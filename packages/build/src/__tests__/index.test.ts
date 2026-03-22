@@ -6,7 +6,7 @@ describe("generatePackageJson", () => {
 	it("should be a test", () => {
 		const generatedPackageJson = generatePackageJson({
 			packageJson: {
-				name: "roo-cline",
+				name: "njust-ai-cj",
 				displayName: "%extension.displayName%",
 				description: "%extension.description%",
 				publisher: "RooVeterinaryInc",
@@ -16,29 +16,29 @@ describe("generatePackageJson", () => {
 					viewsContainers: {
 						activitybar: [
 							{
-								id: "roo-cline-ActivityBar",
+								id: "njust-ai-cj-ActivityBar",
 								title: "%views.activitybar.title%",
 								icon: "assets/icons/icon.svg",
 							},
 						],
 					},
 					views: {
-						"roo-cline-ActivityBar": [
+						"njust-ai-cj-ActivityBar": [
 							{
 								type: "webview",
-								id: "roo-cline.SidebarProvider",
+								id: "njust-ai-cj.SidebarProvider",
 								name: "",
 							},
 						],
 					},
 					commands: [
 						{
-							command: "roo-cline.plusButtonClicked",
+							command: "njust-ai-cj.plusButtonClicked",
 							title: "%command.newTask.title%",
 							icon: "$(edit)",
 						},
 						{
-							command: "roo-cline.openInNewTab",
+							command: "njust-ai-cj.openInNewTab",
 							title: "%command.openInNewTab.title%",
 							category: "%configuration.title%",
 						},
@@ -46,48 +46,48 @@ describe("generatePackageJson", () => {
 					menus: {
 						"editor/context": [
 							{
-								submenu: "roo-cline.contextMenu",
+								submenu: "njust-ai-cj.contextMenu",
 								group: "navigation",
 							},
 						],
-						"roo-cline.contextMenu": [
+						"njust-ai-cj.contextMenu": [
 							{
-								command: "roo-cline.addToContext",
+								command: "njust-ai-cj.addToContext",
 								group: "1_actions@1",
 							},
 						],
 						"editor/title": [
 							{
-								command: "roo-cline.plusButtonClicked",
+								command: "njust-ai-cj.plusButtonClicked",
 								group: "navigation@1",
-								when: "activeWebviewPanelId == roo-cline.TabPanelProvider",
+								when: "activeWebviewPanelId == njust-ai-cj.TabPanelProvider",
 							},
 							{
-								command: "roo-cline.settingsButtonClicked",
+								command: "njust-ai-cj.settingsButtonClicked",
 								group: "navigation@6",
-								when: "activeWebviewPanelId == roo-cline.TabPanelProvider",
+								when: "activeWebviewPanelId == njust-ai-cj.TabPanelProvider",
 							},
 							{
-								command: "roo-cline.accountButtonClicked",
+								command: "njust-ai-cj.accountButtonClicked",
 								group: "navigation@6",
-								when: "activeWebviewPanelId == roo-cline.TabPanelProvider",
+								when: "activeWebviewPanelId == njust-ai-cj.TabPanelProvider",
 							},
 						],
 					},
 					submenus: [
 						{
-							id: "roo-cline.contextMenu",
+							id: "njust-ai-cj.contextMenu",
 							label: "%views.contextMenu.label%",
 						},
 						{
-							id: "roo-cline.terminalMenu",
+							id: "njust-ai-cj.terminalMenu",
 							label: "%views.terminalMenu.label%",
 						},
 					],
 					configuration: {
 						title: "%configuration.title%",
 						properties: {
-							"roo-cline.allowedCommands": {
+							"njust-ai-cj.allowedCommands": {
 								type: "array",
 								items: {
 									type: "string",
@@ -95,7 +95,7 @@ describe("generatePackageJson", () => {
 								default: ["npm test", "npm install", "tsc", "git log", "git diff", "git show"],
 								description: "%commands.allowedCommands.description%",
 							},
-							"roo-cline.customStoragePath": {
+							"njust-ai-cj.customStoragePath": {
 								type: "string",
 								default: "",
 								description: "%settings.customStoragePath.description%",
@@ -108,18 +108,18 @@ describe("generatePackageJson", () => {
 				},
 			},
 			overrideJson: {
-				name: "roo-code-nightly",
+				name: "njust-ai-cj-nightly",
 				displayName: "NJUST_AI_CJ Nightly",
 				publisher: "RooVeterinaryInc",
 				version: "0.0.1",
 				icon: "assets/icons/icon-nightly.png",
 				scripts: {},
 			},
-			substitution: ["roo-cline", "roo-code-nightly"],
+			substitution: ["njust-ai-cj", "njust-ai-cj-nightly"],
 		})
 
 		expect(generatedPackageJson).toStrictEqual({
-			name: "roo-code-nightly",
+			name: "njust-ai-cj-nightly",
 			displayName: "NJUST_AI_CJ Nightly",
 			description: "%extension.description%",
 			publisher: "RooVeterinaryInc",
@@ -129,29 +129,29 @@ describe("generatePackageJson", () => {
 				viewsContainers: {
 					activitybar: [
 						{
-							id: "roo-code-nightly-ActivityBar",
+							id: "njust-ai-cj-nightly-ActivityBar",
 							title: "%views.activitybar.title%",
 							icon: "assets/icons/icon.svg",
 						},
 					],
 				},
 				views: {
-					"roo-code-nightly-ActivityBar": [
+					"njust-ai-cj-nightly-ActivityBar": [
 						{
 							type: "webview",
-							id: "roo-code-nightly.SidebarProvider",
+							id: "njust-ai-cj-nightly.SidebarProvider",
 							name: "",
 						},
 					],
 				},
 				commands: [
 					{
-						command: "roo-code-nightly.plusButtonClicked",
+						command: "njust-ai-cj-nightly.plusButtonClicked",
 						title: "%command.newTask.title%",
 						icon: "$(edit)",
 					},
 					{
-						command: "roo-code-nightly.openInNewTab",
+						command: "njust-ai-cj-nightly.openInNewTab",
 						title: "%command.openInNewTab.title%",
 						category: "%configuration.title%",
 					},
@@ -159,48 +159,48 @@ describe("generatePackageJson", () => {
 				menus: {
 					"editor/context": [
 						{
-							submenu: "roo-code-nightly.contextMenu",
+							submenu: "njust-ai-cj-nightly.contextMenu",
 							group: "navigation",
 						},
 					],
-					"roo-code-nightly.contextMenu": [
+					"njust-ai-cj-nightly.contextMenu": [
 						{
-							command: "roo-code-nightly.addToContext",
+							command: "njust-ai-cj-nightly.addToContext",
 							group: "1_actions@1",
 						},
 					],
 					"editor/title": [
 						{
-							command: "roo-code-nightly.plusButtonClicked",
+							command: "njust-ai-cj-nightly.plusButtonClicked",
 							group: "navigation@1",
-							when: "activeWebviewPanelId == roo-code-nightly.TabPanelProvider",
+							when: "activeWebviewPanelId == njust-ai-cj-nightly.TabPanelProvider",
 						},
 						{
-							command: "roo-code-nightly.settingsButtonClicked",
+							command: "njust-ai-cj-nightly.settingsButtonClicked",
 							group: "navigation@6",
-							when: "activeWebviewPanelId == roo-code-nightly.TabPanelProvider",
+							when: "activeWebviewPanelId == njust-ai-cj-nightly.TabPanelProvider",
 						},
 						{
-							command: "roo-code-nightly.accountButtonClicked",
+							command: "njust-ai-cj-nightly.accountButtonClicked",
 							group: "navigation@6",
-							when: "activeWebviewPanelId == roo-code-nightly.TabPanelProvider",
+							when: "activeWebviewPanelId == njust-ai-cj-nightly.TabPanelProvider",
 						},
 					],
 				},
 				submenus: [
 					{
-						id: "roo-code-nightly.contextMenu",
+						id: "njust-ai-cj-nightly.contextMenu",
 						label: "%views.contextMenu.label%",
 					},
 					{
-						id: "roo-code-nightly.terminalMenu",
+						id: "njust-ai-cj-nightly.terminalMenu",
 						label: "%views.terminalMenu.label%",
 					},
 				],
 				configuration: {
 					title: "%configuration.title%",
 					properties: {
-						"roo-code-nightly.allowedCommands": {
+						"njust-ai-cj-nightly.allowedCommands": {
 							type: "array",
 							items: {
 								type: "string",
@@ -208,7 +208,7 @@ describe("generatePackageJson", () => {
 							default: ["npm test", "npm install", "tsc", "git log", "git diff", "git show"],
 							description: "%commands.allowedCommands.description%",
 						},
-						"roo-code-nightly.customStoragePath": {
+						"njust-ai-cj-nightly.customStoragePath": {
 							type: "string",
 							default: "",
 							description: "%settings.customStoragePath.description%",

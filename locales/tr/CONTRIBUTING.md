@@ -54,7 +54,7 @@ PR'lerinizde bu alanlarla uyumu belirtin.
 
 ### 3. NJUST_AI_CJ Topluluğuna Katılın
 
-- **Birincil:** [Discord](https://discord.gg/roocode) sunucumuza katılın ve **Hannes Rudolph (`hrudolph`)**'a DM gönderin.
+- **Birincil:** [Discord](https://discord.gg/njust-ai-cj) sunucumuza katılın ve **Hannes Rudolph (`hrudolph`)**'a DM gönderin.
 - **Alternatif:** Deneyimli katkıda bulunanlar doğrudan [GitHub Projeleri](https://github.com/orgs/RooCodeInc/projects/1) aracılığıyla etkileşimde bulunabilirler.
 
 ## Katkınızı Bulma ve Planlama
@@ -69,26 +69,26 @@ PR'lerinizde bu alanlarla uyumu belirtin.
 
 Tüm katkılar, basit şablonlarımızı kullanarak bir GitHub Sorunu ile başlar.
 
-- **Mevcut sorunları kontrol edin**: [GitHub Sorunları](https://github.com/RooCodeInc/Roo-Code/issues)nda arama yapın.
+- **Mevcut sorunları kontrol edin**: [GitHub Sorunları](https://github.com/NJUST-AI/NJUST_AI_CJ/issues)nda arama yapın.
 - **Bir sorun oluşturun**:
     - **İyileştirmeler:** "İyileştirme İsteği" şablonu (kullanıcı yararına odaklanan sade bir dil).
     - **Hatalar:** "Hata Raporu" şablonu (minimum yeniden oluşturma + beklenen vs gerçek + sürüm).
-- **Üzerinde çalışmak ister misiniz?** Soruna "Talep ediyorum" yorumu yapın ve atanmak için [Discord](https://discord.gg/roocode) üzerinden **Hannes Rudolph (`hrudolph`)**'a DM gönderin. Atama, başlıkta teyit edilecektir.
+- **Üzerinde çalışmak ister misiniz?** Soruna "Talep ediyorum" yorumu yapın ve atanmak için [Discord](https://discord.gg/njust-ai-cj) üzerinden **Hannes Rudolph (`hrudolph`)**'a DM gönderin. Atama, başlıkta teyit edilecektir.
 - **PR'ler soruna bağlanmalıdır.** Bağlantısız PR'ler kapatılabilir.
 
 ### Ne Üzerinde Çalışılacağına Karar Verme
 
 - "Sorun [Atanmamış]" sorunları için [GitHub Projesi](https://github.com/orgs/RooCodeInc/projects/1)'ni kontrol edin.
-- Belgeler için [NJUST_AI_CJ Belgeleri](https://github.com/RooCodeInc/Roo-Code-Docs)ni ziyaret edin.
+- Belgeler için [NJUST_AI_CJ Belgeleri](https://github.com/NJUST-AI/NJUST_AI_CJ-Docs)ni ziyaret edin.
 
 ### Hataları Bildirme
 
 - Önce mevcut raporları kontrol edin.
-- Aşağıdakilerle ["Hata Raporu" şablonunu](https://github.com/RooCodeInc/Roo-Code/issues/new/choose) kullanarak yeni bir hata oluşturun:
+- Aşağıdakilerle ["Hata Raporu" şablonunu](https://github.com/NJUST-AI/NJUST_AI_CJ/issues/new/choose) kullanarak yeni bir hata oluşturun:
     - Açık, numaralandırılmış yeniden oluşturma adımları
     - Beklenen vs gerçek sonuç
     - NJUST_AI_CJ sürümü (gerekli); ilgiliyse API sağlayıcısı/modeli
-- **Güvenlik sorunları**: [Güvenlik tavsiyeleri](https://github.com/RooCodeInc/Roo-Code/security/advisories/new) aracılığıyla özel olarak bildirin.
+- **Güvenlik sorunları**: [Güvenlik tavsiyeleri](https://github.com/NJUST-AI/NJUST_AI_CJ/security/advisories/new) aracılığıyla özel olarak bildirin.
 
 ## Geliştirme ve Gönderme Süreci
 
@@ -97,7 +97,7 @@ Tüm katkılar, basit şablonlarımızı kullanarak bir GitHub Sorunu ile başla
 1. **Çatallayın ve Klonlayın:**
 
 ```
-git clone https://github.com/KULLANICI_ADINIZ/Roo-Code.git
+git clone https://github.com/KULLANICI_ADINIZ/NJUST_AI_CJ.git
 ```
 
 2. **Bağımlılıkları Yükleyin:**
@@ -126,7 +126,7 @@ pnpm install
 
 ### Çekme İsteği Politikası
 
-- Atanmış bir GitHub Sorununa atıfta bulunmalıdır. Atanmak için: soruna "Talep ediyorum" yorumu yapın ve [Discord](https://discord.gg/roocode) üzerinden **Hannes Rudolph (`hrudolph`)**'a DM gönderin. Atama, başlıkta teyit edilecektir.
+- Atanmış bir GitHub Sorununa atıfta bulunmalıdır. Atanmak için: soruna "Talep ediyorum" yorumu yapın ve [Discord](https://discord.gg/njust-ai-cj) üzerinden **Hannes Rudolph (`hrudolph`)**'a DM gönderin. Atama, başlıkta teyit edilecektir.
 - Bağlantısız PR'ler kapatılabilir.
 - PR'ler CI testlerini geçmeli, yol haritasıyla uyumlu olmalı ve net belgelere sahip olmalıdır.
 

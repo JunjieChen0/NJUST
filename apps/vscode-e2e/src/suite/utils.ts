@@ -1,4 +1,4 @@
-import { NJUST_AI_CJEventName, type NJUST_AI_CJAPI } from "@roo-code/types"
+import { NJUST_AI_CJEventName, type NJUST_AI_CJAPI } from "@njust-ai-cj/types"
 
 type WaitForOptions = {
 	timeout?: number

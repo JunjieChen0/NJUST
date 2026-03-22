@@ -57,7 +57,7 @@ jobs:
         run: pnpm bundle
 
       - name: Build CLI
-        run: pnpm --filter @roo-code/cli build
+        run: pnpm --filter @njust-ai-cj/cli build
 
       - name: Create release tarball
         id: tarball
@@ -86,7 +86,7 @@ jobs:
           node -e "
             const pkg = require('./apps/cli/package.json');
             const newPkg = {
-              name: '@roo-code/cli',
+              name: '@njust-ai-cj/cli',
               version: '$VERSION',
               type: 'module',
               dependencies: {
@@ -320,12 +320,12 @@ jobs:
           echo "## Installation" >> "$NOTES_FILE"
           echo "" >> "$NOTES_FILE"
           echo '```bash' >> "$NOTES_FILE"
-          echo "curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh" >> "$NOTES_FILE"
+          echo "curl -fsSL https://raw.githubusercontent.com/NJUST-AI/NJUST_AI_CJ/main/apps/cli/install.sh | sh" >> "$NOTES_FILE"
           echo '```' >> "$NOTES_FILE"
           echo "" >> "$NOTES_FILE"
           echo "Or install a specific version:" >> "$NOTES_FILE"
           echo '```bash' >> "$NOTES_FILE"
-          echo "ROO_VERSION=$VERSION curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh" >> "$NOTES_FILE"
+          echo "ROO_VERSION=$VERSION curl -fsSL https://raw.githubusercontent.com/NJUST-AI/NJUST_AI_CJ/main/apps/cli/install.sh | sh" >> "$NOTES_FILE"
           echo '```' >> "$NOTES_FILE"
           echo "" >> "$NOTES_FILE"
           echo "## Requirements" >> "$NOTES_FILE"

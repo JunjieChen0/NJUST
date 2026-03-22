@@ -1,4 +1,4 @@
-import type { ModelInfo, OrganizationAllowList } from "@roo-code/types"
+import type { ModelInfo, OrganizationAllowList } from "@njust-ai-cj/types"
 
 import { filterProviders, filterModels } from "../organizationFilters"
 

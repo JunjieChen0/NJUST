@@ -54,7 +54,7 @@ Wspomnij o dostosowaniu do tych obszarów w swoich PR-ach.
 
 ### 3. Dołącz do społeczności NJUST_AI_CJ
 
-- **Głównie:** Dołącz do naszego [Discorda](https://discord.gg/roocode) i wyślij wiadomość prywatną do **Hannes Rudolph (`hrudolph`)**.
+- **Głównie:** Dołącz do naszego [Discorda](https://discord.gg/njust-ai-cj) i wyślij wiadomość prywatną do **Hannes Rudolph (`hrudolph`)**.
 - **Alternatywa:** Doświadczeni współtwórcy mogą angażować się bezpośrednio za pośrednictwem [projektów na GitHubie](https://github.com/orgs/RooCodeInc/projects/1).
 
 ## Znajdowanie i planowanie swojego wkładu
@@ -69,26 +69,26 @@ Wspomnij o dostosowaniu do tych obszarów w swoich PR-ach.
 
 Wszystkie wkłady zaczynają się od zgłoszenia na GitHubie przy użyciu naszych uproszczonych szablonów.
 
-- **Sprawdź istniejące zgłoszenia**: Przeszukaj [zgłoszenia на GitHubie](https://github.com/RooCodeInc/Roo-Code/issues).
+- **Sprawdź istniejące zgłoszenia**: Przeszukaj [zgłoszenia на GitHubie](https://github.com/NJUST-AI/NJUST_AI_CJ/issues).
 - **Utwórz zgłoszenie**, używając:
     - **Ulepszenia:** szablon „Prośba o ulepszenie” (prosty język skoncentrowany na korzyściach dla użytkownika).
     - **Błędy:** szablon „Zgłoszenie błędu” (minimalna reprodukcja + oczekiwane a rzeczywiste + wersja).
-- **Chcesz nad tym popracować?** Skomentuj „Zgłaszam się” w zgłoszeniu i wyślij wiadomość prywatną do **Hannes Rudolph (`hrudolph`)** na [Discordzie](https://discord.gg/roocode), aby zostać przypisanym. Przypisanie zostanie potwierdzone w wątku.
+- **Chcesz nad tym popracować?** Skomentuj „Zgłaszam się” w zgłoszeniu i wyślij wiadomość prywatną do **Hannes Rudolph (`hrudolph`)** na [Discordzie](https://discord.gg/njust-ai-cj), aby zostać przypisanym. Przypisanie zostanie potwierdzone w wątku.
 - **PR-y muszą być połączone зі zgłoszeniem.** Niepołączone PR-y mogą zostać zamknięte.
 
 ### Decydowanie, nad czym pracować
 
 - Sprawdź [projekt na GitHubie](https://github.com/orgs/RooCodeInc/projects/1) pod kątem zgłoszeń „Zgłoszenie [Nieprzypisane]”.
-- Aby uzyskać dokumentację, odwiedź [dokumentację NJUST_AI_CJ](https://github.com/RooCodeInc/Roo-Code-Docs).
+- Aby uzyskać dokumentację, odwiedź [dokumentację NJUST_AI_CJ](https://github.com/NJUST-AI/NJUST_AI_CJ-Docs).
 
 ### Zgłaszanie błędów
 
 - Najpierw sprawdź istniejące raporty.
-- Utwórz nowy błąd, używając szablonu [„Zgłoszenie błędu”](https://github.com/RooCodeInc/Roo-Code/issues/new/choose) z:
+- Utwórz nowy błąd, używając szablonu [„Zgłoszenie błędu”](https://github.com/NJUST-AI/NJUST_AI_CJ/issues/new/choose) z:
     - Jasnymi, ponumerowanymi krokami reprodukcji
     - Oczekiwanym a rzeczywistym wynikiem
     - Wersją NJUST_AI_CJ (wymagane); dostawcą/modelem sztucznej inteligencji, jeśli ma to zastosowanie
-- **Problemy z bezpieczeństwem**: Zgłoś je prywatnie za pośrednictwem [zaleceń dotyczących bezpieczeństwa](https://github.com/RooCodeInc/Roo-Code/security/advisories/new).
+- **Problemy z bezpieczeństwem**: Zgłoś je prywatnie za pośrednictwem [zaleceń dotyczących bezpieczeństwa](https://github.com/NJUST-AI/NJUST_AI_CJ/security/advisories/new).
 
 ## Proces rozwoju i przesyłania
 
@@ -97,7 +97,7 @@ Wszystkie wkłady zaczynają się od zgłoszenia na GitHubie przy użyciu naszyc
 1. **Sforkuj i sklonuj:**
 
 ```
-git clone https://github.com/TWOJA_NAZWA_UŻYTKOWNIKA/Roo-Code.git
+git clone https://github.com/TWOJA_NAZWA_UŻYTKOWNIKA/NJUST_AI_CJ.git
 ```
 
 2. **Zainstaluj zależności:**
@@ -126,7 +126,7 @@ pnpm install
 
 ### Polityka dotycząca żądań ściągnięcia
 
-- Musi odnosić się do przypisanego zgłoszenia na GitHubie. Aby zostać przypisanym: skomentuj „Zgłaszam się” w zgłoszeniu i wyślij wiadomość prywatną do **Hannes Rudolph (`hrudolph`)** na [Discordzie](https://discord.gg/roocode). Przypisanie zostanie potwierdzone w wątku.
+- Musi odnosić się do przypisanego zgłoszenia na GitHubie. Aby zostać przypisanym: skomentuj „Zgłaszam się” w zgłoszeniu i wyślij wiadomość prywatną do **Hannes Rudolph (`hrudolph`)** na [Discordzie](https://discord.gg/njust-ai-cj). Przypisanie zostanie potwierdzone w wątku.
 - Niepołączone PR-y mogą zostać zamknięte.
 - PR-y muszą przejść testy CI, być zgodne z mapą drogową i mieć przejrzystą dokumentację.
 

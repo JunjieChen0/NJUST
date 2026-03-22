@@ -55,11 +55,11 @@ export default function Privacy() {
 					</p>
 					<ul className="lead">
 						<li>
-							browse any page under <strong>roocode.com</strong> (the <em>Marketing Site</em>); and/or
+							browse any page under <strong>njust-ai-cj.local</strong> (the <em>Marketing Site</em>); and/or
 						</li>
 						<li>
 							create an account for, sign in to, or otherwise use <strong>NJUST_AI_CJ Cloud</strong> at{" "}
-							<strong>app.roocode.com</strong> or through the NJUST_AI_CJ extension while authenticated to
+							the NJUST_AI_CJ platform or through the NJUST_AI_CJ extension while authenticated to
 							that Cloud account (the <em>Cloud Service</em>).
 						</li>
 					</ul>
@@ -70,7 +70,7 @@ export default function Privacy() {
 							If you run the NJUST_AI_CJ extension <strong>without</strong> connecting to a Cloud account,
 							your data is governed by the standalone{" "}
 							<a
-								href="https://github.com/RooCodeInc/Roo-Code/blob/main/PRIVACY.md"
+								href="https://github.com/NJUST-AI/NJUST_AI_CJ/blob/main/PRIVACY.md"
 								target="_blank"
 								rel="noopener noreferrer"
 								className="text-primary hover:underline">
@@ -310,8 +310,8 @@ export default function Privacy() {
 					<h2 className="mt-12 text-2xl font-bold">8. Contact Us</h2>
 					<p>
 						Questions or concerns? Email{" "}
-						<a href="mailto:privacy@roocode.com" className="text-primary hover:underline">
-							privacy@roocode.com
+						<a href="mailto:privacy@njust-ai-cj.local" className="text-primary hover:underline">
+							privacy@njust-ai-cj.local
 						</a>
 						.
 					</p>

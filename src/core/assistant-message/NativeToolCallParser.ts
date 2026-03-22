@@ -1,7 +1,7 @@
 import { parseJSON } from "partial-json"
 
-import { type ToolName, toolNames, type FileEntry } from "@roo-code/types"
-import { customToolRegistry } from "@roo-code/core"
+import { type ToolName, toolNames, type FileEntry } from "@njust-ai-cj/types"
+import { customToolRegistry } from "@njust-ai-cj/core"
 
 import {
 	type ToolUse,

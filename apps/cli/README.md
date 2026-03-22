@@ -1,10 +1,10 @@
-# @roo-code/cli
+# @njust-ai-cj/cli
 
 Command Line Interface for NJUST_AI_CJ - Run the NJUST_AI_CJ agent from the terminal without VSCode.
 
 ## Overview
 
-This CLI uses the `@roo-code/vscode-shim` package to provide a VSCode API compatibility layer, allowing the main NJUST_AI_CJ extension to run in a Node.js environment.
+This CLI uses the `@njust-ai-cj/vscode-shim` package to provide a VSCode API compatibility layer, allowing the main NJUST_AI_CJ extension to run in a Node.js environment.
 
 ## Installation
 
@@ -13,7 +13,7 @@ This CLI uses the `@roo-code/vscode-shim` package to provide a VSCode API compat
 Install the NJUST_AI_CJ CLI with a single command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/NJUST-AI/NJUST_AI_CJ/main/apps/cli/install.sh | sh
 ```
 
 **Requirements:**
@@ -30,7 +30,7 @@ ROO_INSTALL_DIR=/opt/roo-code ROO_BIN_DIR=/usr/local/bin curl -fsSL ... | sh
 **Install a specific version:**
 
 ```bash
-ROO_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh
+ROO_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/NJUST-AI/NJUST_AI_CJ/main/apps/cli/install.sh | sh
 ```
 
 ### Updating
@@ -38,7 +38,7 @@ ROO_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Co
 Re-run the install script to update to the latest version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/NJUST-AI/NJUST_AI_CJ/main/apps/cli/install.sh | sh
 ```
 
 Or run:
@@ -62,10 +62,10 @@ For contributing or development:
 pnpm install
 
 # Build the main extension first.
-pnpm --filter roo-cline bundle
+pnpm --filter njust-ai-cj bundle
 
 # Build the CLI.
-pnpm --filter @roo-code/cli build
+pnpm --filter @njust-ai-cj/cli build
 ```
 
 ## Usage
@@ -223,7 +223,7 @@ The CLI will look for API keys in environment variables if not provided via `--a
 
 | Variable          | Description                                                          |
 | ----------------- | -------------------------------------------------------------------- |
-| `ROO_WEB_APP_URL` | Override the NJUST_AI_CJ Cloud URL (default: `https://app.roocode.com`) |
+| `ROO_WEB_APP_URL` | Override the NJUST_AI_CJ Cloud URL |
 
 ## Architecture
 
@@ -255,7 +255,7 @@ The CLI will look for API keys in environment variables if not provided via `--a
 
 2. **ExtensionHost** (`extension-host.ts`):
 
-    - Creates a VSCode API mock using `@roo-code/vscode-shim`
+    - Creates a VSCode API mock using `@njust-ai-cj/vscode-shim`
     - Intercepts `require('vscode')` to return the mock
     - Loads and activates the extension bundle
     - Manages bidirectional message flow
@@ -280,10 +280,10 @@ pnpm check-types
 pnpm lint
 ```
 
-By default the `start` script points `ROO_CODE_PROVIDER_URL` at `http://localhost:8080/proxy` for local development. To point at the production API instead, override the environment variable:
+By default the `start` script points `NJUST_AI_CJ_PROVIDER_URL` at `http://localhost:8080/proxy` for local development. To point at the production API instead, override the environment variable:
 
 ```bash
-ROO_CODE_PROVIDER_URL=https://api.roocode.com/proxy pnpm dev --provider roo --api-key $ROO_API_KEY --print "Hello"
+pnpm dev --provider roo --api-key $ROO_API_KEY --print "Hello"
 ```
 
 ## Releasing

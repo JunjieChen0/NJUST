@@ -1,7 +1,7 @@
 "use server"
 
-import { getModelId, rooCodeSettingsSchema } from "@roo-code/types"
-import { getRuns, getLanguageScores } from "@roo-code/evals"
+import { getModelId, rooCodeSettingsSchema } from "@njust-ai-cj/types"
+import { getRuns, getLanguageScores } from "@njust-ai-cj/evals"
 
 import { formatScore } from "@/lib"
 

@@ -1,7 +1,7 @@
 // npx vitest run __tests__/history-resume-delegation.spec.ts
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { NJUST_AI_CJEventName } from "@roo-code/types"
+import { NJUST_AI_CJEventName } from "@njust-ai-cj/types"
 
 /* vscode mock for Task/Provider imports */
 vi.mock("vscode", () => {

@@ -1,6 +1,6 @@
 #!/bin/sh
 # NJUST_AI_CJ CLI Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/NJUST-AI/NJUST_AI_CJ/main/apps/cli/install.sh | sh
 #
 # Environment variables:
 #   ROO_INSTALL_DIR   - Installation directory (default: ~/.roo/cli)
@@ -13,7 +13,7 @@ set -e
 # Configuration
 INSTALL_DIR="${ROO_INSTALL_DIR:-$HOME/.roo/cli}"
 BIN_DIR="${ROO_BIN_DIR:-$HOME/.local/bin}"
-REPO="RooCodeInc/Roo-Code"
+REPO="NJUST-AI/NJUST_AI_CJ"
 MIN_NODE_VERSION=20
 
 # Color output (only if terminal supports it)

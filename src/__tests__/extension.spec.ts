@@ -1,7 +1,7 @@
 // npx vitest run __tests__/extension.spec.ts
 
 import type * as vscode from "vscode"
-import type { AuthState } from "@roo-code/types"
+import type { AuthState } from "@njust-ai-cj/types"
 
 vi.mock("vscode", () => ({
 	window: {
@@ -51,7 +51,7 @@ vi.mock("fs", () => ({
 	existsSync: vi.fn().mockReturnValue(false),
 }))
 
-vi.mock("@roo-code/telemetry", () => ({
+vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
 		createInstance: vi.fn().mockReturnValue({
 			register: vi.fn(),
@@ -175,7 +175,7 @@ vi.mock("../core/webview/ClineProvider", async () => {
 			{
 				// Static method used by extension.ts
 				getVisibleInstance: vi.fn().mockReturnValue(mockInstance),
-				sideBarId: "roo-cline-sidebar",
+				sideBarId: "njust-ai-cj-sidebar",
 			},
 		),
 	}

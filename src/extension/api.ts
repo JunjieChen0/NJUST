@@ -19,8 +19,8 @@ import {
 	isSecretStateKey,
 	IpcOrigin,
 	IpcMessageType,
-} from "@roo-code/types"
-import { IpcServer } from "@roo-code/ipc"
+} from "@njust-ai-cj/types"
+import { IpcServer } from "@njust-ai-cj/ipc"
 
 import { Package } from "../shared/package"
 import { ClineProvider } from "../core/webview/ClineProvider"
@@ -138,7 +138,7 @@ export class API extends EventEmitter<NJUST_AI_CJEvents> implements NJUST_AI_CJA
 						try {
 							const models = await getModels({
 								provider: "roo" as const,
-								baseUrl: process.env.ROO_CODE_PROVIDER_URL ?? "https://api.roocode.com/proxy",
+								baseUrl: process.env.NJUST_AI_CJ_PROVIDER_URL ?? "",
 								apiKey: undefined,
 							})
 

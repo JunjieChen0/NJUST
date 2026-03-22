@@ -1,4 +1,4 @@
-import type { TaskMetrics, Run } from "@roo-code/evals"
+import type { TaskMetrics, Run } from "@njust-ai-cj/evals"
 
 export type EvalRun = Run & {
 	label: string

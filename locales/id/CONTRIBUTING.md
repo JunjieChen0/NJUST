@@ -54,7 +54,7 @@ Sebutkan keselarasan dengan area-area ini di PR Anda.
 
 ### 3. Bergabunglah dengan Komunitas NJUST_AI_CJ
 
-- **Utama:** Bergabunglah dengan [Discord](https://discord.gg/roocode) kami dan kirim DM ke **Hannes Rudolph (`hrudolph`)**.
+- **Utama:** Bergabunglah dengan [Discord](https://discord.gg/njust-ai-cj) kami dan kirim DM ke **Hannes Rudolph (`hrudolph`)**.
 - **Alternatif:** Kontributor berpengalaman dapat terlibat langsung melalui [Proyek GitHub](https://github.com/orgs/RooCodeInc/projects/1).
 
 ## Menemukan & Merencanakan Kontribusi Anda
@@ -69,26 +69,26 @@ Sebutkan keselarasan dengan area-area ini di PR Anda.
 
 Semua kontribusi dimulai dengan Masalah GitHub menggunakan template ramping kami.
 
-- **Periksa masalah yang ada**: Cari di [Masalah GitHub](https://github.com/RooCodeInc/Roo-Code/issues).
+- **Periksa masalah yang ada**: Cari di [Masalah GitHub](https://github.com/NJUST-AI/NJUST_AI_CJ/issues).
 - **Buat masalah** menggunakan:
     - **Penyempurnaan:** Template "Permintaan Penyempurnaan" (bahasa sederhana yang berfokus pada manfaat pengguna).
     - **Bug:** Template "Laporan Bug" (repro minimal + yang diharapkan vs aktual + versi).
-- **Ingin mengerjakannya?** Beri komentar "Mengklaim" pada masalah tersebut dan kirim DM ke **Hannes Rudolph (`hrudolph`)** di [Discord](https://discord.gg/roocode) untuk ditugaskan. Penugasan akan dikonfirmasi di utas.
+- **Ingin mengerjakannya?** Beri komentar "Mengklaim" pada masalah tersebut dan kirim DM ke **Hannes Rudolph (`hrudolph`)** di [Discord](https://discord.gg/njust-ai-cj) untuk ditugaskan. Penugasan akan dikonfirmasi di utas.
 - **PR harus menautkan ke masalah.** PR yang tidak tertaut dapat ditutup.
 
 ### Memutuskan Apa yang Akan Dikerjakan
 
 - Periksa [Proyek GitHub](https://github.com/orgs/RooCodeInc/projects/1) untuk masalah "Masalah [Belum Ditugaskan]".
-- Untuk dokumentasi, kunjungi [Dokumentasi NJUST_AI_CJ](https://github.com/RooCodeInc/Roo-Code-Docs).
+- Untuk dokumentasi, kunjungi [Dokumentasi NJUST_AI_CJ](https://github.com/NJUST-AI/NJUST_AI_CJ-Docs).
 
 ### Melaporkan Bug
 
 - Periksa laporan yang ada terlebih dahulu.
-- Buat bug baru menggunakan [template "Laporan Bug"](https://github.com/RooCodeInc/Roo-Code/issues/new/choose) dengan:
+- Buat bug baru menggunakan [template "Laporan Bug"](https://github.com/NJUST-AI/NJUST_AI_CJ/issues/new/choose) dengan:
     - Langkah-langkah reproduksi yang jelas dan bernomor
     - Hasil yang diharapkan vs aktual
     - Versi NJUST_AI_CJ (wajib); penyedia/model API jika relevan
-- **Masalah keamanan**: Laporkan secara pribadi melalui [saran keamanan](https://github.com/RooCodeInc/Roo-Code/security/advisories/new).
+- **Masalah keamanan**: Laporkan secara pribadi melalui [saran keamanan](https://github.com/NJUST-AI/NJUST_AI_CJ/security/advisories/new).
 
 ## Proses Pengembangan & Pengajuan
 
@@ -97,7 +97,7 @@ Semua kontribusi dimulai dengan Masalah GitHub menggunakan template ramping kami
 1. **Fork & Klon:**
 
 ```
-git clone https://github.com/NAMA_PENGGUNA_ANDA/Roo-Code.git
+git clone https://github.com/NAMA_PENGGUNA_ANDA/NJUST_AI_CJ.git
 ```
 
 2. **Instal Ketergantungan:**
@@ -126,7 +126,7 @@ pnpm install
 
 ### Kebijakan Pull Request
 
-- Harus merujuk pada Masalah GitHub yang ditugaskan. Untuk ditugaskan: beri komentar "Mengklaim" pada masalah tersebut dan kirim DM ke **Hannes Rudolph (`hrudolph`)** di [Discord](https://discord.gg/roocode). Penugasan akan dikonfirmasi di utas.
+- Harus merujuk pada Masalah GitHub yang ditugaskan. Untuk ditugaskan: beri komentar "Mengklaim" pada masalah tersebut dan kirim DM ke **Hannes Rudolph (`hrudolph`)** di [Discord](https://discord.gg/njust-ai-cj). Penugasan akan dikonfirmasi di utas.
 - PR yang tidak tertaut dapat ditutup.
 - PR harus lulus tes CI, selaras dengan peta jalan, dan memiliki dokumentasi yang jelas.
 

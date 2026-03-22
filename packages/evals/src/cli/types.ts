@@ -1,4 +1,4 @@
-import { type TaskEvent } from "@roo-code/types"
+import { type TaskEvent } from "@njust-ai-cj/types"
 
 import type { Run, Task } from "../db/index"
 import { Logger } from "./utils"

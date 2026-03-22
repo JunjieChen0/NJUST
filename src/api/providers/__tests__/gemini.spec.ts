@@ -2,7 +2,7 @@
 
 const mockCaptureException = vitest.fn()
 
-vitest.mock("@roo-code/telemetry", () => ({
+vitest.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
 		hasInstance: () => true,
 		instance: {
@@ -13,7 +13,7 @@ vitest.mock("@roo-code/telemetry", () => ({
 
 import { Anthropic } from "@anthropic-ai/sdk"
 
-import { type ModelInfo, geminiDefaultModelId, ApiProviderError } from "@roo-code/types"
+import { type ModelInfo, geminiDefaultModelId, ApiProviderError } from "@njust-ai-cj/types"
 
 import { t } from "i18next"
 import { GeminiHandler } from "../gemini"

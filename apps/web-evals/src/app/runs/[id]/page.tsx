@@ -1,4 +1,4 @@
-import { findRun } from "@roo-code/evals"
+import { findRun } from "@njust-ai-cj/evals"
 
 import { Run } from "./run"
 

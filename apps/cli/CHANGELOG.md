@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the `@roo-code/cli` package will be documented in this file.
+All notable changes to the `@njust-ai-cj/cli` package will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -157,7 +157,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Telemetry Control**: Added `ROO_CODE_DISABLE_TELEMETRY=1` environment variable to disable cloud telemetry.
+- **Telemetry Control**: Added `NJUST_AI_CJ_DISABLE_TELEMETRY=1` environment variable to disable cloud telemetry.
 
 ## [0.1.1] - 2026-02-24
 

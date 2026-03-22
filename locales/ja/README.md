@@ -1,12 +1,12 @@
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.roo-cline"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.njust-ai-cj"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
   <a href="https://x.com/roocode"><img src="https://img.shields.io/badge/roocode-000000?style=flat&logo=x&logoColor=white" alt="X"></a>
   <a href="https://youtube.com/@roocodeyt?feature=shared"><img src="https://img.shields.io/badge/YouTube-FF0000?style=flat&logo=youtube&logoColor=white" alt="YouTube"></a>
-  <a href="https://discord.gg/roocode"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
-  <a href="https://www.reddit.com/r/RooCode/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
+  <a href="https://discord.gg/njust-ai-cj"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
+  <a href="https://www.reddit.com/r/NJUST_AI_CJ/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
 </p>
 <p align="center">
-  <em>すぐに助けを得る → <a href="https://discord.gg/roocode">Discordに参加</a> • 非同期を好む？ → <a href="https://www.reddit.com/r/RooCode/">r/NJUST_AI_CJに参加</a></em>
+  <em>すぐに助けを得る → <a href="https://discord.gg/njust-ai-cj">Discordに参加</a> • 非同期を好む？ → <a href="https://www.reddit.com/r/NJUST_AI_CJ/">r/NJUST_AI_CJに参加</a></em>
 </p>
 
 # NJUST_AI_CJ
@@ -64,7 +64,7 @@ NJUST_AI_CJは、あなたの働き方に合わせるように適応します。
 - デバッグモード：問題の追跡、ログの追加、根本原因の特定
 - カスタムモード：チームやワークフローに特化したモードの構築
 
-詳しくは: [モードの使い方](https://docs.roocode.com/basic-usage/using-modes) • [カスタムモード](https://docs.roocode.com/advanced-usage/custom-modes)
+詳しくは: [モードの使い方](https://docs.njust-ai-cj.local/basic-usage/using-modes) • [カスタムモード](https://docs.njust-ai-cj.local/advanced-usage/custom-modes)
 
 ## チュートリアルと機能のビデオ
 
@@ -77,17 +77,17 @@ NJUST_AI_CJは、あなたの働き方に合わせるように適応します。
 
 </div>
 <p align="center">
-<a href="https://docs.roocode.com/tutorial-videos">その他のクイックチュートリアルと機能のビデオ...</a>
+<a href="https://docs.njust-ai-cj.local/tutorial-videos">その他のクイックチュートリアルと機能のビデオ...</a>
 </p>
 
 ## リソース
 
-- **[ドキュメント](https://docs.roocode.com):** NJUST_AI_CJのインストール、設定、習熟のための公式ガイド。
+- **[ドキュメント](https://docs.njust-ai-cj.local):** NJUST_AI_CJのインストール、設定、習熟のための公式ガイド。
 - **[YouTubeチャンネル](https://youtube.com/@roocodeyt?feature=shared):** チュートリアルを見て、実際の機能を確認できます。
-- **[Discordサーバー](https://discord.gg/roocode):** コミュニティに参加して、リアルタイムのヘルプやディスカッションに参加できます。
-- **[Redditコミュニティ](https://www.reddit.com/r/RooCode):** あなたの経験を共有し、他の人が何を構築しているかを見ることができます。
-- **[GitHub Issues](https://github.com/RooCodeInc/Roo-Code/issues):** バグを報告し、開発を追跡します。
-- **[機能リクエスト](https://github.com/RooCodeInc/Roo-Code/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** アイデアがありますか？開発者と共有してください。
+- **[Discordサーバー](https://discord.gg/njust-ai-cj):** コミュニティに参加して、リアルタイムのヘルプやディスカッションに参加できます。
+- **[Redditコミュニティ](https://www.reddit.com/r/NJUST_AI_CJ):** あなたの経験を共有し、他の人が何を構築しているかを見ることができます。
+- **[GitHub Issues](https://github.com/NJUST-AI/NJUST_AI_CJ/issues):** バグを報告し、開発を追跡します。
+- **[機能リクエスト](https://github.com/NJUST-AI/NJUST_AI_CJ/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** アイデアがありますか？開発者と共有してください。
 
 ---
 
@@ -96,7 +96,7 @@ NJUST_AI_CJは、あなたの働き方に合わせるように適応します。
 1. **リポジトリをクローンする**:
 
 ```sh
-git clone https://github.com/RooCodeInc/Roo-Code.git
+git clone https://github.com/NJUST-AI/NJUST_AI_CJ.git
 ```
 
 2. **依存関係をインストールする**:
@@ -147,10 +147,10 @@ VSIXパッケージを手動でインストールしたい場合：
     ```sh
     pnpm vsix
     ```
-2.  `.vsix`ファイルが`bin/`ディレクトリに生成されます（例：`bin/roo-cline-<version>.vsix`）。
+2.  `.vsix`ファイルが`bin/`ディレクトリに生成されます（例：`bin/njust-ai-cj-<version>.vsix`）。
 3.  VSCode CLIを使用して手動でインストールします：
     ```sh
-    code --install-extension bin/roo-cline-<version>.vsix
+    code --install-extension bin/njust-ai-cj-<version>.vsix
     ```
 
 ---
@@ -177,4 +177,4 @@ VSIXパッケージを手動でインストールしたい場合：
 
 ---
 
-**NJUST_AI_CJをお楽しみください！** 手綱を短く持って使うか、自律的に歩き回らせるかにかかわらず、あなたが何を構築するか楽しみにしています。質問や機能のアイデアがあれば、私たちの[Redditコミュニティ](https://www.reddit.com/r/RooCode/)または[Discord](https://discord.gg/roocode)にお立ち寄りください。ハッピーコーディング！
+**NJUST_AI_CJをお楽しみください！** 手綱を短く持って使うか、自律的に歩き回らせるかにかかわらず、あなたが何を構築するか楽しみにしています。質問や機能のアイデアがあれば、私たちの[Redditコミュニティ](https://www.reddit.com/r/NJUST_AI_CJ/)または[Discord](https://discord.gg/njust-ai-cj)にお立ち寄りください。ハッピーコーディング！

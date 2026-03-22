@@ -17,8 +17,8 @@ import {
 	isSecretStateKey,
 	isProviderName,
 	isRetiredProvider,
-} from "@roo-code/types"
-import { TelemetryService } from "@roo-code/telemetry"
+} from "@njust-ai-cj/types"
+import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import { logger } from "../../utils/logging"
 import { supportPrompt } from "../../shared/support-prompt"

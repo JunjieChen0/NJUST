@@ -22,9 +22,9 @@ import type {
 	ReasoningEffortExtended,
 	NJUST_AI_CJSettings,
 	WebviewMessage,
-} from "@roo-code/types"
-import { createVSCodeAPI, IExtensionHost, ExtensionHostEventMap, setRuntimeConfigValues } from "@roo-code/vscode-shim"
-import { DebugLogger, setDebugLogEnabled } from "@roo-code/core/cli"
+} from "@njust-ai-cj/types"
+import { createVSCodeAPI, IExtensionHost, ExtensionHostEventMap, setRuntimeConfigValues } from "@njust-ai-cj/vscode-shim"
+import { DebugLogger, setDebugLogEnabled } from "@njust-ai-cj/core/cli"
 
 import { DEFAULT_FLAGS, type SupportedProvider } from "@/types/index.js"
 import type { User } from "@/lib/sdk/index.js"
@@ -447,7 +447,7 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 		// sending webviewDidLaunch. This prevents a race condition where the
 		// webviewDidLaunch handler's first-time init sync reads default state
 		// (apiProvider: "anthropic") instead of the CLI-provided settings.
-		setRuntimeConfigValues("roo-cline", this.initialSettings as Record<string, unknown>)
+		setRuntimeConfigValues("njust-ai-cj", this.initialSettings as Record<string, unknown>)
 		this.sendToExtension({ type: "updateSettings", updatedSettings: this.initialSettings })
 
 		// Now trigger extension initialization. The context proxy should already

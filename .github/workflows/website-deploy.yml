@@ -1,4 +1,4 @@
-name: Deploy roocode.com
+name: Deploy njust-ai-cj.local
 
 on:
     push:

@@ -11,7 +11,7 @@ import {
 	IpcMessageType,
 	type IpcMessage,
 	ipcMessageSchema,
-} from "@roo-code/types"
+} from "@njust-ai-cj/types"
 
 export class IpcServer extends EventEmitter<IpcServerEvents> implements NJUST_AI_CJIpcServer {
 	private readonly _socketPath: string

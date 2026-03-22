@@ -1,4 +1,4 @@
-import { NJUST_AI_CJEventName, TodoItem } from "@roo-code/types"
+import { NJUST_AI_CJEventName, TodoItem } from "@njust-ai-cj/types"
 
 import { AttemptCompletionToolUse } from "../../../shared/tools"
 
@@ -14,7 +14,7 @@ vi.mock("../../prompts/responses", () => ({
 const { mockCaptureTaskCompleted } = vi.hoisted(() => ({
 	mockCaptureTaskCompleted: vi.fn(),
 }))
-vi.mock("@roo-code/telemetry", () => ({
+vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
 		instance: {
 			captureTaskCompleted: mockCaptureTaskCompleted,
@@ -34,7 +34,7 @@ vi.mock("vscode", () => ({
 // Mock Package module
 vi.mock("../../../shared/package", () => ({
 	Package: {
-		name: "roo-cline",
+		name: "njust-ai-cj",
 	},
 }))
 

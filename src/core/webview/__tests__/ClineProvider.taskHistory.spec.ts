@@ -1,8 +1,8 @@
-// pnpm --filter roo-cline test core/webview/__tests__/ClineProvider.taskHistory.spec.ts
+// pnpm --filter njust-ai-cj test core/webview/__tests__/ClineProvider.taskHistory.spec.ts
 
 import * as vscode from "vscode"
-import type { HistoryItem, ExtensionMessage } from "@roo-code/types"
-import { TelemetryService } from "@roo-code/telemetry"
+import type { HistoryItem, ExtensionMessage } from "@njust-ai-cj/types"
+import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import { ContextProxy } from "../../config/ContextProxy"
 import { ClineProvider } from "../ClineProvider"

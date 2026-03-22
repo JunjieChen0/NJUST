@@ -165,11 +165,11 @@ export default function CookiePolicy() {
 					<p>
 						Our blog at{" "}
 						<a
-							href="https://blog.roocode.com"
+							href="https://blog.njust-ai-cj.local"
 							target="_blank"
 							rel="noopener noreferrer"
 							className="text-primary hover:underline">
-							blog.roocode.com
+							blog.njust-ai-cj.local
 						</a>{" "}
 						is hosted on Substack. When you visit it, Substack may set cookies for analytics,
 						personalization, and advertising/marketing. These cookies are managed directly by Substack and
@@ -209,8 +209,8 @@ export default function CookiePolicy() {
 					<h2 className="mt-12 text-2xl font-bold">Contact us</h2>
 					<p>
 						If you have questions about our use of cookies, please contact us at{" "}
-						<a href="mailto:privacy@roocode.com" className="text-primary hover:underline">
-							privacy@roocode.com
+						<a href="mailto:privacy@njust-ai-cj.local" className="text-primary hover:underline">
+							privacy@njust-ai-cj.local
 						</a>
 						.
 					</p>

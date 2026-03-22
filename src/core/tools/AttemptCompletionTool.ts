@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 
-import { NJUST_AI_CJEventName, type HistoryItem } from "@roo-code/types"
-import { TelemetryService } from "@roo-code/telemetry"
+import { NJUST_AI_CJEventName, type HistoryItem } from "@njust-ai-cj/types"
+import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"

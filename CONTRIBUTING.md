@@ -54,7 +54,7 @@ Mention alignment with these areas in your PRs.
 
 ### 3. Join the NJUST_AI_CJ Community
 
-- **Primary:** Join our [Discord](https://discord.gg/roocode) and DM **Hannes Rudolph (`hrudolph`)**.
+- **Primary:** Join our [Discord](https://discord.gg/njust-ai-cj) and DM **Hannes Rudolph (`hrudolph`)**.
 - **Alternative:** Experienced contributors can engage directly via [GitHub Projects](https://github.com/orgs/RooCodeInc/projects/1).
 
 ## Finding & Planning Your Contribution
@@ -69,26 +69,26 @@ Mention alignment with these areas in your PRs.
 
 All contributions start with a GitHub Issue using our skinny templates.
 
-- **Check existing issues**: Search [GitHub Issues](https://github.com/RooCodeInc/Roo-Code/issues).
+- **Check existing issues**: Search [GitHub Issues](https://github.com/NJUST-AI/NJUST_AI_CJ/issues).
 - **Create an issue** using:
     - **Enhancements:** "Enhancement Request" template (plain language focused on user benefit).
     - **Bugs:** "Bug Report" template (minimal repro + expected vs actual + version).
-- **Want to work on it?** Comment "Claiming" on the issue and DM **Hannes Rudolph (`hrudolph`)** on [Discord](https://discord.gg/roocode) to get assigned. Assignment will be confirmed in the thread.
+- **Want to work on it?** Comment "Claiming" on the issue and DM **Hannes Rudolph (`hrudolph`)** on [Discord](https://discord.gg/njust-ai-cj) to get assigned. Assignment will be confirmed in the thread.
 - **PRs must link to the issue.** Unlinked PRs may be closed.
 
 ### Deciding What to Work On
 
 - Check the [GitHub Project](https://github.com/orgs/RooCodeInc/projects/1) for "Issue [Unassigned]" issues.
-- For docs, visit [NJUST_AI_CJ Docs](https://github.com/RooCodeInc/Roo-Code-Docs).
+- For docs, visit [NJUST_AI_CJ Docs](https://github.com/NJUST-AI/NJUST_AI_CJ-Docs).
 
 ### Reporting Bugs
 
 - Check for existing reports first.
-- Create a new bug using the ["Bug Report" template](https://github.com/RooCodeInc/Roo-Code/issues/new/choose) with:
+- Create a new bug using the ["Bug Report" template](https://github.com/NJUST-AI/NJUST_AI_CJ/issues/new/choose) with:
     - Clear, numbered reproduction steps
     - Expected vs actual result
     - NJUST_AI_CJ version (required); API provider/model if relevant
-- **Security issues**: Report privately via [security advisories](https://github.com/RooCodeInc/Roo-Code/security/advisories/new).
+- **Security issues**: Report privately via [security advisories](https://github.com/NJUST-AI/NJUST_AI_CJ/security/advisories/new).
 
 ## Development & Submission Process
 
@@ -97,7 +97,7 @@ All contributions start with a GitHub Issue using our skinny templates.
 1. **Fork & Clone:**
 
 ```
-git clone https://github.com/YOUR_USERNAME/Roo-Code.git
+git clone https://github.com/YOUR_USERNAME/NJUST_AI_CJ.git
 ```
 
 2. **Install Dependencies:**
@@ -126,7 +126,7 @@ pnpm install
 
 ### Pull Request Policy
 
-- Must reference an assigned GitHub Issue. To get assigned: comment "Claiming" on the issue and DM **Hannes Rudolph (`hrudolph`)** on [Discord](https://discord.gg/roocode). Assignment will be confirmed in the thread.
+- Must reference an assigned GitHub Issue. To get assigned: comment "Claiming" on the issue and DM **Hannes Rudolph (`hrudolph`)** on [Discord](https://discord.gg/njust-ai-cj). Assignment will be confirmed in the thread.
 - Unlinked PRs may be closed.
 - PRs should pass CI tests, align with the roadmap, and have clear documentation.
 

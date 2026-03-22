@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { ChevronUp, ChevronDown, HardDriveDownload, HardDriveUpload, FoldVertical, ArrowLeft } from "lucide-react"
 import prettyBytes from "pretty-bytes"
 
-import type { ClineMessage } from "@roo-code/types"
+import type { ClineMessage } from "@njust-ai-cj/types"
 
 import { getModelMaxOutputTokens } from "@roo/api"
 import { findLastIndex } from "@roo/array"

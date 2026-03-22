@@ -2,8 +2,8 @@
 
 import * as path from "path"
 import { Anthropic } from "@anthropic-ai/sdk"
-import type { ModelInfo } from "@roo-code/types"
-import { TelemetryService } from "@roo-code/telemetry"
+import type { ModelInfo } from "@njust-ai-cj/types"
+import { TelemetryService } from "@njust-ai-cj/telemetry"
 import { BaseProvider } from "../../../api/providers/base-provider"
 
 // Mock the tree-sitter module

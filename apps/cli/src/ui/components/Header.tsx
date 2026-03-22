@@ -1,7 +1,7 @@
 import { memo } from "react"
 import { Text, Box } from "ink"
 
-import type { TokenUsage } from "@roo-code/types"
+import type { TokenUsage } from "@njust-ai-cj/types"
 
 import { ASCII_ROO } from "@/types/constants.js"
 

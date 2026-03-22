@@ -1,4 +1,4 @@
-import { GlobalState, ClineMessage, ClineAsk } from "@roo-code/types"
+import { GlobalState, ClineMessage, ClineAsk } from "@njust-ai-cj/types"
 
 import { getApiMetrics } from "../../shared/getApiMetrics"
 import { ClineAskResponse } from "../../shared/WebviewMessage"

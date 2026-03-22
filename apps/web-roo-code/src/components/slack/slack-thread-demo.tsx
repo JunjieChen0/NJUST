@@ -135,19 +135,19 @@ export function SlackThreadDemo({ className }: SlackThreadDemoProps): JSX.Elemen
 						<div>
 							The documentation for using NJUST_AI_CJ from Slack is here:{" "}
 							<FakeLink className="hover:text-violet-200">
-								https://docs.roocode.com/roo-code-cloud/slack-integration
+								https://docs.njust-ai-cj.local/roo-code-cloud/slack-integration
 							</FakeLink>
 						</div>
 						<div className="text-[#B8BBC0]">Here are some pages from our site we can use for guidance:</div>
 						<ol className="list-decimal pl-5 text-[#D1D2D3]">
 							<li>
-								<FakeLink className="hover:text-violet-200">https://roocode.com</FakeLink>
+								<FakeLink className="hover:text-violet-200">https://njust-ai-cj.local</FakeLink>
 							</li>
 							<li>
-								<FakeLink className="hover:text-violet-200">https://roocode.com/extension</FakeLink>
+								<FakeLink className="hover:text-violet-200">https://njust-ai-cj.local/extension</FakeLink>
 							</li>
 							<li>
-								<FakeLink className="hover:text-violet-200">https://roocode.com/cloud</FakeLink>
+								<FakeLink className="hover:text-violet-200">https://njust-ai-cj.local/cloud</FakeLink>
 							</li>
 						</ol>
 					</div>
@@ -200,7 +200,7 @@ export function SlackThreadDemo({ className }: SlackThreadDemoProps): JSX.Elemen
 							Calling <span className="font-semibold text-[#F8F8F9]">Planneroo</span> to get started on
 							your task on{" "}
 							<code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-[#F8F8F9]">
-								RooCodeInc/Roo-Code
+								NJUST-AI/NJUST_AI_CJ
 							</code>
 						</div>
 						<div>
@@ -365,7 +365,7 @@ export function SlackThreadDemo({ className }: SlackThreadDemoProps): JSX.Elemen
 							<div className="mt-2">
 								<span className="font-semibold text-[#F8F8F9]">PR #10853</span>:{" "}
 								<FakeLink className="hover:text-violet-200">
-									https://github.com/RooCodeInc/Roo-Code/pull/10853
+									https://github.com/NJUST-AI/NJUST_AI_CJ/pull/10853
 								</FakeLink>
 							</div>
 						</div>

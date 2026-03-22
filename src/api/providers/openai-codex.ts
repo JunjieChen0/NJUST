@@ -10,8 +10,8 @@ import {
 	openAiCodexModels,
 	type ReasoningEffort,
 	type ReasoningEffortExtended,
-} from "@roo-code/types"
-import { TelemetryService } from "@roo-code/telemetry"
+} from "@njust-ai-cj/types"
+import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import { Package } from "../../shared/package"
 import type { ApiHandlerOptions } from "../../shared/api"

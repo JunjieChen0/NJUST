@@ -19,8 +19,8 @@ import {
 	ExperimentId,
 	checkoutDiffPayloadSchema,
 	checkoutRestorePayloadSchema,
-} from "@roo-code/types"
-import { customToolRegistry } from "@roo-code/core"
+} from "@njust-ai-cj/types"
+import { customToolRegistry } from "@njust-ai-cj/core"
 
 import { type ApiMessage } from "../task-persistence/apiMessages"
 import { saveTaskMessages } from "../task-persistence"
@@ -932,7 +932,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					key: "roo",
 					options: {
 						provider: "roo",
-						baseUrl: process.env.ROO_CODE_PROVIDER_URL ?? "https://api.roocode.com/proxy",
+						baseUrl: process.env.NJUST_AI_CJ_PROVIDER_URL ?? "",
 						apiKey: undefined,
 					},
 				},
@@ -1055,7 +1055,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 		try {
 			const rooOptions = {
 				provider: "roo" as const,
-				baseUrl: process.env.ROO_CODE_PROVIDER_URL ?? "https://api.roocode.com/proxy",
+				baseUrl: process.env.NJUST_AI_CJ_PROVIDER_URL ?? "",
 				apiKey: undefined,
 			}
 			await flushModels(rooOptions, true)

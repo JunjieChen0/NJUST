@@ -1,4 +1,4 @@
-import { NJUST_AI_CJEventName, ProviderSettings, TokenUsage, ToolUsage } from "@roo-code/types"
+import { NJUST_AI_CJEventName, ProviderSettings, TokenUsage, ToolUsage } from "@njust-ai-cj/types"
 
 import { Task } from "../Task"
 import { ClineProvider } from "../../webview/ClineProvider"
@@ -23,7 +23,7 @@ vi.mock("../../../api", () => ({
 }))
 
 // Mock TelemetryService
-vi.mock("@roo-code/telemetry", () => ({
+vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
 		instance: {
 			captureTaskCreated: vi.fn(),

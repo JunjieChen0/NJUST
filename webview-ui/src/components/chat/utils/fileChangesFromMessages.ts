@@ -1,4 +1,4 @@
-import type { ClineMessage, ClineSayTool } from "@roo-code/types"
+import type { ClineMessage, ClineSayTool } from "@njust-ai-cj/types"
 import { safeJsonParse } from "@roo/core"
 
 /** File-edit tool names from ClineSayTool["tool"] (packages/types). */

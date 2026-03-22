@@ -1,5 +1,5 @@
 {
-	"name": "@roo-code/cli",
+	"name": "@njust-ai-cj/cli",
 	"version": "0.1.17",
 	"description": "NJUST_AI_CJ CLI - Run the NJUST_AI_CJ agent from the command line",
 	"private": true,
@@ -15,16 +15,16 @@
 		"test": "vitest run",
 		"test:integration": "tsx scripts/integration/run.ts",
 		"build": "tsup",
-		"build:extension": "pnpm --filter roo-cline bundle",
-		"dev": "ROO_AUTH_BASE_URL=https://app.roocode.com ROO_SDK_BASE_URL=https://cloud-api.roocode.com ROO_CODE_PROVIDER_URL=https://api.roocode.com/proxy tsx src/index.ts",
-		"dev:local": "ROO_AUTH_BASE_URL=http://localhost:3000 ROO_SDK_BASE_URL=http://localhost:3001 ROO_CODE_PROVIDER_URL=http://localhost:8080/proxy tsx src/index.ts",
+		"build:extension": "pnpm --filter njust-ai-cj bundle",
+		"dev": "tsx src/index.ts",
+		"dev:local": "ROO_AUTH_BASE_URL=http://localhost:3000 ROO_SDK_BASE_URL=http://localhost:3001 NJUST_AI_CJ_PROVIDER_URL=http://localhost:8080/proxy tsx src/index.ts",
 		"clean": "rimraf dist .turbo"
 	},
 	"dependencies": {
 		"@inkjs/ui": "^2.0.0",
-		"@roo-code/core": "workspace:^",
-		"@roo-code/types": "workspace:^",
-		"@roo-code/vscode-shim": "workspace:^",
+		"@njust-ai-cj/core": "workspace:^",
+		"@njust-ai-cj/types": "workspace:^",
+		"@njust-ai-cj/vscode-shim": "workspace:^",
 		"@trpc/client": "^11.8.1",
 		"@vscode/ripgrep": "^1.15.9",
 		"commander": "^12.1.0",
@@ -38,8 +38,8 @@
 		"zustand": "^5.0.0"
 	},
 	"devDependencies": {
-		"@roo-code/config-eslint": "workspace:^",
-		"@roo-code/config-typescript": "workspace:^",
+		"@njust-ai-cj/config-eslint": "workspace:^",
+		"@njust-ai-cj/config-typescript": "workspace:^",
 		"@types/node": "^24.1.0",
 		"@types/react": "^19.1.6",
 		"ink-testing-library": "^4.0.0",

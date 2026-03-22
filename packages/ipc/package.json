@@ -1,5 +1,5 @@
 {
-	"name": "@roo-code/ipc",
+	"name": "@njust-ai-cj/ipc",
 	"description": "IPC server and client for remote NJUST_AI_CJ access.",
 	"version": "0.0.0",
 	"type": "module",
@@ -10,12 +10,12 @@
 		"clean": "rimraf .turbo"
 	},
 	"dependencies": {
-		"@roo-code/types": "workspace:^",
+		"@njust-ai-cj/types": "workspace:^",
 		"node-ipc": "^12.0.0"
 	},
 	"devDependencies": {
-		"@roo-code/config-eslint": "workspace:^",
-		"@roo-code/config-typescript": "workspace:^",
+		"@njust-ai-cj/config-eslint": "workspace:^",
+		"@njust-ai-cj/config-typescript": "workspace:^",
 		"@types/node": "20.x",
 		"@types/node-ipc": "^9.2.3",
 		"vitest": "^3.2.3"

@@ -90,7 +90,7 @@ RUN mkdir -p /roo/.vscode-template \
 
 # Copy evals
 ARG EVALS_COMMIT=main
-ARG EVALS_REPO_URL=https://github.com/RooCodeInc/Roo-Code-Evals.git
+ARG EVALS_REPO_URL=https://github.com/NJUST-AI/NJUST_AI_CJ-Evals.git
 RUN git clone ${EVALS_REPO_URL} evals \
   && cd evals \
   && git checkout ${EVALS_COMMIT}
@@ -161,8 +161,8 @@ RUN pnpm vsix -- --out ../bin/roo-code.vsix \
 
 # Build the extension bundle and CLI (for CLI execution method)
 # The CLI requires the extension bundle (src/dist/extension.js) and the CLI build (apps/cli/dist/index.js)
-RUN pnpm --filter roo-cline bundle \
-    && pnpm --filter @roo-code/cli build
+RUN pnpm --filter njust-ai-cj bundle \
+    && pnpm --filter @njust-ai-cj/cli build
 
 # Copy entrypoint script
 COPY packages/evals/.docker/entrypoints/runner.sh /usr/local/bin/entrypoint.sh

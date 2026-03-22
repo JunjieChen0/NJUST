@@ -1,7 +1,7 @@
 /**
  * ShareButton - Cloud sharing stripped. Always returns null.
  */
-import type { HistoryItem } from "@roo-code/types"
+import type { HistoryItem } from "@njust-ai-cj/types"
 
 interface ShareButtonProps {
 	item?: HistoryItem

@@ -20,8 +20,8 @@ vi.mock("@/lib/server/redis", () => ({
 	}),
 }))
 
-// Mock @roo-code/evals
-vi.mock("@roo-code/evals", () => ({
+// Mock @njust-ai-cj/evals
+vi.mock("@njust-ai-cj/evals", () => ({
 	createRun: vi.fn(),
 	deleteRun: vi.fn(),
 	createTask: vi.fn(),

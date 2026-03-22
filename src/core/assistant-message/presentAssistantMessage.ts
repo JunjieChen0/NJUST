@@ -1,9 +1,9 @@
 import { serializeError } from "serialize-error"
 import { Anthropic } from "@anthropic-ai/sdk"
 
-import type { ToolName, ClineAsk, ToolProgressStatus } from "@roo-code/types"
-import { ConsecutiveMistakeError } from "@roo-code/types"
-import { customToolRegistry } from "@roo-code/core"
+import type { ToolName, ClineAsk, ToolProgressStatus } from "@njust-ai-cj/types"
+import { ConsecutiveMistakeError } from "@njust-ai-cj/types"
+import { customToolRegistry } from "@njust-ai-cj/core"
 
 import { t } from "../../i18n"
 

@@ -1,7 +1,7 @@
 // npx vitest run __tests__/nested-delegation-resume.spec.ts
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { NJUST_AI_CJEventName } from "@roo-code/types"
+import { NJUST_AI_CJEventName } from "@njust-ai-cj/types"
 
 // Mock safe-stable-stringify to avoid runtime error
 vi.mock("safe-stable-stringify", () => ({
@@ -9,7 +9,7 @@ vi.mock("safe-stable-stringify", () => ({
 }))
 
 // Mock TelemetryService
-vi.mock("@roo-code/telemetry", () => ({
+vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
 		instance: {
 			captureTaskCompleted: vi.fn(),

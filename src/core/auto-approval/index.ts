@@ -5,7 +5,7 @@ import {
 	type FollowUpData,
 	type ExtensionState,
 	isNonBlockingAsk,
-} from "@roo-code/types"
+} from "@njust-ai-cj/types"
 
 import { ClineAskResponse } from "../../shared/WebviewMessage"
 

@@ -1,5 +1,5 @@
 {
-	"name": "@roo-code/vscode-nightly",
+	"name": "@njust-ai-cj/vscode-nightly",
 	"description": "Nightly build for the NJUST_AI_CJ VSCode extension.",
 	"private": true,
 	"packageManager": "pnpm@10.8.1",
@@ -9,6 +9,6 @@
 		"clean": "rimraf build .turbo"
 	},
 	"devDependencies": {
-		"@roo-code/build": "workspace:^"
+		"@njust-ai-cj/build": "workspace:^"
 	}
 }

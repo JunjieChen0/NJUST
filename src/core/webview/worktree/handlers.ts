@@ -15,8 +15,8 @@ import type {
 	WorktreeIncludeStatus,
 	WorktreeListResponse,
 	WorktreeDefaultsResponse,
-} from "@roo-code/types"
-import { worktreeService, worktreeIncludeService, type CopyProgressCallback } from "@roo-code/core"
+} from "@njust-ai-cj/types"
+import { worktreeService, worktreeIncludeService, type CopyProgressCallback } from "@njust-ai-cj/core"
 
 import type { ClineProvider } from "../ClineProvider"
 

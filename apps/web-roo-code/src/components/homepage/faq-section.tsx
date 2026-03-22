@@ -83,7 +83,7 @@ const faqs: FAQItem[] = [
 			<>
 				Install NJUST_AI_CJ from the{" "}
 				<a
-					href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.roo-cline"
+					href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.njust-ai-cj"
 					target="_blank"
 					rel="noopener noreferrer"
 					className="text-primary underline-offset-4 hover:underline">
@@ -92,7 +92,7 @@ const faqs: FAQItem[] = [
 				(or GitHub). Add your AI keys (OpenAI, Anthropic, or other) in the extension settings. Open the Roo
 				panel (the rocket icon) in VS Code, and start typing commands in plain English!{" "}
 				<a
-					href="https://docs.roocode.com/tutorial-videos"
+					href="https://docs.njust-ai-cj.local/tutorial-videos"
 					target="_blank"
 					rel="noopener noreferrer"
 					className="text-primary underline-offset-4 hover:underline">
@@ -123,7 +123,7 @@ const faqs: FAQItem[] = [
 				approval. And because NJUST_AI_CJ is fully open-source, it&apos;s auditable—you can review exactly how it
 				works before deploying it.{" "}
 				<a
-					href="https://roocode.com/enterprise"
+					href="https://njust-ai-cj.local/enterprise"
 					target="_blank"
 					rel="noopener noreferrer"
 					className="text-primary underline-offset-4 hover:underline">
@@ -158,7 +158,7 @@ const faqs: FAQItem[] = [
 			<>
 				Yes, please do! NJUST_AI_CJ is open-source on{" "}
 				<a
-					href="https://github.com/RooCodeInc/Roo-Code"
+					href="https://github.com/NJUST-AI/NJUST_AI_CJ"
 					target="_blank"
 					rel="noopener noreferrer"
 					className="text-primary underline-offset-4 hover:underline">
@@ -166,7 +166,7 @@ const faqs: FAQItem[] = [
 				</a>
 				. Submit issues, suggest features, or open a pull request. There&apos;s also an active community on{" "}
 				<a
-					href="https://discord.gg/roocode"
+					href="https://discord.gg/njust-ai-cj"
 					target="_blank"
 					rel="noopener noreferrer"
 					className="text-primary underline-offset-4 hover:underline">
@@ -174,7 +174,7 @@ const faqs: FAQItem[] = [
 				</a>{" "}
 				and{" "}
 				<a
-					href="https://reddit.com/r/RooCode"
+					href="https://reddit.com/r/NJUST_AI_CJ"
 					target="_blank"
 					rel="noopener noreferrer"
 					className="text-primary underline-offset-4 hover:underline">
@@ -190,7 +190,7 @@ const faqs: FAQItem[] = [
 			<>
 				Check out our{" "}
 				<a
-					href="https://docs.roocode.com"
+					href="https://docs.njust-ai-cj.local"
 					target="_blank"
 					rel="noopener noreferrer"
 					className="text-primary underline-offset-4 hover:underline">
@@ -198,7 +198,7 @@ const faqs: FAQItem[] = [
 				</a>{" "}
 				for both a quick-start set up and advanced guides. You can also get community support on{" "}
 				<a
-					href="https://discord.gg/roocode"
+					href="https://discord.gg/njust-ai-cj"
 					target="_blank"
 					rel="noopener noreferrer"
 					className="text-primary underline-offset-4 hover:underline">
@@ -206,7 +206,7 @@ const faqs: FAQItem[] = [
 				</a>{" "}
 				and{" "}
 				<a
-					href="https://reddit.com/r/RooCode"
+					href="https://reddit.com/r/NJUST_AI_CJ"
 					target="_blank"
 					rel="noopener noreferrer"
 					className="text-primary underline-offset-4 hover:underline">
@@ -222,7 +222,7 @@ const faqs: FAQItem[] = [
 				</a>{" "}
 				tutorials and{" "}
 				<a
-					href="https://blog.roocode.com"
+					href="https://blog.njust-ai-cj.local"
 					target="_blank"
 					rel="noopener noreferrer"
 					className="text-primary underline-offset-4 hover:underline">

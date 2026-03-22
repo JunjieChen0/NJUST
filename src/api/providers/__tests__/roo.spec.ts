@@ -1,7 +1,7 @@
 // npx vitest run api/providers/__tests__/roo.spec.ts
 
 import { Anthropic } from "@anthropic-ai/sdk"
-import { rooDefaultModelId } from "@roo-code/types"
+import { rooDefaultModelId } from "@njust-ai-cj/types"
 
 import { ApiHandlerOptions } from "../../../shared/api"
 

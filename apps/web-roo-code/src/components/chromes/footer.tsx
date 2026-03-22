@@ -49,7 +49,7 @@ export function Footer() {
 
 						{/* Made with NJUST_AI_CJ */}
 						<a
-							href="https://roocode.com"
+							href="https://njust-ai-cj.local"
 							target="_blank"
 							rel="noopener noreferrer"
 							className="inline-flex items-center space-x-2 group">
@@ -232,7 +232,7 @@ export function Footer() {
 								<ul className="mt-6 space-y-4">
 									<li>
 										<a
-											href="mailto:support@roocode.com"
+											href="mailto:support@njust-ai-cj.local"
 											className="text-sm leading-6 text-muted-foreground transition-colors hover:text-foreground">
 											Contact
 										</a>

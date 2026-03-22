@@ -1,4 +1,4 @@
-import { NJUST_AI_CJSettings } from "@roo-code/types"
+import { NJUST_AI_CJSettings } from "@njust-ai-cj/types"
 
 import { useCLIStore } from "../store.js"
 

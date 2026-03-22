@@ -1,4 +1,4 @@
-import { parametersSchema, defineCustomTool } from "@roo-code/types"
+import { parametersSchema, defineCustomTool } from "@njust-ai-cj/types"
 
 export default defineCustomTool({
 	name: "simple",

@@ -35,7 +35,7 @@ export function Evals({ runs }: { runs: EvalRun[] }) {
 			<div className="flex flex-col gap-4">
 				<div>
 					NJUST_AI_CJ tests each frontier model against{" "}
-					<a href="https://github.com/RooCodeInc/Roo-Code-Evals" className="underline">
+					<a href="https://github.com/NJUST-AI/NJUST_AI_CJ-Evals" className="underline">
 						a suite of hundreds of exercises
 					</a>{" "}
 					across 5 programming languages with varying difficulty. These results can help you find the right
@@ -43,7 +43,7 @@ export function Evals({ runs }: { runs: EvalRun[] }) {
 				</div>
 				<div>
 					Want to see the results for a model we haven&apos;t tested yet? Ping us in{" "}
-					<a href="https://discord.gg/roocode" className="underline">
+					<a href="https://discord.gg/njust-ai-cj" className="underline">
 						Discord
 					</a>
 					.

@@ -17,7 +17,7 @@ import {
 	RouterModels,
 	ORGANIZATION_ALLOW_ALL,
 	DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
-} from "@roo-code/types"
+} from "@njust-ai-cj/types"
 
 import { findLastIndex } from "@roo/array"
 

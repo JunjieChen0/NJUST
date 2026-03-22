@@ -1,3 +1,3 @@
-export type { WebviewMessage, WebViewMessagePayload } from "@roo-code/types"
+export type { WebviewMessage, WebViewMessagePayload } from "@njust-ai-cj/types"
 
 export type ClineAskResponse = "yesButtonClicked" | "noButtonClicked" | "messageResponse" | "objectResponse"

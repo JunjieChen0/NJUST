@@ -1,12 +1,12 @@
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.roo-cline"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.njust-ai-cj"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
   <a href="https://x.com/roocode"><img src="https://img.shields.io/badge/roocode-000000?style=flat&logo=x&logoColor=white" alt="X"></a>
   <a href="https://youtube.com/@roocodeyt?feature=shared"><img src="https://img.shields.io/badge/YouTube-FF0000?style=flat&logo=youtube&logoColor=white" alt="YouTube"></a>
-  <a href="https://discord.gg/roocode"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
-  <a href="https://www.reddit.com/r/RooCode/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
+  <a href="https://discord.gg/njust-ai-cj"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
+  <a href="https://www.reddit.com/r/NJUST_AI_CJ/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
 </p>
 <p align="center">
-  <em>빠른 도움 받기 → <a href="https://discord.gg/roocode">Discord 가입하기</a> • 비동기 선호? → <a href="https://www.reddit.com/r/RooCode/">r/NJUST_AI_CJ 가입하기</a></em>
+  <em>빠른 도움 받기 → <a href="https://discord.gg/njust-ai-cj">Discord 가입하기</a> • 비동기 선호? → <a href="https://www.reddit.com/r/NJUST_AI_CJ/">r/NJUST_AI_CJ 가입하기</a></em>
 </p>
 
 # NJUST_AI_CJ
@@ -64,7 +64,7 @@ NJUST_AI_CJ는 당신의 작업 방식에 맞춰 적응합니다.
 - 디버그 모드: 문제 추적, 로그 추가, 근본 원인 격리
 - 사용자 지정 모드: 팀이나 워크플로우를 위한 특수 모드 구축
 
-자세히: [모드 사용](https://docs.roocode.com/basic-usage/using-modes) • [사용자 지정 모드](https://docs.roocode.com/advanced-usage/custom-modes)
+자세히: [모드 사용](https://docs.njust-ai-cj.local/basic-usage/using-modes) • [사용자 지정 모드](https://docs.njust-ai-cj.local/advanced-usage/custom-modes)
 
 ## 튜토리얼 및 기능 비디오
 
@@ -77,17 +77,17 @@ NJUST_AI_CJ는 당신의 작업 방식에 맞춰 적응합니다.
 
 </div>
 <p align="center">
-<a href="https://docs.roocode.com/tutorial-videos">더 많은 빠른 튜토리얼 및 기능 비디오...</a>
+<a href="https://docs.njust-ai-cj.local/tutorial-videos">더 많은 빠른 튜토리얼 및 기능 비디오...</a>
 </p>
 
 ## 리소스
 
-- **[문서](https://docs.roocode.com):** NJUST_AI_CJ 설치, 구성 및 마스터하기 위한 공식 가이드.
+- **[문서](https://docs.njust-ai-cj.local):** NJUST_AI_CJ 설치, 구성 및 마스터하기 위한 공식 가이드.
 - **[YouTube 채널](https://youtube.com/@roocodeyt?feature=shared):** 튜토리얼을 시청하고 실제 기능을 확인하세요.
-- **[Discord 서버](https://discord.gg/roocode):** 커뮤니티에 가입하여 실시간 도움과 토론에 참여하세요.
-- **[Reddit 커뮤니티](https://www.reddit.com/r/RooCode):** 경험을 공유하고 다른 사람들이 무엇을 만들고 있는지 확인하세요.
-- **[GitHub 문제](https://github.com/RooCodeInc/Roo-Code/issues):** 버그를 보고하고 개발을 추적하세요.
-- **[기능 요청](https://github.com/RooCodeInc/Roo-Code/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** 아이디어가 있으신가요? 개발자들과 공유하세요.
+- **[Discord 서버](https://discord.gg/njust-ai-cj):** 커뮤니티에 가입하여 실시간 도움과 토론에 참여하세요.
+- **[Reddit 커뮤니티](https://www.reddit.com/r/NJUST_AI_CJ):** 경험을 공유하고 다른 사람들이 무엇을 만들고 있는지 확인하세요.
+- **[GitHub 문제](https://github.com/NJUST-AI/NJUST_AI_CJ/issues):** 버그를 보고하고 개발을 추적하세요.
+- **[기능 요청](https://github.com/NJUST-AI/NJUST_AI_CJ/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** 아이디어가 있으신가요? 개발자들과 공유하세요.
 
 ---
 
@@ -96,7 +96,7 @@ NJUST_AI_CJ는 당신의 작업 방식에 맞춰 적응합니다.
 1. **리포지토리 복제**:
 
 ```sh
-git clone https://github.com/RooCodeInc/Roo-Code.git
+git clone https://github.com/NJUST-AI/NJUST_AI_CJ.git
 ```
 
 2. **의존성 설치**:
@@ -147,10 +147,10 @@ VSIX 패키지를 수동으로 설치하려면:
     ```sh
     pnpm vsix
     ```
-2.  `.vsix` 파일이 `bin/` 디렉터리에 생성됩니다(예: `bin/roo-cline-<version>.vsix`).
+2.  `.vsix` 파일이 `bin/` 디렉터리에 생성됩니다(예: `bin/njust-ai-cj-<version>.vsix`).
 3.  VSCode CLI를 사용하여 수동으로 설치합니다:
     ```sh
-    code --install-extension bin/roo-cline-<version>.vsix
+    code --install-extension bin/njust-ai-cj-<version>.vsix
     ```
 
 ---
@@ -177,4 +177,4 @@ VSIX 패키지를 수동으로 설치하려면:
 
 ---
 
-**NJUST_AI_CJ를 즐기세요!** 짧은 줄에 묶어두든 자율적으로 돌아다니게 하든, 여러분이 무엇을 만들지 기대됩니다. 질문이나 기능 아이디어가 있으면 저희 [Reddit 커뮤니티](https://www.reddit.com/r/RooCode/)나 [Discord](https://discord.gg/roocode)에 들러주세요. 즐거운 코딩 되세요!
+**NJUST_AI_CJ를 즐기세요!** 짧은 줄에 묶어두든 자율적으로 돌아다니게 하든, 여러분이 무엇을 만들지 기대됩니다. 질문이나 기능 아이디어가 있으면 저희 [Reddit 커뮤니티](https://www.reddit.com/r/NJUST_AI_CJ/)나 [Discord](https://discord.gg/njust-ai-cj)에 들러주세요. 즐거운 코딩 되세요!

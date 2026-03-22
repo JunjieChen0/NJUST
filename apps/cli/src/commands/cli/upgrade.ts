@@ -3,9 +3,9 @@ import { spawn } from "child_process"
 import { VERSION } from "@/lib/utils/version.js"
 import { isRecord } from "@/lib/utils/guards.js"
 
-const RELEASES_URL = "https://api.github.com/repos/RooCodeInc/Roo-Code/releases?per_page=100"
+const RELEASES_URL = "https://api.github.com/repos/NJUST-AI/NJUST_AI_CJ/releases?per_page=100"
 export const INSTALL_SCRIPT_COMMAND =
-	"curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh"
+	"curl -fsSL https://raw.githubusercontent.com/NJUST-AI/NJUST_AI_CJ/main/apps/cli/install.sh | sh"
 
 export interface UpgradeOptions {
 	currentVersion?: string

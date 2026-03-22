@@ -1,5 +1,5 @@
 {
-	"name": "@roo-code/telemetry",
+	"name": "@njust-ai-cj/telemetry",
 	"version": "1.0.0",
 	"description": "Telemetry service stub for NJUST_AI_CJ",
 	"main": "dist/index.js",
@@ -9,7 +9,7 @@
 		"watch": "tsc --watch"
 	},
 	"dependencies": {
-		"@roo-code/types": "workspace:^"
+		"@njust-ai-cj/types": "workspace:^"
 	},
 	"devDependencies": {
 		"typescript": "5.8.3"

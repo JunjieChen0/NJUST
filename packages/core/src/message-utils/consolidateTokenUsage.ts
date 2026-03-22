@@ -1,4 +1,4 @@
-import type { TokenUsage, ToolUsage, ToolName, ClineMessage } from "@roo-code/types"
+import type { TokenUsage, ToolUsage, ToolName, ClineMessage } from "@njust-ai-cj/types"
 
 export type ParsedApiReqStartedTextType = {
 	tokensIn: number

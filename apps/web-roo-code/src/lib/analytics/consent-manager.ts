@@ -4,7 +4,7 @@
  */
 
 import { getCookieConsentValue } from "react-cookie-consent"
-import { CONSENT_COOKIE_NAME } from "@roo-code/types"
+import { CONSENT_COOKIE_NAME } from "@njust-ai-cj/types"
 import posthog from "posthog-js"
 
 export const CONSENT_EVENT = "cookieConsentChanged"

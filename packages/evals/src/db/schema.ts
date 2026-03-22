@@ -1,7 +1,7 @@
 import { pgTable, text, timestamp, integer, real, boolean, jsonb, uniqueIndex } from "drizzle-orm/pg-core"
 import { relations } from "drizzle-orm"
 
-import type { NJUST_AI_CJSettings, ToolName, ToolUsage } from "@roo-code/types"
+import type { NJUST_AI_CJSettings, ToolName, ToolUsage } from "@njust-ai-cj/types"
 
 import type { ExerciseLanguage } from "../exercises/index"
 

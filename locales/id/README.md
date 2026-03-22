@@ -1,12 +1,12 @@
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.roo-cline"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.njust-ai-cj"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
   <a href="https://x.com/roocode"><img src="https://img.shields.io/badge/roocode-000000?style=flat&logo=x&logoColor=white" alt="X"></a>
   <a href="https://youtube.com/@roocodeyt?feature=shared"><img src="https://img.shields.io/badge/YouTube-FF0000?style=flat&logo=youtube&logoColor=white" alt="YouTube"></a>
-  <a href="https://discord.gg/roocode"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
-  <a href="https://www.reddit.com/r/RooCode/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
+  <a href="https://discord.gg/njust-ai-cj"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
+  <a href="https://www.reddit.com/r/NJUST_AI_CJ/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
 </p>
 <p align="center">
-  <em>Dapatkan bantuan cepat → <a href="https://discord.gg/roocode">Gabung Discord</a> • Lebih suka asinkron? → <a href="https://www.reddit.com/r/RooCode/">Gabung r/NJUST_AI_CJ</a></em>
+  <em>Dapatkan bantuan cepat → <a href="https://discord.gg/njust-ai-cj">Gabung Discord</a> • Lebih suka asinkron? → <a href="https://www.reddit.com/r/NJUST_AI_CJ/">Gabung r/NJUST_AI_CJ</a></em>
 </p>
 
 # NJUST_AI_CJ
@@ -64,7 +64,7 @@ NJUST_AI_CJ beradaptasi dengan cara Anda bekerja, bukan sebaliknya:
 - Mode Debug: melacak masalah, menambahkan log, mengisolasi akar penyebab
 - Mode Kustom: buat mode khusus untuk tim atau alur kerja Anda
 
-Pelajari lebih lanjut: [Menggunakan Mode](https://docs.roocode.com/basic-usage/using-modes) • [Mode Kustom](https://docs.roocode.com/advanced-usage/custom-modes)
+Pelajari lebih lanjut: [Menggunakan Mode](https://docs.njust-ai-cj.local/basic-usage/using-modes) • [Mode Kustom](https://docs.njust-ai-cj.local/advanced-usage/custom-modes)
 
 ## Video Tutorial & Fitur
 
@@ -77,17 +77,17 @@ Pelajari lebih lanjut: [Menggunakan Mode](https://docs.roocode.com/basic-usage/u
 
 </div>
 <p align="center">
-<a href="https://docs.roocode.com/tutorial-videos">Video tutorial dan fitur cepat lainnya...</a>
+<a href="https://docs.njust-ai-cj.local/tutorial-videos">Video tutorial dan fitur cepat lainnya...</a>
 </p>
 
 ## Sumber daya
 
-- **[Dokumentasi](https://docs.roocode.com):** Panduan resmi untuk menginstal, mengonfigurasi, dan menguasai NJUST_AI_CJ.
+- **[Dokumentasi](https://docs.njust-ai-cj.local):** Panduan resmi untuk menginstal, mengonfigurasi, dan menguasai NJUST_AI_CJ.
 - **[Saluran YouTube](https://youtube.com/@roocodeyt?feature=shared):** Tonton tutorial dan lihat fitur-fitur dalam aksi.
-- **[Server Discord](https://discord.gg/roocode):** Bergabunglah dengan komunitas untuk bantuan dan diskusi real-time.
-- **[Komunitas Reddit](https://www.reddit.com/r/RooCode):** Bagikan pengalaman Anda dan lihat apa yang sedang dibangun orang lain.
-- **[Masalah GitHub](https://github.com/RooCodeInc/Roo-Code/issues):** Laporkan bug dan lacak pengembangan.
-- **[Permintaan Fitur](https://github.com/RooCodeInc/Roo-Code/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** Punya ide? Bagikan dengan para pengembang.
+- **[Server Discord](https://discord.gg/njust-ai-cj):** Bergabunglah dengan komunitas untuk bantuan dan diskusi real-time.
+- **[Komunitas Reddit](https://www.reddit.com/r/NJUST_AI_CJ):** Bagikan pengalaman Anda dan lihat apa yang sedang dibangun orang lain.
+- **[Masalah GitHub](https://github.com/NJUST-AI/NJUST_AI_CJ/issues):** Laporkan bug dan lacak pengembangan.
+- **[Permintaan Fitur](https://github.com/NJUST-AI/NJUST_AI_CJ/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** Punya ide? Bagikan dengan para pengembang.
 
 ---
 
@@ -96,7 +96,7 @@ Pelajari lebih lanjut: [Menggunakan Mode](https://docs.roocode.com/basic-usage/u
 1. **Clone** repo:
 
 ```sh
-git clone https://github.com/RooCodeInc/Roo-Code.git
+git clone https://github.com/NJUST-AI/NJUST_AI_CJ.git
 ```
 
 2. **Instal dependensi**:
@@ -147,10 +147,10 @@ Jika Anda lebih suka menginstal paket VSIX secara manual:
     ```sh
     pnpm vsix
     ```
-2.  File `.vsix` akan dibuat di direktori `bin/` (misalnya, `bin/roo-cline-<version>.vsix`).
+2.  File `.vsix` akan dibuat di direktori `bin/` (misalnya, `bin/njust-ai-cj-<version>.vsix`).
 3.  Instal secara manual menggunakan VSCode CLI:
     ```sh
-    code --install-extension bin/roo-cline-<version>.vsix
+    code --install-extension bin/njust-ai-cj-<version>.vsix
     ```
 
 ---
@@ -177,4 +177,4 @@ Kami menyukai kontribusi komunitas! Mulailah dengan membaca [CONTRIBUTING.md](CO
 
 ---
 
-**Selamat menikmati NJUST_AI_CJ!** Baik Anda mengendalikannya dengan ketat atau membiarkannya berkeliaran secara otonom, kami tidak sabar untuk melihat apa yang Anda bangun. Jika Anda memiliki pertanyaan atau ide fitur, kunjungi [komunitas Reddit](https://www.reddit.com/r/RooCode/) atau [Discord](https://discord.gg/roocode) kami. Selamat membuat kode!
+**Selamat menikmati NJUST_AI_CJ!** Baik Anda mengendalikannya dengan ketat atau membiarkannya berkeliaran secara otonom, kami tidak sabar untuk melihat apa yang Anda bangun. Jika Anda memiliki pertanyaan atau ide fitur, kunjungi [komunitas Reddit](https://www.reddit.com/r/NJUST_AI_CJ/) atau [Discord](https://discord.gg/njust-ai-cj) kami. Selamat membuat kode!

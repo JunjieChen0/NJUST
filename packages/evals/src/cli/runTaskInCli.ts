@@ -4,8 +4,8 @@ import * as os from "node:os"
 import pWaitFor from "p-wait-for"
 import { execa } from "execa"
 
-import { type ToolUsage, TaskCommandName, NJUST_AI_CJEventName, IpcMessageType } from "@roo-code/types"
-import { IpcClient } from "@roo-code/ipc"
+import { type ToolUsage, TaskCommandName, NJUST_AI_CJEventName, IpcMessageType } from "@njust-ai-cj/types"
+import { IpcClient } from "@njust-ai-cj/ipc"
 
 import { updateTask, createTaskMetrics, updateTaskMetrics, createToolError } from "../db/index"
 import { EVALS_REPO_PATH } from "../exercises/index"
@@ -25,11 +25,11 @@ export const runTaskWithCli = async ({ run, task, publish, logger, jobToken }: R
 
 	const env: Record<string, string> = {
 		...(process.env as Record<string, string>),
-		ROO_CODE_IPC_SOCKET_PATH: ipcSocketPath,
+		NJUST_AI_CJ_IPC_SOCKET_PATH: ipcSocketPath,
 	}
 
 	if (jobToken) {
-		env.ROO_CODE_CLOUD_TOKEN = jobToken
+		env.NJUST_AI_CJ_CLOUD_TOKEN = jobToken
 	}
 
 	const controller = new AbortController()
@@ -37,7 +37,7 @@ export const runTaskWithCli = async ({ run, task, publish, logger, jobToken }: R
 
 	const cliArgs = [
 		"--filter",
-		"@roo-code/cli",
+		"@njust-ai-cj/cli",
 		"start",
 		"--prompt-file",
 		promptSourcePath,

@@ -8,7 +8,7 @@ import {
 	type ClineAskUseMcpServer,
 	type McpExecutionStatus,
 	mcpExecutionStatusSchema,
-} from "@roo-code/types"
+} from "@njust-ai-cj/types"
 
 import { safeJsonParse } from "@roo/core"
 

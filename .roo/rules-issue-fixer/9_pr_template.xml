@@ -29,7 +29,7 @@ Closes: #[ISSUE_NUMBER] <!-- Replace with the issue number, e.g., Closes: #123 -
 <!--
 If you used NJUST_AI_CJ to help create this PR, you can share public task links here.
 This helps reviewers understand your development process and provides additional context.
-Example: https://app.roocode.com/share/task-id
+Example: (task link)
 -->
 
 [TASK_CONTEXT]
@@ -163,7 +163,7 @@ gh repo fork [owner]/[repo] --clone=false
       </placeholder>
       <placeholder name="TASK_CONTEXT">
         <description>Optional NJUST_AI_CJ task links if used during development</description>
-        <example>https://app.roocode.com/share/task-abc123</example>
+        <example>(task link)</example>
         <default>_No NJUST_AI_CJ task context for this PR_</default>
       </placeholder>
       <placeholder name="DESCRIPTION_CONTENT">

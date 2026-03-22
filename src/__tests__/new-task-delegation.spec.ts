@@ -1,7 +1,7 @@
 // npx vitest run __tests__/new-task-delegation.spec.ts
 
 import { describe, it, expect, vi } from "vitest"
-import { NJUST_AI_CJEventName } from "@roo-code/types"
+import { NJUST_AI_CJEventName } from "@njust-ai-cj/types"
 import { Task } from "../core/task/Task"
 
 describe("Task.startSubtask() metadata-driven delegation", () => {

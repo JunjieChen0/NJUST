@@ -15,8 +15,8 @@ import {
 	type VerbosityLevel,
 	type ReasoningEffortExtended,
 	type ServiceTier,
-} from "@roo-code/types"
-import { TelemetryService } from "@roo-code/telemetry"
+} from "@njust-ai-cj/types"
+import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import type { ApiHandlerOptions } from "../../shared/api"
 

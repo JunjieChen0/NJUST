@@ -1,12 +1,12 @@
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.roo-cline"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.njust-ai-cj"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
   <a href="https://x.com/roocode"><img src="https://img.shields.io/badge/roocode-000000?style=flat&logo=x&logoColor=white" alt="X"></a>
   <a href="https://youtube.com/@roocodeyt?feature=shared"><img src="https://img.shields.io/badge/YouTube-FF0000?style=flat&logo=youtube&logoColor=white" alt="YouTube"></a>
-  <a href="https://discord.gg/roocode"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
-  <a href="https://www.reddit.com/r/RooCode/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
+  <a href="https://discord.gg/njust-ai-cj"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
+  <a href="https://www.reddit.com/r/NJUST_AI_CJ/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
 </p>
 <p align="center">
-  <em>Obtenha ajuda rápida → <a href="https://discord.gg/roocode">Junte-se ao Discord</a> • Prefere assíncrono? → <a href="https://www.reddit.com/r/RooCode/">Junte-se ao r/NJUST_AI_CJ</a></em>
+  <em>Obtenha ajuda rápida → <a href="https://discord.gg/njust-ai-cj">Junte-se ao Discord</a> • Prefere assíncrono? → <a href="https://www.reddit.com/r/NJUST_AI_CJ/">Junte-se ao r/NJUST_AI_CJ</a></em>
 </p>
 
 # NJUST_AI_CJ
@@ -64,7 +64,7 @@ O NJUST_AI_CJ se adapta à sua maneira de trabalhar, e não o contrário:
 - Modo Depuração: rastreie problemas, adicione logs, isole as causas raiz
 - Modos Personalizados: crie modos especializados para sua equipe ou fluxo de trabalho
 
-Saiba mais: [Usar Modos](https://docs.roocode.com/basic-usage/using-modes) • [Modos personalizados](https://docs.roocode.com/advanced-usage/custom-modes)
+Saiba mais: [Usar Modos](https://docs.njust-ai-cj.local/basic-usage/using-modes) • [Modos personalizados](https://docs.njust-ai-cj.local/advanced-usage/custom-modes)
 
 ## Vídeos de tutorial e recursos
 
@@ -77,17 +77,17 @@ Saiba mais: [Usar Modos](https://docs.roocode.com/basic-usage/using-modes) • [
 
 </div>
 <p align="center">
-<a href="https://docs.roocode.com/tutorial-videos">Mais vídeos rápidos de tutorial e recursos...</a>
+<a href="https://docs.njust-ai-cj.local/tutorial-videos">Mais vídeos rápidos de tutorial e recursos...</a>
 </p>
 
 ## Recursos
 
-- **[Documentação](https://docs.roocode.com):** O guia oficial para instalar, configurar e dominar o NJUST_AI_CJ.
+- **[Documentação](https://docs.njust-ai-cj.local):** O guia oficial para instalar, configurar e dominar o NJUST_AI_CJ.
 - **[Canal do YouTube](https://youtube.com/@roocodeyt?feature=shared):** Assista a tutoriais e veja os recursos em ação.
-- **[Servidor do Discord](https://discord.gg/roocode):** Junte-se à comunidade para ajuda e discussão em tempo real.
-- **[Comunidade do Reddit](https://www.reddit.com/r/RooCode):** Compartilhe suas experiências e veja o que os outros estão construindo.
-- **[Issues do GitHub](https://github.com/RooCodeInc/Roo-Code/issues):** Relate bugs e acompanhe o desenvolvimento.
-- **[Solicitações de recursos](https://github.com/RooCodeInc/Roo-Code/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** Tem uma ideia? Compartilhe com os desenvolvedores.
+- **[Servidor do Discord](https://discord.gg/njust-ai-cj):** Junte-se à comunidade para ajuda e discussão em tempo real.
+- **[Comunidade do Reddit](https://www.reddit.com/r/NJUST_AI_CJ):** Compartilhe suas experiências e veja o que os outros estão construindo.
+- **[Issues do GitHub](https://github.com/NJUST-AI/NJUST_AI_CJ/issues):** Relate bugs e acompanhe o desenvolvimento.
+- **[Solicitações de recursos](https://github.com/NJUST-AI/NJUST_AI_CJ/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** Tem uma ideia? Compartilhe com os desenvolvedores.
 
 ---
 
@@ -96,7 +96,7 @@ Saiba mais: [Usar Modos](https://docs.roocode.com/basic-usage/using-modes) • [
 1. **Clone** o repositório:
 
 ```sh
-git clone https://github.com/RooCodeInc/Roo-Code.git
+git clone https://github.com/NJUST-AI/NJUST_AI_CJ.git
 ```
 
 2. **Instale as dependências**:
@@ -147,10 +147,10 @@ Se preferir instalar o pacote VSIX manualmente:
     ```sh
     pnpm vsix
     ```
-2.  Um arquivo `.vsix` será gerado no diretório `bin/` (por exemplo, `bin/roo-cline-<version>.vsix`).
+2.  Um arquivo `.vsix` será gerado no diretório `bin/` (por exemplo, `bin/njust-ai-cj-<version>.vsix`).
 3.  Instale-o manualmente usando a CLI do VSCode:
     ```sh
-    code --install-extension bin/roo-cline-<version>.vsix
+    code --install-extension bin/njust-ai-cj-<version>.vsix
     ```
 
 ---
@@ -177,4 +177,4 @@ Adoramos contribuições da comunidade! Comece lendo nosso [CONTRIBUTING.md](CON
 
 ---
 
-**Aproveite o NJUST_AI_CJ!** Quer você o mantenha na coleira curta ou o deixe perambular autonomamente, mal podemos esperar para ver o que você vai construir. Se tiver dúvidas ou ideias de recursos, passe na nossa [comunidade do Reddit](https://www.reddit.com/r/RooCode/) ou no [Discord](https://discord.gg/roocode). Feliz codificação!
+**Aproveite o NJUST_AI_CJ!** Quer você o mantenha na coleira curta ou o deixe perambular autonomamente, mal podemos esperar para ver o que você vai construir. Se tiver dúvidas ou ideias de recursos, passe na nossa [comunidade do Reddit](https://www.reddit.com/r/NJUST_AI_CJ/) ou no [Discord](https://discord.gg/njust-ai-cj). Feliz codificação!

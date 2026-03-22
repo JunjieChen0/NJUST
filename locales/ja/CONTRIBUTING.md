@@ -54,7 +54,7 @@ PRでこれらの分野との連携について言及してください。
 
 ### 3. NJUST_AI_CJコミュニティに参加する
 
-- **プライマリ：** [Discord](https://discord.gg/roocode)に参加し、**Hannes Rudolph (`hrudolph`)**にDMしてください。
+- **プライマリ：** [Discord](https://discord.gg/njust-ai-cj)に参加し、**Hannes Rudolph (`hrudolph`)**にDMしてください。
 - **代替：** 経験豊富な貢献者は、[GitHubプロジェクト](https://github.com/orgs/RooCodeInc/projects/1)を介して直接関与できます。
 
 ## 貢献内容の検索と計画
@@ -69,26 +69,26 @@ PRでこれらの分野との連携について言及してください。
 
 すべての貢献は、私たちのスキニーテンプレートを使用してGitHubの課題から始まります。
 
-- **既存の課題を確認する**：[GitHubの課題](https://github.com/RooCodeInc/Roo-Code/issues)で検索します。
+- **既存の課題を確認する**：[GitHubの課題](https://github.com/NJUST-AI/NJUST_AI_CJ/issues)で検索します。
 - **課題を作成する**：
     - **機能強化：** 「機能強化リクエスト」テンプレート（ユーザーの利益に焦点を当てた平易な言葉）。
     - **バグ：** 「バグレポート」テンプレート（最小限の再現+期待値と実際値+バージョン）。
-- **それに取り組みたいですか？** 課題に「Claiming」とコメントし、[Discord](https://discord.gg/roocode)で**Hannes Rudolph（`hrudolph`）**にDMして割り当てを受けてください。割り当てはスレッドで確認されます。
+- **それに取り組みたいですか？** 課題に「Claiming」とコメントし、[Discord](https://discord.gg/njust-ai-cj)で**Hannes Rudolph（`hrudolph`）**にDMして割り当てを受けてください。割り当てはスレッドで確認されます。
 - **PRは課題にリンクする必要があります。** リンクされていないPRはクローズされる場合があります。
 
 ### 何に取り組むかを決める
 
 - 「課題[未割り当て]」の課題については、[GitHubプロジェクト](https://github.com/orgs/RooCodeInc/projects/1)を確認してください。
-- ドキュメントについては、[NJUST_AI_CJドキュメント](https://github.com/RooCodeInc/Roo-Code-Docs)をご覧ください。
+- ドキュメントについては、[NJUST_AI_CJドキュメント](https://github.com/NJUST-AI/NJUST_AI_CJ-Docs)をご覧ください。
 
 ### バグの報告
 
 - 最初に既存のレポートを確認してください。
-- 次の情報を含む[「バグレポート」テンプレート](https://github.com/RooCodeInc/Roo-Code/issues/new/choose)を使用して新しいバグを作成します。
+- 次の情報を含む[「バグレポート」テンプレート](https://github.com/NJUST-AI/NJUST_AI_CJ/issues/new/choose)を使用して新しいバグを作成します。
     - 明確で番号付きの再現手順
     - 期待される結果と実際の結果
     - NJUST_AI_CJのバージョン（必須）。関連する場合はAPIプロバイダー/モデル
-- **セキュリティの問題**：[セキュリティアドバイザリ](https://github.com/RooCodeInc/Roo-Code/security/advisories/new)を介して非公開で報告してください。
+- **セキュリティの問題**：[セキュリティアドバイザリ](https://github.com/NJUST-AI/NJUST_AI_CJ/security/advisories/new)を介して非公開で報告してください。
 
 ## 開発と提出のプロセス
 
@@ -97,7 +97,7 @@ PRでこれらの分野との連携について言及してください。
 1. **フォークとクローン：**
 
 ```
-git clone https://github.com/あなたのユーザー名/Roo-Code.git
+git clone https://github.com/あなたのユーザー名/NJUST_AI_CJ.git
 ```
 
 2. **依存関係のインストール：**
@@ -126,7 +126,7 @@ pnpm install
 
 ### プルリクエストポリシー
 
-- 割り当てられたGitHubの課題を参照する必要があります。割り当てを受けるには、課題に「Claiming」とコメントし、[Discord](https://discord.gg/roocode)で**Hannes Rudolph（`hrudolph`）**にDMしてください。割り当てはスレッドで確認されます。
+- 割り当てられたGitHubの課題を参照する必要があります。割り当てを受けるには、課題に「Claiming」とコメントし、[Discord](https://discord.gg/njust-ai-cj)で**Hannes Rudolph（`hrudolph`）**にDMしてください。割り当てはスレッドで確認されます。
 - リンクされていないPRはクローズされる場合があります。
 - PRはCIテストに合格し、ロードマップに沿っており、明確なドキュメントが必要です。
 

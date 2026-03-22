@@ -1,7 +1,7 @@
 // Mock TelemetryService before other imports
 const mockCaptureException = vi.fn()
 
-vi.mock("@roo-code/telemetry", () => ({
+vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
 		hasInstance: () => true,
 		instance: {
@@ -42,7 +42,7 @@ import {
 	BEDROCK_SERVICE_TIER_MODEL_IDS,
 	bedrockModels,
 	ApiProviderError,
-} from "@roo-code/types"
+} from "@njust-ai-cj/types"
 
 import type { Anthropic } from "@anthropic-ai/sdk"
 

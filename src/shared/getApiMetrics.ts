@@ -3,6 +3,6 @@ import {
 	consolidateTokenUsage as getApiMetrics,
 	hasTokenUsageChanged,
 	hasToolUsageChanged,
-} from "@roo-code/core/browser"
+} from "@njust-ai-cj/core/browser"
 
 export { type ParsedApiReqStartedTextType, getApiMetrics, hasTokenUsageChanged, hasToolUsageChanged }

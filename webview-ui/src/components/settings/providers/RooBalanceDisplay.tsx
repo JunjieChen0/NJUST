@@ -10,7 +10,7 @@ export const RooBalanceDisplay = () => {
 	}
 
 	const formattedBalance = balance.toFixed(2)
-	const billingUrl = "https://app.roocode.com/billing"
+	const billingUrl = ""
 
 	return (
 		<VSCodeLink href={billingUrl} className="text-vscode-foreground hover:underline whitespace-nowrap">

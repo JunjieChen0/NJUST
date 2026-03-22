@@ -12,7 +12,7 @@ Use this skill when the task involves:
 - Modifying or debugging the evals execution infrastructure
 - Adding new eval exercises or languages
 - Working with the evals web interface (apps/web-evals)
-- Modifying the public evals display page on roocode.com
+- Modifying the public evals display page on njust-ai-cj.local
 - Understanding where evals code lives in this monorepo
 
 ## When NOT to Use This Skill
@@ -31,8 +31,8 @@ This monorepo has **two distinct evals-related locations** that can cause confus
 | --------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
 | **Evals Execution System**  | `packages/evals/`                                              | Core eval infrastructure: CLI, DB schema, Docker configs       |
 | **Evals Management UI**     | `apps/web-evals/`                                              | Next.js app for creating/monitoring eval runs (localhost:3446) |
-| **Website Evals Page**      | `apps/web-roo-code/src/app/evals/`                             | Public roocode.com page displaying eval results                |
-| **External Exercises Repo** | [Roo-Code-Evals](https://github.com/RooCodeInc/Roo-Code-Evals) | Actual coding exercises (NOT in this monorepo)                 |
+| **Website Evals Page**      | `apps/web-roo-code/src/app/evals/`                             | Public njust-ai-cj.local page displaying eval results                |
+| **External Exercises Repo** | [NJUST_AI_CJ-Evals](https://github.com/NJUST-AI/NJUST_AI_CJ-Evals) | Actual coding exercises (NOT in this monorepo)                 |
 
 ## Directory Structure Reference
 
@@ -94,7 +94,7 @@ apps/web-roo-code/src/app/evals/
 └── types.ts      # EvalRun type (extends packages/evals types)
 ```
 
-This page **displays** eval results on the public roocode.com website. It imports types from `@roo-code/evals` but does NOT run evals.
+This page **displays** eval results on the public njust-ai-cj.local website. It imports types from `@njust-ai-cj/evals` but does NOT run evals.
 
 ## Architecture Overview
 
@@ -123,7 +123,7 @@ The evals system is a distributed evaluation platform that runs AI coding tasks 
 
 ### Adding a New Eval Exercise
 
-1. Add exercise to [Roo-Code-Evals](https://github.com/RooCodeInc/Roo-Code-Evals) repo (external)
+1. Add exercise to [NJUST_AI_CJ-Evals](https://github.com/NJUST-AI/NJUST_AI_CJ-Evals) repo (external)
 2. See [`packages/evals/ADDING-EVALS.md`](packages/evals/ADDING-EVALS.md) for structure
 
 ### Modifying Eval CLI Behavior
@@ -179,7 +179,7 @@ cd packages/evals && npx vitest run
 cd apps/web-evals && npx vitest run
 ```
 
-## Key Types/Exports from `@roo-code/evals`
+## Key Types/Exports from `@njust-ai-cj/evals`
 
 The package exports are defined in [`packages/evals/src/index.ts`](packages/evals/src/index.ts):
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react"
 import { Plus, Globe, Folder, Edit, Trash2, Settings } from "lucide-react"
 
-import type { SkillMetadata } from "@roo-code/types"
+import type { SkillMetadata } from "@njust-ai-cj/types"
 
 import { getAllModes } from "@roo/modes"
 

@@ -17,8 +17,8 @@ if (fs.existsSync(envPath)) {
 	}
 }
 
-import type { } from "@roo-code/types"
-import { customToolRegistry } from "@roo-code/core"
+import type { } from "@njust-ai-cj/types"
+import { customToolRegistry } from "@njust-ai-cj/core"
 
 import "./utils/path" // Necessary to have access to String.prototype.toPosix.
 import { createOutputChannelLogger } from "./utils/outputChannelLogger"
@@ -91,7 +91,7 @@ async function checkWorktreeAutoOpen(
 			// Open the NJUST_AI_CJ sidebar with a slight delay to ensure UI is ready
 			setTimeout(async () => {
 				try {
-					await vscode.commands.executeCommand("roo-cline.plusButtonClicked")
+					await vscode.commands.executeCommand("njust-ai-cj.plusButtonClicked")
 				} catch (error) {
 					outputChannel.appendLine(
 						`[Worktree] Error auto-opening sidebar: ${error instanceof Error ? error.message : String(error)}`,
@@ -244,7 +244,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	vscode.commands.executeCommand(`${Package.name}.activationCompleted`)
 
 	// Implements the `NJUST_AI_CJAPI` interface.
-	const socketPath = process.env.ROO_CODE_IPC_SOCKET_PATH
+	const socketPath = process.env.NJUST_AI_CJ_IPC_SOCKET_PATH
 	const enableLogging = typeof socketPath === "string"
 
 	// Watch the core files and automatically reload the extension host.

@@ -33,7 +33,7 @@ export const rooCodeCloudModelSchema = z.object({
 export type NJUST_AI_CJCloudModel = z.infer<typeof rooCodeCloudModelSchema>
 
 export const getNJUST_AI_CJCloudModels = async (): Promise<NJUST_AI_CJCloudModel[]> => {
-	const response = await fetch("https://api.roocode.com/proxy/v1/models")
+	const response = await fetch("")
 
 	if (!response.ok) {
 		return []

@@ -1,12 +1,12 @@
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.roo-cline"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.njust-ai-cj"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
   <a href="https://x.com/roocode"><img src="https://img.shields.io/badge/roocode-000000?style=flat&logo=x&logoColor=white" alt="X"></a>
   <a href="https://youtube.com/@roocodeyt?feature=shared"><img src="https://img.shields.io/badge/YouTube-FF0000?style=flat&logo=youtube&logoColor=white" alt="YouTube"></a>
-  <a href="https://discord.gg/roocode"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
-  <a href="https://www.reddit.com/r/RooCode/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
+  <a href="https://discord.gg/njust-ai-cj"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
+  <a href="https://www.reddit.com/r/NJUST_AI_CJ/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
 </p>
 <p align="center">
-  <em>Hızlı yardım alın → <a href="https://discord.gg/roocode">Discord'a Katılın</a> • Asenkron mu tercih edersiniz? → <a href="https://www.reddit.com/r/RooCode/">r/NJUST_AI_CJ'a Katılın</a></em>
+  <em>Hızlı yardım alın → <a href="https://discord.gg/njust-ai-cj">Discord'a Katılın</a> • Asenkron mu tercih edersiniz? → <a href="https://www.reddit.com/r/NJUST_AI_CJ/">r/NJUST_AI_CJ'a Katılın</a></em>
 </p>
 
 # NJUST_AI_CJ
@@ -64,7 +64,7 @@ NJUST_AI_CJ, sizin çalışma şeklinize uyum sağlar, tam tersi değil:
 - Hata Ayıklama Modu: sorunları izleyin, günlükler ekleyin, kök nedenleri izole edin
 - Özel Modlar: ekibiniz veya iş akışınız için özel modlar oluşturun
 
-Daha fazla: [Modları kullanma](https://docs.roocode.com/basic-usage/using-modes) • [Özel modlar](https://docs.roocode.com/advanced-usage/custom-modes)
+Daha fazla: [Modları kullanma](https://docs.njust-ai-cj.local/basic-usage/using-modes) • [Özel modlar](https://docs.njust-ai-cj.local/advanced-usage/custom-modes)
 
 ## Eğitim ve Özellik Videoları
 
@@ -77,17 +77,17 @@ Daha fazla: [Modları kullanma](https://docs.roocode.com/basic-usage/using-modes
 
 </div>
 <p align="center">
-<a href="https://docs.roocode.com/tutorial-videos">Daha fazla hızlı eğitim ve özellik videosu...</a>
+<a href="https://docs.njust-ai-cj.local/tutorial-videos">Daha fazla hızlı eğitim ve özellik videosu...</a>
 </p>
 
 ## Kaynaklar
 
-- **[Dokümantasyon](https://docs.roocode.com):** NJUST_AI_CJ'u yükleme, yapılandırma ve ustalaşma konusundaki resmi kılavuz.
+- **[Dokümantasyon](https://docs.njust-ai-cj.local):** NJUST_AI_CJ'u yükleme, yapılandırma ve ustalaşma konusundaki resmi kılavuz.
 - **[YouTube Kanalı](https://youtube.com/@roocodeyt?feature=shared):** Eğitimleri izleyin ve özellikleri çalışırken görün.
-- **[Discord Sunucusu](https://discord.gg/roocode):** Gerçek zamanlı yardım ve tartışma için topluluğa katılın.
-- **[Reddit Topluluğu](https://www.reddit.com/r/RooCode):** Deneyimlerinizi paylaşın ve başkalarının ne inşa ettiğini görün.
-- **[GitHub Sorunları](https://github.com/RooCodeInc/Roo-Code/issues):** Hataları bildirin ve gelişimi takip edin.
-- **[Özellik İstekleri](https://github.com/RooCodeInc/Roo-Code/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** Bir fikriniz mi var? Geliştiricilerle paylaşın.
+- **[Discord Sunucusu](https://discord.gg/njust-ai-cj):** Gerçek zamanlı yardım ve tartışma için topluluğa katılın.
+- **[Reddit Topluluğu](https://www.reddit.com/r/NJUST_AI_CJ):** Deneyimlerinizi paylaşın ve başkalarının ne inşa ettiğini görün.
+- **[GitHub Sorunları](https://github.com/NJUST-AI/NJUST_AI_CJ/issues):** Hataları bildirin ve gelişimi takip edin.
+- **[Özellik İstekleri](https://github.com/NJUST-AI/NJUST_AI_CJ/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** Bir fikriniz mi var? Geliştiricilerle paylaşın.
 
 ---
 
@@ -96,7 +96,7 @@ Daha fazla: [Modları kullanma](https://docs.roocode.com/basic-usage/using-modes
 1. **Depoyu klonlayın**:
 
 ```sh
-git clone https://github.com/RooCodeInc/Roo-Code.git
+git clone https://github.com/NJUST-AI/NJUST_AI_CJ.git
 ```
 
 2. **Bağımlılıkları yükleyin**:
@@ -147,10 +147,10 @@ VSIX paketini manuel olarak yüklemeyi tercih ederseniz:
     ```sh
     pnpm vsix
     ```
-2.  `bin/` dizininde bir `.vsix` dosyası oluşturulur (ör. `bin/roo-cline-<version>.vsix`).
+2.  `bin/` dizininde bir `.vsix` dosyası oluşturulur (ör. `bin/njust-ai-cj-<version>.vsix`).
 3.  VSCode CLI kullanarak manuel olarak yükleyin:
     ```sh
-    code --install-extension bin/roo-cline-<version>.vsix
+    code --install-extension bin/njust-ai-cj-<version>.vsix
     ```
 
 ---
@@ -177,4 +177,4 @@ Topluluk katkılarını çok seviyoruz! [CONTRIBUTING.md](CONTRIBUTING.md) dosya
 
 ---
 
-**NJUST_AI_CJ'un keyfini çıkar!** Onu kısa tasmalı tut ya da otonom dolaşsın; ne inşa edeceğini görmek için sabırsızlanıyoruz. Soruların veya özellik fikirlerin varsa [Reddit topluluğumuza](https://www.reddit.com/r/RooCode/) ya da [Discord](https://discord.gg/roocode)'a uğra. İyi kodlamalar!
+**NJUST_AI_CJ'un keyfini çıkar!** Onu kısa tasmalı tut ya da otonom dolaşsın; ne inşa edeceğini görmek için sabırsızlanıyoruz. Soruların veya özellik fikirlerin varsa [Reddit topluluğumuza](https://www.reddit.com/r/NJUST_AI_CJ/) ya da [Discord](https://discord.gg/njust-ai-cj)'a uğra. İyi kodlamalar!

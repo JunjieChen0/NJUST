@@ -8,7 +8,7 @@ import { getModelDimension, getDefaultModelId } from "../../../../shared/embeddi
 vi.mock("openai")
 
 // Mock TelemetryService
-vi.mock("@roo-code/telemetry", () => ({
+vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
 		instance: {
 			captureEvent: vi.fn(),
@@ -90,7 +90,7 @@ describe("OpenRouterEmbedder", () => {
 				baseURL: "https://openrouter.ai/api/v1",
 				apiKey: mockApiKey,
 				defaultHeaders: {
-					"HTTP-Referer": "https://github.com/RooCodeInc/Roo-Code",
+					"HTTP-Referer": "https://github.com/NJUST-AI/NJUST_AI_CJ",
 					"X-Title": "NJUST_AI_CJ",
 				},
 			})

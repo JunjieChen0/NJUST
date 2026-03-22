@@ -1,12 +1,12 @@
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.roo-cline"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.njust-ai-cj"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
   <a href="https://x.com/roocode"><img src="https://img.shields.io/badge/roocode-000000?style=flat&logo=x&logoColor=white" alt="X"></a>
   <a href="https://youtube.com/@roocodeyt?feature=shared"><img src="https://img.shields.io/badge/YouTube-FF0000?style=flat&logo=youtube&logoColor=white" alt="YouTube"></a>
-  <a href="https://discord.gg/roocode"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
-  <a href="https://www.reddit.com/r/RooCode/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
+  <a href="https://discord.gg/njust-ai-cj"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
+  <a href="https://www.reddit.com/r/NJUST_AI_CJ/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
 </p>
 <p align="center">
-  <em>Obtén ayuda rápido → <a href="https://discord.gg/roocode">Únete a Discord</a> • ¿Prefieres asíncrono? → <a href="https://www.reddit.com/r/RooCode/">Únete a r/NJUST_AI_CJ</a></em>
+  <em>Obtén ayuda rápido → <a href="https://discord.gg/njust-ai-cj">Únete a Discord</a> • ¿Prefieres asíncrono? → <a href="https://www.reddit.com/r/NJUST_AI_CJ/">Únete a r/NJUST_AI_CJ</a></em>
 </p>
 
 # NJUST_AI_CJ
@@ -64,7 +64,7 @@ NJUST_AI_CJ se adapta a tu forma de trabajar, no al revés:
 - Modo Depuración: rastrear problemas, agregar registros, aislar causas raíz
 - Modos Personalizados: crea modos especializados para tu equipo o flujo de trabajo
 
-Más info: [Usar Modos](https://docs.roocode.com/basic-usage/using-modes) • [Modos Personalizados](https://docs.roocode.com/advanced-usage/custom-modes)
+Más info: [Usar Modos](https://docs.njust-ai-cj.local/basic-usage/using-modes) • [Modos Personalizados](https://docs.njust-ai-cj.local/advanced-usage/custom-modes)
 
 ## Tutoriales y vídeos de funcionalidades
 
@@ -77,17 +77,17 @@ Más info: [Usar Modos](https://docs.roocode.com/basic-usage/using-modes) • [M
 
 </div>
 <p align="center">
-<a href="https://docs.roocode.com/tutorial-videos">Más tutoriales rápidos y vídeos de funcionalidades...</a>
+<a href="https://docs.njust-ai-cj.local/tutorial-videos">Más tutoriales rápidos y vídeos de funcionalidades...</a>
 </p>
 
 ## Recursos
 
-- **[Documentación](https://docs.roocode.com):** La guía oficial para instalar, configurar y dominar NJUST_AI_CJ.
+- **[Documentación](https://docs.njust-ai-cj.local):** La guía oficial para instalar, configurar y dominar NJUST_AI_CJ.
 - **[Canal de YouTube](https://youtube.com/@roocodeyt?feature=shared):** Mira tutoriales y ve las funcionalidades en acción.
-- **[Servidor de Discord](https://discord.gg/roocode):** Únete a la comunidad para obtener ayuda y discutir en tiempo real.
-- **[Comunidad de Reddit](https://www.reddit.com/r/RooCode):** Comparte tus experiencias y ve lo que otros están construyendo.
-- **[Incidencias de GitHub](https://github.com/RooCodeInc/Roo-Code/issues):** Reporta errores y sigue el desarrollo.
-- **[Solicitudes de funcionalidades](https://github.com/RooCodeInc/Roo-Code/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** ¿Tienes una idea? Compártela con los desarrolladores.
+- **[Servidor de Discord](https://discord.gg/njust-ai-cj):** Únete a la comunidad para obtener ayuda y discutir en tiempo real.
+- **[Comunidad de Reddit](https://www.reddit.com/r/NJUST_AI_CJ):** Comparte tus experiencias y ve lo que otros están construyendo.
+- **[Incidencias de GitHub](https://github.com/NJUST-AI/NJUST_AI_CJ/issues):** Reporta errores y sigue el desarrollo.
+- **[Solicitudes de funcionalidades](https://github.com/NJUST-AI/NJUST_AI_CJ/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** ¿Tienes una idea? Compártela con los desarrolladores.
 
 ---
 
@@ -96,7 +96,7 @@ Más info: [Usar Modos](https://docs.roocode.com/basic-usage/using-modes) • [M
 1. **Clona** el repositorio:
 
 ```sh
-git clone https://github.com/RooCodeInc/Roo-Code.git
+git clone https://github.com/NJUST-AI/NJUST_AI_CJ.git
 ```
 
 2. **Instala las dependencias**:
@@ -147,10 +147,10 @@ Si prefieres instalar el paquete VSIX manualmente:
     ```sh
     pnpm vsix
     ```
-2.  Se generará un archivo `.vsix` en el directorio `bin/` (p. ej., `bin/roo-cline-<version>.vsix`).
+2.  Se generará un archivo `.vsix` en el directorio `bin/` (p. ej., `bin/njust-ai-cj-<version>.vsix`).
 3.  Instálalo manualmente usando la CLI de VSCode:
     ```sh
-    code --install-extension bin/roo-cline-<version>.vsix
+    code --install-extension bin/njust-ai-cj-<version>.vsix
     ```
 
 ---
@@ -177,4 +177,4 @@ Usamos [changesets](https://github.com/changesets/changesets) para el versionado
 
 ---
 
-**¡Disfruta de NJUST_AI_CJ!** Ya sea que lo mantengas con una correa corta o lo dejes deambular de forma autónoma, no podemos esperar a ver qué construyes. Si tienes preguntas o ideas sobre funcionalidades, pásate por nuestra [comunidad de Reddit](https://www.reddit.com/r/RooCode/) o [Discord](https://discord.gg/roocode). ¡Feliz codificación!
+**¡Disfruta de NJUST_AI_CJ!** Ya sea que lo mantengas con una correa corta o lo dejes deambular de forma autónoma, no podemos esperar a ver qué construyes. Si tienes preguntas o ideas sobre funcionalidades, pásate por nuestra [comunidad de Reddit](https://www.reddit.com/r/NJUST_AI_CJ/) o [Discord](https://discord.gg/njust-ai-cj). ¡Feliz codificación!

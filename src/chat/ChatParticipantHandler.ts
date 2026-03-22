@@ -1,9 +1,9 @@
 import * as vscode from "vscode"
 
 import type { ClineProvider } from "../core/webview/ClineProvider"
-import type { ClineMessage } from "@roo-code/types"
+import type { ClineMessage } from "@njust-ai-cj/types"
 
-const PARTICIPANT_ID = "roo-cline.agent"
+const PARTICIPANT_ID = "njust-ai-cj.agent"
 
 const COMMAND_MODE_MAP: Record<string, string> = {
 	code: "code",

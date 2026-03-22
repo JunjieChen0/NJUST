@@ -1,6 +1,6 @@
 import * as assert from "assert"
 
-import { NJUST_AI_CJEventName, type ClineMessage } from "@roo-code/types"
+import { NJUST_AI_CJEventName, type ClineMessage } from "@njust-ai-cj/types"
 
 import { sleep, waitFor, waitUntilCompleted } from "./utils"
 

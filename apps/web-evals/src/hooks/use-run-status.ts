@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef } from "react"
 import { useQuery, keepPreviousData } from "@tanstack/react-query"
 
-import { type TokenUsage, type ToolUsage, NJUST_AI_CJEventName, taskEventSchema } from "@roo-code/types"
-import type { Run, Task, TaskMetrics } from "@roo-code/evals"
+import { type TokenUsage, type ToolUsage, NJUST_AI_CJEventName, taskEventSchema } from "@njust-ai-cj/types"
+import type { Run, Task, TaskMetrics } from "@njust-ai-cj/evals"
 
 import { getHeartbeat } from "@/actions/heartbeat"
 import { getRunners } from "@/actions/runners"

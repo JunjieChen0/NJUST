@@ -27,7 +27,7 @@ import {
 	providerSettingsSchema,
 	getModelId,
 	EVALS_SETTINGS,
-} from "@roo-code/types"
+} from "@njust-ai-cj/types"
 
 import { createRun } from "@/actions/runs"
 import { getExercises } from "@/actions/exercises"

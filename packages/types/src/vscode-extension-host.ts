@@ -659,6 +659,10 @@ export interface WebviewMessage {
 	worktreeForce?: boolean
 	worktreeNewWindow?: boolean
 	worktreeIncludeContent?: string
+	action?: string
+	planId?: string
+	stepId?: string
+	description?: string
 }
 
 export interface RequestOpenAiCodexRateLimitsMessage {

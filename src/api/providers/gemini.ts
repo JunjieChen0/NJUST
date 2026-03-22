@@ -15,9 +15,9 @@ import {
 	ApiProviderError,
 	geminiDefaultModelId,
 	geminiModels,
-} from "@roo-code/types"
-import { safeJsonParse } from "@roo-code/core"
-import { TelemetryService } from "@roo-code/telemetry"
+} from "@njust-ai-cj/types"
+import { safeJsonParse } from "@njust-ai-cj/core"
+import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import type { ApiHandlerOptions } from "../../shared/api"
 

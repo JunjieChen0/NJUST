@@ -1,22 +1,22 @@
 {
-	"name": "@roo-code/types",
+	"name": "@njust-ai-cj/types",
 	"version": "1.115.0",
 	"description": "TypeScript type definitions for NJUST_AI_CJ.",
 	"publishConfig": {
 		"access": "public",
-		"name": "@roo-code/types",
+		"name": "@njust-ai-cj/types",
 		"registry": "https://registry.npmjs.org/"
 	},
 	"author": "NJUST_AI_CJ Team",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/RooCodeInc/Roo-Code.git"
+		"url": "git+https://github.com/NJUST-AI/NJUST_AI_CJ.git"
 	},
 	"bugs": {
-		"url": "https://github.com/RooCodeInc/Roo-Code/issues"
+		"url": "https://github.com/NJUST-AI/NJUST_AI_CJ/issues"
 	},
-	"homepage": "https://roocode.com",
+	"homepage": "https://njust-ai-cj.local",
 	"keywords": ["roo", "roo-code", "ai"],
 	"files": ["dist"]
 }

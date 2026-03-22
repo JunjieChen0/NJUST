@@ -5,8 +5,8 @@ import * as fsSync from "fs"
 import NodeCache from "node-cache"
 import { z } from "zod"
 
-import type { ProviderName, ModelRecord } from "@roo-code/types"
-import { modelInfoSchema } from "@roo-code/types"
+import type { ProviderName, ModelRecord } from "@njust-ai-cj/types"
+import { modelInfoSchema } from "@njust-ai-cj/types"
 
 import { safeWriteJson } from "../../../utils/safeWriteJson"
 
@@ -86,7 +86,7 @@ async function fetchModelsFromProvider(options: GetModelsOptions): Promise<Model
 			break
 		case "roo": {
 			// NJUST_AI_CJ Cloud provider requires baseUrl and optional apiKey
-			const rooBaseUrl = options.baseUrl ?? process.env.ROO_CODE_PROVIDER_URL ?? "https://api.roocode.com/proxy"
+			const rooBaseUrl = options.baseUrl ?? process.env.NJUST_AI_CJ_PROVIDER_URL ?? ""
 			models = await getRooModels(rooBaseUrl, options.apiKey)
 			break
 		}

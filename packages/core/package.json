@@ -1,5 +1,5 @@
 {
-	"name": "@roo-code/core",
+	"name": "@njust-ai-cj/core",
 	"description": "Platform agnostic core functionality for NJUST_AI_CJ.",
 	"version": "0.0.0",
 	"type": "module",
@@ -15,7 +15,7 @@
 		"clean": "rimraf .turbo"
 	},
 	"dependencies": {
-		"@roo-code/types": "workspace:^",
+		"@njust-ai-cj/types": "workspace:^",
 		"esbuild": "^0.25.0",
 		"execa": "^9.5.2",
 		"ignore": "^7.0.3",
@@ -23,8 +23,8 @@
 		"zod": "^3.25.61"
 	},
 	"devDependencies": {
-		"@roo-code/config-eslint": "workspace:^",
-		"@roo-code/config-typescript": "workspace:^",
+		"@njust-ai-cj/config-eslint": "workspace:^",
+		"@njust-ai-cj/config-typescript": "workspace:^",
 		"@types/node": "^24.1.0",
 		"vitest": "^3.2.3"
 	}

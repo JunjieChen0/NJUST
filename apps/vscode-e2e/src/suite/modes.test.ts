@@ -1,6 +1,6 @@
 import * as assert from "assert"
 
-import { NJUST_AI_CJEventName } from "@roo-code/types"
+import { NJUST_AI_CJEventName } from "@njust-ai-cj/types"
 
 import { waitUntilCompleted } from "./utils"
 import { setDefaultSuiteTimeout } from "./test-utils"

@@ -1,5 +1,5 @@
-import { ProviderSettings, ClineMessage } from "@roo-code/types"
-import { TelemetryService } from "@roo-code/telemetry"
+import { ProviderSettings, ClineMessage } from "@njust-ai-cj/types"
+import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import { MessageEnhancer } from "../messageEnhancer"
 import * as singleCompletionHandlerModule from "../../../utils/single-completion-handler"
@@ -7,7 +7,7 @@ import { ProviderSettingsManager } from "../../config/ProviderSettingsManager"
 
 // Mock dependencies
 vi.mock("../../../utils/single-completion-handler")
-vi.mock("@roo-code/telemetry")
+vi.mock("@njust-ai-cj/telemetry")
 
 describe("MessageEnhancer", () => {
 	let mockProviderSettingsManager: ProviderSettingsManager

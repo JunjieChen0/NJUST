@@ -1,4 +1,4 @@
-import type { NJUST_AI_CJAPI } from "@roo-code/types"
+import type { NJUST_AI_CJAPI } from "@njust-ai-cj/types"
 
 declare global {
 	// eslint-disable-next-line no-var

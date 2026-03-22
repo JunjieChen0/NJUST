@@ -1,6 +1,6 @@
 // npx vitest run __tests__/delegation-events.spec.ts
 
-import { NJUST_AI_CJEventName, rooCodeEventsSchema, taskEventSchema } from "@roo-code/types"
+import { NJUST_AI_CJEventName, rooCodeEventsSchema, taskEventSchema } from "@njust-ai-cj/types"
 
 describe("delegation event schemas", () => {
 	test("rooCodeEventsSchema validates tuples", () => {

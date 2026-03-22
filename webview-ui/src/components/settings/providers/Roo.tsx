@@ -3,7 +3,7 @@ import {
 	type OrganizationAllowList,
 	type RouterModels,
 	rooDefaultModelId,
-} from "@roo-code/types"
+} from "@njust-ai-cj/types"
 
 import { ModelPicker } from "../ModelPicker"
 
@@ -34,7 +34,7 @@ export const Roo = ({
 				models={routerModels?.roo ?? {}}
 				modelIdKey="apiModelId"
 				serviceName="NJUST_AI_CJ Router"
-				serviceUrl="https://github.com/RooCodeInc/Roo-Code"
+				serviceUrl="https://github.com/NJUST-AI/NJUST_AI_CJ"
 				organizationAllowList={organizationAllowList}
 				errorMessage={modelValidationError}
 				simplifySettings={simplifySettings}

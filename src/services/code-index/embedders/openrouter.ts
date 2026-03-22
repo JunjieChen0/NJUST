@@ -74,7 +74,7 @@ export class OpenRouterEmbedder implements IEmbedder {
 				baseURL: this.baseUrl,
 				apiKey: apiKey,
 				defaultHeaders: {
-					"HTTP-Referer": "https://github.com/RooCodeInc/Roo-Code",
+					"HTTP-Referer": "https://github.com/NJUST-AI/NJUST_AI_CJ",
 					"X-Title": "NJUST_AI_CJ",
 				},
 			})

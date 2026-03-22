@@ -11,8 +11,8 @@
 Clone the NJUST_AI_CJ repo:
 
 ```sh
-git clone https://github.com/RooCodeInc/Roo-Code.git
-cd Roo-Code
+git clone https://github.com/NJUST-AI/NJUST_AI_CJ.git
+cd NJUST_AI_CJ
 ```
 
 Add your OpenRouter API key:
@@ -37,7 +37,7 @@ Additionally, you'll find in Docker Desktop that database and redis services are
 
 Navigate to [localhost:3446](http://localhost:3446/) in your browser and click the 🚀 button.
 
-By default an evals run will run all programming exercises in [NJUST_AI_CJ Evals](https://github.com/RooCodeInc/Roo-Code-Evals) repository with the Claude Sonnet 4 model and default settings. For basic configuration you can specify the LLM to use and any subset of the exercises you'd like. For advanced configuration you can import a NJUST_AI_CJ settings file which will allow you to run the evals with NJUST_AI_CJ configured any way you'd like (this includes custom modes, custom instructions, etc).
+By default an evals run will run all programming exercises in [NJUST_AI_CJ Evals](https://github.com/NJUST-AI/NJUST_AI_CJ-Evals) repository with the Claude Sonnet 4 model and default settings. For basic configuration you can specify the LLM to use and any subset of the exercises you'd like. For advanced configuration you can import a NJUST_AI_CJ settings file which will allow you to run the evals with NJUST_AI_CJ configured any way you'd like (this includes custom modes, custom instructions, etc).
 
 <img width="1053" src="https://github.com/user-attachments/assets/2367eef4-6ae9-4ac2-8ee4-80f981046486" />
 

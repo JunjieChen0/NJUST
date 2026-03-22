@@ -54,7 +54,7 @@ Mentionnez l'alignement avec ces domaines dans vos PRs.
 
 ### 3. Rejoignez la communauté NJUST_AI_CJ
 
-- **Principal :** Rejoignez notre [Discord](https://discord.gg/roocode) et envoyez un DM à **Hannes Rudolph (`hrudolph`)**.
+- **Principal :** Rejoignez notre [Discord](https://discord.gg/njust-ai-cj) et envoyez un DM à **Hannes Rudolph (`hrudolph`)**.
 - **Alternative :** Les contributeurs expérimentés peuvent s'engager directement via les [Projets GitHub](https://github.com/orgs/RooCodeInc/projects/1).
 
 ## Trouver et planifier votre contribution
@@ -69,26 +69,26 @@ Mentionnez l'alignement avec ces domaines dans vos PRs.
 
 Toutes les contributions commencent par une Issue GitHub en utilisant nos modèles simples.
 
-- **Vérifiez les issues existantes** : Recherchez dans les [Issues GitHub](https://github.com/RooCodeInc/Roo-Code/issues).
+- **Vérifiez les issues existantes** : Recherchez dans les [Issues GitHub](https://github.com/NJUST-AI/NJUST_AI_CJ/issues).
 - **Créez une issue** en utilisant :
     - **Améliorations :** Modèle "Demande d'amélioration" (langage simple axé sur l'avantage pour l'utilisateur).
     - **Bugs :** Modèle "Rapport de bug" (reproduction minimale + attendu vs réel + version).
-- **Vous voulez y travailler ?** Commentez "Claiming" sur l'issue et envoyez un DM à **Hannes Rudolph (`hrudolph`)** sur [Discord](https://discord.gg/roocode) pour être assigné. L'assignation sera confirmée dans le fil de discussion.
+- **Vous voulez y travailler ?** Commentez "Claiming" sur l'issue et envoyez un DM à **Hannes Rudolph (`hrudolph`)** sur [Discord](https://discord.gg/njust-ai-cj) pour être assigné. L'assignation sera confirmée dans le fil de discussion.
 - **Les PRs doivent être liées à l'issue.** Les PRs non liées peuvent être fermées.
 
 ### Décider sur quoi travailler
 
 - Consultez le [Projet GitHub](https://github.com/orgs/RooCodeInc/projects/1) pour les issues "Issue [Non assignée]".
-- Pour la documentation, visitez [NJUST_AI_CJ Docs](https://github.com/RooCodeInc/Roo-Code-Docs).
+- Pour la documentation, visitez [NJUST_AI_CJ Docs](https://github.com/NJUST-AI/NJUST_AI_CJ-Docs).
 
 ### Signaler des bugs
 
 - Vérifiez d'abord les rapports existants.
-- Créez un nouveau bug en utilisant le [modèle "Rapport de bug"](https://github.com/RooCodeInc/Roo-Code/issues/new/choose) avec :
+- Créez un nouveau bug en utilisant le [modèle "Rapport de bug"](https://github.com/NJUST-AI/NJUST_AI_CJ/issues/new/choose) avec :
     - Des étapes de reproduction claires et numérotées
     - Résultat attendu vs réel
     - Version de NJUST_AI_CJ (requise) ; fournisseur/modèle d'API si pertinent
-- **Problèmes de sécurité** : Signalez-les en privé via les [avis de sécurité](https://github.com/RooCodeInc/Roo-Code/security/advisories/new).
+- **Problèmes de sécurité** : Signalez-les en privé via les [avis de sécurité](https://github.com/NJUST-AI/NJUST_AI_CJ/security/advisories/new).
 
 ## Processus de développement et de soumission
 
@@ -97,7 +97,7 @@ Toutes les contributions commencent par une Issue GitHub en utilisant nos modèl
 1. **Fork & Cloner :**
 
 ```
-git clone https://github.com/VOTRE_NOM_UTILISATEUR/Roo-Code.git
+git clone https://github.com/VOTRE_NOM_UTILISATEUR/NJUST_AI_CJ.git
 ```
 
 2. **Installer les dépendances :**
@@ -126,7 +126,7 @@ pnpm install
 
 ### Politique de Pull Request
 
-- Doit faire référence à une Issue GitHub assignée. Pour être assigné : commentez "Claiming" sur l'issue et envoyez un DM à **Hannes Rudolph (`hrudolph`)** sur [Discord](https://discord.gg/roocode). L'assignation sera confirmée dans le fil de discussion.
+- Doit faire référence à une Issue GitHub assignée. Pour être assigné : commentez "Claiming" sur l'issue et envoyez un DM à **Hannes Rudolph (`hrudolph`)** sur [Discord](https://discord.gg/njust-ai-cj). L'assignation sera confirmée dans le fil de discussion.
 - Les PRs non liées peuvent être fermées.
 - Les PRs doivent passer les tests d'intégration continue, s'aligner sur la feuille de route et avoir une documentation claire.
 

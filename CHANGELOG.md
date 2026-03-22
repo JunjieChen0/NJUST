@@ -104,7 +104,7 @@
 - Add per-workspace indexing opt-in and stop/cancel indexing controls (#11455 by @JamesRobert20, PR #11456 by @JamesRobert20)
 - Add per-task file-based history store for cross-instance safety (PR #11490 by @roomote)
 - Fix: Redesign rehydration scroll lifecycle for smoother chat experience (PR #11483 by @hannesrudolph)
-- Fix: Bump @roo-code/types metadata version to 1.111.0 after revert regression (PR #11588 by @roomote)
+- Fix: Bump @njust-ai-cj/types metadata version to 1.111.0 after revert regression (PR #11588 by @roomote)
 
 ## [3.48.1] - 2026-02-18
 
@@ -150,7 +150,7 @@
 - Clean up repo-facing mode rules (PR #11410 by @hannesrudolph)
 - Implement ModelMessage storage layer with AI SDK response messages (PR #11409 by @daniel-lxs)
 - Extract translation and merge resolver modes into reusable skills (PR #11215 by @app/roomote)
-- Add blog section with initial posts to roocode.com (PR #11127 by @app/roomote)
+- Add blog section with initial posts to njust-ai-cj.local (PR #11127 by @app/roomote)
 - Replace Roomote Control with Linear Integration in cloud features grid (PR #11280 by @app/roomote)
 - Add IPC query handlers for commands, modes, and models (PR #11279 by @cte)
 - Add stdin stream mode for the CLI (PR #11476 by @cte)
@@ -337,8 +337,8 @@
 - Chore: Stop overriding tool allow/deny lists for Gemini (PR #10592 by @hannesrudolph)
 - Chore: Change default CLI model to anthropic/claude-opus-4.5 (PR #10544 by @mrubens)
 - Chore: Update Terms of Service effective January 9, 2026 (PR #10568 by @mrubens)
-- Chore: Move more types to @roo-code/types for CLI support (PR #10583 by @cte)
-- Chore: Add functionality to @roo-code/core for CLI support (PR #10584 by @cte)
+- Chore: Move more types to @njust-ai-cj/types for CLI support (PR #10583 by @cte)
+- Chore: Add functionality to @njust-ai-cj/core for CLI support (PR #10584 by @cte)
 - Chore: Add slash commands useful for CLI development (PR #10586 by @cte)
 
 ## [3.39.1] - 2026-01-08
@@ -1162,7 +1162,7 @@
 
 - The free Supernova model now has a 1M token context window (thanks @mrubens!)
 - Experiment to show the Roo provider on the welcome screen (thanks @mrubens!)
-- Web: Website improvements to https://roocode.com/ (thanks @brunobergher!)
+- Web: Website improvements to https://njust-ai-cj.local/ (thanks @brunobergher!)
 - Fix: Remove <thinking> tags from prompts for cleaner output and fewer tokens (#8318 by @hannesrudolph, PR by @app/roomote)
 - Correct tool use suggestion to improve model adherence to suggestion (thanks @hannesrudolph!)
 - feat: log out from cloud when resetting extension state (thanks @app/roomote!)
@@ -2847,7 +2847,7 @@
 
 ## [3.7.5] - 2025-02-26
 
-- Fix context window truncation math (see [#1173](https://github.com/RooCodeInc/Roo-Code/issues/1173))
+- Fix context window truncation math (see [#1173](https://github.com/NJUST-AI/NJUST_AI_CJ/issues/1173))
 - Fix various issues with the model picker (thanks @System233!)
 - Fix model input / output cost parsing (thanks @System233!)
 - Add drag-and-drop for files
@@ -3062,7 +3062,7 @@
 - Ask and Architect modes can now edit markdown files
 - Custom modes can now be restricted to specific file patterns (for example, a technical writer who can only edit markdown files 👋)
 - Support for configuring the Bedrock provider with AWS Profiles
-- New NJUST_AI_CJ community Discord at https://roocode.com/discord!
+- New NJUST_AI_CJ community Discord at https://njust-ai-cj.local/discord!
 
 ## [3.2.8]
 
@@ -3102,7 +3102,7 @@
     - Create specialized assistants for any workflow
     - Just type "Create a new mode for <X>" or visit the Prompts tab in the top menu to get started
 
-Join us at https://www.reddit.com/r/RooCode to share your custom modes and be part of our next chapter!
+Join us at https://www.reddit.com/r/NJUST_AI_CJ to share your custom modes and be part of our next chapter!
 
 ## [3.1.7]
 
@@ -3155,7 +3155,7 @@ Join us at https://www.reddit.com/r/RooCode to share your custom modes and be pa
 
 ## [3.0.0]
 
-- This release adds chat modes! Now you can ask NJUST_AI_CJ questions about system architecture or the codebase without immediately jumping into writing code. You can even assign different API configuration profiles to each mode if you prefer to use different models for thinking vs coding. Would love feedback in the new NJUST_AI_CJ Reddit! https://www.reddit.com/r/RooCode
+- This release adds chat modes! Now you can ask NJUST_AI_CJ questions about system architecture or the codebase without immediately jumping into writing code. You can even assign different API configuration profiles to each mode if you prefer to use different models for thinking vs coding. Would love feedback in the new NJUST_AI_CJ Reddit! https://www.reddit.com/r/NJUST_AI_CJ
 
 ## [2.2.46]
 
@@ -3276,7 +3276,7 @@ Join us at https://www.reddit.com/r/RooCode to share your custom modes and be pa
 
 ## [2.2.16]
 
-- Incorporate Premshay's [PR](https://github.com/RooCodeInc/Roo-Code/pull/60) to add support for Amazon Nova and Meta Llama Models via Bedrock (3, 3.1, 3.2) and unified Bedrock calls using BedrockClient and Bedrock Runtime API
+- Incorporate Premshay's [PR](https://github.com/NJUST-AI/NJUST_AI_CJ/pull/60) to add support for Amazon Nova and Meta Llama Models via Bedrock (3, 3.1, 3.2) and unified Bedrock calls using BedrockClient and Bedrock Runtime API
 
 ## [2.2.14 - 2.2.15]
 
@@ -3348,7 +3348,7 @@ Join us at https://www.reddit.com/r/RooCode to share your custom modes and be pa
 
 ## [2.1.15]
 
-- Incorporate dbasclpy's [PR](https://github.com/RooCodeInc/Roo-Code/pull/54) to add support for gemini-exp-1206
+- Incorporate dbasclpy's [PR](https://github.com/NJUST-AI/NJUST_AI_CJ/pull/54) to add support for gemini-exp-1206
 - Make it clear that diff editing is very experimental
 
 ## [2.1.14]
@@ -3358,7 +3358,7 @@ Join us at https://www.reddit.com/r/RooCode to share your custom modes and be pa
 
 ## [2.1.13]
 
-- Fix https://github.com/RooCodeInc/Roo-Code/issues/50 where sound effects were not respecting settings
+- Fix https://github.com/NJUST-AI/NJUST_AI_CJ/issues/50 where sound effects were not respecting settings
 
 ## [2.1.12]
 
@@ -3366,7 +3366,7 @@ Join us at https://www.reddit.com/r/RooCode to share your custom modes and be pa
 
 ## [2.1.11]
 
-- Incorporate lloydchang's [PR](https://github.com/RooCodeInc/Roo-Code/pull/42) to add support for OpenRouter compression
+- Incorporate lloydchang's [PR](https://github.com/NJUST-AI/NJUST_AI_CJ/pull/42) to add support for OpenRouter compression
 
 ## [2.1.10]
 

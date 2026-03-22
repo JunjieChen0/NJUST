@@ -15,10 +15,10 @@ export function useLogoSrc(): string {
 	// Before mounting, return a default logo (dark theme as specified in providers)
 	// This prevents the logo from flickering on initial load
 	if (!mounted) {
-		return "/Roo-Code-Logo-Horiz-white.svg"
+		return "/NJUST_AI_CJ-Logo-Horiz-white.svg"
 	}
 
 	// Use theme as fallback if resolvedTheme is not available yet
 	const currentTheme = resolvedTheme || theme
-	return currentTheme === "light" ? "/Roo-Code-Logo-Horiz-blk.svg" : "/Roo-Code-Logo-Horiz-white.svg"
+	return currentTheme === "light" ? "/NJUST_AI_CJ-Logo-Horiz-blk.svg" : "/NJUST_AI_CJ-Logo-Horiz-white.svg"
 }

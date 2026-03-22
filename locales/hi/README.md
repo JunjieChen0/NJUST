@@ -1,12 +1,12 @@
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.roo-cline"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.njust-ai-cj"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
   <a href="https://x.com/roocode"><img src="https://img.shields.io/badge/roocode-000000?style=flat&logo=x&logoColor=white" alt="X"></a>
   <a href="https://youtube.com/@roocodeyt?feature=shared"><img src="https://img.shields.io/badge/YouTube-FF0000?style=flat&logo=youtube&logoColor=white" alt="YouTube"></a>
-  <a href="https://discord.gg/roocode"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
-  <a href="https://www.reddit.com/r/RooCode/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
+  <a href="https://discord.gg/njust-ai-cj"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
+  <a href="https://www.reddit.com/r/NJUST_AI_CJ/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
 </p>
 <p align="center">
-  <em>जल्दी मदद पाएं → <a href="https://discord.gg/roocode">डिस्कॉर्ड से जुड़ें</a> • एसिंक पसंद है? → <a href="https://www.reddit.com/r/RooCode/">r/NJUST_AI_CJ से जुड़ें</a></em>
+  <em>जल्दी मदद पाएं → <a href="https://discord.gg/njust-ai-cj">डिस्कॉर्ड से जुड़ें</a> • एसिंक पसंद है? → <a href="https://www.reddit.com/r/NJUST_AI_CJ/">r/NJUST_AI_CJ से जुड़ें</a></em>
 </p>
 
 # NJUST_AI_CJ
@@ -64,7 +64,7 @@
 - डीबग मोड: समस्याओं का पता लगाएं, लॉग जोड़ें, मूल कारणों को अलग करें
 - कस्टम मोड: अपनी टीम या वर्कफ़्लो के लिए विशेष मोड बनाएं
 
-और जानो: [मोड्स का इस्तेमाल](https://docs.roocode.com/basic-usage/using-modes) • [कस्टम मोड्स](https://docs.roocode.com/advanced-usage/custom-modes)
+और जानो: [मोड्स का इस्तेमाल](https://docs.njust-ai-cj.local/basic-usage/using-modes) • [कस्टम मोड्स](https://docs.njust-ai-cj.local/advanced-usage/custom-modes)
 
 ## ट्यूटोरियल और फ़ीचर वीडियो
 
@@ -77,17 +77,17 @@
 
 </div>
 <p align="center">
-<a href="https://docs.roocode.com/tutorial-videos">अधिक त्वरित ट्यूटोरियल और फ़ीचर वीडियो...</a>
+<a href="https://docs.njust-ai-cj.local/tutorial-videos">अधिक त्वरित ट्यूटोरियल और फ़ीचर वीडियो...</a>
 </p>
 
 ## संसाधन
 
-- **[दस्तावेज़ीकरण](https://docs.roocode.com):** NJUST_AI_CJ को स्थापित करने, कॉन्फ़िगर करने और उसमें महारत हासिल करने के लिए आधिकारिक गाइड।
+- **[दस्तावेज़ीकरण](https://docs.njust-ai-cj.local):** NJUST_AI_CJ को स्थापित करने, कॉन्फ़िगर करने और उसमें महारत हासिल करने के लिए आधिकारिक गाइड।
 - **[यूट्यूब चैनल](https://youtube.com/@roocodeyt?feature=shared):** ट्यूटोरियल देखें और सुविधाओं को एक्शन में देखें।
-- **[डिस्कॉर्ड सर्वर](https://discord.gg/roocode):** रीयल-टाइम सहायता और चर्चा के लिए समुदाय में शामिल हों।
-- **[रेडिट समुदाय](https://www.reddit.com/r/RooCode):** अपने अनुभव साझा करें और देखें कि दूसरे क्या बना रहे हैं।
-- **[गिटहब मुद्दे](https://github.com/RooCodeInc/Roo-Code/issues):** बग की रिपोर्ट करें और विकास को ट्रैक करें।
-- **[सुविधा अनुरोध](https://github.com/RooCodeInc/Roo-Code/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** क्या आपके पास कोई विचार है? इसे डेवलपर्स के साथ साझा करें।
+- **[डिस्कॉर्ड सर्वर](https://discord.gg/njust-ai-cj):** रीयल-टाइम सहायता और चर्चा के लिए समुदाय में शामिल हों।
+- **[रेडिट समुदाय](https://www.reddit.com/r/NJUST_AI_CJ):** अपने अनुभव साझा करें और देखें कि दूसरे क्या बना रहे हैं।
+- **[गिटहब मुद्दे](https://github.com/NJUST-AI/NJUST_AI_CJ/issues):** बग की रिपोर्ट करें और विकास को ट्रैक करें।
+- **[सुविधा अनुरोध](https://github.com/NJUST-AI/NJUST_AI_CJ/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** क्या आपके पास कोई विचार है? इसे डेवलपर्स के साथ साझा करें।
 
 ---
 
@@ -96,7 +96,7 @@
 1. **क्लोन** करें रेपो:
 
 ```sh
-git clone https://github.com/RooCodeInc/Roo-Code.git
+git clone https://github.com/NJUST-AI/NJUST_AI_CJ.git
 ```
 
 2. **निर्भरताएँ स्थापित करें**:
@@ -147,10 +147,10 @@ pnpm install:vsix [-y] [--editor=<command>]
     ```sh
     pnpm vsix
     ```
-2.  `bin/` डायरेक्टरी में एक `.vsix` फ़ाइल जनरेट होगी (जैसे, `bin/roo-cline-<version>.vsix` )।
+2.  `bin/` डायरेक्टरी में एक `.vsix` फ़ाइल जनरेट होगी (जैसे, `bin/njust-ai-cj-<version>.vsix` )।
 3.  इसे वीएसकोड सीएलआई का उपयोग करके मैन्युअल रूप से इंस्टॉल करें:
     ```sh
-    code --install-extension bin/roo-cline-<version>.vsix
+    code --install-extension bin/njust-ai-cj-<version>.vsix
     ```
 
 ---
@@ -177,4 +177,4 @@ pnpm install:vsix [-y] [--editor=<command>]
 
 ---
 
-**NJUST_AI_CJ का आनंद लें!** चाहे आप इसे छोटी लगाम में रखें या इसे स्वायत्त रूप से घूमने दें, हम यह देखने के लिए इंतजार नहीं कर सकते कि आप क्या बनाते हैं। यदि आपके कोई प्रश्न या सुविधा के विचार हैं, तो हमारी [रेडिट समुदाय](https://www.reddit.com/r/RooCode/) या [डिस्कॉर्ड](https://discord.gg/roocode) पर आएं। हैप्पी कोडिंग!
+**NJUST_AI_CJ का आनंद लें!** चाहे आप इसे छोटी लगाम में रखें या इसे स्वायत्त रूप से घूमने दें, हम यह देखने के लिए इंतजार नहीं कर सकते कि आप क्या बनाते हैं। यदि आपके कोई प्रश्न या सुविधा के विचार हैं, तो हमारी [रेडिट समुदाय](https://www.reddit.com/r/NJUST_AI_CJ/) या [डिस्कॉर्ड](https://discord.gg/njust-ai-cj) पर आएं। हैप्पी कोडिंग!

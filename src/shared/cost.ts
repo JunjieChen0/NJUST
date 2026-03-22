@@ -1,5 +1,5 @@
-import type { ModelInfo } from "@roo-code/types"
-import type { ServiceTier } from "@roo-code/types"
+import type { ModelInfo } from "@njust-ai-cj/types"
+import type { ServiceTier } from "@njust-ai-cj/types"
 
 export interface ApiCostResult {
 	totalInputTokens: number

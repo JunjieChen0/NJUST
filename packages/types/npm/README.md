@@ -3,14 +3,14 @@
 The NJUST_AI_CJ extension exposes an API that can be used by other extensions.
 To use this API in your extension:
 
-1. Install `@roo-code/types` with npm, pnpm, or yarn.
+1. Install `@njust-ai-cj/types` with npm, pnpm, or yarn.
 2. Import the `NJUST_AI_CJAPI` type.
 3. Load the extension API.
 
 ```typescript
-import { NJUST_AI_CJAPI } from "@roo-code/types"
+import { NJUST_AI_CJAPI } from "@njust-ai-cj/types"
 
-const extension = vscode.extensions.getExtension<NJUST_AI_CJAPI>("RooVeterinaryInc.roo-cline")
+const extension = vscode.extensions.getExtension<NJUST_AI_CJAPI>("RooVeterinaryInc.njust-ai-cj")
 
 if (!extension?.isActive) {
 	throw new Error("Extension is not activated")
@@ -38,10 +38,10 @@ await api.pressPrimaryButton()
 await api.pressSecondaryButton()
 ```
 
-**NOTE:** To ensure that the `RooVeterinaryInc.roo-cline` extension is activated before your extension, add it to the `extensionDependencies` in your `package.json`:
+**NOTE:** To ensure that the `RooVeterinaryInc.njust-ai-cj` extension is activated before your extension, add it to the `extensionDependencies` in your `package.json`:
 
 ```json
-"extensionDependencies": ["RooVeterinaryInc.roo-cline"]
+"extensionDependencies": ["RooVeterinaryInc.njust-ai-cj"]
 ```
 
 For detailed information on the available methods and their usage, refer to the `roo-code.d.ts` file.

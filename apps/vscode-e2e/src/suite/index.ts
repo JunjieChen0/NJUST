@@ -3,12 +3,12 @@ import Mocha from "mocha"
 import { glob } from "glob"
 import * as vscode from "vscode"
 
-import type { NJUST_AI_CJAPI } from "@roo-code/types"
+import type { NJUST_AI_CJAPI } from "@njust-ai-cj/types"
 
 import { waitFor } from "./utils"
 
 export async function run() {
-	const extension = vscode.extensions.getExtension<NJUST_AI_CJAPI>("RooVeterinaryInc.roo-cline")
+	const extension = vscode.extensions.getExtension<NJUST_AI_CJAPI>("RooVeterinaryInc.njust-ai-cj")
 
 	if (!extension) {
 		throw new Error("Extension not found")
@@ -22,7 +22,7 @@ export async function run() {
 		openRouterModelId: "openai/gpt-4.1",
 	})
 
-	await vscode.commands.executeCommand("roo-cline.SidebarProvider.focus")
+	await vscode.commands.executeCommand("njust-ai-cj.SidebarProvider.focus")
 	await waitFor(() => api.isReady())
 
 	globalThis.api = api

@@ -1,5 +1,5 @@
 {
-	"name": "@roo-code/vscode-shim",
+	"name": "@njust-ai-cj/vscode-shim",
 	"private": true,
 	"type": "module",
 	"exports": "./src/index.ts",
@@ -11,8 +11,8 @@
 		"clean": "rimraf .turbo"
 	},
 	"devDependencies": {
-		"@roo-code/config-eslint": "workspace:^",
-		"@roo-code/config-typescript": "workspace:^",
+		"@njust-ai-cj/config-eslint": "workspace:^",
+		"@njust-ai-cj/config-typescript": "workspace:^",
 		"@types/node": "^24.1.0",
 		"vitest": "^3.2.3"
 	},

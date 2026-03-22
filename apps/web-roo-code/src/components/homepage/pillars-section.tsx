@@ -181,7 +181,7 @@ export function PillarsSection() {
 								<div className="text-muted-foreground my-4 space-y-1">
 									<p>
 										The NJUST_AI_CJ Extension is{" "}
-										<Link target="_blank" href="https://github.com/RooCodeInc/Roo-Code">
+										<Link target="_blank" href="https://github.com/NJUST-AI/NJUST_AI_CJ">
 											open source
 										</Link>{" "}
 										so you can see for yourself exactly what it&apos;s doing and we don&apos;t use

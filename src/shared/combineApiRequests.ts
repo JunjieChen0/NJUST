@@ -1,3 +1,3 @@
-import { consolidateApiRequests as combineApiRequests } from "@roo-code/core/browser"
+import { consolidateApiRequests as combineApiRequests } from "@njust-ai-cj/core/browser"
 
 export { combineApiRequests }

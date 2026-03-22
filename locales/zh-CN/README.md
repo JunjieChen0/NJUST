@@ -1,12 +1,12 @@
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.roo-cline"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.njust-ai-cj"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
   <a href="https://x.com/roocode"><img src="https://img.shields.io/badge/roocode-000000?style=flat&logo=x&logoColor=white" alt="X"></a>
   <a href="https://youtube.com/@roocodeyt?feature=shared"><img src="https://img.shields.io/badge/YouTube-FF0000?style=flat&logo=youtube&logoColor=white" alt="YouTube"></a>
-  <a href="https://discord.gg/roocode"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
-  <a href="https://www.reddit.com/r/RooCode/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
+  <a href="https://discord.gg/njust-ai-cj"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
+  <a href="https://www.reddit.com/r/NJUST_AI_CJ/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI_CJ-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI_CJ"></a>
 </p>
 <p align="center">
-  <em>快速获取帮助 → <a href="https://discord.gg/roocode">加入 Discord</a> • 偏好异步？→ <a href="https://www.reddit.com/r/RooCode/">加入 r/NJUST_AI_CJ</a></em>
+  <em>快速获取帮助 → <a href="https://discord.gg/njust-ai-cj">加入 Discord</a> • 偏好异步？→ <a href="https://www.reddit.com/r/NJUST_AI_CJ/">加入 r/NJUST_AI_CJ</a></em>
 </p>
 
 # NJUST_AI_CJ
@@ -64,7 +64,7 @@ NJUST_AI_CJ 适应您的工作方式，而不是相反：
 - 调试模式：跟踪问题、添加日志、隔离根本原因
 - 自定义模式：为您的团队或工作流程构建专门的模式
 
-了解更多：[使用模式](https://docs.roocode.com/basic-usage/using-modes) • [自定义模式](https://docs.roocode.com/advanced-usage/custom-modes)
+了解更多：[使用模式](https://docs.njust-ai-cj.local/basic-usage/using-modes) • [自定义模式](https://docs.njust-ai-cj.local/advanced-usage/custom-modes)
 
 ## 教程和功能视频
 
@@ -77,17 +77,17 @@ NJUST_AI_CJ 适应您的工作方式，而不是相反：
 
 </div>
 <p align="center">
-<a href="https://docs.roocode.com/tutorial-videos">更多快速教程和功能视频...</a>
+<a href="https://docs.njust-ai-cj.local/tutorial-videos">更多快速教程和功能视频...</a>
 </p>
 
 ## 资源
 
-- **[文档](https://docs.roocode.com):** 安装、配置和掌握 NJUST_AI_CJ 的官方指南。
+- **[文档](https://docs.njust-ai-cj.local):** 安装、配置和掌握 NJUST_AI_CJ 的官方指南。
 - **[YouTube 频道](https://youtube.com/@roocodeyt?feature=shared):** 观看教程和功能演示。
-- **[Discord 服务器](https://discord.gg/roocode):** 加入社区以获得实时帮助和讨论。
-- **[Reddit 社区](https://www.reddit.com/r/RooCode):** 分享您的经验，看看别人在构建什么。
-- **[GitHub 问题](https://github.com/RooCodeInc/Roo-Code/issues):** 报告错误并跟踪开发。
-- **[功能请求](https://github.com/RooCodeInc/Roo-Code/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** 有想法吗？与开发人员分享。
+- **[Discord 服务器](https://discord.gg/njust-ai-cj):** 加入社区以获得实时帮助和讨论。
+- **[Reddit 社区](https://www.reddit.com/r/NJUST_AI_CJ):** 分享您的经验，看看别人在构建什么。
+- **[GitHub 问题](https://github.com/NJUST-AI/NJUST_AI_CJ/issues):** 报告错误并跟踪开发。
+- **[功能请求](https://github.com/NJUST-AI/NJUST_AI_CJ/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** 有想法吗？与开发人员分享。
 
 ---
 
@@ -96,7 +96,7 @@ NJUST_AI_CJ 适应您的工作方式，而不是相反：
 1. **克隆**仓库：
 
 ```sh
-git clone https://github.com/RooCodeInc/Roo-Code.git
+git clone https://github.com/NJUST-AI/NJUST_AI_CJ.git
 ```
 
 2. **安装依赖项**:
@@ -147,10 +147,10 @@ pnpm install:vsix [-y] [--editor=<command>]
     ```sh
     pnpm vsix
     ```
-2.  将在 `bin/` 目录中生成一个 `.vsix` 文件（例如，`bin/roo-cline-<version>.vsix`）。
+2.  将在 `bin/` 目录中生成一个 `.vsix` 文件（例如，`bin/njust-ai-cj-<version>.vsix`）。
 3.  使用 VSCode CLI 手动安装
     ```sh
-    code --install-extension bin/roo-cline-<version>.vsix
+    code --install-extension bin/njust-ai-cj-<version>.vsix
     ```
 
 ---
@@ -177,4 +177,4 @@ pnpm install:vsix [-y] [--editor=<command>]
 
 ---
 
-**享受 NJUST_AI_CJ！** 无论您是让它保持短绳还是让它自主漫游，我们都迫不及待地想看看您会构建什么。如果您有问题或功能想法，请访问我们的 [Reddit 社区](https://www.reddit.com/r/RooCode/)或 [Discord](https://discord.gg/roocode)。编码愉快！
+**享受 NJUST_AI_CJ！** 无论您是让它保持短绳还是让它自主漫游，我们都迫不及待地想看看您会构建什么。如果您有问题或功能想法，请访问我们的 [Reddit 社区](https://www.reddit.com/r/NJUST_AI_CJ/)或 [Discord](https://discord.gg/njust-ai-cj)。编码愉快！
