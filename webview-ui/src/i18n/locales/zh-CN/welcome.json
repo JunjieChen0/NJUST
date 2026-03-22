@@ -1,0 +1,48 @@
+{
+	"routers": {
+		"requesty": {
+			"description": "您优化的 LLM 路由器",
+			"incentive": "$1 免费额度"
+		},
+		"openrouter": {
+			"description": "LLM 统一接口"
+		},
+		"roo": {
+			"description": "开始使用的最佳免费模型",
+			"incentive": "免费尝试 Roo"
+		}
+	},
+	"landing": {
+		"greeting": "欢迎使用 NJUST_AI_CJ！",
+		"introduction": "一个强大的 AI 编程助手。请在下方配置你的 LLM 提供商以开始使用。",
+		"accountMention": "",
+		"getStarted": "配置提供商",
+		"noAccount": ""
+	},
+	"providerSignup": {
+		"heading": "配置你的提供商",
+		"chooseProviderLocal": "选择以下 AI 提供商以继续",
+		"useAnotherProvider": "使用其他提供商",
+		"useAnotherProviderDescription": "使用你自己的 API 密钥或其他提供商",
+		"finish": "完成",
+		"learnMore": "了解更多",
+		"goBack": "返回"
+	},
+	"waitingForCloud": {
+		"heading": "登录到 NJUST_AI_CJ Cloud...",
+		"description": "我们将带你前往浏览器注册 NJUST_AI_CJ Cloud。然后我们会把你带回这里以完成设置。",
+		"noPrompt": "如果没有提示你打开 URL，<clickHere>点击这里</clickHere>。",
+		"havingTrouble": "如果你已完成注册但遇到问题，<clickHere>点击这里</clickHere>。",
+		"pasteUrl": "粘贴浏览器中显示的回调 URL：",
+		"docsLink": "无法正常工作？<DocsLink>查看文档</DocsLink>。",
+		"invalidURL": "这不像是有效的回调 URL。请复制 NJUST_AI_CJ Cloud 在你的浏览器中显示的内容。",
+		"goBack": "返回"
+	},
+	"startRouter": "我们建议使用 LLM 路由器：",
+	"startCustom": "或者你可以带上自己的 API 密钥：",
+	"telemetry": {
+		"helpImprove": "帮助改进 NJUST_AI_CJ",
+		"helpImproveMessage": "NJUST_AI_CJ 收集错误和使用数据以帮助我们修复 Bug 并改进扩展。此遥测不收集代码、提示或个人信息。你可以在<settingsLink>设置</settingsLink>中将其关闭。"
+	},
+	"importSettings": "导入设置"
+}

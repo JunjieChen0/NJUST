@@ -1,0 +1,17 @@
+{
+	"name": "@roo-code/telemetry",
+	"version": "1.0.0",
+	"description": "Telemetry service stub for NJUST_AI_CJ",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"scripts": {
+		"build": "tsc",
+		"watch": "tsc --watch"
+	},
+	"dependencies": {
+		"@roo-code/types": "workspace:^"
+	},
+	"devDependencies": {
+		"typescript": "5.8.3"
+	}
+}
