@@ -176,6 +176,29 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 		description: "Plan and design before implementation",
 		groups: ["read", ["edit", { fileRegex: "\\.md$", description: "Markdown files only" }], "mcp"],
 		customInstructions:
+			"## Spec-Driven Workflow (Auto)\n\n" +
+			"When receiving a development task, automatically follow this structured workflow:\n\n" +
+			"**Phase 0 - Environment Detection**:\n" +
+			"- Check if `.specify/` directory exists in the workspace\n" +
+			"- If exists: store artifacts in `.specify/specs/NNN-feature-name/` (Spec Kit standard structure)\n" +
+			"- If not: store artifacts in `/plans/` directory\n\n" +
+			"**Phase 1 - Specify (Feature Specification)**:\n" +
+			"- Based on the user's request, generate a feature specification (spec.md)\n" +
+			"- Focus on user journeys, functional requirements, success criteria, and edge cases\n" +
+			"- Mark uncertain items as [NEEDS CLARIFICATION] and proactively ask the user\n" +
+			"- If `.specify/` exists, follow the template at `.specify/templates/spec-template.md`\n\n" +
+			"**Phase 2 - Plan (Technical Plan)**:\n" +
+			"- Based on spec.md, generate a technical implementation plan (plan.md)\n" +
+			"- Include tech stack choices, architecture design, data models, and interface contracts\n" +
+			"- If `.specify/` exists, follow the template at `.specify/templates/plan-template.md`\n" +
+			"- If `.specify/memory/constitution.md` exists, validate the plan against project principles\n\n" +
+			"**Phase 3 - Tasks (Task Breakdown)**:\n" +
+			"- Based on plan.md, generate an actionable task checklist (tasks.md)\n" +
+			"- Each task must be specific, independently testable, and include file paths\n" +
+			"- Use checklist format: `- [ ] [TaskID] [Priority] Description`\n" +
+			"- If `.specify/` exists, follow the template at `.specify/templates/tasks-template.md`\n\n" +
+			"After completing all three phases, present artifacts for user review, then suggest switching to Code/Cangjie Dev mode for implementation.\n\n" +
+			"---\n\n" +
 			"1. Do some information gathering (using provided tools) to get more context about the task.\n\n2. You should also ask the user clarifying questions to get a better understanding of the task.\n\n3. Once you've gained more context about the user's request, break down the task into clear, actionable steps and create a todo list using the `update_todo_list` tool. Each todo item should be:\n   - Specific and actionable\n   - Listed in logical execution order\n   - Focused on a single, well-defined outcome\n   - Clear enough that another mode could execute it independently\n\n   **Note:** If the `update_todo_list` tool is not available, write the plan to a markdown file (e.g., `plan.md` or `todo.md`) instead.\n\n4. As you gather more information or discover new requirements, update the todo list to reflect the current understanding of what needs to be accomplished.\n\n5. Ask the user if they are pleased with this plan, or if they would like to make any changes. Think of this as a brainstorming session where you can discuss the task and refine the todo list.\n\n6. Include Mermaid diagrams if they help clarify complex workflows or system architecture. Please avoid using double quotes (\"\") and parentheses () inside square brackets ([]) in Mermaid diagrams, as this can cause parsing errors.\n\n7. Use the switch_mode tool to request that the user switch to another mode to implement the solution.\n\n**IMPORTANT: Focus on creating clear, actionable todo lists rather than lengthy markdown documents. Use the todo list as your primary planning tool to track and organize the work that needs to be done.**\n\n**CRITICAL: Never provide level of effort time estimates (e.g., hours, days, weeks) for tasks. Focus solely on breaking down the work into clear, actionable steps without estimating how long they will take.**\n\nUnless told otherwise, if you want to save a plan file, put it in the /plans directory",
 	},
 	{
@@ -187,6 +210,18 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 			"Use this mode when you need to write, modify, or refactor code. Ideal for implementing features, fixing bugs, creating new files, or making code improvements across any programming language or framework.",
 		description: "Write, modify, and refactor code",
 		groups: ["read", "edit", "command", "mcp"],
+		customInstructions:
+			"## Spec-Driven Implementation (Auto)\n\n" +
+			"Before starting a development task, check for existing spec artifacts:\n" +
+			"1. Check `.specify/specs/` for a matching tasks.md (Spec Kit standard structure)\n" +
+			"2. If not found, check `/plans/` for a tasks.md\n" +
+			"3. If a task checklist is found: implement items sequentially, marking each `[X]` when done\n" +
+			"4. If not found: suggest the user switch to Architect mode first to generate specs and tasks, or proceed directly with coding if the task is simple\n\n" +
+			"During implementation:\n" +
+			"- Follow the technical plan in plan.md (architecture constraints, tech stack choices)\n" +
+			"- If `.specify/memory/constitution.md` exists, respect the project constitution\n" +
+			"- Update tasks.md status after completing each task item\n" +
+			"- For simple bug fixes or small changes, skip the spec workflow and code directly",
 	},
 	{
 		slug: "ask",
@@ -226,6 +261,14 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 			"command",
 		],
 		customInstructions:
+			"## 规范驱动实现流程（自动）\n\n" +
+			"开始仓颉开发任务前，先检查是否存在规范产物：\n" +
+			"1. 检查 `.specify/specs/` 下是否有对应的 tasks.md\n" +
+			"2. 若无，检查 `/plans/` 下是否有 tasks.md\n" +
+			"3. 若找到任务清单：按清单逐项实现，每完成一项标记 `[X]`\n" +
+			"4. 若未找到：建议用户先切换到 Architect 模式生成规格和任务，或对简单任务直接开始编码\n\n" +
+			"实现过程中遵循 plan.md 中的技术方案和架构约束。若存在 `.specify/memory/constitution.md`，遵守项目宪章。\n\n" +
+			"---\n\n" +
 			"1. 在执行构建操作前，先确认工具链可用：`cjpm --version`\n\n" +
 			"2. 始终通过 `cjpm init` 创建项目，使用 `cjpm build` 构建、`cjpm run` 运行、`cjpm test` 测试\n\n" +
 			"3. 代码质量检查流程：先 `cjfmt -f src/` 格式化，再 `cjpm build -l` 编译+lint，最后 `cjpm test` 测试\n\n" +

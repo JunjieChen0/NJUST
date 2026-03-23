@@ -48,10 +48,16 @@ logs
 .vercel
 .roo/mcp.json
 
+# Cangjie symbol index (auto-generated)
+.cangjie-index/
+
 # Qdrant
 qdrant_storage/
 
 # Architect plans
 plans/
+
+# Spec Kit - track templates and config, ignore generated specs
+.specify/specs/
 
 roo-cli-*.tar.gz*

@@ -8,6 +8,186 @@ interface BuiltInCommandDefinition {
 }
 
 const BUILT_IN_COMMANDS: Record<string, BuiltInCommandDefinition> = {
+	"speckit-init": {
+		name: "speckit-init",
+		description: "Initialize Spec Kit in the current workspace",
+		content: `<task>
+Initialize Spec Kit spec-driven development workflow in the current workspace.
+</task>
+
+<steps>
+1. Check if \`.specify/\` directory already exists in the workspace root.
+   - If it exists, inform the user that Spec Kit is already initialized and show a summary of the current state.
+   - If not, proceed with initialization.
+
+2. Try to run \`specify init <project-name> --ai roo --script ps\` (where project-name is derived from the workspace folder name).
+   - If the \`specify\` CLI is available, run it and handle the output.
+   - If the CLI is not available, create the directory structure manually (see step 3).
+
+3. Manual initialization (fallback when CLI is unavailable):
+   Create the following directory structure:
+   \`\`\`
+   .specify/
+   ├── memory/
+   │   └── constitution.md    (project principles template)
+   ├── scripts/               (empty, for future shell scripts)
+   ├── templates/
+   │   ├── spec-template.md   (feature spec template)
+   │   ├── plan-template.md   (technical plan template)
+   │   └── tasks-template.md  (task breakdown template)
+   ├── specs/                  (where feature specs will be stored)
+   └── init-options.json       ({"branch_numbering": "sequential", "script": "ps"})
+   \`\`\`
+
+4. Create reasonable default templates:
+   - spec-template.md: sections for User Stories (P1/P2/P3), Functional Requirements, Key Entities, Success Criteria, Edge Cases
+   - plan-template.md: sections for Technical Context, Architecture, Data Model, API Contracts
+   - tasks-template.md: sections for phased task checklist with TaskID, Priority, and file paths
+
+5. Inform the user that Spec Kit is ready and suggest using the Architect mode for their next feature.
+</steps>`,
+	},
+	"speckit.specify": {
+		name: "speckit.specify",
+		description: "Create a feature specification from requirements",
+		argumentHint: "<feature description>",
+		content: `<task>
+Create a feature specification (spec.md) based on the user's description.
+</task>
+
+<steps>
+1. Determine the storage location:
+   - If \`.specify/\` exists: create a new feature directory under \`.specify/specs/NNN-feature-name/\`
+   - If not: use \`/plans/\` directory
+
+2. If \`.specify/templates/spec-template.md\` exists, use it as the template. Otherwise use the default structure.
+
+3. Generate spec.md containing:
+   - **User Stories**: Prioritized (P1 = must-have, P2 = should-have, P3 = nice-to-have)
+   - **Functional Requirements**: Numbered, specific, testable
+   - **Key Entities**: Core data structures and their relationships
+   - **Success Criteria**: Measurable outcomes
+   - **Edge Cases**: Boundary conditions and error scenarios
+
+4. Mark uncertain items as [NEEDS CLARIFICATION] and ask the user to resolve them (max 3-5 questions).
+
+5. If \`.specify/memory/constitution.md\` exists, validate the spec against project principles.
+
+6. Present the spec to the user for review and suggest running /speckit.plan next.
+</steps>`,
+	},
+	"speckit.plan": {
+		name: "speckit.plan",
+		description: "Create a technical implementation plan from a specification",
+		content: `<task>
+Create a technical implementation plan (plan.md) based on an existing spec.md.
+</task>
+
+<steps>
+1. Locate the active spec:
+   - Check \`.specify/specs/\` for the most recent feature spec
+   - If not found, check \`/plans/\` for spec.md
+   - If no spec exists, inform the user and suggest running /speckit.specify first
+
+2. If \`.specify/templates/plan-template.md\` exists, use it as the template.
+
+3. Generate plan.md containing:
+   - **Technical Context**: Relevant codebase areas, existing patterns to follow
+   - **Architecture Design**: Component structure, data flow, integration points
+   - **Data Model**: Entities, fields, relationships, migrations if needed
+   - **API/Interface Contracts**: Endpoints, function signatures, type definitions
+   - **Dependencies**: External libraries, internal packages to leverage
+   - **Risk Assessment**: Technical risks and mitigation strategies
+
+4. If \`.specify/memory/constitution.md\` exists, verify the plan complies with project principles. Flag any violations.
+
+5. Present the plan to the user for review and suggest running /speckit.tasks next.
+</steps>`,
+	},
+	"speckit.tasks": {
+		name: "speckit.tasks",
+		description: "Generate actionable task breakdown from a plan",
+		content: `<task>
+Generate an actionable task breakdown (tasks.md) based on spec.md and plan.md.
+</task>
+
+<steps>
+1. Locate the active spec and plan:
+   - Check \`.specify/specs/\` for the most recent feature directory
+   - If not found, check \`/plans/\` for spec.md and plan.md
+   - If plan.md doesn't exist, inform the user and suggest running /speckit.plan first
+
+2. If \`.specify/templates/tasks-template.md\` exists, use it as the template.
+
+3. Generate tasks.md with phased task breakdown:
+   - **Phase 1 - Setup**: Project initialization, dependencies, configuration
+   - **Phase 2 - Foundation**: Core data structures, base interfaces, utilities
+   - **Phase 3+ - Features**: One phase per user story (P1 first, then P2, P3)
+   - **Final Phase - Polish**: Cross-cutting concerns, documentation, cleanup
+
+4. Each task must follow the format:
+   \`- [ ] [T-NNN] [P1/P2/P3] Description (file: path/to/file.ts)\`
+
+5. Include a dependency graph showing which tasks block others.
+
+6. Present the task list to the user and suggest switching to Code or Cangjie Dev mode for implementation.
+</steps>`,
+	},
+	"speckit.implement": {
+		name: "speckit.implement",
+		description: "Execute implementation following the task checklist",
+		content: `<task>
+Implement the feature by executing tasks from the task checklist.
+</task>
+
+<steps>
+1. Locate the active tasks.md:
+   - Check \`.specify/specs/\` for the most recent feature's tasks.md
+   - If not found, check \`/plans/\` for tasks.md
+   - If no tasks exist, inform the user and suggest running /speckit.tasks first
+
+2. Parse the task checklist and identify incomplete items (unchecked \`[ ]\`).
+
+3. Execute tasks in order, respecting the dependency graph:
+   - For each task: implement the code change, run relevant tests
+   - After completing a task, mark it \`[X]\` in tasks.md
+   - If a task fails or needs clarification, pause and ask the user
+
+4. If \`.specify/memory/constitution.md\` exists, ensure implementation follows project principles.
+
+5. After all tasks are complete, provide a summary of what was implemented and suggest running /speckit.analyze for validation.
+</steps>`,
+	},
+	"speckit.analyze": {
+		name: "speckit.analyze",
+		description: "Cross-artifact consistency and coverage analysis",
+		content: `<task>
+Analyze spec.md, plan.md, and tasks.md for consistency, coverage, and quality.
+</task>
+
+<steps>
+1. Locate the active spec artifacts:
+   - Check \`.specify/specs/\` for the most recent feature directory
+   - If not found, check \`/plans/\`
+
+2. Perform cross-artifact analysis:
+   - **Coverage**: Every requirement in spec.md should have corresponding tasks
+   - **Consistency**: plan.md architecture should align with task implementations
+   - **Orphans**: Tasks without matching requirements, or requirements without tasks
+   - **Terminology**: Consistent naming across all three documents
+   - **Completeness**: No [NEEDS CLARIFICATION] items remaining unresolved
+
+3. If \`.specify/memory/constitution.md\` exists, check for principle violations.
+
+4. Output a findings table with severity levels (CRITICAL / HIGH / MEDIUM / LOW):
+   - CRITICAL: Constitution violations, missing requirements coverage
+   - HIGH: Inconsistencies between spec and plan
+   - MEDIUM: Orphaned tasks, terminology drift
+   - LOW: Style and formatting issues
+
+5. Provide actionable recommendations for resolving each finding.
+</steps>`,
+	},
 	init: {
 		name: "init",
 		description: "Analyze codebase and create concise AGENTS.md files for AI assistants",
