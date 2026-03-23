@@ -65,6 +65,8 @@ export const toolParamNames = [
 	"old_string", // search_replace and edit_file parameter
 	"new_string", // search_replace and edit_file parameter
 	"replace_all", // edit tool parameter for replacing all occurrences
+	"search_query", // web_search parameter
+	"count", // web_search parameter
 	"expected_replacements", // edit_file parameter for multiple occurrences
 	"timeout", // execute_command parameter
 	"artifact_id", // read_command_output parameter
@@ -115,6 +117,7 @@ export type NativeToolArgs = {
 	switch_mode: { mode_slug: string; reason: string }
 	update_todo_list: { todos: string }
 	use_mcp_tool: { server_name: string; tool_name: string; arguments?: Record<string, unknown> }
+	web_search: { search_query: string; count?: number }
 	write_to_file: { path: string; content: string }
 	// Add more tools as they are migrated to native protocol
 }
@@ -289,13 +292,14 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	run_slash_command: "run slash command",
 	skill: "load skill",
 	generate_image: "generate images",
+	web_search: "search the web",
 	custom_tool: "use custom tools",
 } as const
 
 // Define available tool groups.
 export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 	read: {
-		tools: ["read_file", "search_files", "list_files", "codebase_search"],
+		tools: ["read_file", "search_files", "list_files", "codebase_search", "web_search"],
 	},
 	edit: {
 		tools: ["apply_diff", "write_to_file", "generate_image"],

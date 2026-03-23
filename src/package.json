@@ -46,7 +46,6 @@
 		"njust_ai_cj"
 	],
 	"activationEvents": [
-		"onLanguage",
 		"onStartupFinished"
 	],
 	"main": "./dist/extension.js",
@@ -118,6 +117,65 @@
 						"file": 1,
 						"line": 2,
 						"column": 3
+					}
+				]
+			}
+		],
+		"debuggers": [
+			{
+				"type": "cangjie",
+				"label": "Cangjie Debug",
+				"languages": [
+					"cangjie"
+				],
+				"configurationAttributes": {
+					"launch": {
+						"required": [
+							"program"
+						],
+						"properties": {
+							"program": {
+								"type": "string",
+								"description": "可执行文件路径（cjpm build 输出）",
+								"default": "${workspaceFolder}/target/output"
+							},
+							"args": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "程序运行参数",
+								"default": []
+							},
+							"cwd": {
+								"type": "string",
+								"description": "工作目录",
+								"default": "${workspaceFolder}"
+							},
+							"debuggerArgs": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "传递给 cjdb 的额外参数",
+								"default": []
+							}
+						}
+					}
+				},
+				"configurationSnippets": [
+					{
+						"label": "Cangjie: 调试程序",
+						"description": "构建并调试仓颉程序",
+						"body": {
+							"type": "cangjie",
+							"request": "launch",
+							"name": "调试仓颉程序",
+							"program": "^\"\\${workspaceFolder}/target/output\"",
+							"args": [],
+							"cwd": "^\"\\${workspaceFolder}\"",
+							"preLaunchTask": "cjpm: build"
+						}
 					}
 				]
 			}
@@ -237,6 +295,46 @@
 				"title": "%command.runCode.title%",
 				"icon": "$(play)",
 				"category": "%configuration.title%"
+			},
+			{
+				"command": "njust-ai-cj.cangjieBuild",
+				"title": "Cangjie: Build (cjpm build)",
+				"category": "Cangjie"
+			},
+			{
+				"command": "njust-ai-cj.cangjieRun",
+				"title": "Cangjie: Run (cjpm run)",
+				"category": "Cangjie"
+			},
+			{
+				"command": "njust-ai-cj.cangjieTest",
+				"title": "Cangjie: Test (cjpm test)",
+				"category": "Cangjie"
+			},
+			{
+				"command": "njust-ai-cj.cangjieCheck",
+				"title": "Cangjie: Check (cjpm check)",
+				"category": "Cangjie"
+			},
+			{
+				"command": "njust-ai-cj.cangjieClean",
+				"title": "Cangjie: Clean (cjpm clean)",
+				"category": "Cangjie"
+			},
+			{
+				"command": "njust-ai-cj.cangjieRestartLsp",
+				"title": "Cangjie: Restart Language Server",
+				"category": "Cangjie"
+			},
+			{
+				"command": "njust-ai-cj.cangjieRunTest",
+				"title": "Cangjie: Run Test",
+				"category": "Cangjie"
+			},
+			{
+				"command": "njust-ai-cj.cangjieDebugTest",
+				"title": "Cangjie: Debug Test",
+				"category": "Cangjie"
 			}
 		],
 		"menus": {
@@ -597,6 +695,16 @@
 					"type": "boolean",
 					"default": false,
 					"description": "%commands.preventCompletionWithOpenTodos.description%"
+				},
+				"njust-ai-cj.enableWebSearch": {
+					"type": "boolean",
+					"default": false,
+					"description": "Enable web search tool for AI agent to fetch real-time information from the internet"
+				},
+				"njust-ai-cj.webSearchApiKey": {
+					"type": "string",
+					"default": "",
+					"description": "API key for web search provider (Tavily). Get a free key at https://tavily.com"
 				},
 				"njust-ai-cj.vsCodeLmModelSelector": {
 					"type": "object",

@@ -23,6 +23,7 @@ interface BuildToolsOptions {
 	experiments: Record<string, boolean> | undefined
 	apiConfiguration: ProviderSettings | undefined
 	disabledTools?: string[]
+	enableWebSearch?: boolean
 	modelInfo?: ModelInfo
 	/**
 	 * If true, returns all tools without mode filtering, but also includes
@@ -88,6 +89,7 @@ export async function buildNativeToolsArrayWithRestrictions(options: BuildToolsO
 		experiments,
 		apiConfiguration,
 		disabledTools,
+		enableWebSearch,
 		modelInfo,
 		includeAllToolsWithRestrictions,
 	} = options
@@ -98,10 +100,15 @@ export async function buildNativeToolsArrayWithRestrictions(options: BuildToolsO
 	const { CodeIndexManager } = await import("../../services/code-index/manager")
 	const codeIndexManager = CodeIndexManager.getInstance(provider.context, cwd)
 
+	const effectiveDisabledTools = [...(disabledTools ?? [])]
+	if (!enableWebSearch) {
+		effectiveDisabledTools.push("web_search")
+	}
+
 	// Build settings object for tool filtering.
 	const filterSettings = {
 		todoListEnabled: apiConfiguration?.todoListEnabled ?? true,
-		disabledTools,
+		disabledTools: effectiveDisabledTools,
 		modelInfo,
 	}
 
