@@ -63,6 +63,144 @@ project/
 - 每个有效包目录必须直接包含至少一个 `.cj` 文件
 - 测试文件命名为 `xxx_test.cj`，与被测源文件放在同一目录
 
+### 2.4 多模块 Workspace 项目
+
+#### 创建 Workspace
+
+```bash
+mkdir my_project && cd my_project
+cjpm init --workspace
+```
+
+#### 添加模块
+
+```bash
+cjpm init --type=static --path lib_core
+cjpm init --type=static --path lib_utils
+cjpm init --type=executable --path app
+```
+
+#### 注册模块到 Workspace
+
+编辑根目录 `cjpm.toml`，在 `[workspace]` 段的 `members` 中添加所有模块路径：
+
+```toml
+[workspace]
+  members = ["./lib_core", "./lib_utils", "./app"]
+  build-members = []
+  test-members = []
+  compile-option = ""
+  target-dir = ""
+```
+
+#### 配置模块间依赖
+
+在 `app/cjpm.toml` 中声明对库模块的依赖：
+
+```toml
+[package]
+  cjc-version = "0.55.3"
+  name = "app"
+  version = "1.0.0"
+  output-type = "executable"
+
+[dependencies]
+  lib_core = { path = "../lib_core" }
+  lib_utils = { path = "../lib_utils" }
+```
+
+#### Workspace 目录结构
+
+```
+my_project/
+├── cjpm.toml                    # workspace 配置
+├── lib_core/
+│   ├── cjpm.toml                # 模块配置 (static)
+│   └── src/
+│       └── core.cj              # package lib_core
+├── lib_utils/
+│   ├── cjpm.toml                # 模块配置 (static)
+│   └── src/
+│       └── utils.cj             # package lib_utils
+└── app/
+    ├── cjpm.toml                # 模块配置 (executable)
+    └── src/
+        └── main.cj              # import lib_core.*, import lib_utils.*
+```
+
+#### 构建与运行
+
+```bash
+cjpm build                       # 构建整个 workspace
+cjpm run --name app              # 运行指定可执行模块
+cjpm test                        # 测试所有模块
+cjpm test lib_core/src           # 只测试 lib_core
+```
+
+#### Workspace 注意事项
+
+- `[workspace]` 和 `[package]` 不能同时存在于同一个 `cjpm.toml`
+- workspace 级别的 `compile-option` 和 `link-option` 会应用到所有成员模块
+- 使用 `build-members` 可限制只构建部分模块，`test-members` 同理
+- 模块间依赖路径使用相对路径（相对于依赖方的 `cjpm.toml` 所在目录）
+- 每个模块必须有独立的 `cjpm.toml` 和 `src/` 目录
+
+### 2.5 依赖管理最佳实践
+
+- **本地依赖**：模块间依赖使用 `{ path = "../module_name" }`，路径相对于当前模块
+- **Git 依赖**：外部库使用 `{ git = "https://...", tag = "v1.0.0" }`
+  - 优先使用 `tag` 固定版本，其次 `commitId`
+  - 避免使用 `branch`（内容可能变化，构建不可复现）
+- **版本锁定**：`cjpm.lock` 记录依赖的精确版本，应提交到版本控制
+  - 更新依赖后执行 `cjpm update` 刷新 lock 文件
+- **依赖检查**：
+  - `cjpm check` — 检查依赖关系是否有效，报告循环依赖
+  - `cjpm tree` — 可视化完整依赖树
+  - `cjpm tree -V --depth 3` — 限制显示深度的详细依赖树
+- **依赖替换**：使用 `[replace]` 临时替换间接依赖（仅入口模块的 replace 生效）
+- **测试依赖**：仅测试需要的依赖放在 `[test-dependencies]`，不污染正式依赖
+- **构建脚本依赖**：`build.cj` 需要的依赖放在 `[script-dependencies]`
+
+### 2.6 包组织规范
+
+#### 包声明与目录匹配
+
+- 文件中的 `package` 声明必须与相对于 `src/` 的目录路径匹配
+- `src/` 根目录的文件默认属于 `default` 包（可省略声明）
+- 示例：`src/network/http/client.cj` → `package default.network.http`
+
+#### 访问修饰符使用
+
+| 修饰符 | 可见范围 | 使用场景 |
+|--------|---------|---------|
+| `private` | 当前文件 | 文件内辅助函数/类型 |
+| `internal`（默认） | 包及子包 | 包内共享的实现细节 |
+| `protected` | 当前模块 | 模块内跨包共享 |
+| `public` | 全局 | 对外暴露的 API |
+
+#### 重新导出模式
+
+库模块应在根包中使用 `public import` 重新导出子包的公共 API：
+
+```cangjie
+// src/lib.cj — 库的入口文件
+package my_lib
+
+public import my_lib.http.HttpClient
+public import my_lib.http.HttpServer
+public import my_lib.utils.StringHelper
+```
+
+#### 包嵌套深度
+
+- 建议不超过 3 层嵌套（如 `pkg.sub1.sub2`）
+- 过深的嵌套表明需要拆分为独立模块
+
+#### 空目录处理
+
+- 无 `.cj` 文件的目录不构成有效包，其子目录也会被忽略（cjpm 会发出警告）
+- 如需创建子包，确保每层目录都至少有一个 `.cj` 文件
+
 ---
 
 ## 3. 构建规则

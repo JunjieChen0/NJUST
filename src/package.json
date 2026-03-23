@@ -54,8 +54,14 @@
 		"languages": [
 			{
 				"id": "cangjie",
-				"aliases": ["Cangjie", "仓颉", "cj"],
-				"extensions": [".cj"],
+				"aliases": [
+					"Cangjie",
+					"仓颉",
+					"cj"
+				],
+				"extensions": [
+					".cj"
+				],
 				"configuration": "./languages/cangjie-language-configuration.json"
 			}
 		],
@@ -75,7 +81,9 @@
 		"taskDefinitions": [
 			{
 				"type": "cjpm",
-				"required": ["command"],
+				"required": [
+					"command"
+				],
 				"properties": {
 					"command": {
 						"type": "string",
@@ -83,7 +91,9 @@
 					},
 					"args": {
 						"type": "array",
-						"items": { "type": "string" },
+						"items": {
+							"type": "string"
+						},
 						"description": "Additional arguments for the cjpm command"
 					}
 				}
@@ -93,7 +103,10 @@
 			{
 				"name": "cjc",
 				"owner": "cangjie",
-				"fileLocation": ["relative", "${workspaceFolder}"],
+				"fileLocation": [
+					"relative",
+					"${workspaceFolder}"
+				],
 				"pattern": [
 					{
 						"regexp": "^(error|warning):\\s+(.+)$",
@@ -121,7 +134,7 @@
 		"views": {
 			"njust-ai-cj-ActivityBar": [
 				{
-					"icon":"assets/icons/icon.svg",
+					"icon": "assets/icons/icon.svg",
 					"type": "webview",
 					"id": "njust-ai-cj.SidebarProvider",
 					"name": "%views.sidebar.name%"
@@ -214,18 +227,18 @@
 				"title": "%command.acceptInput.title%",
 				"category": "%configuration.title%"
 			},
-		{
-			"command": "njust-ai-cj.toggleAutoApprove",
-			"title": "%command.toggleAutoApprove.title%",
-			"category": "%configuration.title%"
-		},
-		{
-			"command": "njust-ai-cj.runCode",
-			"title": "%command.runCode.title%",
-			"icon": "$(play)",
-			"category": "%configuration.title%"
-		}
-	],
+			{
+				"command": "njust-ai-cj.toggleAutoApprove",
+				"title": "%command.toggleAutoApprove.title%",
+				"category": "%configuration.title%"
+			},
+			{
+				"command": "njust-ai-cj.runCode",
+				"title": "%command.runCode.title%",
+				"icon": "$(play)",
+				"category": "%configuration.title%"
+			}
+		],
 		"menus": {
 			"editor/context": [
 				{
@@ -267,60 +280,60 @@
 					"group": "1_actions@3"
 				}
 			],
-		"view/title": [
-			{
-				"command": "njust-ai-cj.plusButtonClicked",
-				"group": "navigation@1",
-				"when": "view == njust-ai-cj.SidebarProvider"
-			},
-			{
-				"command": "njust-ai-cj.runCode",
-				"group": "navigation@2",
-				"when": "view == njust-ai-cj.SidebarProvider"
-			},
-			{
-				"command": "njust-ai-cj.settingsButtonClicked",
-				"group": "navigation@3",
-				"when": "view == njust-ai-cj.SidebarProvider"
-			},
-			{
-				"command": "njust-ai-cj.historyButtonClicked",
-				"group": "overflow@1",
-				"when": "view == njust-ai-cj.SidebarProvider"
-			},
-			{
-				"command": "njust-ai-cj.popoutButtonClicked",
-				"group": "overflow@2",
-				"when": "view == njust-ai-cj.SidebarProvider"
-			}
-		],
-		"editor/title": [
-			{
-				"command": "njust-ai-cj.plusButtonClicked",
-				"group": "navigation@1",
-				"when": "activeWebviewPanelId == njust-ai-cj.TabPanelProvider"
-			},
-			{
-				"command": "njust-ai-cj.runCode",
-				"group": "navigation@2",
-				"when": "activeWebviewPanelId == njust-ai-cj.TabPanelProvider"
-			},
-			{
-				"command": "njust-ai-cj.settingsButtonClicked",
-				"group": "navigation@3",
-				"when": "activeWebviewPanelId == njust-ai-cj.TabPanelProvider"
-			},
-			{
-				"command": "njust-ai-cj.historyButtonClicked",
-				"group": "overflow@1",
-				"when": "activeWebviewPanelId == njust-ai-cj.TabPanelProvider"
-			},
-			{
-				"command": "njust-ai-cj.popoutButtonClicked",
-				"group": "overflow@2",
-				"when": "activeWebviewPanelId == njust-ai-cj.TabPanelProvider"
-			}
-		]
+			"view/title": [
+				{
+					"command": "njust-ai-cj.plusButtonClicked",
+					"group": "navigation@1",
+					"when": "view == njust-ai-cj.SidebarProvider"
+				},
+				{
+					"command": "njust-ai-cj.runCode",
+					"group": "navigation@2",
+					"when": "view == njust-ai-cj.SidebarProvider"
+				},
+				{
+					"command": "njust-ai-cj.settingsButtonClicked",
+					"group": "navigation@3",
+					"when": "view == njust-ai-cj.SidebarProvider"
+				},
+				{
+					"command": "njust-ai-cj.historyButtonClicked",
+					"group": "overflow@1",
+					"when": "view == njust-ai-cj.SidebarProvider"
+				},
+				{
+					"command": "njust-ai-cj.popoutButtonClicked",
+					"group": "overflow@2",
+					"when": "view == njust-ai-cj.SidebarProvider"
+				}
+			],
+			"editor/title": [
+				{
+					"command": "njust-ai-cj.plusButtonClicked",
+					"group": "navigation@1",
+					"when": "activeWebviewPanelId == njust-ai-cj.TabPanelProvider"
+				},
+				{
+					"command": "njust-ai-cj.runCode",
+					"group": "navigation@2",
+					"when": "activeWebviewPanelId == njust-ai-cj.TabPanelProvider"
+				},
+				{
+					"command": "njust-ai-cj.settingsButtonClicked",
+					"group": "navigation@3",
+					"when": "activeWebviewPanelId == njust-ai-cj.TabPanelProvider"
+				},
+				{
+					"command": "njust-ai-cj.historyButtonClicked",
+					"group": "overflow@1",
+					"when": "activeWebviewPanelId == njust-ai-cj.TabPanelProvider"
+				},
+				{
+					"command": "njust-ai-cj.popoutButtonClicked",
+					"group": "overflow@2",
+					"when": "activeWebviewPanelId == njust-ai-cj.TabPanelProvider"
+				}
+			]
 		},
 		"keybindings": [
 			{
@@ -370,9 +383,14 @@
 							"description": "The path of the file to read, relative to the workspace root"
 						}
 					},
-					"required": ["path"]
+					"required": [
+						"path"
+					]
 				},
-				"tags": ["roo-agent", "file-operations"]
+				"tags": [
+					"roo-agent",
+					"file-operations"
+				]
 			},
 			{
 				"name": "roo_editFile",
@@ -390,9 +408,15 @@
 							"description": "The unified diff patch to apply to the file"
 						}
 					},
-					"required": ["path", "diff"]
+					"required": [
+						"path",
+						"diff"
+					]
 				},
-				"tags": ["roo-agent", "file-operations"]
+				"tags": [
+					"roo-agent",
+					"file-operations"
+				]
 			},
 			{
 				"name": "roo_executeCommand",
@@ -406,9 +430,14 @@
 							"description": "The shell command to execute"
 						}
 					},
-					"required": ["command"]
+					"required": [
+						"command"
+					]
 				},
-				"tags": ["roo-agent", "terminal"]
+				"tags": [
+					"roo-agent",
+					"terminal"
+				]
 			},
 			{
 				"name": "roo_searchFiles",
@@ -426,9 +455,14 @@
 							"description": "Optional directory path to limit the search scope"
 						}
 					},
-					"required": ["pattern"]
+					"required": [
+						"pattern"
+					]
 				},
-				"tags": ["roo-agent", "search"]
+				"tags": [
+					"roo-agent",
+					"search"
+				]
 			},
 			{
 				"name": "roo_listFiles",
@@ -446,9 +480,14 @@
 							"description": "Whether to list files recursively"
 						}
 					},
-					"required": ["path"]
+					"required": [
+						"path"
+					]
 				},
-				"tags": ["roo-agent", "file-operations"]
+				"tags": [
+					"roo-agent",
+					"file-operations"
+				]
 			},
 			{
 				"name": "roo_codebaseSearch",
@@ -462,9 +501,14 @@
 							"description": "The natural language search query"
 						}
 					},
-					"required": ["query"]
+					"required": [
+						"query"
+					]
 				},
-				"tags": ["roo-agent", "search"]
+				"tags": [
+					"roo-agent",
+					"search"
+				]
 			}
 		],
 		"chatParticipants": [
@@ -659,11 +703,28 @@
 					"default": "",
 					"description": "Path to the cjpm project manager. Leave empty to auto-detect from CANGJIE_HOME or PATH."
 				},
-				"njust-ai-cj.debug": {
-					"type": "boolean",
-					"default": false,
-					"description": "%settings.debug.description%"
-				},
+			"njust-ai-cj.mcpServer.enabled": {
+				"type": "boolean",
+				"default": false,
+				"description": "Enable the built-in MCP Tools Server, allowing external agents to call internal tools (read/write files, execute commands, search, etc.) via the MCP protocol over HTTP."
+			},
+			"njust-ai-cj.mcpServer.port": {
+				"type": "number",
+				"default": 3100,
+				"minimum": 1024,
+				"maximum": 65535,
+				"description": "Port number for the MCP Tools Server (requires restart after change)."
+			},
+			"njust-ai-cj.mcpServer.authToken": {
+				"type": "string",
+				"default": "",
+				"description": "Optional Bearer token for authenticating MCP Tools Server requests. Leave empty to disable authentication (only recommended for local development)."
+			},
+			"njust-ai-cj.debug": {
+				"type": "boolean",
+				"default": false,
+				"description": "%settings.debug.description%"
+			},
 				"njust-ai-cj.debugProxy.enabled": {
 					"type": "boolean",
 					"default": false,
@@ -716,11 +777,11 @@
 		"@lmstudio/sdk": "^1.1.1",
 		"@mistralai/mistralai": "^1.9.18",
 		"@modelcontextprotocol/sdk": "1.12.0",
-		"@qdrant/js-client-rest": "^1.14.0",
 		"@njust-ai-cj/core": "workspace:^",
 		"@njust-ai-cj/ipc": "workspace:^",
 		"@njust-ai-cj/telemetry": "workspace:^",
 		"@njust-ai-cj/types": "workspace:^",
+		"@qdrant/js-client-rest": "^1.14.0",
 		"@vscode/codicons": "^0.0.36",
 		"async-mutex": "^0.5.0",
 		"axios": "^1.12.0",
@@ -783,6 +844,7 @@
 		"turndown": "^7.2.0",
 		"undici": "^6.21.3",
 		"uuid": "^11.1.0",
+		"vscode-languageclient": "^9.0.1",
 		"vscode-material-icons": "^0.1.1",
 		"web-tree-sitter": "^0.25.6",
 		"workerpool": "^9.2.0",
@@ -792,10 +854,10 @@
 	},
 	"devDependencies": {
 		"@ai-sdk/openai-compatible": "^2.0.28",
-		"@openrouter/ai-sdk-provider": "^2.1.1",
 		"@njust-ai-cj/build": "workspace:^",
 		"@njust-ai-cj/config-eslint": "workspace:^",
 		"@njust-ai-cj/config-typescript": "workspace:^",
+		"@openrouter/ai-sdk-provider": "^2.1.1",
 		"@types/clone-deep": "^4.0.4",
 		"@types/debug": "^4.1.12",
 		"@types/diff": "^5.2.1",

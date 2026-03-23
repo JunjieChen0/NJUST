@@ -14,6 +14,9 @@ import {
 	openAiCodexModels,
 	openAiNativeModels,
 	qwenCodeModels,
+	qwenModels,
+	doubaoModels,
+	glmModels,
 	sambaNovaModels,
 	vertexModels,
 	vscodeLlmModels,
@@ -112,6 +115,9 @@ export const providerNames = [
 	"mistral",
 	"moonshot",
 	"minimax",
+	"qwen",
+	"doubao",
+	"glm",
 	"openai-codex",
 	"openai-native",
 	"qwen-code",
@@ -137,7 +143,6 @@ export const retiredProviderNames = [
 	"cerebras",
 	"chutes",
 	"deepinfra",
-	"doubao",
 	"featherless",
 	"groq",
 	"huggingface",
@@ -320,6 +325,21 @@ const minimaxSchema = apiModelIdProviderModelSchema.extend({
 	minimaxApiKey: z.string().optional(),
 })
 
+const qwenSchema = apiModelIdProviderModelSchema.extend({
+	qwenApiKey: z.string().optional(),
+	qwenBaseUrl: z.string().optional(),
+})
+
+const doubaoSchema = apiModelIdProviderModelSchema.extend({
+	doubaoApiKey: z.string().optional(),
+	doubaoBaseUrl: z.string().optional(),
+})
+
+const glmSchema = apiModelIdProviderModelSchema.extend({
+	glmApiKey: z.string().optional(),
+	glmBaseUrl: z.string().optional(),
+})
+
 const requestySchema = baseProviderSettingsSchema.extend({
 	requestyBaseUrl: z.string().optional(),
 	requestyApiKey: z.string().optional(),
@@ -402,6 +422,9 @@ export const providerSettingsSchemaDiscriminated = z.discriminatedUnion("apiProv
 	deepSeekSchema.merge(z.object({ apiProvider: z.literal("deepseek") })),
 	moonshotSchema.merge(z.object({ apiProvider: z.literal("moonshot") })),
 	minimaxSchema.merge(z.object({ apiProvider: z.literal("minimax") })),
+	qwenSchema.merge(z.object({ apiProvider: z.literal("qwen") })),
+	doubaoSchema.merge(z.object({ apiProvider: z.literal("doubao") })),
+	glmSchema.merge(z.object({ apiProvider: z.literal("glm") })),
 	requestySchema.merge(z.object({ apiProvider: z.literal("requesty") })),
 	unboundSchema.merge(z.object({ apiProvider: z.literal("unbound") })),
 	fakeAiSchema.merge(z.object({ apiProvider: z.literal("fake-ai") })),
@@ -435,6 +458,9 @@ export const providerSettingsSchema = z.object({
 	...deepSeekSchema.shape,
 	...moonshotSchema.shape,
 	...minimaxSchema.shape,
+	...qwenSchema.shape,
+	...doubaoSchema.shape,
+	...glmSchema.shape,
 	...requestySchema.shape,
 	...unboundSchema.shape,
 	...fakeAiSchema.shape,
@@ -509,6 +535,9 @@ export const modelIdKeysByProvider: Record<TypicalProvider, ModelIdKey> = {
 	mistral: "apiModelId",
 	moonshot: "apiModelId",
 	minimax: "apiModelId",
+	qwen: "apiModelId",
+	doubao: "apiModelId",
+	glm: "apiModelId",
 	deepseek: "apiModelId",
 	"qwen-code": "apiModelId",
 	requesty: "requestyModelId",
@@ -599,6 +628,21 @@ export const MODELS_BY_PROVIDER: Record<
 		id: "minimax",
 		label: "MiniMax",
 		models: Object.keys(minimaxModels),
+	},
+	qwen: {
+		id: "qwen",
+		label: "Qwen (通义千问)",
+		models: Object.keys(qwenModels),
+	},
+	doubao: {
+		id: "doubao",
+		label: "Doubao (豆包)",
+		models: Object.keys(doubaoModels),
+	},
+	glm: {
+		id: "glm",
+		label: "GLM (智谱清言)",
+		models: Object.keys(glmModels),
 	},
 	"openai-codex": {
 		id: "openai-codex",

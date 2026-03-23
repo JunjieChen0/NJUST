@@ -32,6 +32,9 @@ import {
 	vercelAiGatewayDefaultModelId,
 	minimaxDefaultModelId,
 	unboundDefaultModelId,
+	qwenDefaultModelId,
+	doubaoDefaultModelId,
+	glmDefaultModelId,
 } from "@njust-ai-cj/types"
 
 import {
@@ -92,6 +95,9 @@ import {
 	Fireworks,
 	VercelAiGateway,
 	MiniMax,
+	Qwen,
+	Doubao,
+	Glm,
 } from "./providers"
 
 import { MODELS_BY_PROVIDER, PROVIDERS } from "./constants"
@@ -342,6 +348,9 @@ const ApiOptions = ({
 				deepseek: { field: "apiModelId", default: deepSeekDefaultModelId },
 				moonshot: { field: "apiModelId", default: moonshotDefaultModelId },
 				minimax: { field: "apiModelId", default: minimaxDefaultModelId },
+				qwen: { field: "apiModelId", default: qwenDefaultModelId },
+				doubao: { field: "apiModelId", default: doubaoDefaultModelId },
+				glm: { field: "apiModelId", default: glmDefaultModelId },
 				mistral: { field: "apiModelId", default: mistralDefaultModelId },
 				xai: { field: "apiModelId", default: xaiDefaultModelId },
 				baseten: { field: "apiModelId", default: basetenDefaultModelId },
@@ -627,6 +636,30 @@ const ApiOptions = ({
 						<MiniMax
 							apiConfiguration={apiConfiguration}
 							setApiConfigurationField={setApiConfigurationField}
+						/>
+					)}
+
+					{selectedProvider === "qwen" && (
+						<Qwen
+							apiConfiguration={apiConfiguration}
+							setApiConfigurationField={setApiConfigurationField}
+							simplifySettings={fromWelcomeView}
+						/>
+					)}
+
+					{selectedProvider === "doubao" && (
+						<Doubao
+							apiConfiguration={apiConfiguration}
+							setApiConfigurationField={setApiConfigurationField}
+							simplifySettings={fromWelcomeView}
+						/>
+					)}
+
+					{selectedProvider === "glm" && (
+						<Glm
+							apiConfiguration={apiConfiguration}
+							setApiConfigurationField={setApiConfigurationField}
+							simplifySettings={fromWelcomeView}
 						/>
 					)}
 

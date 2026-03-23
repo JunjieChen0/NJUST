@@ -38,6 +38,8 @@ import { CjpmTaskProvider } from "./services/cangjie-lsp/CjpmTaskProvider"
 import { migrateSettings } from "./utils/migrateSettings"
 import { autoImportSettings } from "./utils/autoImportSettings"
 import { API } from "./extension/api"
+import { RooToolsMcpServer } from "./services/mcp-server/RooToolsMcpServer"
+import { getWorkspacePath } from "./utils/path"
 
 import {
 	handleUri,
@@ -63,6 +65,7 @@ let cangjieLspClient: CangjieLspClient | undefined
 let cjfmtFormatter: CjfmtFormatter | undefined
 let cjlintDiagnostics: CjlintDiagnostics | undefined
 let cjpmTaskProvider: CjpmTaskProvider | undefined
+let rooToolsMcpServer: RooToolsMcpServer | undefined
 
 /**
  * Check if we should auto-open the NJUST_AI_CJ sidebar after switching to a worktree.
@@ -265,6 +268,42 @@ export async function activate(context: vscode.ExtensionContext) {
 	registerCodeActions(context)
 	registerTerminalActions(context)
 
+	// Start MCP Tools Server if enabled in settings.
+	const mcpServerConfig = vscode.workspace.getConfiguration(Package.name)
+	const mcpServerEnabled = mcpServerConfig.get<boolean>("mcpServer.enabled", false)
+	if (mcpServerEnabled) {
+		const port = mcpServerConfig.get<number>("mcpServer.port", 3100)
+		const authToken = mcpServerConfig.get<string>("mcpServer.authToken", "") || undefined
+		const workspacePath = getWorkspacePath()
+
+		if (workspacePath) {
+			rooToolsMcpServer = new RooToolsMcpServer({
+				workspacePath,
+				port,
+				authToken,
+				allowedCommands: defaultCommands,
+				deniedCommands: mcpServerConfig.get<string[]>("deniedCommands", []),
+			})
+
+			rooToolsMcpServer
+				.start()
+				.then(() => {
+					outputChannel.appendLine(`[McpToolsServer] Started on http://127.0.0.1:${port}/mcp`)
+				})
+				.catch((error) => {
+					outputChannel.appendLine(
+						`[McpToolsServer] Failed to start: ${error instanceof Error ? error.message : String(error)}`,
+					)
+				})
+
+			context.subscriptions.push({
+				dispose: () => {
+					rooToolsMcpServer?.stop()
+				},
+			})
+		}
+	}
+
 	// Allows other extensions to activate once Roo is ready.
 	vscode.commands.executeCommand(`${Package.name}.activationCompleted`)
 
@@ -340,6 +379,11 @@ export async function deactivate() {
 	cjlintDiagnostics = undefined
 	cjpmTaskProvider?.dispose()
 	cjpmTaskProvider = undefined
+
+	if (rooToolsMcpServer) {
+		await rooToolsMcpServer.stop()
+		rooToolsMcpServer = undefined
+	}
 
 	await McpServerManager.cleanup(extensionContext)
 	TerminalRegistry.cleanup()

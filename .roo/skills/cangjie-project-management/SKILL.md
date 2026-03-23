@@ -322,3 +322,346 @@ cjpm test
 # 8. 清理
 cjpm clean
 ```
+
+---
+
+## 8. 项目脚手架模板
+
+### 8.1 单模块可执行项目
+
+```bash
+cjpm init --name my_app --type=executable
+```
+
+目录结构：
+```
+my_app/
+├── cjpm.toml
+└── src/
+    └── main.cj
+```
+
+`cjpm.toml`：
+```toml
+[package]
+  cjc-version = "0.55.3"
+  name = "my_app"
+  version = "1.0.0"
+  output-type = "executable"
+
+[dependencies]
+```
+
+`src/main.cj`：
+```cangjie
+main(): Int64 {
+    println("Hello, Cangjie!")
+    return 0
+}
+```
+
+### 8.2 单模块库项目
+
+```bash
+cjpm init --name my_lib --type=static
+```
+
+目录结构：
+```
+my_lib/
+├── cjpm.toml
+├── src/
+│   ├── lib.cj                 # 公共 API 入口（public import 重新导出）
+│   ├── internal/
+│   │   └── impl.cj            # 内部实现
+│   └── models/
+│       └── data.cj            # 数据模型
+└── src/
+    └── lib_test.cj            # 单元测试
+```
+
+`cjpm.toml`：
+```toml
+[package]
+  cjc-version = "0.55.3"
+  name = "my_lib"
+  version = "1.0.0"
+  output-type = "static"
+
+[dependencies]
+```
+
+`src/lib.cj`（公共 API 入口）：
+```cangjie
+package my_lib
+
+public import my_lib.models.DataModel
+public import my_lib.models.Config
+```
+
+`src/models/data.cj`：
+```cangjie
+package my_lib.models
+
+public struct DataModel {
+    public let name: String
+    public let value: Int64
+
+    public init(name: String, value: Int64) {
+        this.name = name
+        this.value = value
+    }
+}
+
+public struct Config {
+    public let debug: Bool
+    public init(debug!: Bool = false) {
+        this.debug = debug
+    }
+}
+```
+
+`src/internal/impl.cj`：
+```cangjie
+package my_lib.internal
+
+import my_lib.models.*
+
+func processData(data: DataModel): String {
+    "${data.name}: ${data.value}"
+}
+```
+
+`src/lib_test.cj`：
+```cangjie
+import my_lib.models.*
+
+@Test
+class DataModelTest {
+    @TestCase
+    func testCreate() {
+        let m = DataModel("test", 42)
+        @Assert(m.name == "test")
+        @Assert(m.value == 42)
+    }
+}
+```
+
+### 8.3 多模块 Workspace：库 + 应用
+
+创建一个包含共享库和可执行应用的 workspace 项目。
+
+```bash
+mkdir my_project && cd my_project
+cjpm init --workspace
+cjpm init --type=static --path core
+cjpm init --type=executable --path app
+```
+
+目录结构：
+```
+my_project/
+├── cjpm.toml                       # workspace 配置
+├── core/
+│   ├── cjpm.toml                   # 库模块配置
+│   └── src/
+│       ├── core.cj                 # 公共 API
+│       ├── models/
+│       │   └── user.cj             # 数据模型
+│       └── core_test.cj            # 测试
+└── app/
+    ├── cjpm.toml                   # 应用模块配置
+    └── src/
+        └── main.cj                 # 应用入口
+```
+
+根目录 `cjpm.toml`（workspace）：
+```toml
+[workspace]
+  members = ["./core", "./app"]
+  build-members = []
+  compile-option = ""
+  link-option = ""
+  target-dir = ""
+  test-members = []
+
+[dependencies]
+```
+
+`core/cjpm.toml`：
+```toml
+[package]
+  cjc-version = "0.55.3"
+  name = "core"
+  version = "1.0.0"
+  output-type = "static"
+
+[dependencies]
+```
+
+`app/cjpm.toml`：
+```toml
+[package]
+  cjc-version = "0.55.3"
+  name = "app"
+  version = "1.0.0"
+  output-type = "executable"
+
+[dependencies]
+  core = { path = "../core" }
+```
+
+`core/src/core.cj`：
+```cangjie
+package core
+
+public import core.models.User
+```
+
+`core/src/models/user.cj`：
+```cangjie
+package core.models
+
+public class User {
+    public var name: String
+    public var age: Int64
+
+    public init(name: String, age: Int64) {
+        this.name = name
+        this.age = age
+    }
+
+    public func greet(): String {
+        "Hello, I'm ${name}, ${age} years old."
+    }
+}
+```
+
+`app/src/main.cj`：
+```cangjie
+import core.*
+
+main(): Int64 {
+    let user = User("Alice", 30)
+    println(user.greet())
+    return 0
+}
+```
+
+构建与运行：
+```bash
+cjpm build                          # 构建整个 workspace
+cjpm run --name app                 # 运行 app 模块
+cjpm test                           # 测试所有模块
+```
+
+### 8.4 多模块 Workspace：多库 + 多应用（大型项目）
+
+适用于包含多个独立库和多个可执行程序的大型项目。
+
+```bash
+mkdir big_project && cd big_project
+cjpm init --workspace
+cjpm init --type=static --path libs/common
+cjpm init --type=static --path libs/network
+cjpm init --type=static --path libs/database
+cjpm init --type=executable --path apps/server
+cjpm init --type=executable --path apps/cli
+```
+
+目录结构：
+```
+big_project/
+├── cjpm.toml                          # workspace 配置
+├── libs/
+│   ├── common/
+│   │   ├── cjpm.toml                  # 通用工具库
+│   │   └── src/
+│   │       ├── common.cj
+│   │       ├── types/
+│   │       │   └── result.cj
+│   │       └── common_test.cj
+│   ├── network/
+│   │   ├── cjpm.toml                  # 网络库（依赖 common）
+│   │   └── src/
+│   │       ├── network.cj
+│   │       └── http/
+│   │           ├── client.cj
+│   │           └── server.cj
+│   └── database/
+│       ├── cjpm.toml                  # 数据库库（依赖 common）
+│       └── src/
+│           ├── database.cj
+│           └── connection.cj
+└── apps/
+    ├── server/
+    │   ├── cjpm.toml                  # 服务端（依赖 network, database）
+    │   └── src/
+    │       └── main.cj
+    └── cli/
+        ├── cjpm.toml                  # CLI 工具（依赖 common, database）
+        └── src/
+            └── main.cj
+```
+
+根目录 `cjpm.toml`：
+```toml
+[workspace]
+  members = [
+    "./libs/common",
+    "./libs/network",
+    "./libs/database",
+    "./apps/server",
+    "./apps/cli"
+  ]
+  build-members = []
+  compile-option = ""
+  link-option = ""
+  target-dir = ""
+  test-members = []
+
+[dependencies]
+```
+
+`libs/network/cjpm.toml`（依赖 common）：
+```toml
+[package]
+  cjc-version = "0.55.3"
+  name = "network"
+  version = "1.0.0"
+  output-type = "static"
+
+[dependencies]
+  common = { path = "../common" }
+```
+
+`apps/server/cjpm.toml`（依赖 network 和 database）：
+```toml
+[package]
+  cjc-version = "0.55.3"
+  name = "server"
+  version = "1.0.0"
+  output-type = "executable"
+
+[dependencies]
+  network = { path = "../../libs/network" }
+  database = { path = "../../libs/database" }
+```
+
+构建与运行：
+```bash
+cjpm build                              # 构建全部
+cjpm run --name server                  # 运行服务端
+cjpm run --name cli                     # 运行 CLI
+cjpm test                               # 测试全部
+cjpm test libs/common/src               # 只测试 common 库
+cjpm tree -V                            # 查看完整依赖树
+```
+
+#### 大型项目依赖关系设计原则
+
+- 库模块之间的依赖应单向流动，避免循环
+- 通用工具（common）应位于依赖树底层，不依赖业务库
+- 应用模块（executable）位于依赖树顶层，可依赖任意库
+- 使用 `build-members` 在开发时只构建正在修改的模块子集
+- 使用 `test-members` 限制 CI 中的测试范围以加快速度

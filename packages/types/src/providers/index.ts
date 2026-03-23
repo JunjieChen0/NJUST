@@ -24,6 +24,9 @@ export * from "./xai.js"
 export * from "./vercel-ai-gateway.js"
 export * from "./zai.js"
 export * from "./minimax.js"
+export * from "./qwen.js"
+export * from "./doubao.js"
+export * from "./glm.js"
 
 import { anthropicDefaultModelId } from "./anthropic.js"
 import { basetenDefaultModelId } from "./baseten.js"
@@ -47,6 +50,9 @@ import { xaiDefaultModelId } from "./xai.js"
 import { vercelAiGatewayDefaultModelId } from "./vercel-ai-gateway.js"
 import { internationalZAiDefaultModelId, mainlandZAiDefaultModelId } from "./zai.js"
 import { minimaxDefaultModelId } from "./minimax.js"
+import { qwenDefaultModelId } from "./qwen.js"
+import { doubaoDefaultModelId } from "./doubao.js"
+import { glmDefaultModelId } from "./glm.js"
 
 // Import the ProviderName type from provider-settings to avoid duplication
 import type { ProviderName } from "../provider-settings.js"
@@ -83,6 +89,12 @@ export function getProviderDefaultModelId(
 			return moonshotDefaultModelId
 		case "minimax":
 			return minimaxDefaultModelId
+		case "qwen":
+			return qwenDefaultModelId
+		case "doubao":
+			return doubaoDefaultModelId
+		case "glm":
+			return glmDefaultModelId
 		case "zai":
 			return options?.isChina ? mainlandZAiDefaultModelId : internationalZAiDefaultModelId
 		case "openai-native":

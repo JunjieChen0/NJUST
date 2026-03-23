@@ -16,6 +16,9 @@ import {
 	fireworksDefaultModelId,
 	minimaxDefaultModelId,
 	basetenDefaultModelId,
+	qwenDefaultModelId,
+	doubaoDefaultModelId,
+	glmDefaultModelId,
 } from "@njust-ai-cj/types"
 
 import { MODELS_BY_PROVIDER } from "../constants"
@@ -41,6 +44,9 @@ export const PROVIDER_SERVICE_CONFIG: Partial<Record<ProviderName, ProviderServi
 	fireworks: { serviceName: "Fireworks AI", serviceUrl: "https://fireworks.ai" },
 	minimax: { serviceName: "MiniMax", serviceUrl: "https://minimax.chat" },
 	baseten: { serviceName: "Baseten", serviceUrl: "https://baseten.co" },
+	qwen: { serviceName: "Qwen (通义千问)", serviceUrl: "https://dashscope.console.aliyun.com" },
+	doubao: { serviceName: "Doubao (豆包)", serviceUrl: "https://console.volcengine.com/ark" },
+	glm: { serviceName: "GLM (智谱清言)", serviceUrl: "https://open.bigmodel.cn" },
 	ollama: { serviceName: "Ollama", serviceUrl: "https://ollama.ai" },
 	lmstudio: { serviceName: "LM Studio", serviceUrl: "https://lmstudio.ai/docs" },
 	"vscode-lm": {
@@ -65,6 +71,9 @@ export const PROVIDER_DEFAULT_MODEL_IDS: Partial<Record<ProviderName, string>> =
 	fireworks: fireworksDefaultModelId,
 	minimax: minimaxDefaultModelId,
 	baseten: basetenDefaultModelId,
+	qwen: qwenDefaultModelId,
+	doubao: doubaoDefaultModelId,
+	glm: glmDefaultModelId,
 }
 
 export const getProviderServiceConfig = (provider: ProviderName): ProviderServiceConfig => {

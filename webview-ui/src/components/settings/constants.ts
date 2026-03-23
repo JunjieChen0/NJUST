@@ -10,6 +10,9 @@ import {
 	openAiNativeModels,
 	openAiCodexModels,
 	qwenCodeModels,
+	qwenModels,
+	doubaoModels,
+	glmModels,
 	vertexModels,
 	xaiModels,
 	sambaNovaModels,
@@ -36,6 +39,9 @@ export const MODELS_BY_PROVIDER: Partial<Record<ProviderName, Record<string, Mod
 	fireworks: fireworksModels,
 	minimax: minimaxModels,
 	baseten: basetenModels,
+	qwen: qwenModels,
+	doubao: doubaoModels,
+	glm: glmModels,
 }
 
 export const PROVIDERS = [
@@ -64,4 +70,7 @@ export const PROVIDERS = [
 	{ value: "minimax", label: "MiniMax", proxy: false },
 	{ value: "baseten", label: "Baseten", proxy: false },
 	{ value: "unbound", label: "Unbound", proxy: false },
+	{ value: "qwen", label: "Qwen (通义千问)", proxy: false },
+	{ value: "doubao", label: "Doubao (豆包)", proxy: false },
+	{ value: "glm", label: "GLM (智谱清言)", proxy: false },
 ].sort((a, b) => a.label.localeCompare(b.label))

@@ -4,5 +4,6 @@
 		"types": ["node"]
 	},
 	"exclude": ["node_modules"],
-	"include": ["*.ts", "scripts/**/*.ts"]
+	"include": ["*.ts", "scripts/**/*.ts"],
+	"files": []
 }

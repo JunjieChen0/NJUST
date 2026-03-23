@@ -33,6 +33,9 @@ import {
 	VercelAiGatewayHandler,
 	MiniMaxHandler,
 	BasetenHandler,
+	QwenHandler,
+	DoubaoHandler,
+	GlmHandler,
 } from "./providers"
 import { NativeOllamaHandler } from "./providers/native-ollama"
 
@@ -176,6 +179,12 @@ export function buildApiHandler(configuration: ProviderSettings): ApiHandler {
 			return new MiniMaxHandler(options)
 		case "baseten":
 			return new BasetenHandler(options)
+		case "qwen":
+			return new QwenHandler(options)
+		case "doubao":
+			return new DoubaoHandler(options)
+		case "glm":
+			return new GlmHandler(options)
 		default:
 			return new AnthropicHandler(options)
 	}

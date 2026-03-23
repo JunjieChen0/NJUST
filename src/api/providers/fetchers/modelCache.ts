@@ -85,8 +85,10 @@ async function fetchModelsFromProvider(options: GetModelsOptions): Promise<Model
 			models = await getVercelAiGatewayModels()
 			break
 		case "roo": {
-			// NJUST_AI_CJ Cloud provider requires baseUrl and optional apiKey
 			const rooBaseUrl = options.baseUrl ?? process.env.NJUST_AI_CJ_PROVIDER_URL ?? ""
+			if (!rooBaseUrl) {
+				return {}
+			}
 			models = await getRooModels(rooBaseUrl, options.apiKey)
 			break
 		}

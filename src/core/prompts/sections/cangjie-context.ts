@@ -277,10 +277,43 @@ const CODE_REVIEW_CHECKLIST = `## 仓颉代码审查要点
 - 共享可变状态必须使用 Mutex/AtomicReference 保护
 - 避免在 spawn 中直接捕获可变引用
 
-### 项目结构
-- 测试文件命名: xxx_test.cj
+### 项目结构与包管理
+- cjpm.toml 中 name 字段须与模块目录名一致
+- workspace 的 members 列表须包含所有参与构建的模块
+- 库模块的公共 API 须标记 public，并在入口文件中 public import 重新导出
+- 各模块的 [dependencies] 须声明实际使用的依赖，不留多余项
+- 源文件中的 package 声明须与 src/ 下的目录路径匹配
+- 测试文件命名: xxx_test.cj，与被测文件放在同一目录
 - 使用 @Test 标注测试类，@TestCase 标注测试方法
-- 保持 cjpm.toml 中的依赖声明最新`
+- 避免循环依赖，使用 cjpm check 检查依赖关系
+- 每个有效包目录须直接包含至少一个 .cj 文件`
+
+// ---------------------------------------------------------------------------
+// Project structure types and constants
+// ---------------------------------------------------------------------------
+
+interface CjpmProjectInfo {
+	name: string
+	version: string
+	outputType: string
+	isWorkspace: boolean
+	members?: Array<{ name: string; path: string; outputType: string }>
+	dependencies?: Record<string, { path?: string; git?: string; tag?: string; branch?: string }>
+	srcDir: string
+}
+
+interface PackageNode {
+	packageName: string
+	dirPath: string
+	sourceFiles: string[]
+	testFiles: string[]
+	hasMain: boolean
+	children: PackageNode[]
+}
+
+const MAX_SCAN_DEPTH = 5
+const MAX_SCAN_FILES = 500
+const MAX_WORKSPACE_MEMBERS = 20
 
 /**
  * Extract import statements from Cangjie source code.
@@ -382,6 +415,353 @@ function resolveDocsBasePath(cwd: string): string {
 	return path.join(cwd, ".roo", "skills", "cangjie-full-docs")
 }
 
+// ---------------------------------------------------------------------------
+// cjpm.toml parsing
+// ---------------------------------------------------------------------------
+
+function splitTomlSections(content: string): Map<string, string> {
+	const sections = new Map<string, string>()
+	const lines = content.split("\n")
+	let currentSection = ""
+	let currentLines: string[] = []
+
+	for (const line of lines) {
+		const match = line.match(/^\s*\[([^\]]+)\]\s*$/)
+		if (match) {
+			if (currentSection) {
+				sections.set(currentSection, currentLines.join("\n"))
+			}
+			currentSection = match[1].trim()
+			currentLines = []
+		} else {
+			currentLines.push(line)
+		}
+	}
+
+	if (currentSection) {
+		sections.set(currentSection, currentLines.join("\n"))
+	}
+
+	return sections
+}
+
+function extractTomlString(section: string, key: string): string | undefined {
+	const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+	const re = new RegExp(`^\\s*${escaped}\\s*=\\s*"([^"]*)"`, "m")
+	const match = section.match(re)
+	return match ? match[1] : undefined
+}
+
+function extractTomlArray(section: string, key: string): string[] {
+	const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+	const re = new RegExp(`^\\s*${escaped}\\s*=\\s*\\[([^\\]]*)\\]`, "ms")
+	const match = section.match(re)
+	if (!match) return []
+	return match[1].match(/"([^"]*)"/g)?.map((s) => s.slice(1, -1)) || []
+}
+
+function extractTomlInlineTables(section: string): Record<string, Record<string, string>> {
+	const result: Record<string, Record<string, string>> = {}
+	const re = /^\s*(\S+)\s*=\s*\{([^}]*)\}\s*$/gm
+	let match
+	while ((match = re.exec(section)) !== null) {
+		const key = match[1].trim()
+		const tableContent = match[2]
+		const table: Record<string, string> = {}
+		const kvRe = /([\w][\w-]*)\s*=\s*"([^"]*)"/g
+		let kvMatch
+		while ((kvMatch = kvRe.exec(tableContent)) !== null) {
+			table[kvMatch[1]] = kvMatch[2]
+		}
+		result[key] = table
+	}
+	return result
+}
+
+function parseSingleModuleProject(sections: Map<string, string>): CjpmProjectInfo | null {
+	const pkg = sections.get("package")
+	if (!pkg) return null
+
+	const name = extractTomlString(pkg, "name") || ""
+	const version = extractTomlString(pkg, "version") || ""
+	const outputType = extractTomlString(pkg, "output-type") || "executable"
+	const srcDir = extractTomlString(pkg, "src-dir") || "src"
+
+	let dependencies: CjpmProjectInfo["dependencies"]
+	const deps = sections.get("dependencies")
+	if (deps) {
+		const tables = extractTomlInlineTables(deps)
+		if (Object.keys(tables).length > 0) {
+			dependencies = {}
+			for (const [depName, t] of Object.entries(tables)) {
+				dependencies[depName] = { path: t["path"], git: t["git"], tag: t["tag"], branch: t["branch"] }
+			}
+		}
+	}
+
+	return { name, version, outputType, isWorkspace: false, srcDir, dependencies }
+}
+
+function parseWorkspaceProject(sections: Map<string, string>, cwd: string): CjpmProjectInfo | null {
+	const ws = sections.get("workspace")
+	if (!ws) return null
+
+	const memberPaths = extractTomlArray(ws, "members")
+	const members: CjpmProjectInfo["members"] = []
+
+	for (const mp of memberPaths.slice(0, MAX_WORKSPACE_MEMBERS)) {
+		const memberToml = path.join(cwd, mp, "cjpm.toml")
+		if (!fs.existsSync(memberToml)) continue
+		try {
+			const content = fs.readFileSync(memberToml, "utf-8")
+			const ms = splitTomlSections(content)
+			const pkg = ms.get("package")
+			if (pkg) {
+				members.push({
+					name: extractTomlString(pkg, "name") || path.basename(mp),
+					path: mp,
+					outputType: extractTomlString(pkg, "output-type") || "static",
+				})
+			}
+		} catch {
+			/* skip unreadable member */
+		}
+	}
+
+	let dependencies: CjpmProjectInfo["dependencies"]
+	const deps = sections.get("dependencies")
+	if (deps) {
+		const tables = extractTomlInlineTables(deps)
+		if (Object.keys(tables).length > 0) {
+			dependencies = {}
+			for (const [depName, t] of Object.entries(tables)) {
+				dependencies[depName] = { path: t["path"], git: t["git"] }
+			}
+		}
+	}
+
+	return { name: "", version: "", outputType: "", isWorkspace: true, members, dependencies, srcDir: "src" }
+}
+
+function parseCjpmToml(cwd: string): CjpmProjectInfo | null {
+	const tomlPath = path.join(cwd, "cjpm.toml")
+	if (!fs.existsSync(tomlPath)) return null
+
+	try {
+		const content = fs.readFileSync(tomlPath, "utf-8")
+		const sections = splitTomlSections(content)
+		if (sections.has("workspace")) {
+			return parseWorkspaceProject(sections, cwd)
+		}
+		if (sections.has("package")) {
+			return parseSingleModuleProject(sections)
+		}
+	} catch {
+		/* ignore parse errors */
+	}
+
+	return null
+}
+
+// ---------------------------------------------------------------------------
+// Package hierarchy scanning
+// ---------------------------------------------------------------------------
+
+function scanPackageHierarchy(cwd: string, srcDir: string, rootPackageName?: string): PackageNode | null {
+	const srcPath = path.join(cwd, srcDir)
+	if (!fs.existsSync(srcPath)) return null
+
+	let fileCount = 0
+	const rootPkg = rootPackageName || "default"
+
+	function scan(dir: string, depth: number, pkgName: string): PackageNode | null {
+		if (depth > MAX_SCAN_DEPTH || fileCount > MAX_SCAN_FILES) return null
+
+		let entries: fs.Dirent[]
+		try {
+			entries = fs.readdirSync(dir, { withFileTypes: true })
+		} catch {
+			return null
+		}
+
+		const sourceFiles: string[] = []
+		const testFiles: string[] = []
+		let hasMain = false
+		const childDirs: fs.Dirent[] = []
+
+		for (const entry of entries) {
+			if (entry.isFile() && entry.name.endsWith(".cj")) {
+				fileCount++
+				if (entry.name.endsWith("_test.cj")) {
+					testFiles.push(entry.name)
+				} else {
+					sourceFiles.push(entry.name)
+					if (entry.name === "main.cj") hasMain = true
+				}
+			} else if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "target") {
+				childDirs.push(entry)
+			}
+		}
+
+		const children: PackageNode[] = []
+		for (const cd of childDirs) {
+			const childNode = scan(path.join(dir, cd.name), depth + 1, `${pkgName}.${cd.name}`)
+			if (childNode) children.push(childNode)
+		}
+
+		if (sourceFiles.length === 0 && testFiles.length === 0 && children.length === 0) return null
+
+		return {
+			packageName: pkgName,
+			dirPath: path.relative(cwd, dir).replace(/\\/g, "/"),
+			sourceFiles,
+			testFiles,
+			hasMain,
+			children,
+		}
+	}
+
+	return scan(srcPath, 0, rootPkg)
+}
+
+function countTreeFiles(node: PackageNode, testOnly: boolean): number {
+	const count = testOnly ? node.testFiles.length : node.sourceFiles.length
+	return count + node.children.reduce((sum, child) => sum + countTreeFiles(child, testOnly), 0)
+}
+
+// ---------------------------------------------------------------------------
+// System prompt section formatters
+// ---------------------------------------------------------------------------
+
+function formatProjectInfoSection(info: CjpmProjectInfo): string {
+	const lines: string[] = ["## 当前仓颉项目信息\n"]
+
+	if (info.isWorkspace) {
+		lines.push("项目类型: workspace（多模块工作区）")
+		if (info.members && info.members.length > 0) {
+			lines.push("\n工作区成员:")
+			for (const m of info.members) {
+				lines.push(`- ${m.name} (${m.outputType}) — ${m.path}`)
+			}
+		}
+	} else {
+		lines.push(`项目名: ${info.name} | 版本: ${info.version} | 类型: ${info.outputType}`)
+	}
+
+	if (info.dependencies && Object.keys(info.dependencies).length > 0) {
+		lines.push("\n依赖:")
+		for (const [name, dep] of Object.entries(info.dependencies)) {
+			if (dep.path) {
+				lines.push(`- ${name} (本地: ${dep.path})`)
+			} else if (dep.git) {
+				const ver = dep.tag || dep.branch || ""
+				lines.push(`- ${name} (git: ${dep.git}${ver ? `, ${ver}` : ""})`)
+			}
+		}
+	}
+
+	return lines.join("\n")
+}
+
+function formatPackageTreeSection(root: PackageNode, info: CjpmProjectInfo): string {
+	const lines: string[] = ["## 当前包结构\n"]
+
+	function renderNode(node: PackageNode, indent: string, isLast: boolean): void {
+		const connector = isLast ? "└── " : "├── "
+		const files = [...node.sourceFiles, ...node.testFiles.map((f) => `${f} (测试)`)].join(", ")
+		const mainTag = node.hasMain ? " ← 入口" : ""
+		lines.push(`${indent}${connector}[${node.packageName}] ${files}${mainTag}`)
+
+		const childIndent = indent + (isLast ? "    " : "│   ")
+		node.children.forEach((child, i) => {
+			renderNode(child, childIndent, i === node.children.length - 1)
+		})
+	}
+
+	const rootFiles = [...root.sourceFiles, ...root.testFiles.map((f) => `${f} (测试)`)].join(", ")
+	lines.push(`${root.dirPath}/`)
+	if (rootFiles) {
+		lines.push(`├── [${root.packageName}] ${rootFiles}${root.hasMain ? " ← 入口" : ""}`)
+	}
+	root.children.forEach((child, i) => {
+		renderNode(child, "", i === root.children.length - 1)
+	})
+
+	lines.push(
+		`\n包声明规则: 子包声明须与相对于 ${info.srcDir}/ 的目录路径匹配（如 ${info.srcDir}/network/http/ → package ${root.packageName}.network.http）`,
+	)
+
+	return lines.join("\n")
+}
+
+function formatWorkspaceModulesSection(info: CjpmProjectInfo, cwd: string): string | null {
+	if (!info.members || info.members.length === 0) return null
+
+	const lines: string[] = ["## 工作区模块结构\n"]
+
+	for (const member of info.members) {
+		const memberCwd = path.join(cwd, member.path)
+		const pkgTree = scanPackageHierarchy(memberCwd, "src", member.name)
+		if (pkgTree) {
+			const srcCount = countTreeFiles(pkgTree, false)
+			const testCount = countTreeFiles(pkgTree, true)
+			lines.push(
+				`- ${member.name} (${member.outputType}): ${srcCount} 源文件, ${testCount} 测试文件${pkgTree.hasMain ? ", 含 main" : ""}`,
+			)
+		} else {
+			lines.push(`- ${member.name} (${member.outputType}): 未发现源文件`)
+		}
+	}
+
+	lines.push("\n各模块包声明规则: 子包声明须与相对于 src/ 的目录路径匹配")
+
+	return lines.join("\n")
+}
+
+function buildDependencyContext(info: CjpmProjectInfo, cwd: string): string | null {
+	if (!info.isWorkspace || !info.members || info.members.length === 0) return null
+
+	const lines: string[] = ["## 模块间依赖关系\n"]
+	let hasDeps = false
+
+	for (const member of info.members) {
+		const memberToml = path.join(cwd, member.path, "cjpm.toml")
+		if (!fs.existsSync(memberToml)) continue
+
+		try {
+			const content = fs.readFileSync(memberToml, "utf-8")
+			const memberSections = splitTomlSections(content)
+			const deps = memberSections.get("dependencies")
+			if (!deps) continue
+
+			const tables = extractTomlInlineTables(deps)
+			const depNames = Object.keys(tables)
+			if (depNames.length === 0) continue
+
+			hasDeps = true
+			const depList = depNames
+				.map((d) => {
+					const t = tables[d]
+					if (t["path"]) return `${d} (本地: ${t["path"]})`
+					if (t["git"]) return `${d} (git)`
+					return d
+				})
+				.join(", ")
+			lines.push(`- ${member.name} → ${depList}`)
+		} catch {
+			/* skip */
+		}
+	}
+
+	if (!hasDeps) return null
+
+	lines.push(
+		"\n注意: 修改模块间的依赖关系时，须同步更新对应 cjpm.toml 中的 [dependencies]。使用 `cjpm check` 验证依赖无循环。",
+	)
+
+	return lines.join("\n")
+}
+
 /**
  * Generate the Cangjie context section for the system prompt.
  * Only included when mode is "cangjie".
@@ -393,6 +773,30 @@ export function getCangjieContextSection(cwd: string, mode: string): string {
 	const docsExist = fs.existsSync(docsBase)
 
 	const sections: string[] = []
+
+	// 0a. Project structure context (cjpm.toml)
+	const projectInfo = parseCjpmToml(cwd)
+	if (projectInfo) {
+		sections.push(formatProjectInfoSection(projectInfo))
+	}
+
+	// 0b. Package hierarchy context
+	if (projectInfo && !projectInfo.isWorkspace) {
+		const rootPkgName = projectInfo.name || undefined
+		const pkgTree = scanPackageHierarchy(cwd, projectInfo.srcDir, rootPkgName)
+		if (pkgTree) {
+			sections.push(formatPackageTreeSection(pkgTree, projectInfo))
+		}
+	} else if (projectInfo && projectInfo.isWorkspace) {
+		const modulesSection = formatWorkspaceModulesSection(projectInfo, cwd)
+		if (modulesSection) sections.push(modulesSection)
+	}
+
+	// 0c. Dependency context (workspace only)
+	if (projectInfo) {
+		const depCtx = buildDependencyContext(projectInfo, cwd)
+		if (depCtx) sections.push(depCtx)
+	}
 
 	// 1. Import-based documentation context
 	const imports = collectActiveCangjieImports()
@@ -480,4 +884,4 @@ export function enhanceCjcErrorOutput(errorOutput: string, cwd: string): string 
 }
 
 // Re-export for testing
-export { extractImports, mapImportsToDocPaths, CJC_ERROR_PATTERNS, STDLIB_DOC_MAP }
+export { extractImports, mapImportsToDocPaths, CJC_ERROR_PATTERNS, STDLIB_DOC_MAP, parseCjpmToml, scanPackageHierarchy }
