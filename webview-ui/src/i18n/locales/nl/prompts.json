@@ -9,7 +9,7 @@
 		"editModesConfig": "Modusconfiguratie bewerken",
 		"editGlobalModes": "Globale modi bewerken",
 		"editProjectModes": "Projectmodi bewerken (.roomodes)",
-		"createModeHelpText": "Modi zijn gespecialiseerde persona's die het gedrag van Roo aanpassen. <0>Meer informatie over het gebruik van modi</0> of <1>het aanpassen van modi.</1>",
+		"createModeHelpText": "Modi zijn gespecialiseerde persona's die het gedrag van Roo aanpassen. Meer informatie over het gebruik van modi of het aanpassen van modi.",
 		"selectMode": "Modus zoeken"
 	},
 	"apiConfiguration": {
@@ -72,7 +72,7 @@
 	},
 	"globalCustomInstructions": {
 		"title": "Aangepaste instructies voor alle modi",
-		"description": "Deze instructies gelden voor alle modi. Ze bieden een basisset aan gedragingen die kunnen worden uitgebreid met modusspecifieke instructies hieronder. <0>Meer informatie</0>",
+		"description": "Deze instructies gelden voor alle modi. Ze bieden een basisset aan gedragingen die kunnen worden uitgebreid met modusspecifieke instructies hieronder.",
 		"loadFromFile": "Instructies kunnen ook worden geladen vanuit de map <span>.roo/rules/</span> in je werkruimte of vanuit de globale <0>.roo/rules/</0> (.roorules en .clinerules zijn verouderd en zullen binnenkort niet meer werken)."
 	},
 	"systemPrompt": {

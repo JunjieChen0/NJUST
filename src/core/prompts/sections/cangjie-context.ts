@@ -200,96 +200,9 @@ const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 	},
 ]
 
-const SYNTAX_PITFALLS = `## 仓颉语法常见陷阱（写代码前必读）
-
-### 入口函数
-- main 函数签名: \`main(): Int64\`，必须返回 Int64，不是 Unit/void
-- main 函数位于顶层，不在任何 class/struct 内
-
-### 声明与赋值
-- \`let\` 是不可变绑定，不能重新赋值；需要可变绑定用 \`var\`
-- \`const\` 是编译期常量，值必须在编译时可确定
-- 变量声明可省略类型（类型推断），但函数参数和返回值类型不能省略
-
-### struct vs class
-- struct 是值类型：不支持继承、不能自引用（递归成员）、赋值是拷贝
-- class 是引用类型：支持继承（\`<:\`）、可以自引用、赋值是引用
-- let 绑定的 struct 变量不能调用 mut 方法（需要 var 绑定）
-
-### 函数
-- 命名参数调用必须带 \`name:\`：\`func foo(x!: Int64)\` → 调用 \`foo(x: 42)\`
-- Lambda: \`{ params => body }\`，不是 \`(params) => { body }\`
-- 函数最后一个表达式可作为返回值（无需 return），但类型必须匹配
-
-### 模式匹配
-- match 必须穷尽所有可能分支，否则编译错误
-- 用 \`case _ =>\` 作为默认分支
-- enum 匹配时每个构造器都必须覆盖
-
-### 泛型
-- 泛型约束用 where 子句：\`func f<T>(x: T) where T <: Comparable<T>\`
-- 多约束用 \`&\` 连接：\`where T <: A & B\`
-- 泛型类型实例化需要显式类型参数或可推断
-
-### 并发
-- \`spawn { ... }\` 创建协程，返回 Future<T>
-- spawn 块内不能直接捕获外部 var 变量（可变引用）
-- 共享可变状态必须用 Mutex/AtomicReference 保护
-
-### 包与导入
-- 文件顶部声明 \`package pkg_name\`
-- 导入: \`import std.collection.*\` 或 \`import std.io.{File, Path}\`
-- 跨包访问的类型/函数必须标记 \`public\`
-
-### 字符串
-- 字符串插值用 \`\${expr}\`：\`"value is \${x + 1}"\`
-- 多行字符串无特殊语法，字符串内可直接包含换行符
-- Rune 类型代表单个 Unicode 字符，用单引号 \`'A'\`
-
-### 错误处理
-- try-catch: \`try { ... } catch (e: ExceptionType) { ... }\`
-- try-with-resources: \`try (res = expr) { ... }\`，对象必须实现 Resource 接口
-- Option 类型: \`?T\`，使用 \`??\` 提供默认值，\`?.\` 可选链
-
-### 操作符
-- 区间: \`0..10\` 左闭右开，\`0..=10\` 左闭右闭
-- 管道: \`x |> f\` 等同于 \`f(x)\`
-- 类型检查: \`x is Type\`，类型转换: \`x as Type\`（不安全）
-`
-
-const CODE_REVIEW_CHECKLIST = `## 仓颉代码审查要点
-
-### 类型与语义
-- 优先使用 struct（值语义），仅在需要继承/引用语义时使用 class
-- 优先使用 let（不可变绑定），仅在需要重新赋值时使用 var
-- 使用 Option<?T> 而非 null 表达可空值
-
-### 命名规范
-- 类型名: PascalCase (MyClass, HttpServer)
-- 函数/变量: camelCase (getData, itemCount)
-- 常量: SCREAMING_SNAKE_CASE (MAX_RETRY_COUNT)
-- 包名: snake_case (my_package)
-
-### 错误处理
-- 使用 try-catch 处理可恢复错误，不要忽略异常
-- 使用 try-with-resources 自动管理资源释放
-- 使用 Option 的 ?? 运算符提供默认值，避免 getOrThrow
-
-### 并发
-- 使用 spawn {} 创建协程，使用 Future.get() 获取结果
-- 共享可变状态必须使用 Mutex/AtomicReference 保护
-- 避免在 spawn 中直接捕获可变引用
-
-### 项目结构与包管理
-- cjpm.toml 中 name 字段须与模块目录名一致
-- workspace 的 members 列表须包含所有参与构建的模块
-- 库模块的公共 API 须标记 public，并在入口文件中 public import 重新导出
-- 各模块的 [dependencies] 须声明实际使用的依赖，不留多余项
-- 源文件中的 package 声明须与 src/ 下的目录路径匹配
-- 测试文件命名: xxx_test.cj，与被测文件放在同一目录
-- 使用 @Test 标注测试类，@TestCase 标注测试方法
-- 避免循环依赖，使用 cjpm check 检查依赖关系
-- 每个有效包目录须直接包含至少一个 .cj 文件`
+// SYNTAX_PITFALLS and CODE_REVIEW_CHECKLIST have been removed to avoid
+// duplication with the inlined CANGJIE_SYNTAX_REFERENCE and CANGJIE_CODING_RULES
+// that are already injected via customInstructions in mode.ts.
 
 // ---------------------------------------------------------------------------
 // Project structure types and constants
@@ -1107,40 +1020,44 @@ export function getCangjieContextSection(cwd: string, mode: string): string {
 		if (depCtx) sections.push(depCtx)
 	}
 
-	// 0d. Active file symbol definitions
-	const symbolSection = collectActiveCangjieSymbols()
-	if (symbolSection) {
-		sections.push(symbolSection)
-	}
+	// Symbol scanning, import analysis, and doc mapping are only performed
+	// when a cjpm.toml project exists, to keep context lightweight otherwise.
+	if (projectInfo) {
+		// 0d. Active file symbol definitions
+		const symbolSection = collectActiveCangjieSymbols()
+		if (symbolSection) {
+			sections.push(symbolSection)
+		}
 
-	// 0e. Cross-file symbol resolution via import analysis
-	const imports = collectActiveCangjieImports()
+		// 0e. Cross-file symbol resolution via import analysis
+		const imports = collectActiveCangjieImports()
 
-	const importedSymbolsSection = resolveImportedSymbols(imports, cwd, projectInfo)
-	if (importedSymbolsSection) {
-		sections.push(importedSymbolsSection)
-	}
+		const importedSymbolsSection = resolveImportedSymbols(imports, cwd, projectInfo)
+		if (importedSymbolsSection) {
+			sections.push(importedSymbolsSection)
+		}
 
-	// 0f. Workspace cross-module symbol summary
-	if (projectInfo?.isWorkspace) {
-		const wsSymbols = buildWorkspaceSymbolSummary(projectInfo, cwd)
-		if (wsSymbols) sections.push(wsSymbols)
-	}
+		// 0f. Workspace cross-module symbol summary
+		if (projectInfo.isWorkspace) {
+			const wsSymbols = buildWorkspaceSymbolSummary(projectInfo, cwd)
+			if (wsSymbols) sections.push(wsSymbols)
+		}
 
-	// 1. Import-based documentation context
-	if (imports.length > 0 && docsExist) {
-		const docMappings = mapImportsToDocPaths(imports)
-		if (docMappings.length > 0) {
-			const importContext = docMappings
-				.map((m) => {
-					const paths = m.docPaths.map((p) => `.roo/skills/cangjie-full-docs/${p}`).join(", ")
-					return `- \`${m.prefix}\`: ${m.summary} → ${paths}`
-				})
-				.join("\n")
+		// 1. Import-based documentation context
+		if (imports.length > 0 && docsExist) {
+			const docMappings = mapImportsToDocPaths(imports)
+			if (docMappings.length > 0) {
+				const importContext = docMappings
+					.map((m) => {
+						const paths = m.docPaths.map((p) => `.roo/skills/cangjie-full-docs/${p}`).join(", ")
+						return `- \`${m.prefix}\`: ${m.summary} → ${paths}`
+					})
+					.join("\n")
 
-			sections.push(
-				`## 当前代码使用的标准库模块\n\n以下模块在当前编辑的 .cj 文件中被引用，对应文档路径可用于查阅 API 详情：\n\n${importContext}`,
-			)
+				sections.push(
+					`## 当前代码使用的标准库模块\n\n以下模块在当前编辑的 .cj 文件中被引用，对应文档路径可用于查阅 API 详情：\n\n${importContext}`,
+				)
+			}
 		}
 	}
 
@@ -1168,13 +1085,7 @@ export function getCangjieContextSection(cwd: string, mode: string): string {
 		)
 	}
 
-	// 4. Common syntax pitfalls
-	sections.push(SYNTAX_PITFALLS)
-
-	// 5. Code review checklist
-	sections.push(CODE_REVIEW_CHECKLIST)
-
-	// 6. Structured editing context (cursor position, enclosing symbol, nearby code)
+	// 4. Structured editing context (cursor position, enclosing symbol, nearby code)
 	const editingCtx = buildStructuredEditingContext()
 	if (editingCtx) {
 		sections.push(editingCtx)

@@ -8,7 +8,7 @@
 		"editModesConfig": "Edit modes configuration",
 		"editGlobalModes": "Edit Global Modes",
 		"editProjectModes": "Edit Project Modes (.roomodes)",
-		"createModeHelpText": "Modes are specialized personas that tailor Roo's behavior. <0>Learn about Using Modes</0> or <1>Customizing Modes.</1>",
+		"createModeHelpText": "Modes are specialized personas that tailor Roo's behavior.",
 		"selectMode": "Search modes",
 		"noMatchFound": "No modes found"
 	},
@@ -71,7 +71,7 @@
 	},
 	"globalCustomInstructions": {
 		"title": "Custom Instructions for All Modes",
-		"description": "These instructions apply to all modes. They provide a base set of behaviors that can be enhanced by mode-specific instructions below. <0>Learn more</0>",
+		"description": "These instructions apply to all modes. They provide a base set of behaviors that can be enhanced by mode-specific instructions below.",
 		"loadFromFile": "Instructions can also be loaded from the <span>.roo/rules/</span> folder in your workspace or from the global <0>.roo/rules/</0> (.roorules and .clinerules are deprecated and will stop working soon)."
 	},
 	"systemPrompt": {

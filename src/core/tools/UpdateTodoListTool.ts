@@ -6,6 +6,7 @@ import cloneDeep from "clone-deep"
 import crypto from "crypto"
 import { TodoItem, TodoStatus, todoStatusSchema } from "@njust-ai-cj/types"
 import { getLatestTodo } from "../../shared/todo"
+import { ignoreAbortError } from "../../utils/errorHandling"
 
 interface UpdateTodoListParams {
 	todos: string
@@ -102,7 +103,7 @@ export class UpdateTodoListTool extends BaseTool<"update_todo_list"> {
 			tool: "updateTodoList",
 			todos: todos,
 		})
-		await task.ask("tool", approvalMsg, block.partial).catch(() => {})
+		await task.ask("tool", approvalMsg, block.partial).catch(ignoreAbortError)
 	}
 }
 

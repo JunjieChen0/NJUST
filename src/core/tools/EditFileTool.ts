@@ -4,6 +4,7 @@ import path from "path"
 import { type ClineSayTool, DEFAULT_WRITE_DELAY_MS } from "@njust-ai-cj/types"
 
 import { getReadablePath } from "../../utils/path"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
@@ -167,7 +168,7 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 			}
 
 			// Finalize the existing partial tool ask row so the UI doesn't get stuck in a spinner state.
-			await task.ask("tool", JSON.stringify(sharedMessageProps), false).catch(() => {})
+			await task.ask("tool", JSON.stringify(sharedMessageProps), false).catch(ignoreAbortError)
 		}
 
 		const recordFailureForPathAndMaybeEscalate = async (relPath: string, formattedError: string): Promise<void> => {
@@ -521,7 +522,7 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 			isOutsideWorkspace,
 		}
 
-		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(() => {})
+		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(ignoreAbortError)
 	}
 }
 

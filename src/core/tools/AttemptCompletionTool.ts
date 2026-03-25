@@ -4,6 +4,7 @@ import { NJUST_AI_CJEventName, type HistoryItem } from "@njust-ai-cj/types"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import { Task } from "../task/Task"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { formatResponse } from "../prompts/responses"
 import { Package } from "../../shared/package"
 import type { ToolUse } from "../../shared/tools"
@@ -186,10 +187,10 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 
 		if (command) {
 			if (lastMessage && lastMessage.ask === "command") {
-				await task.ask("command", command ?? "", block.partial).catch(() => {})
+				await task.ask("command", command ?? "", block.partial).catch(ignoreAbortError)
 			} else {
 				await task.say("completion_result", result ?? "", undefined, false)
-				await task.ask("command", command ?? "", block.partial).catch(() => {})
+				await task.ask("command", command ?? "", block.partial).catch(ignoreAbortError)
 			}
 		} else {
 			await task.say("completion_result", result ?? "", undefined, block.partial)

@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
-import { Trans } from "react-i18next"
 import { z } from "zod"
 import {
 	VSCodeButton,
 	VSCodeTextField,
 	VSCodeDropdown,
 	VSCodeOption,
-	VSCodeLink,
 	VSCodeCheckbox,
 } from "@vscode/webview-ui-toolkit/react"
 import * as ProgressPrimitive from "@radix-ui/react-progress"

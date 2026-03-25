@@ -379,6 +379,59 @@ async function loadAllAgentRulesFiles(cwd: string, enableSubfolderRules: boolean
 	return agentRules.join("\n\n")
 }
 
+function getGlobalNjustDirectory(): string {
+	return path.join(os.homedir(), ".njust")
+}
+
+function getProjectNjustDirectory(cwd: string): string {
+	return path.join(cwd, ".njust")
+}
+
+/**
+ * Return .njust directories ordered: global first, then project-local.
+ */
+function getNjustDirectories(cwd: string): string[] {
+	return [getGlobalNjustDirectory(), getProjectNjustDirectory(cwd)]
+}
+
+/**
+ * Load learned fixes for a specific mode from global (~/.njust) and project-local (.njust) directories.
+ * Supports two files per scope:
+ *   - learned-fixes/{mode}.md  — structured fix entries
+ *   - learned-fixes/{mode}-summary.md — condensed high-frequency patterns (loaded first for priority)
+ *
+ * These are accumulated error-fix patterns recorded by the AI across sessions,
+ * enabling progressive improvement in solving recurring problems.
+ */
+export async function loadLearnedFixes(cwd: string, mode: string): Promise<string> {
+	if (!mode) return ""
+
+	const sections: string[] = []
+	const njustDirs = getNjustDirectories(cwd)
+
+	for (const njustDir of njustDirs) {
+		const isGlobal = njustDir === getGlobalNjustDirectory()
+		const scope = isGlobal ? "global" : "project"
+		const fixesDir = path.join(njustDir, "learned-fixes")
+
+		const summaryFile = path.join(fixesDir, `${mode}-summary.md`)
+		const summaryContent = await safeReadFile(summaryFile)
+		if (summaryContent) {
+			sections.push(`<!-- ${scope}: high-frequency summary -->\n${summaryContent}`)
+		}
+
+		const fullFile = path.join(fixesDir, `${mode}.md`)
+		const fullContent = await safeReadFile(fullFile)
+		if (fullContent) {
+			sections.push(`<!-- ${scope}: full fix log -->\n${fullContent}`)
+		}
+	}
+
+	if (sections.length === 0) return ""
+
+	return sections.join("\n\n---\n\n")
+}
+
 export async function addCustomInstructions(
 	modeCustomInstructions: string,
 	globalCustomInstructions: string,
@@ -461,7 +514,7 @@ export async function addCustomInstructions(
 
 	// Add mode-specific rules first if they exist
 	if (modeRuleContent && modeRuleContent.trim()) {
-		if (usedRuleFile.includes(path.join(".roo", `rules-${mode}`))) {
+		if (usedRuleFile.endsWith("directories")) {
 			rules.push(modeRuleContent.trim())
 		} else {
 			rules.push(`# Rules from ${usedRuleFile}:\n${modeRuleContent}`)
@@ -489,6 +542,16 @@ export async function addCustomInstructions(
 
 	if (rules.length > 0) {
 		sections.push(`Rules:\n\n${rules.join("\n\n")}`)
+	}
+
+	// Load learned fixes for the current mode (accumulated error-fix patterns from past sessions)
+	if (mode) {
+		const learnedFixes = await loadLearnedFixes(cwd, mode)
+		if (learnedFixes && learnedFixes.trim()) {
+			sections.push(
+				`Learned Fixes (accumulated error-fix patterns from past sessions — reference these to avoid repeating known mistakes):\n\n${learnedFixes.trim()}`,
+			)
+		}
 	}
 
 	const joinedSections = sections.join("\n\n")

@@ -88,11 +88,6 @@ vi.mock("@src/i18n/TranslationContext", () => ({
 	}),
 }))
 
-// Mock buildDocLink
-vi.mock("@/utils/docLinks", () => ({
-	buildDocLink: (path: string, source: string) => `https://docs.njust-ai-cj.local/${path}?utm_source=${source}`,
-}))
-
 const renderWelcomeViewProvider = (extensionState = {}) => {
 	const useExtensionStateMock = vi.spyOn(ExtensionStateContext, "useExtensionState")
 	useExtensionStateMock.mockReturnValue({

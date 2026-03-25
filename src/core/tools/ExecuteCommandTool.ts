@@ -19,6 +19,7 @@ import { Terminal } from "../../integrations/terminal/Terminal"
 import { OutputInterceptor } from "../../integrations/terminal/OutputInterceptor"
 import { Package } from "../../shared/package"
 import { t } from "../../i18n"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { getTaskDirectoryPath } from "../../utils/storage"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
@@ -161,7 +162,7 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 
 	override async handlePartial(task: Task, block: ToolUse<"execute_command">): Promise<void> {
 		const command = block.params.command
-		await task.ask("command", command ?? "", block.partial).catch(() => {})
+		await task.ask("command", command ?? "", block.partial).catch(ignoreAbortError)
 	}
 }
 

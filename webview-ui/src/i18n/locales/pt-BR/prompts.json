@@ -9,7 +9,7 @@
 		"editModesConfig": "Editar configuração de modos",
 		"editGlobalModes": "Editar modos globais",
 		"editProjectModes": "Editar modos do projeto (.roomodes)",
-		"createModeHelpText": "Modos são personas especializadas que adaptam o comportamento do Roo. <0>Saiba mais sobre o uso de modos</0> ou <1>Personalização de modos.</1>",
+		"createModeHelpText": "Modos são personas especializadas que adaptam o comportamento do Roo. Saiba mais sobre o uso de modos ou Personalização de modos.",
 		"selectMode": "Buscar modos"
 	},
 	"apiConfiguration": {
@@ -72,7 +72,7 @@
 	},
 	"globalCustomInstructions": {
 		"title": "Instruções personalizadas para todos os modos",
-		"description": "Estas instruções se aplicam a todos os modos. Elas fornecem um conjunto base de comportamentos que podem ser aprimorados por instruções específicas do modo abaixo. <0>Saiba mais</0>",
+		"description": "Estas instruções se aplicam a todos os modos. Elas fornecem um conjunto base de comportamentos que podem ser aprimorados por instruções específicas do modo abaixo.",
 		"loadFromFile": "Instruções também podem ser carregadas da pasta <span>.roo/rules/</span> no seu espaço de trabalho ou do global <0>.roo/rules/</0> (.roorules e .clinerules estão obsoletos e deixarão de funcionar em breve)."
 	},
 	"systemPrompt": {

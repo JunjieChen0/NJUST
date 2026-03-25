@@ -68,7 +68,7 @@
 		}
 	},
 	"slashCommands": {
-		"description": "Gestisci i tuoi comandi slash per eseguire rapidamente flussi di lavoro e azioni personalizzate. <DocsLink>Scopri di più</DocsLink>",
+		"description": "Gestisci i tuoi comandi slash per eseguire rapidamente flussi di lavoro e azioni personalizzate. Scopri di più",
 		"workspaceCommands": "Comandi dell'area di lavoro",
 		"globalCommands": "Comandi globali",
 		"noWorkspaceCommands": "Nessun comando in questo progetto ancora.",
@@ -157,7 +157,7 @@
 			"cancelButton": "Annulla",
 			"confirmButton": "Cancella dati"
 		},
-		"description": "Configura le impostazioni di indicizzazione del codebase per abilitare la ricerca semantica del tuo progetto. <0>Scopri di più</0>",
+		"description": "Configura le impostazioni di indicizzazione del codebase per abilitare la ricerca semantica del tuo progetto. Scopri di più",
 		"statusTitle": "Stato",
 		"settingsTitle": "Impostazioni di indicizzazione",
 		"disabledMessage": "L'indicizzazione del codebase è attualmente disabilitata. Abilitala nelle impostazioni globali per configurare le opzioni di indicizzazione.",
@@ -563,7 +563,7 @@
 		},
 		"enable": {
 			"label": "Abilita punti di controllo automatici",
-			"description": "Quando abilitato, Roo creerà automaticamente punti di controllo durante l'esecuzione dei compiti, facilitando la revisione delle modifiche o il ritorno a stati precedenti. <0>Scopri di più</0>"
+			"description": "Quando abilitato, Roo creerà automaticamente punti di controllo durante l'esecuzione dei compiti, facilitando la revisione delle modifiche o il ritorno a stati precedenti. Scopri di più"
 		}
 	},
 	"notifications": {
@@ -685,11 +685,11 @@
 		},
 		"outputLineLimit": {
 			"label": "Limite output terminale",
-			"description": "Mantiene le prime e ultime righe e scarta quelle centrali per rimanere sotto il limite. Abbassa per risparmiare token; alza per dare a Roo più dettagli centrali. Roo vede un segnaposto dove il contenuto viene saltato.<0>Scopri di più</0>"
+			"description": "Mantiene le prime e ultime righe e scarta quelle centrali per rimanere sotto il limite. Abbassa per risparmiare token; alza per dare a Roo più dettagli centrali. Roo vede un segnaposto dove il contenuto viene saltato.Scopri di più"
 		},
 		"outputCharacterLimit": {
 			"label": "Limite caratteri terminale",
-			"description": "Sovrascrive il limite di righe per prevenire problemi di memoria imponendo un limite rigido alla dimensione di output. Se superato, mantiene l'inizio e la fine e mostra un segnaposto a Roo dove il contenuto viene saltato. <0>Scopri di più</0>"
+			"description": "Sovrascrive il limite di righe per prevenire problemi di memoria imponendo un limite rigido alla dimensione di output. Se superato, mantiene l'inizio e la fine e mostra un segnaposto a Roo dove il contenuto viene saltato. Scopri di più"
 		},
 		"outputPreviewSize": {
 			"label": "Dimensione anteprima output comandi",
@@ -702,39 +702,39 @@
 		},
 		"shellIntegrationTimeout": {
 			"label": "Timeout integrazione shell terminale",
-			"description": "Quanto tempo attendere l'integrazione della shell di VS Code prima di eseguire i comandi. Aumenta se la tua shell si avvia lentamente o vedi errori 'Integrazione Shell Non Disponibile'. <0>Scopri di più</0>"
+			"description": "Quanto tempo attendere l'integrazione della shell di VS Code prima di eseguire i comandi. Aumenta se la tua shell si avvia lentamente o vedi errori 'Integrazione Shell Non Disponibile'. Scopri di più"
 		},
 		"shellIntegrationDisabled": {
 			"label": "Usa terminale in linea (consigliato)",
-			"description": "Esegui comandi nel terminale in linea (chat) per bypassare profili/integrazione shell per esecuzioni più veloci e affidabili. Quando disabilitato, Roo usa il terminale VS Code con il tuo profilo shell, prompt e plugin. <0>Scopri di più</0>"
+			"description": "Esegui comandi nel terminale in linea (chat) per bypassare profili/integrazione shell per esecuzioni più veloci e affidabili. Quando disabilitato, Roo usa il terminale VS Code con il tuo profilo shell, prompt e plugin. Scopri di più"
 		},
 		"commandDelay": {
 			"label": "Ritardo comando terminale",
-			"description": "Aggiunge una breve pausa dopo ogni comando affinché il terminale VS Code possa svuotare tutto l'output (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Usa solo se vedi output finale mancante; altrimenti lascia a 0. <0>Scopri di più</0>"
+			"description": "Aggiunge una breve pausa dopo ogni comando affinché il terminale VS Code possa svuotare tutto l'output (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Usa solo se vedi output finale mancante; altrimenti lascia a 0. Scopri di più"
 		},
 		"powershellCounter": {
 			"label": "Abilita workaround contatore PowerShell",
-			"description": "Attiva quando l'output PowerShell è mancante o duplicato; aggiunge un piccolo contatore a ogni comando per stabilizzare l'output. Mantieni disattivato se l'output sembra già corretto. <0>Scopri di più</0>"
+			"description": "Attiva quando l'output PowerShell è mancante o duplicato; aggiunge un piccolo contatore a ogni comando per stabilizzare l'output. Mantieni disattivato se l'output sembra già corretto. Scopri di più"
 		},
 		"zshClearEolMark": {
 			"label": "Cancella marcatore EOL ZSH",
-			"description": "Attiva quando vedi % vaganti alla fine delle righe o l'analisi sembra sbagliata; omette il marcatore di fine riga (%) di Zsh. <0>Scopri di più</0>"
+			"description": "Attiva quando vedi % vaganti alla fine delle righe o l'analisi sembra sbagliata; omette il marcatore di fine riga (%) di Zsh. Scopri di più"
 		},
 		"zshOhMy": {
 			"label": "Abilita integrazione Oh My Zsh",
-			"description": "Attiva quando il tuo tema/plugin Oh My Zsh si aspetta l'integrazione della shell; imposta ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Disattiva per evitare di impostare quella variabile. <0>Scopri di più</0>"
+			"description": "Attiva quando il tuo tema/plugin Oh My Zsh si aspetta l'integrazione della shell; imposta ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Disattiva per evitare di impostare quella variabile. Scopri di più"
 		},
 		"zshP10k": {
 			"label": "Abilita integrazione Powerlevel10k",
-			"description": "Attiva quando usi l'integrazione della shell Powerlevel10k. <0>Scopri di più</0>"
+			"description": "Attiva quando usi l'integrazione della shell Powerlevel10k. Scopri di più"
 		},
 		"zdotdir": {
 			"label": "Abilita gestione ZDOTDIR",
-			"description": "Attiva quando l'integrazione della shell zsh fallisce o è in conflitto con i tuoi dotfile. <0>Scopri di più</0>"
+			"description": "Attiva quando l'integrazione della shell zsh fallisce o è in conflitto con i tuoi dotfile. Scopri di più"
 		},
 		"inheritEnv": {
 			"label": "Eredita variabili d'ambiente",
-			"description": "Attiva per ereditare le variabili d'ambiente dal processo padre di VS Code. <0>Scopri di più</0>"
+			"description": "Attiva per ereditare le variabili d'ambiente dal processo padre di VS Code. Scopri di più"
 		}
 	},
 	"advancedSettings": {
@@ -960,7 +960,7 @@
 		}
 	},
 	"skills": {
-		"description": "Gestisci le skills che forniscono istruzioni contestuali all'agente. Le skills vengono applicate automaticamente quando rilevanti per le tue attività. <DocsLink>Scopri di più</DocsLink>",
+		"description": "Gestisci le skills che forniscono istruzioni contestuali all'agente. Le skills vengono applicate automaticamente quando rilevanti per le tue attività. Scopri di più",
 		"workspaceSkills": "Skills dell'area di lavoro",
 		"globalSkills": "Skills Globali",
 		"noWorkspaceSkills": "Nessuna skill in questo progetto ancora.",

@@ -68,7 +68,7 @@
 		}
 	},
 	"slashCommands": {
-		"description": "管理您的斜線命令，以便快速執行自訂工作流程和動作。 <DocsLink>了解更多</DocsLink>",
+		"description": "管理您的斜線命令，以便快速執行自訂工作流程和動作。",
 		"workspaceCommands": "工作區命令",
 		"globalCommands": "全域命令",
 		"noWorkspaceCommands": "此專案中還沒有命令。",
@@ -117,7 +117,7 @@
 	},
 	"codeIndex": {
 		"title": "程式碼庫索引",
-		"description": "設定程式碼庫索引設定以啟用專案的語意搜尋。<0>了解更多</0>",
+		"description": "設定程式碼庫索引設定以啟用專案的語意搜尋。",
 		"statusTitle": "狀態",
 		"enableLabel": "啟用程式碼庫索引",
 		"enableDescription": "啟用程式碼索引以改進搜尋和上下文理解",
@@ -466,7 +466,7 @@
 			"draftModelDesc": "草稿模型必須來自相同模型系列才能正確運作。",
 			"selectDraftModel": "選擇草稿模型",
 			"noModelsFound": "未找到草稿模型。請確保 LM Studio 以伺服器模式執行。",
-			"description": "LM Studio 允許您在本機電腦執行模型。詳細資訊請參閱快速入門指南。您需要啟動 LM Studio 的本機伺服器功能才能與此擴充功能搭配使用。<span>注意：</span> NJUST_AI_CJ 使用複雜提示詞，與 Claude 模型搭配最佳。功能較弱的模型可能無法正常運作。"
+			"description": "LM Studio 允許您在本機電腦執行模型。詳細資訊請參閱<a>快速入門指南</a>。您需要啟動 LM Studio 的<b>本機伺服器</b>功能才能與此擴充功能搭配使用。<span>注意：</span> NJUST_AI_CJ 使用複雜提示詞，與 Claude 模型搭配最佳。功能較弱的模型可能無法正常運作。"
 		},
 		"ollama": {
 			"baseUrl": "基礎 URL（選用）",
@@ -573,7 +573,7 @@
 		},
 		"enable": {
 			"label": "啟用自動檢查點",
-			"description": "啟用後，Roo 將在工作執行期間自動建立檢查點，方便檢視變更或回到較早的狀態。 <0>了解更多</0>"
+			"description": "啟用後，Roo 將在工作執行期間自動建立檢查點，方便檢視變更或回到較早的狀態。"
 		}
 	},
 	"notifications": {
@@ -695,11 +695,11 @@
 		},
 		"outputLineLimit": {
 			"label": "終端機輸出限制",
-			"description": "保留首尾行並丟棄中間行以保持在限制內。降低可節省 Token；提高可為 Roo 提供更多中間細節。Roo 看到內容被跳過的佔位符。<0>了解更多</0>"
+			"description": "保留首尾行並丟棄中間行以保持在限制內。降低可節省 Token；提高可為 Roo 提供更多中間細節。Roo 看到內容被跳過的佔位符。"
 		},
 		"outputCharacterLimit": {
 			"label": "終端機字元限制",
-			"description": "透過強制限制輸出大小來覆寫行限制以防止記憶體問題。如果超出，保留開頭和結尾並向 Roo 顯示內容被跳過的佔位符。<0>了解更多</0>"
+			"description": "透過強制限制輸出大小來覆寫行限制以防止記憶體問題。如果超出，保留開頭和結尾並向 Roo 顯示內容被跳過的佔位符。"
 		},
 		"outputPreviewSize": {
 			"label": "命令輸出預覽大小",
@@ -712,39 +712,39 @@
 		},
 		"shellIntegrationTimeout": {
 			"label": "終端機 shell 整合逾時",
-			"description": "執行命令前等待 VS Code shell 整合的時間。如果 shell 啟動緩慢或看到 'Shell Integration Unavailable' 錯誤，請提高此值。<0>了解更多</0>"
+			"description": "執行命令前等待 VS Code shell 整合的時間。如果 shell 啟動緩慢或看到 'Shell Integration Unavailable' 錯誤，請提高此值。"
 		},
 		"shellIntegrationDisabled": {
 			"label": "使用內嵌終端機（建議）",
-			"description": "在內嵌終端機（聊天）中執行命令以繞過 shell 設定檔/整合，實現更快、更可靠的執行。停用時，Roo 使用 VS Code 終端機及您的 shell 設定檔、提示和外掛程式。<0>了解更多</0>"
+			"description": "在內嵌終端機（聊天）中執行命令以繞過 shell 設定檔/整合，實現更快、更可靠的執行。停用時，Roo 使用 VS Code 終端機及您的 shell 設定檔、提示和外掛程式。"
 		},
 		"commandDelay": {
 			"label": "終端機命令延遲",
-			"description": "在每個命令後新增短暫暫停，以便 VS Code 終端機刷新所有輸出（bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep）。僅在看到缺少尾部輸出時使用；否則保持為 0。<0>了解更多</0>"
+			"description": "在每個命令後新增短暫暫停，以便 VS Code 終端機刷新所有輸出（bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep）。僅在看到缺少尾部輸出時使用；否則保持為 0。"
 		},
 		"powershellCounter": {
 			"label": "啟用 PowerShell 計數器解決方案",
-			"description": "當 PowerShell 輸出遺失或重複時啟用此選項；它會為每個命令附加一個小計數器以穩定輸出。如果輸出已正常，請保持關閉。<0>了解更多</0>"
+			"description": "當 PowerShell 輸出遺失或重複時啟用此選項；它會為每個命令附加一個小計數器以穩定輸出。如果輸出已正常，請保持關閉。"
 		},
 		"zshClearEolMark": {
 			"label": "清除 ZSH EOL 標記",
-			"description": "當您在行尾看到零散的 % 或解析看起來錯誤時啟用此選項；它會省略 Zsh 的行尾標記（%）。<0>了解更多</0>"
+			"description": "當您在行尾看到零散的 % 或解析看起來錯誤時啟用此選項；它會省略 Zsh 的行尾標記（%）。"
 		},
 		"zshOhMy": {
 			"label": "啟用 Oh My Zsh 整合",
-			"description": "當您的 Oh My Zsh 主題/外掛程式期望 shell 整合時啟用此選項；它會設定 ITERM_SHELL_INTEGRATION_INSTALLED=Yes。關閉此選項以避免設定該變數。<0>了解更多</0>"
+			"description": "當您的 Oh My Zsh 主題/外掛程式期望 shell 整合時啟用此選項；它會設定 ITERM_SHELL_INTEGRATION_INSTALLED=Yes。關閉此選項以避免設定該變數。"
 		},
 		"zshP10k": {
 			"label": "啟用 Powerlevel10k 整合",
-			"description": "使用 Powerlevel10k shell 整合時啟用此選項。<0>了解更多</0>"
+			"description": "使用 Powerlevel10k shell 整合時啟用此選項。"
 		},
 		"zdotdir": {
 			"label": "啟用 ZDOTDIR 處理",
-			"description": "當 zsh shell 整合失敗或與您的 dotfiles 衝突時啟用此選項。<0>了解更多</0>"
+			"description": "當 zsh shell 整合失敗或與您的 dotfiles 衝突時啟用此選項。"
 		},
 		"inheritEnv": {
 			"label": "繼承環境變數",
-			"description": "啟用此選項以從父 VS Code 程序繼承環境變數。<0>了解更多</0>"
+			"description": "啟用此選項以從父 VS Code 程序繼承環境變數。"
 		}
 	},
 	"advancedSettings": {
@@ -960,7 +960,7 @@
 		}
 	},
 	"skills": {
-		"description": "管理為代理提供上下文指令的技能。技能會在與您的任務相關時自動套用。<DocsLink>深入了解</DocsLink>",
+		"description": "管理為代理提供上下文指令的技能。技能會在與您的任務相關時自動套用。深入了解",
 		"workspaceSkills": "工作區技能",
 		"globalSkills": "全域技能",
 		"noWorkspaceSkills": "此專案中還沒有技能。",

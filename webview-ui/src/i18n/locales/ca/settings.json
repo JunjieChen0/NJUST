@@ -68,7 +68,7 @@
 		}
 	},
 	"slashCommands": {
-		"description": "Gestiona les teves comandes de barra per executar ràpidament fluxos de treball i accions personalitzades. <DocsLink>Aprèn-ne més</DocsLink>",
+		"description": "Gestiona les teves comandes de barra per executar ràpidament fluxos de treball i accions personalitzades. Aprèn-ne més",
 		"workspaceCommands": "Comandes de l'espai de treball",
 		"globalCommands": "Comandes globals",
 		"noWorkspaceCommands": "Sense comandes en aquest projecte encara.",
@@ -157,7 +157,7 @@
 			"cancelButton": "Cancel·lar",
 			"confirmButton": "Esborrar dades"
 		},
-		"description": "Configureu la configuració d'indexació de la base de codi per habilitar la cerca semàntica del vostre projecte. <0>Més informació</0>",
+		"description": "Configureu la configuració d'indexació de la base de codi per habilitar la cerca semàntica del vostre projecte.",
 		"statusTitle": "Estat",
 		"settingsTitle": "Configuració d'indexació",
 		"disabledMessage": "La indexació de la base de codi està actualment deshabilitada. Habiliteu-la a la configuració global per configurar les opcions d'indexació.",
@@ -563,7 +563,7 @@
 		},
 		"enable": {
 			"label": "Habilitar punts de control automàtics",
-			"description": "Quan està habilitat, Roo crearà automàticament punts de control durant l'execució de tasques, facilitant la revisió de canvis o la reversió a estats anteriors. <0>Més informació</0>"
+			"description": "Quan està habilitat, Roo crearà automàticament punts de control durant l'execució de tasques, facilitant la revisió de canvis o la reversió a estats anteriors."
 		}
 	},
 	"notifications": {
@@ -685,11 +685,11 @@
 		},
 		"outputLineLimit": {
 			"label": "Límit de sortida del terminal",
-			"description": "Conserva les primeres i últimes línies i descarta les del mig per mantenir-se sota el límit. Redueix per estalviar tokens; augmenta per donar a Roo més detalls del mig. Roo veu un marcador on s'ha omès el contingut.<0>Aprèn-ne més</0>"
+			"description": "Conserva les primeres i últimes línies i descarta les del mig per mantenir-se sota el límit. Redueix per estalviar tokens; augmenta per donar a Roo més detalls del mig. Roo veu un marcador on s'ha omès el contingut.Aprèn-ne més"
 		},
 		"outputCharacterLimit": {
 			"label": "Límit de caràcters del terminal",
-			"description": "Anul·la el límit de línies per evitar problemes de memòria imposant un límit dur a la mida de sortida. Si se supera, manté l'inici i el final i mostra un marcador a Roo on s'ha omès el contingut. <0>Aprèn-ne més</0>"
+			"description": "Anul·la el límit de línies per evitar problemes de memòria imposant un límit dur a la mida de sortida. Si se supera, manté l'inici i el final i mostra un marcador a Roo on s'ha omès el contingut. Aprèn-ne més"
 		},
 		"outputPreviewSize": {
 			"label": "Mida de la previsualització de la sortida d'ordres",
@@ -702,39 +702,39 @@
 		},
 		"shellIntegrationTimeout": {
 			"label": "Temps d'espera d'integració del shell del terminal",
-			"description": "Quant de temps esperar la integració del shell de VS Code abans d'executar comandes. Augmenta si el teu shell s'inicia lentament o veus errors 'Integració del Shell No Disponible'. <0>Aprèn-ne més</0>"
+			"description": "Quant de temps esperar la integració del shell de VS Code abans d'executar comandes. Augmenta si el teu shell s'inicia lentament o veus errors 'Integració del Shell No Disponible'. Aprèn-ne més"
 		},
 		"shellIntegrationDisabled": {
 			"label": "Utilitza terminal en línia (recomanat)",
-			"description": "Executa comandes al terminal en línia (xat) per evitar perfils/integració del shell per a execucions més ràpides i fiables. Quan està desactivat, Roo usa el terminal de VS Code amb el teu perfil de shell, prompts i connectors. <0>Aprèn-ne més</0>"
+			"description": "Executa comandes al terminal en línia (xat) per evitar perfils/integració del shell per a execucions més ràpides i fiables. Quan està desactivat, Roo usa el terminal de VS Code amb el teu perfil de shell, prompts i connectors. Aprèn-ne més"
 		},
 		"commandDelay": {
 			"label": "Retard de comanda del terminal",
-			"description": "Afegeix una pausa breu després de cada comanda perquè el terminal de VS Code pugui buidar tota la sortida (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Usa només si veus que falta sortida final; altrament deixa a 0. <0>Aprèn-ne més</0>"
+			"description": "Afegeix una pausa breu després de cada comanda perquè el terminal de VS Code pugui buidar tota la sortida (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Usa només si veus que falta sortida final; altrament deixa a 0. Aprèn-ne més"
 		},
 		"powershellCounter": {
 			"label": "Activa solució de comptador de PowerShell",
-			"description": "Activa quan falta o es duplica la sortida de PowerShell; afegeix un petit comptador a cada comanda per estabilitzar la sortida. Mantén desactivat si la sortida ja es veu correcta. <0>Aprèn-ne més</0>"
+			"description": "Activa quan falta o es duplica la sortida de PowerShell; afegeix un petit comptador a cada comanda per estabilitzar la sortida. Mantén desactivat si la sortida ja es veu correcta. Aprèn-ne més"
 		},
 		"zshClearEolMark": {
 			"label": "Neteja marca EOL de ZSH",
-			"description": "Activa quan vegis % extraviats al final de línies o l'anàlisi sembli incorrecta; omet la marca de final de línia (%) de Zsh. <0>Aprèn-ne més</0>"
+			"description": "Activa quan vegis % extraviats al final de línies o l'anàlisi sembli incorrecta; omet la marca de final de línia (%) de Zsh. Aprèn-ne més"
 		},
 		"zshOhMy": {
 			"label": "Activa integració amb Oh My Zsh",
-			"description": "Activa quan el teu tema/connectors d'Oh My Zsh esperin integració del shell; estableix ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Desactiva per evitar establir aquesta variable. <0>Aprèn-ne més</0>"
+			"description": "Activa quan el teu tema/connectors d'Oh My Zsh esperin integració del shell; estableix ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Desactiva per evitar establir aquesta variable. Aprèn-ne més"
 		},
 		"zshP10k": {
 			"label": "Activa integració amb Powerlevel10k",
-			"description": "Activa quan usis integració del shell de Powerlevel10k. <0>Aprèn-ne més</0>"
+			"description": "Activa quan usis integració del shell de Powerlevel10k. Aprèn-ne més"
 		},
 		"zdotdir": {
 			"label": "Activa gestió de ZDOTDIR",
-			"description": "Activa quan la integració del shell de zsh falli o entri en conflicte amb els teus dotfiles. <0>Aprèn-ne més</0>"
+			"description": "Activa quan la integració del shell de zsh falli o entri en conflicte amb els teus dotfiles. Aprèn-ne més"
 		},
 		"inheritEnv": {
 			"label": "Hereta variables d'entorn",
-			"description": "Activa per heretar variables d'entorn del procés pare de VS Code. <0>Aprèn-ne més</0>"
+			"description": "Activa per heretar variables d'entorn del procés pare de VS Code. Aprèn-ne més"
 		}
 	},
 	"advancedSettings": {
@@ -960,7 +960,7 @@
 		}
 	},
 	"skills": {
-		"description": "Gestiona les skills que proporcionen instruccions contextuals a l'agent. Les skills s'apliquen automàticament quan són rellevants per a les teves tasques. <DocsLink>Més informació</DocsLink>",
+		"description": "Gestiona les skills que proporcionen instruccions contextuals a l'agent. Les skills s'apliquen automàticament quan són rellevants per a les teves tasques.",
 		"workspaceSkills": "Skills de l'espai de treball",
 		"globalSkills": "Skills globals",
 		"noWorkspaceSkills": "Sense skills en aquest projecte encara.",

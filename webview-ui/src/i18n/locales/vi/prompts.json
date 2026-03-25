@@ -9,7 +9,7 @@
 		"editModesConfig": "Chỉnh sửa cấu hình chế độ",
 		"editGlobalModes": "Chỉnh sửa chế độ toàn cục",
 		"editProjectModes": "Chỉnh sửa chế độ dự án (.roomodes)",
-		"createModeHelpText": "Chế độ là các vai trò chuyên biệt điều chỉnh hành vi của Roo. <0>Tìm hiểu về Sử dụng Chế độ</0> hoặc <1>Tùy chỉnh Chế độ.</1>",
+		"createModeHelpText": "Chế độ là các vai trò chuyên biệt điều chỉnh hành vi của Roo. Tìm hiểu về Sử dụng Chế độ hoặc Tùy chỉnh Chế độ.",
 		"selectMode": "Tìm kiếm chế độ"
 	},
 	"apiConfiguration": {
@@ -59,7 +59,7 @@
 	},
 	"globalCustomInstructions": {
 		"title": "Hướng dẫn tùy chỉnh cho tất cả các chế độ",
-		"description": "Những hướng dẫn này áp dụng cho tất cả các chế độ. Chúng cung cấp một bộ hành vi cơ bản có thể được nâng cao bởi hướng dẫn dành riêng cho chế độ bên dưới. <0>Tìm hiểu thêm</0>",
+		"description": "Những hướng dẫn này áp dụng cho tất cả các chế độ. Chúng cung cấp một bộ hành vi cơ bản có thể được nâng cao bởi hướng dẫn dành riêng cho chế độ bên dưới.",
 		"loadFromFile": "Hướng dẫn cũng có thể được tải từ thư mục <span>.roo/rules/</span> trong không gian làm việc của bạn hoặc từ toàn cục <0>.roo/rules/</0> (.roorules và .clinerules đã lỗi thời và sẽ ngừng hoạt động sớm)."
 	},
 	"importMode": {

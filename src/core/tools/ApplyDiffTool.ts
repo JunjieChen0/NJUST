@@ -5,6 +5,7 @@ import { type ClineSayTool, DEFAULT_WRITE_DELAY_MS } from "@njust-ai-cj/types"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import { getReadablePath } from "../../utils/path"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { fileExistsAtPath } from "../../utils/fs"
@@ -294,7 +295,7 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 			return
 		}
 
-		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial, toolProgressStatus).catch(() => {})
+		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial, toolProgressStatus).catch(ignoreAbortError)
 	}
 }
 

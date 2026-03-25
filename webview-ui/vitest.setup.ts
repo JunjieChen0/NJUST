@@ -48,5 +48,9 @@ Object.defineProperty(window, "matchMedia", {
 	})),
 })
 
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false)
+Element.prototype.setPointerCapture = vi.fn()
+Element.prototype.releasePointerCapture = vi.fn()
+
 // Mock scrollIntoView which is not available in jsdom
 Element.prototype.scrollIntoView = vi.fn()

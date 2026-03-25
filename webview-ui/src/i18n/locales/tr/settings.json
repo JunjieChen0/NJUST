@@ -68,7 +68,7 @@
 		}
 	},
 	"slashCommands": {
-		"description": "Özel iş akışlarını ve eylemleri hızlı bir şekilde yürütmek için eğik çizgi komutlarınızı yönetin. <DocsLink>Daha fazla bilgi edinin</DocsLink>",
+		"description": "Özel iş akışlarını ve eylemleri hızlı bir şekilde yürütmek için eğik çizgi komutlarınızı yönetin.",
 		"workspaceCommands": "Çalışma Alanı Komutları",
 		"globalCommands": "Genel Komutlar",
 		"noWorkspaceCommands": "Bu projede henüz komut yok.",
@@ -157,7 +157,7 @@
 			"cancelButton": "İptal",
 			"confirmButton": "Verileri Temizle"
 		},
-		"description": "Projenizin anlamsal aramasını etkinleştirmek için kod tabanı indeksleme ayarlarını yapılandırın. <0>Daha fazla bilgi</0>",
+		"description": "Projenizin anlamsal aramasını etkinleştirmek için kod tabanı indeksleme ayarlarını yapılandırın.",
 		"statusTitle": "Durum",
 		"settingsTitle": "İndeksleme Ayarları",
 		"disabledMessage": "Kod tabanı indeksleme şu anda devre dışı. İndeksleme seçeneklerini yapılandırmak için genel ayarlarda etkinleştirin.",
@@ -563,7 +563,7 @@
 		},
 		"enable": {
 			"label": "Otomatik kontrol noktalarını etkinleştir",
-			"description": "Etkinleştirildiğinde, Roo görev yürütme sırasında otomatik olarak kontrol noktaları oluşturarak değişiklikleri gözden geçirmeyi veya önceki durumlara dönmeyi kolaylaştırır. <0>Daha fazla bilgi</0>"
+			"description": "Etkinleştirildiğinde, Roo görev yürütme sırasında otomatik olarak kontrol noktaları oluşturarak değişiklikleri gözden geçirmeyi veya önceki durumlara dönmeyi kolaylaştırır."
 		}
 	},
 	"notifications": {
@@ -685,11 +685,11 @@
 		},
 		"outputLineLimit": {
 			"label": "Terminal çıktı sınırı",
-			"description": "Sınırın altında kalmak için ilk ve son satırları tutar ve ortadakileri atar. Jetonları kaydetmek için düşürün; Roo'ya daha fazla orta ayrıntı vermek için yükseltin. Roo, içeriğin atlandığı yerde bir yer tutucu görür.<0>Daha fazla bilgi edinin</0>"
+			"description": "Sınırın altında kalmak için ilk ve son satırları tutar ve ortadakileri atar. Jetonları kaydetmek için düşürün; Roo'ya daha fazla orta ayrıntı vermek için yükseltin. Roo, içeriğin atlandığı yerde bir yer tutucu görür."
 		},
 		"outputCharacterLimit": {
 			"label": "Terminal karakter sınırı",
-			"description": "Çıktı boyutuna katı bir üst sınır uygulayarak bellek sorunlarını önlemek için satır sınırını geçersiz kılar. Aşılırsa, başlangıcı ve sonu tutar ve içeriğin atlandığı yerde Roo'ya bir yer tutucu gösterir. <0>Daha fazla bilgi edinin</0>"
+			"description": "Çıktı boyutuna katı bir üst sınır uygulayarak bellek sorunlarını önlemek için satır sınırını geçersiz kılar. Aşılırsa, başlangıcı ve sonu tutar ve içeriğin atlandığı yerde Roo'ya bir yer tutucu gösterir."
 		},
 		"outputPreviewSize": {
 			"label": "Komut çıktısı önizleme boyutu",
@@ -702,39 +702,39 @@
 		},
 		"shellIntegrationTimeout": {
 			"label": "Terminal shell entegrasyon timeout",
-			"description": "Komut çalıştırmadan önce VS Code shell entegrasyonunu bekleme süresi. Shell yavaş başlıyorsa veya 'Shell Integration Unavailable' hatası görüyorsanız artırın. <0>Daha fazla bilgi edinin</0>"
+			"description": "Komut çalıştırmadan önce VS Code shell entegrasyonunu bekleme süresi. Shell yavaş başlıyorsa veya 'Shell Integration Unavailable' hatası görüyorsanız artırın."
 		},
 		"shellIntegrationDisabled": {
 			"label": "Satır İçi Terminal Kullan (önerilir)",
-			"description": "Daha hızlı, daha güvenilir çalıştırmalar için kabuk profillerini/entegrasyonunu atlamak için Satır İçi Terminal'de (sohbet) komutları çalıştırın. Devre dışı bırakıldığında Roo, kabuk profiliniz, istemleriniz ve eklentilerinizle VS Code terminalini kullanır. <0>Daha fazla bilgi edinin</0>"
+			"description": "Daha hızlı, daha güvenilir çalıştırmalar için kabuk profillerini/entegrasyonunu atlamak için Satır İçi Terminal'de (sohbet) komutları çalıştırın. Devre dışı bırakıldığında Roo, kabuk profiliniz, istemleriniz ve eklentilerinizle VS Code terminalini kullanır."
 		},
 		"commandDelay": {
 			"label": "Terminal komut delay",
-			"description": "VS Code terminalin tüm outputu flush edebilmesi için her komuttan sonra kısa pause ekler (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Sadece tail output eksikse kullan; yoksa 0'da bırak. <0>Daha fazla bilgi edinin</0>"
+			"description": "VS Code terminalin tüm outputu flush edebilmesi için her komuttan sonra kısa pause ekler (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Sadece tail output eksikse kullan; yoksa 0'da bırak."
 		},
 		"powershellCounter": {
 			"label": "PowerShell sayaç geçici çözümünü etkinleştir",
-			"description": "PowerShell çıktısı eksik veya yineleniyorsa bunu açın; çıktıyı stabilize etmek için her komuta küçük bir sayaç ekler. Çıktı zaten doğru görünüyorsa bunu kapalı tutun. <0>Daha fazla bilgi edinin</0>"
+			"description": "PowerShell çıktısı eksik veya yineleniyorsa bunu açın; çıktıyı stabilize etmek için her komuta küçük bir sayaç ekler. Çıktı zaten doğru görünüyorsa bunu kapalı tutun."
 		},
 		"zshClearEolMark": {
 			"label": "ZSH EOL işaretini temizle",
-			"description": "Satırların sonunda başıboş % gördüğünüzde veya ayrıştırma yanlış göründüğünde bunu açın; Zsh'nin satır sonu işaretini (%) atlar. <0>Daha fazla bilgi edinin</0>"
+			"description": "Satırların sonunda başıboş % gördüğünüzde veya ayrıştırma yanlış göründüğünde bunu açın; Zsh'nin satır sonu işaretini (%) atlar."
 		},
 		"zshOhMy": {
 			"label": "Oh My Zsh entegrasyonunu etkinleştir",
-			"description": "Oh My Zsh temanız/eklentileriniz kabuk entegrasyonu beklediğinde bunu açın; ITERM_SHELL_INTEGRATION_INSTALLED=Yes ayarlar. Bu değişkeni ayarlamaktan kaçınmak için bunu kapatın. <0>Daha fazla bilgi edinin</0>"
+			"description": "Oh My Zsh temanız/eklentileriniz kabuk entegrasyonu beklediğinde bunu açın; ITERM_SHELL_INTEGRATION_INSTALLED=Yes ayarlar. Bu değişkeni ayarlamaktan kaçınmak için bunu kapatın."
 		},
 		"zshP10k": {
 			"label": "Powerlevel10k entegrasyonunu etkinleştir",
-			"description": "Powerlevel10k kabuk entegrasyonunu kullanırken bunu açın. <0>Daha fazla bilgi edinin</0>"
+			"description": "Powerlevel10k kabuk entegrasyonunu kullanırken bunu açın."
 		},
 		"zdotdir": {
 			"label": "ZDOTDIR işlemeyi etkinleştir",
-			"description": "zsh kabuk entegrasyonu başarısız olduğunda veya dotfiles'larınızla çakıştığında bunu açın. <0>Daha fazla bilgi edinin</0>"
+			"description": "zsh kabuk entegrasyonu başarısız olduğunda veya dotfiles'larınızla çakıştığında bunu açın."
 		},
 		"inheritEnv": {
 			"label": "Ortam değişkenlerini devral",
-			"description": "Ana VS Code işleminden ortam değişkenlerini devralmak için bunu açın. <0>Daha fazla bilgi edinin</0>"
+			"description": "Ana VS Code işleminden ortam değişkenlerini devralmak için bunu açın."
 		}
 	},
 	"advancedSettings": {
@@ -960,7 +960,7 @@
 		}
 	},
 	"skills": {
-		"description": "Ajana bağlamsal talimatlar sağlayan becerileri yönetin. Beceriler, görevlerinizle ilgili olduklarında otomatik olarak uygulanır. <DocsLink>Daha fazla bilgi</DocsLink>",
+		"description": "Ajana bağlamsal talimatlar sağlayan becerileri yönetin. Beceriler, görevlerinizle ilgili olduklarında otomatik olarak uygulanır.",
 		"workspaceSkills": "Çalışma Alanı Becerileri",
 		"globalSkills": "Genel Beceriler",
 		"noWorkspaceSkills": "Bu projede henüz beceri yok.",

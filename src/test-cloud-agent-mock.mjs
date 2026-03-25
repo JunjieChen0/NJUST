@@ -1,19 +1,17 @@
 /**
- * Mock Cloud Agent MCP Server — 模拟云端 Agent，用于验证插件侧的 Cloud Agent 模式。
+ * Mock Cloud Agent — 双协议，用于本地联调插件 Cloud Agent 模式。
  *
- * 用法：
- *   1. node test-cloud-agent-mock.mjs
- *   2. 在 .vscode/settings.json 中设置: "njust-ai-cj.cloudAgent.serverUrl": "http://localhost:4000"
- *   3. 按 F5 启动插件调试，选择 Cloud Agent 模式，输入任意消息
+ * 用法（与插件默认 CloudAgentClient 一致，推荐）：
+ *   1. node src/test-cloud-agent-mock.mjs  （或从仓库根目录: node src/test-cloud-agent-mock.mjs）
+ *   2. 设置 "njust-ai-cj.cloudAgent.serverUrl": "http://127.0.0.1:4000"
+ *   3. F5 调试扩展，选择 Cloud Agent 模式发消息
  *
- * 此 mock server 会：
- *   - 发送 reasoning 通知（模拟思考过程）
- *   - 发送 text 通知（模拟文本输出）
- *   - 回调插件执行 list_files（列出工作区根目录）
- *   - 回调插件执行 read_file（读取 package.json 前 5 行）
- *   - 回调插件执行 write_to_file（创建测试文件）
- *   - 回调插件执行 execute_command（运行 echo）
- *   - 发送 done 通知
+ * REST（插件实际调用）：
+ *   - GET  /health     → 200 JSON { "status": "ok" }
+ *   - POST /v1/run     → 请求体 { goal, session_id, workspace_path?, images? }，响应 CloudRunResponse
+ *
+ * MCP Streamable HTTP（可选，其他客户端）：
+ *   - POST /mcp        → MCP 会话；submit_task 工具会模拟通知与 cloudagent/executeTool（插件 REST 路径不会走这里）
  */
 
 import http from "http"
@@ -24,6 +22,8 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js"
 import { z } from "zod"
 
 const PORT = 4000
+/** 与历史默认服务端一致；本地 mock 接受任意非空 Device-Token，不要求匹配此值 */
+const MOCK_EXPECTED_API_KEY = process.env.CLOUD_AGENT_MOCK_API_KEY || "X-20060507012610261002"
 const transports = new Map()
 
 function log(tag, msg) {
@@ -183,10 +183,90 @@ function createMockServer() {
 	return server
 }
 
+function handleHealth(req, res) {
+	if (req.method !== "GET") {
+		res.writeHead(405, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Method not allowed" }))
+		return
+	}
+	res.writeHead(200, { "Content-Type": "application/json" })
+	res.end(JSON.stringify({ status: "ok" }))
+}
+
+/**
+ * @param {import("http").IncomingMessage} req
+ * @param {import("http").ServerResponse} res
+ */
+async function handleV1Run(req, res) {
+	if (req.method !== "POST") {
+		res.writeHead(405, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Method not allowed" }))
+		return
+	}
+
+	const apiKey = req.headers["x-api-key"]
+	if (apiKey && apiKey !== MOCK_EXPECTED_API_KEY) {
+		res.writeHead(401, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Invalid X-API-Key" }))
+		return
+	}
+
+	const deviceToken = req.headers["x-device-token"]
+	if (!deviceToken || String(deviceToken).trim() === "") {
+		res.writeHead(401, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Missing X-Device-Token" }))
+		return
+	}
+
+	let body
+	try {
+		body = await parseBody(req)
+	} catch {
+		res.writeHead(400, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Invalid JSON body" }))
+		return
+	}
+
+	const goal = body?.goal ?? ""
+	const sessionId = body?.session_id ?? ""
+	const workspacePath = body?.workspace_path
+	const images = body?.images
+	log("REST", `POST /v1/run session=${sessionId} workspace=${workspacePath ?? "N/A"} goal=${String(goal).slice(0, 80)}…`)
+	if (Array.isArray(images) && images.length > 0) {
+		log("REST", `  (includes ${images.length} image attachment(s), echoed in logs only)`)
+	}
+
+	const logs = [
+		`[mock-cloud-agent] Received task for session ${sessionId}.`,
+		`[mock-cloud-agent] Workspace: ${workspacePath ?? "(none)"}`,
+		`[mock-cloud-agent] Simulated planning step…`,
+		`[mock-cloud-agent] Goal: ${goal}`,
+	]
+	const memory_summary =
+		"Mock task finished. In production, logs and summary come from the cloud service. " +
+		"(MCP tool callbacks are not used by the extension REST client.)"
+
+	const payload = {
+		ok: true,
+		user_goal: goal,
+		memory_summary,
+		logs,
+		tokens_in: 10,
+		tokens_out: 20,
+		cost: 0,
+	}
+
+	res.writeHead(200, { "Content-Type": "application/json" })
+	res.end(JSON.stringify(payload))
+}
+
 const httpServer = http.createServer(async (req, res) => {
 	res.setHeader("Access-Control-Allow-Origin", "*")
 	res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-	res.setHeader("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, Authorization")
+	res.setHeader(
+		"Access-Control-Allow-Headers",
+		"Content-Type, mcp-session-id, Authorization, X-API-Key, X-Device-Token",
+	)
 	res.setHeader("Access-Control-Expose-Headers", "mcp-session-id")
 
 	if (req.method === "OPTIONS") {
@@ -196,9 +276,20 @@ const httpServer = http.createServer(async (req, res) => {
 	}
 
 	const url = new URL(req.url ?? "/", `http://localhost:${PORT}`)
+
+	if (url.pathname === "/health") {
+		handleHealth(req, res)
+		return
+	}
+
+	if (url.pathname === "/v1/run") {
+		await handleV1Run(req, res)
+		return
+	}
+
 	if (url.pathname !== "/mcp") {
 		res.writeHead(404, { "Content-Type": "application/json" })
-		res.end(JSON.stringify({ error: "Not found. Use /mcp" }))
+		res.end(JSON.stringify({ error: "Not found. Use /health, /v1/run, or /mcp" }))
 		return
 	}
 
@@ -277,13 +368,13 @@ function parseBody(req) {
 httpServer.listen(PORT, "127.0.0.1", () => {
 	console.log("")
 	console.log("=".repeat(60))
-	console.log("  Mock Cloud Agent MCP Server")
+	console.log("  Mock Cloud Agent (REST + MCP)")
 	console.log("=".repeat(60))
-	console.log(`  Endpoint:  http://127.0.0.1:${PORT}/mcp`)
-	console.log(`  Protocol:  MCP Streamable HTTP`)
+	console.log(`  REST:  GET http://127.0.0.1:${PORT}/health`)
+	console.log(`         POST http://127.0.0.1:${PORT}/v1/run`)
+	console.log(`  MCP:   POST http://127.0.0.1:${PORT}/mcp`)
 	console.log("")
-	console.log("  Waiting for plugin to connect...")
-	console.log("  (Make sure cloudAgent.serverUrl = http://localhost:4000)")
+	console.log(`  Set njust-ai-cj.cloudAgent.serverUrl to http://127.0.0.1:${PORT}`)
 	console.log("=".repeat(60))
 	console.log("")
 })

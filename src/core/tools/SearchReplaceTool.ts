@@ -4,6 +4,7 @@ import path from "path"
 import { type ClineSayTool, DEFAULT_WRITE_DELAY_MS } from "@njust-ai-cj/types"
 
 import { getReadablePath } from "../../utils/path"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
@@ -271,7 +272,7 @@ export class SearchReplaceTool extends BaseTool<"search_replace"> {
 			isOutsideWorkspace,
 		}
 
-		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(() => {})
+		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(ignoreAbortError)
 	}
 }
 

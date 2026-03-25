@@ -9,7 +9,7 @@
 		"editModesConfig": "モード設定を編集",
 		"editGlobalModes": "グローバルモードを編集",
 		"editProjectModes": "プロジェクトモードを編集 (.roomodes)",
-		"createModeHelpText": "モードはRooの振る舞いを調整する専門的なペルソナです。<0>モードの使用について学ぶ</0>か、<1>モードのカスタマイズについて学ぶ</1>。",
+		"createModeHelpText": "モードはRooの振る舞いを調整する専門的なペルソナです。モードの使用について学ぶか、",
 		"selectMode": "モードを検索"
 	},
 	"apiConfiguration": {
@@ -72,7 +72,7 @@
 	},
 	"globalCustomInstructions": {
 		"title": "すべてのモードのカスタム指示",
-		"description": "これらの指示はすべてのモードに適用されます。モード固有の指示で強化できる基本的な動作セットを提供します。<0>詳細はこちら</0>",
+		"description": "これらの指示はすべてのモードに適用されます。モード固有の指示で強化できる基本的な動作セットを提供します。",
 		"loadFromFile": "指示は、ワークスペースの<span>.roo/rules/</span>フォルダまたはグローバル<0>.roo/rules/</0>からも読み込むことができます（.roorulesと.clinerulesは非推奨で、まもなく動作しなくなります）。"
 	},
 	"systemPrompt": {

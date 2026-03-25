@@ -31,6 +31,10 @@ vi.mock("react-use", () => ({
 import { useKeyPress } from "react-use"
 
 const mockUseKeyPress = useKeyPress as any
+const hasRefWarning = (calls: unknown[][]) =>
+	calls.some((call) =>
+		call.some((arg) => typeof arg === "string" && arg.includes("Function components cannot be given refs")),
+	)
 
 describe("DeleteTaskDialog", () => {
 	const mockTaskId = "test-task-id"
@@ -50,6 +54,21 @@ describe("DeleteTaskDialog", () => {
 		).toBeInTheDocument()
 		expect(screen.getByText("Cancel")).toBeInTheDocument()
 		expect(screen.getByText("Delete")).toBeInTheDocument()
+	})
+
+	it("does not emit React ref warnings when alert dialog opens", () => {
+		const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+		const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+
+		try {
+			render(<DeleteTaskDialog taskId={mockTaskId} open={true} onOpenChange={mockOnOpenChange} />)
+
+			expect(hasRefWarning(consoleErrorSpy.mock.calls)).toBe(false)
+			expect(hasRefWarning(consoleWarnSpy.mock.calls)).toBe(false)
+		} finally {
+			consoleErrorSpy.mockRestore()
+			consoleWarnSpy.mockRestore()
+		}
 	})
 
 	it("calls vscode.postMessage when delete is confirmed", () => {

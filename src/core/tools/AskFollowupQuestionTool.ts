@@ -1,6 +1,7 @@
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import type { ToolUse } from "../../shared/tools"
+import { ignoreAbortError } from "../../utils/errorHandling"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
@@ -59,7 +60,7 @@ export class AskFollowupQuestionTool extends BaseTool<"ask_followup_question"> {
 
 		// During partial streaming, only show the question to avoid displaying raw JSON
 		// The full JSON with suggestions will be sent when the tool call is complete (!block.partial)
-		await task.ask("followup", question ?? "", block.partial).catch(() => {})
+		await task.ask("followup", question ?? "", block.partial).catch(ignoreAbortError)
 	}
 }
 

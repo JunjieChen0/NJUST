@@ -3,6 +3,7 @@ import * as vscode from "vscode"
 import { TodoItem } from "@njust-ai-cj/types"
 
 import { Task } from "../task/Task"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { getModeBySlug } from "../../shared/modes"
 import { formatResponse } from "../prompts/responses"
 import { t } from "../../i18n"
@@ -138,7 +139,7 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 			todos: todos,
 		})
 
-		await task.ask("tool", partialMessage, block.partial).catch(() => {})
+		await task.ask("tool", partialMessage, block.partial).catch(ignoreAbortError)
 	}
 }
 

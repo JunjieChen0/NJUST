@@ -69,7 +69,7 @@
 		}
 	},
 	"slashCommands": {
-		"description": "Slash commands are shortcuts for reusable workflows and actions to be used on demand (like creating a PR, running a set of tasks, etc). <DocsLink>Learn more</DocsLink>",
+		"description": "Slash commands are shortcuts for reusable workflows and actions to be used on demand (like creating a PR, running a set of tasks, etc).",
 		"workspaceCommands": "Workspace Commands",
 		"globalCommands": "Global Commands",
 		"noWorkspaceCommands": "No commands in this project yet.",
@@ -104,7 +104,7 @@
 		"footer": "Use slash commands for quick access to frequently used prompts and workflows."
 	},
 	"skills": {
-		"description": "Skills encapsulate contextual instructions and workflows, which the agent can load on-demand. They can include general instructions, specific workflows and even scripts to be run as needed. <DocsLink>Learn more</DocsLink>",
+		"description": "Skills encapsulate contextual instructions and workflows, which the agent can load on-demand. They can include general instructions, specific workflows and even scripts to be run as needed.",
 		"workspaceSkills": "Workspace Skills",
 		"globalSkills": "Global Skills",
 		"noWorkspaceSkills": "No skills in this project yet.",
@@ -185,7 +185,7 @@
 	},
 	"codeIndex": {
 		"title": "Codebase Indexing",
-		"description": "Configure codebase indexing settings to enable semantic search of your project. <0>Learn more</0>",
+		"description": "Configure codebase indexing settings to enable semantic search of your project.",
 		"statusTitle": "Status",
 		"enableLabel": "Enable Codebase Indexing",
 		"enableDescription": "Enable code indexing for improved search and context understanding",
@@ -641,7 +641,7 @@
 		},
 		"enable": {
 			"label": "Enable automatic checkpoints",
-			"description": "When enabled, Roo will automatically create checkpoints during task execution, making it easy to review changes or revert to earlier states. <0>Learn more</0>"
+			"description": "When enabled, Roo will automatically create checkpoints during task execution, making it easy to review changes or revert to earlier states."
 		}
 	},
 	"notifications": {
@@ -763,11 +763,11 @@
 		},
 		"outputLineLimit": {
 			"label": "Terminal output limit",
-			"description": "Keeps the first and last lines and drops the middle to stay under the limit. Lower to save tokens; raise to give Roo more middle detail. Roo sees a placeholder where the content is skipped.<0>Learn more</0>"
+			"description": "Keeps the first and last lines and drops the middle to stay under the limit. Lower to save tokens; raise to give Roo more middle detail. Roo sees a placeholder where the content is skipped."
 		},
 		"outputCharacterLimit": {
 			"label": "Terminal character limit",
-			"description": "Overrides the line limit to prevent memory issues by enforcing a hard cap on output size. If exceeded, keeps the beginning and end and shows a placeholder to Roo where content is skipped. <0>Learn more</0>"
+			"description": "Overrides the line limit to prevent memory issues by enforcing a hard cap on output size. If exceeded, keeps the beginning and end and shows a placeholder to Roo where content is skipped."
 		},
 		"outputPreviewSize": {
 			"label": "Command output preview size",
@@ -780,39 +780,39 @@
 		},
 		"shellIntegrationTimeout": {
 			"label": "Terminal shell integration timeout",
-			"description": "How long to wait for VS Code shell integration before running commands. Raise if your shell starts slowly or you see 'Shell Integration Unavailable' errors. <0>Learn more</0>"
+			"description": "How long to wait for VS Code shell integration before running commands. Raise if your shell starts slowly or you see 'Shell Integration Unavailable' errors."
 		},
 		"shellIntegrationDisabled": {
 			"label": "Use Inline Terminal (recommended)",
-			"description": "Run commands in the Inline Terminal (chat) to bypass shell profiles/integration for faster, more reliable runs. When disabled Roo uses the VS Code terminal with your shell profile, prompts, and plugins. <0>Learn more</0>"
+			"description": "Run commands in the Inline Terminal (chat) to bypass shell profiles/integration for faster, more reliable runs. When disabled Roo uses the VS Code terminal with your shell profile, prompts, and plugins."
 		},
 		"commandDelay": {
 			"label": "Terminal command delay",
-			"description": "Adds a short pause after each command so the VS Code terminal can flush all output (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Use only if you see missing tail output; otherwise leave at 0. <0>Learn more</0>"
+			"description": "Adds a short pause after each command so the VS Code terminal can flush all output (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Use only if you see missing tail output; otherwise leave at 0."
 		},
 		"powershellCounter": {
 			"label": "Enable PowerShell counter workaround",
-			"description": "Turn this on when PowerShell output is missing or duplicated; it appends a tiny counter to each command to stabilize output. Keep this off if output already looks correct. <0>Learn more</0>"
+			"description": "Turn this on when PowerShell output is missing or duplicated; it appends a tiny counter to each command to stabilize output. Keep this off if output already looks correct."
 		},
 		"zshClearEolMark": {
 			"label": "Clear ZSH EOL mark",
-			"description": "Turn this on when you see stray % at the end of lines or parsing looks wrong; it omits Zsh’s end‑of‑line mark (%). <0>Learn more</0>"
+			"description": "Turn this on when you see stray % at the end of lines or parsing looks wrong; it omits Zsh’s end‑of‑line mark (%)."
 		},
 		"zshOhMy": {
 			"label": "Enable Oh My Zsh integration",
-			"description": "Turn this on when your Oh My Zsh theme/plugins expect shell integration; it sets ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Turn this off to avoid setting that variable. <0>Learn more</0>"
+			"description": "Turn this on when your Oh My Zsh theme/plugins expect shell integration; it sets ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Turn this off to avoid setting that variable."
 		},
 		"zshP10k": {
 			"label": "Enable Powerlevel10k integration",
-			"description": "Turn this on when using Powerlevel10k shell integration. <0>Learn more</0>"
+			"description": "Turn this on when using Powerlevel10k shell integration."
 		},
 		"zdotdir": {
 			"label": "Enable ZDOTDIR handling",
-			"description": "Turn this on when zsh shell integration fails or conflicts with your dotfiles. <0>Learn more</0>"
+			"description": "Turn this on when zsh shell integration fails or conflicts with your dotfiles."
 		},
 		"inheritEnv": {
 			"label": "Inherit environment variables",
-			"description": "Turn this on to inherit environment variables from the parent VS Code process. <0>Learn more</0>"
+			"description": "Turn this on to inherit environment variables from the parent VS Code process."
 		}
 	},
 	"advancedSettings": {

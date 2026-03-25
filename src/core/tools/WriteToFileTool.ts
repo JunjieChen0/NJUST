@@ -10,6 +10,7 @@ import { RecordSource } from "../context-tracking/FileContextTrackerTypes"
 import { fileExistsAtPath, createDirectoriesForFile } from "../../utils/fs"
 import { stripLineNumbers, everyLineHasLineNumbers } from "../../integrations/misc/extract-text"
 import { getReadablePath } from "../../utils/path"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { unescapeHtmlEntities } from "../../utils/text-normalization"
 import { EXPERIMENT_IDS, experiments } from "../../shared/experiments"
@@ -137,7 +138,7 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 			} else {
 				if (!task.diffViewProvider.isEditing) {
 					const partialMessage = JSON.stringify(sharedMessageProps)
-					await task.ask("tool", partialMessage, true).catch(() => {})
+					await task.ask("tool", partialMessage, true).catch(ignoreAbortError)
 					await task.diffViewProvider.open(relPath)
 				}
 
@@ -242,7 +243,7 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 		}
 
 		const partialMessage = JSON.stringify(sharedMessageProps)
-		await task.ask("tool", partialMessage, block.partial).catch(() => {})
+		await task.ask("tool", partialMessage, block.partial).catch(ignoreAbortError)
 
 		if (newContent) {
 			if (!task.diffViewProvider.isEditing) {

@@ -1,7 +1,6 @@
 import { HTMLAttributes } from "react"
 import { useAppTranslation } from "@/i18n/TranslationContext"
-import { VSCodeCheckbox, VSCodeLink } from "@vscode/webview-ui-toolkit/react"
-import { Trans } from "react-i18next"
+import { VSCodeCheckbox } from "@vscode/webview-ui-toolkit/react"
 import { Slider } from "@/components/ui"
 
 import { SetCachedStateField } from "./types"

@@ -68,7 +68,7 @@
 		}
 	},
 	"slashCommands": {
-		"description": "Kelola perintah slash kamu untuk mengeksekusi alur kerja dan tindakan kustom dengan cepat. <DocsLink>Pelajari lebih lanjut</DocsLink>",
+		"description": "Kelola perintah slash kamu untuk mengeksekusi alur kerja dan tindakan kustom dengan cepat.",
 		"workspaceCommands": "Perintah Ruang Kerja",
 		"globalCommands": "Perintah Global",
 		"noWorkspaceCommands": "Tidak ada perintah di proyek ini belum.",
@@ -157,7 +157,7 @@
 			"cancelButton": "Batal",
 			"confirmButton": "Hapus Data"
 		},
-		"description": "Konfigurasi pengaturan pengindeksan codebase untuk mengaktifkan pencarian semantik proyek kamu. <0>Pelajari lebih lanjut</0>",
+		"description": "Konfigurasi pengaturan pengindeksan codebase untuk mengaktifkan pencarian semantik proyek kamu.",
 		"statusTitle": "Status",
 		"settingsTitle": "Pengaturan Pengindeksan",
 		"disabledMessage": "Pengindeksan codebase saat ini dinonaktifkan. Aktifkan di pengaturan global untuk mengkonfigurasi opsi pengindeksan.",
@@ -563,7 +563,7 @@
 		},
 		"enable": {
 			"label": "Aktifkan checkpoint otomatis",
-			"description": "Ketika diaktifkan, Roo akan secara otomatis membuat checkpoint selama eksekusi tugas, memudahkan untuk meninjau perubahan atau kembali ke state sebelumnya. <0>Pelajari lebih lanjut</0>"
+			"description": "Ketika diaktifkan, Roo akan secara otomatis membuat checkpoint selama eksekusi tugas, memudahkan untuk meninjau perubahan atau kembali ke state sebelumnya."
 		}
 	},
 	"notifications": {
@@ -685,11 +685,11 @@
 		},
 		"outputLineLimit": {
 			"label": "Batas keluaran terminal",
-			"description": "Menyimpan baris pertama dan terakhir dan membuang yang tengah agar tetap di bawah batas. Turunkan untuk menghemat token; naikkan untuk memberi Roo lebih banyak detail tengah. Roo melihat placeholder di mana konten dilewati.<0>Pelajari lebih lanjut</0>"
+			"description": "Menyimpan baris pertama dan terakhir dan membuang yang tengah agar tetap di bawah batas. Turunkan untuk menghemat token; naikkan untuk memberi Roo lebih banyak detail tengah. Roo melihat placeholder di mana konten dilewati."
 		},
 		"outputCharacterLimit": {
 			"label": "Batas karakter terminal",
-			"description": "Override batas baris untuk mencegah masalah memori dengan memberlakukan cap keras pada ukuran output. Jika terlampaui, simpan awal dan akhir lalu tampilkan placeholder ke Roo di mana konten dilewati. <0>Pelajari lebih lanjut</0>"
+			"description": "Override batas baris untuk mencegah masalah memori dengan memberlakukan cap keras pada ukuran output. Jika terlampaui, simpan awal dan akhir lalu tampilkan placeholder ke Roo di mana konten dilewati."
 		},
 		"outputPreviewSize": {
 			"label": "Ukuran pratinjau keluaran perintah",
@@ -702,39 +702,39 @@
 		},
 		"shellIntegrationTimeout": {
 			"label": "Timeout integrasi shell terminal",
-			"description": "Waktu tunggu integrasi shell VS Code sebelum menjalankan perintah. Naikkan jika shell lambat start atau muncul error 'Shell Integration Unavailable'. <0>Pelajari lebih lanjut</0>"
+			"description": "Waktu tunggu integrasi shell VS Code sebelum menjalankan perintah. Naikkan jika shell lambat start atau muncul error 'Shell Integration Unavailable'."
 		},
 		"shellIntegrationDisabled": {
 			"label": "Gunakan Terminal Inline (disarankan)",
-			"description": "Jalankan perintah di Terminal Inline (obrolan) untuk melewati profil/integrasi shell untuk proses lebih cepat dan andal. Saat dinonaktifkan, Roo menggunakan terminal VS Code dengan profil shell, prompt, dan plugin Anda. <0>Pelajari lebih lanjut</0>"
+			"description": "Jalankan perintah di Terminal Inline (obrolan) untuk melewati profil/integrasi shell untuk proses lebih cepat dan andal. Saat dinonaktifkan, Roo menggunakan terminal VS Code dengan profil shell, prompt, dan plugin Anda."
 		},
 		"commandDelay": {
 			"label": "Delay perintah terminal",
-			"description": "Tambahkan jeda singkat setelah setiap perintah agar VS Code terminal bisa flush semua output (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Gunakan hanya jika output ekor hilang; jika tidak biarkan di 0. <0>Pelajari lebih lanjut</0>"
+			"description": "Tambahkan jeda singkat setelah setiap perintah agar VS Code terminal bisa flush semua output (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Gunakan hanya jika output ekor hilang; jika tidak biarkan di 0."
 		},
 		"powershellCounter": {
 			"label": "Aktifkan solusi penghitung PowerShell",
-			"description": "Aktifkan saat keluaran PowerShell hilang atau digandakan; menambahkan penghitung kecil ke setiap perintah untuk menstabilkan keluaran. Biarkan nonaktif jika keluaran sudah terlihat benar. <0>Pelajari lebih lanjut</0>"
+			"description": "Aktifkan saat keluaran PowerShell hilang atau digandakan; menambahkan penghitung kecil ke setiap perintah untuk menstabilkan keluaran. Biarkan nonaktif jika keluaran sudah terlihat benar."
 		},
 		"zshClearEolMark": {
 			"label": "Hapus tanda EOL ZSH",
-			"description": "Aktifkan saat Anda melihat % liar di akhir baris atau penguraian terlihat salah; menghilangkan tanda akhir baris (%) Zsh. <0>Pelajari lebih lanjut</0>"
+			"description": "Aktifkan saat Anda melihat % liar di akhir baris atau penguraian terlihat salah; menghilangkan tanda akhir baris (%) Zsh."
 		},
 		"zshOhMy": {
 			"label": "Aktifkan integrasi Oh My Zsh",
-			"description": "Aktifkan saat tema/plugin Oh My Zsh Anda mengharapkan integrasi shell; menyetel ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Nonaktifkan untuk menghindari penyetelan variabel tersebut. <0>Pelajari lebih lanjut</0>"
+			"description": "Aktifkan saat tema/plugin Oh My Zsh Anda mengharapkan integrasi shell; menyetel ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Nonaktifkan untuk menghindari penyetelan variabel tersebut."
 		},
 		"zshP10k": {
 			"label": "Aktifkan integrasi Powerlevel10k",
-			"description": "Aktifkan saat menggunakan integrasi shell Powerlevel10k. <0>Pelajari lebih lanjut</0>"
+			"description": "Aktifkan saat menggunakan integrasi shell Powerlevel10k."
 		},
 		"zdotdir": {
 			"label": "Aktifkan penanganan ZDOTDIR",
-			"description": "Aktifkan saat integrasi shell zsh gagal atau bertentangan dengan dotfile Anda. <0>Pelajari lebih lanjut</0>"
+			"description": "Aktifkan saat integrasi shell zsh gagal atau bertentangan dengan dotfile Anda."
 		},
 		"inheritEnv": {
 			"label": "Warisi variabel lingkungan",
-			"description": "Aktifkan untuk mewarisi variabel lingkungan dari proses induk VS Code. <0>Pelajari lebih lanjut</0>"
+			"description": "Aktifkan untuk mewarisi variabel lingkungan dari proses induk VS Code."
 		}
 	},
 	"advancedSettings": {
@@ -960,7 +960,7 @@
 		}
 	},
 	"skills": {
-		"description": "Kelola skills yang memberikan instruksi kontekstual kepada agen. Skills diterapkan secara otomatis saat relevan dengan tugas Anda. <DocsLink>Pelajari lebih lanjut</DocsLink>",
+		"description": "Kelola skills yang memberikan instruksi kontekstual kepada agen. Skills diterapkan secara otomatis saat relevan dengan tugas Anda.",
 		"workspaceSkills": "Skills Ruang Kerja",
 		"globalSkills": "Skills Global",
 		"noWorkspaceSkills": "Tidak ada skills di proyek ini belum.",

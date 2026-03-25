@@ -3,6 +3,7 @@ import path from "path"
 
 import { Task } from "../task/Task"
 import { CodeIndexManager } from "../../services/code-index/manager"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { getWorkspacePath } from "../../utils/path"
 import { formatResponse } from "../prompts/responses"
 import { VectorStoreSearchResult } from "../../services/code-index/interfaces"
@@ -139,7 +140,7 @@ Code Chunk: ${result.codeChunk}
 			isOutsideWorkspace: false,
 		}
 
-		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(() => {})
+		await task.ask("tool", JSON.stringify(sharedMessageProps), block.partial).catch(ignoreAbortError)
 	}
 }
 

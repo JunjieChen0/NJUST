@@ -9,7 +9,7 @@
 		"editModesConfig": "Modifica configurazione modalità",
 		"editGlobalModes": "Modifica modalità globali",
 		"editProjectModes": "Modifica modalità di progetto (.roomodes)",
-		"createModeHelpText": "Le modalità sono personas specializzate che personalizzano il comportamento di Roo. <0>Scopri di più sull'uso delle modalità</0> o <1>sulla personalizzazione delle modalità.</1>",
+		"createModeHelpText": "Le modalità sono personas specializzate che personalizzano il comportamento di Roo. Scopri di più sull'uso delle modalità o sulla personalizzazione delle modalità.",
 		"selectMode": "Cerca modalità"
 	},
 	"apiConfiguration": {
@@ -72,7 +72,7 @@
 	},
 	"globalCustomInstructions": {
 		"title": "Istruzioni personalizzate per tutte le modalità",
-		"description": "Queste istruzioni si applicano a tutte le modalità. Forniscono un insieme base di comportamenti che possono essere migliorati dalle istruzioni specifiche per modalità qui sotto. <0>Scopri di più</0>",
+		"description": "Queste istruzioni si applicano a tutte le modalità. Forniscono un insieme base di comportamenti che possono essere migliorati dalle istruzioni specifiche per modalità qui sotto. Scopri di più",
 		"loadFromFile": "Le istruzioni possono anche essere caricate dalla cartella <span>.roo/rules/</span> nel tuo spazio di lavoro o dal globale <0>.roo/rules/</0> (.roorules e .clinerules sono deprecati e smetteranno di funzionare presto)."
 	},
 	"systemPrompt": {

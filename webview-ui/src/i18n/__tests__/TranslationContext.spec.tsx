@@ -17,6 +17,7 @@ vi.mock("react-i18next", () => ({
 				if (key === "notifications.error") {
 					return options?.message ? `Operation failed: ${options.message}` : "Operation failed"
 				}
+				if (key === "settings.richText.description") return "Manage settings. <0>Learn more</0>"
 				return key
 			},
 			changeLanguage: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock("../setup", () => ({
 			if (key === "notifications.error") {
 				return options?.message ? `Operation failed: ${options.message}` : "Operation failed"
 			}
+			if (key === "settings.richText.description") return "Manage settings. <0>Learn more</0>"
 			return key
 		},
 		changeLanguage: vi.fn(),
@@ -47,6 +49,11 @@ const TestComponent = () => {
 			<p data-testid="translation-interpolation">{t("notifications.error", { message: "Test error" })}</p>
 		</div>
 	)
+}
+
+const RichTextTestComponent = () => {
+	const { t } = useAppTranslation()
+	return <p data-testid="rich-text-translation">{t("settings.richText.description")}</p>
 }
 
 describe("TranslationContext", () => {
@@ -70,5 +77,23 @@ describe("TranslationContext", () => {
 
 		// Check if interpolation works
 		expect(getByTestId("translation-interpolation")).toHaveTextContent("Operation failed: Test error")
+	})
+
+	it("warns when rich-text translations are requested via t", () => {
+		const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+
+		try {
+			render(
+				<TranslationProvider>
+					<RichTextTestComponent />
+				</TranslationProvider>,
+			)
+
+			expect(consoleWarnSpy).toHaveBeenCalledWith(
+				expect.stringContaining('Translation key "settings.richText.description" contains rich-text tags'),
+			)
+		} finally {
+			consoleWarnSpy.mockRestore()
+		}
 	})
 })

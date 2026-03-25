@@ -397,17 +397,39 @@ const ApiOptions = ({
 			return undefined
 		}
 
-		// Get the URL slug - use custom mapping if available, otherwise use the provider key.
-		const slugs: Record<string, string> = {
-			"openai-native": "openai",
-			openai: "openai-compatible",
+		const providerDocsUrls: Record<string, string> = {
+			anthropic: "https://docs.anthropic.com",
+			openrouter: "https://openrouter.ai/docs",
+			bedrock: "https://docs.aws.amazon.com/bedrock/",
+			vertex: "https://cloud.google.com/vertex-ai/docs",
+			openai: "https://platform.openai.com/docs",
+			"openai-native": "https://platform.openai.com/docs",
+			"openai-codex": "https://platform.openai.com/docs",
+			gemini: "https://ai.google.dev/docs",
+			ollama: "https://github.com/ollama/ollama#readme",
+			lmstudio: "https://lmstudio.ai/docs",
+			deepseek: "https://platform.deepseek.com/api-docs",
+			mistral: "https://docs.mistral.ai",
+			"vscode-lm": "https://code.visualstudio.com/api/extension-guides/language-model",
+			litellm: "https://docs.litellm.ai",
+			xai: "https://docs.x.ai",
+			sambanova: "https://community.sambanova.ai/docs",
+			fireworks: "https://docs.fireworks.ai",
+			requesty: "https://docs.requesty.ai",
+			"qwen-code": "https://help.aliyun.com/zh/model-studio/",
+			qwen: "https://help.aliyun.com/zh/model-studio/",
+			doubao: "https://www.volcengine.com/docs/82379",
+			glm: "https://open.bigmodel.cn/dev/api",
+			moonshot: "https://platform.moonshot.cn/docs",
+			minimax: "https://platform.minimaxi.com/document",
+			zai: "https://z.ai/docs",
+			"vercel-ai-gateway": "https://vercel.com/docs/ai-gateway",
+			baseten: "https://docs.baseten.co",
+			unbound: "https://docs.getunbound.ai",
 		}
 
-		const slug = slugs[selectedProvider] || selectedProvider
-		return {
-			url: undefined,
-			name,
-		}
+		const url = providerDocsUrls[selectedProvider]
+		return url ? { url, name } : undefined
 	}, [selectedProvider])
 
 	// Convert providers to SearchableSelect options

@@ -9,7 +9,7 @@
 		"editModesConfig": "Edit konfigurasi mode",
 		"editGlobalModes": "Edit Mode Global",
 		"editProjectModes": "Edit Mode Proyek (.roomodes)",
-		"createModeHelpText": "Mode adalah persona khusus yang menyesuaikan perilaku NJUST_AI_CJ. <0>Pelajari tentang Menggunakan Mode</0> atau <1>Menyesuaikan Mode.</1>",
+		"createModeHelpText": "Mode adalah persona khusus yang menyesuaikan perilaku NJUST_AI_CJ.",
 		"selectMode": "Cari mode"
 	},
 	"apiConfiguration": {
@@ -72,7 +72,7 @@
 	},
 	"globalCustomInstructions": {
 		"title": "Instruksi Kustom untuk Semua Mode",
-		"description": "Instruksi ini berlaku untuk semua mode. Mereka menyediakan set dasar perilaku yang dapat ditingkatkan oleh instruksi khusus mode di bawah. <0>Pelajari lebih lanjut</0>",
+		"description": "Instruksi ini berlaku untuk semua mode. Mereka menyediakan set dasar perilaku yang dapat ditingkatkan oleh instruksi khusus mode di bawah.",
 		"loadFromFile": "Instruksi juga dapat dimuat dari folder <span>.roo/rules/</span> di ruang kerja Anda atau dari global <0>.roo/rules/</0> (.roorules dan .clinerules sudah usang dan akan segera berhenti berfungsi)."
 	},
 	"systemPrompt": {

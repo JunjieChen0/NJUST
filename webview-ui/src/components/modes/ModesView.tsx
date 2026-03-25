@@ -4,7 +4,6 @@ import {
 	VSCodeRadioGroup,
 	VSCodeRadio,
 	VSCodeTextArea,
-	VSCodeLink,
 	VSCodeTextField,
 } from "@vscode/webview-ui-toolkit/react"
 import { Trans } from "react-i18next"

@@ -1,6 +1,5 @@
 import React, { useState } from "react"
-import { Trans } from "react-i18next"
-import { VSCodeLink, VSCodePanels, VSCodePanelTab, VSCodePanelView } from "@vscode/webview-ui-toolkit/react"
+import { VSCodePanels, VSCodePanelTab, VSCodePanelView } from "@vscode/webview-ui-toolkit/react"
 
 import type { McpServer } from "@njust-ai-cj/types"
 
@@ -17,7 +16,6 @@ import {
 	DialogDescription,
 	DialogFooter,
 	ToggleSwitch,
-	StandardTooltip,
 } from "@src/components/ui"
 import { Section } from "@src/components/settings/Section"
 import { SectionHeader } from "@src/components/settings/SectionHeader"
@@ -127,14 +125,6 @@ const McpView = () => {
 								{t("mcp:refreshMCP")}
 							</Button>
 					</div>
-						<div
-							style={{
-								marginTop: "15px",
-								fontSize: "12px",
-								color: "var(--vscode-descriptionForeground)",
-							}}>
-							{t("mcp:learnMoreEditingSettings")}
-						</div>
 					</>
 				)}
 			</Section>

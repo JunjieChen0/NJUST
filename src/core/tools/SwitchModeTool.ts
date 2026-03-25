@@ -1,6 +1,7 @@
 import delay from "delay"
 
 import { Task } from "../task/Task"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { formatResponse } from "../prompts/responses"
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
@@ -80,7 +81,7 @@ export class SwitchModeTool extends BaseTool<"switch_mode"> {
 			reason: reason ?? "",
 		})
 
-		await task.ask("tool", partialMessage, block.partial).catch(() => {})
+		await task.ask("tool", partialMessage, block.partial).catch(ignoreAbortError)
 	}
 }
 

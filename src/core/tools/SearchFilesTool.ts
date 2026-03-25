@@ -4,6 +4,7 @@ import { type ClineSayTool } from "@njust-ai-cj/types"
 
 import { Task } from "../task/Task"
 import { getReadablePath } from "../../utils/path"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { regexSearchFiles } from "../../services/ripgrep"
 import type { ToolUse } from "../../shared/tools"
@@ -88,7 +89,7 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 		}
 
 		const partialMessage = JSON.stringify({ ...sharedMessageProps, content: "" } satisfies ClineSayTool)
-		await task.ask("tool", partialMessage, block.partial).catch(() => {})
+		await task.ask("tool", partialMessage, block.partial).catch(ignoreAbortError)
 	}
 }
 

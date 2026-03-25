@@ -9,7 +9,7 @@
 		"editModesConfig": "Moduskonfiguration bearbeiten",
 		"editGlobalModes": "Globale Modi bearbeiten",
 		"editProjectModes": "Projektmodi bearbeiten (.roomodes)",
-		"createModeHelpText": "Modi sind spezialisierte Personas, die Roos Verhalten anpassen. <0>Erfahre mehr über die Verwendung von Modi</0> oder <1>die Anpassung von Modi.</1>",
+		"createModeHelpText": "Modi sind spezialisierte Personas, die Roos Verhalten anpassen. Erfahre mehr über die Verwendung von Modi oder die Anpassung von Modi.",
 		"selectMode": "Modi suchen"
 	},
 	"apiConfiguration": {
@@ -72,7 +72,7 @@
 	},
 	"globalCustomInstructions": {
 		"title": "Benutzerdefinierte Anweisungen für alle Modi",
-		"description": "Diese Anweisungen gelten für alle Modi. Sie bieten einen grundlegenden Satz von Verhaltensweisen, die durch modusspezifische Anweisungen unten erweitert werden können. <0>Mehr erfahren</0>",
+		"description": "Diese Anweisungen gelten für alle Modi. Sie bieten einen grundlegenden Satz von Verhaltensweisen, die durch modusspezifische Anweisungen unten erweitert werden können.",
 		"loadFromFile": "Anweisungen können auch aus dem Ordner <span>.roo/rules/</span> in deinem Arbeitsbereich oder aus dem globalen <0>.roo/rules/</0> geladen werden (.roorules und .clinerules sind veraltet und werden bald nicht mehr funktionieren)."
 	},
 	"systemPrompt": {

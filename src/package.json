@@ -814,12 +814,24 @@
 			"njust-ai-cj.cloudAgent.serverUrl": {
 				"type": "string",
 				"default": "http://120.79.250.232:8765",
-				"description": "Cloud Agent service endpoint. Pre-configured — no change needed for normal use."
+				"description": "Cloud Agent REST base URL (GET /health, POST /v1/run). Override for a custom deployment or local mock (e.g. http://127.0.0.1:4000)."
 			},
 			"njust-ai-cj.cloudAgent.deviceToken": {
 				"type": "string",
 				"default": "",
 				"description": "Auto-generated device token for Cloud Agent authentication. Do not modify manually."
+			},
+			"njust-ai-cj.cloudAgent.apiKey": {
+				"type": "string",
+				"default": "",
+				"description": "Optional X-API-Key for the Cloud Agent service. Leave empty to omit the header (device-token-only deployments). Do not commit real secrets into shared settings files."
+			},
+			"njust-ai-cj.cloudAgent.requestTimeoutMs": {
+				"type": "number",
+				"default": 0,
+				"minimum": 0,
+				"maximum": 3600000,
+				"description": "Timeout in milliseconds for each Cloud Agent HTTP request (health and /v1/run). 0 means no timeout."
 			},
 			"njust-ai-cj.mcpServer.enabled": {
 				"type": "boolean",

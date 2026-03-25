@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { CANGJIE_CODING_RULES } from "./cangjie-rules-content.js"
 import { deprecatedToolGroups, toolGroupsSchema } from "./tool.js"
 
 /**
@@ -231,7 +232,29 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 			"- Follow the technical plan in plan.md (architecture constraints, tech stack choices)\n" +
 			"- If `.specify/memory/constitution.md` exists, respect the project constitution\n" +
 			"- Update tasks.md status after completing each task item\n" +
-			"- For simple bug fixes or small changes, skip the spec workflow and code directly",
+			"- For simple bug fixes or small changes, skip the spec workflow and code directly\n\n" +
+			"---\n\n" +
+			"## 算法与数据结构编写指南\n\n" +
+			"编写算法代码时遵循以下原则，确保正确性和效率：\n\n" +
+			"### 正确性优先\n" +
+			"- **先理解问题**：在写代码前明确输入范围、边界条件、预期输出\n" +
+			"- **边界用例**：空数组/字符串、单元素、全相同元素、最大/最小值、负数、溢出\n" +
+			"- **先写正确的暴力解**，确认逻辑无误后再优化时间/空间复杂度\n" +
+			"- **循环不变量**：写循环时明确「每轮开始/结束时什么条件成立」，避免 off-by-one\n" +
+			"- **递归基准情况**：确保递归有明确终止条件，避免无限递归\n\n" +
+			"### 复杂度意识\n" +
+			"- 选择合适的数据结构：O(1) 查找用哈希表，O(log n) 查找用有序结构/二分，O(1) 头尾操作用双端队列\n" +
+			"- 避免不必要的嵌套循环（O(n²)→O(n) 优化思路：哈希表、双指针、滑动窗口）\n" +
+			"- 字符串拼接在循环中用 StringBuilder/StringBuffer/join 而非 += 避免 O(n²)\n" +
+			"- 整数运算注意溢出：Python 自动大数，但 C/C++/Java/Cangjie 需显式处理\n\n" +
+			"### 代码清晰\n" +
+			"- 变量命名要有语义：`left`/`right` 而非 `i`/`j`（双指针场景）\n" +
+			"- 提取辅助函数：复杂逻辑拆分为可独立测试的小函数\n" +
+			"- 算法注释写「为什么」而非「做什么」：解释不直观的优化或数学推导\n\n" +
+			"### 语言适配\n" +
+			"- 根据目标语言选择惯用数据结构和 API（如 Python 用 `collections.deque`，Java 用 `PriorityQueue`，C++ 用 `unordered_map`）\n" +
+			"- 使用语言内置排序并传自定义比较器，而非手写排序\n" +
+			"- 遇到不熟悉语言的算法库 API 时，使用 `skill` 工具加载 `algorithm` 技能获取详细参考\n",
 	},
 	{
 		slug: "ask",
@@ -286,11 +309,11 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 			"5. 编写测试文件命名为 `xxx_test.cj`，使用 `@Test` 和 `@TestCase` 注解\n\n" +
 			"6. 需要查阅仓颉语言特性时，引用 .roo/skills/ 下的仓颉 Skills 文档\n\n" +
 			"7. 遵循仓颉编码规范：类型名 PascalCase、函数/变量 camelCase、常量 SCREAMING_SNAKE_CASE、优先使用 let、优先使用 struct 值语义\n\n" +
-			"8. 代码审查：编写或修改 .cj 文件后，自动对照 .roo/rules-cangjie/cangjie-coding.md 中的规范进行检查，包括命名规范、错误处理模式、类型选择（struct vs class）、并发安全等\n\n" +
-			"9. 遇到编译或 lint 错误时，先查阅系统提示中的错误修复建议和对应文档路径，再制定修复方案\n\n" +
+			"8. 代码审查：编写或修改 .cj 文件后，自动对照下方「仓颉语言编码规则」进行检查，包括命名规范、错误处理模式、类型选择（struct vs class）、并发安全等\n\n" +
+			"9. 遇到编译或 lint 错误时，先查阅下方「常见编译错误处理」表和对应文档路径，再制定修复方案\n\n" +
 			"10. 编写新代码时主动使用 `read_file` 工具读取 .roo/skills/cangjie-full-docs/ 中的相关文档，确保 API 用法正确\n\n" +
 			"11. **写后即验**：每次编写或修改 .cj 文件后，必须立即执行 `cjpm build` 编译验证。如果编译失败，分析错误信息并立即修复，重复直到编译通过\n\n" +
-			"12. **语法速查**：编写代码时参考 .roo/rules-cangjie/cangjie-syntax-reference.md 中的语法速查手册，特别注意：\n" +
+			"12. **语法速查**：编写代码时参考下方「仓颉语法速查手册」，特别注意：\n" +
 			"    - main 函数签名必须为 `main(): Int64`\n" +
 			"    - struct 不能继承、不能自引用\n" +
 			"    - let 绑定的 struct 变量不能调用 mut 方法\n" +
@@ -298,8 +321,38 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 			"    - spawn 块内不能捕获可变引用\n" +
 			"    - 命名参数调用时需要用 `name:` 语法\n" +
 			"    - 仓颉不使用分号结尾（除非同一行多条语句）\n\n" +
-			"13. **迭代修复流程**：编译失败 → 读取错误信息 → 查阅语法速查手册和错误模式库 → 修复代码 → 重新编译 → 直到通过。最多迭代 3 轮，若仍失败则向用户报告具体问题\n\n" +
-			"14. **详细文档按需加载**：当语法速查手册不够详细时，使用 `read_file` 读取 .roo/skills/cangjie-syntax-detail/SKILL.md 获取详细语法规则，或读取 .roo/skills/cangjie-full-docs/kernel/source_zh_cn/ 下的对应文档",
+			"13. **迭代修复流程**：编译失败 → 读取错误信息 → 查阅下方语法速查手册和错误模式库 → 修复代码 → 重新编译 → 直到通过。最多迭代 3 轮，若仍失败则向用户报告具体问题\n\n" +
+			"14. **详细文档按需加载**：当下方内联手册不够详细时，使用 `read_file` 读取 .roo/skills/cangjie-syntax-detail/SKILL.md 获取详细语法规则，或读取 .roo/skills/cangjie-full-docs/kernel/source_zh_cn/ 下的对应文档\n\n" +
+			"15. **经验积累**：修复编译错误后，若错误为仓颉特有的规律性模式（非拼写错误/缺少 import），追加到 `.njust/learned-fixes/cangjie.md`。格式：`## [类别] 描述`（类别=类型/语法/并发/包管理/API/编译/模式）+ 频次/错误信息/根因/修复方案/示例代码对。去重：相同模式仅频次+1。容量：主文件最多 80 条，高频(频次>=3)提炼到 `cangjie-summary.md`(最多 30 条)。首次创建时自动建 `.njust/learned-fixes/` 目录和文件。\n\n" +
+			"16. **查阅已有经验（优先级最高）**：修复编译错误前，**必须先**检查系统提示中的「Learned Fixes」部分：\n" +
+			"    - 若找到匹配的高频摘要规则 → 直接按规则修复，不需要额外查阅文档\n" +
+			"    - 若找到匹配的详细记录 → 按记录中的修复方案和代码示例修复\n" +
+			"    - 若未找到匹配记录 → 按常规流程（查阅语法手册 → 尝试修复 → 记录经验）\n\n" +
+			"---\n\n" +
+			"## 仓颉语法核心规则（Top 10）\n\n" +
+			"以下是最高频的语法陷阱，写代码时必须遵守。需要完整语法手册时，使用 `skill` 工具加载 `cangjie-syntax-detail` 技能。\n\n" +
+			"1. **main 签名**: `main(): Int64`，必须返回 Int64，不是 Unit/void，位于顶层不在任何 class/struct 内\n" +
+			"2. **struct vs class**: struct 是值类型——不支持继承、不能自引用（递归成员用 class）、赋值是拷贝\n" +
+			"3. **let/var/mut**: `let` 不可变绑定不能重新赋值；let 的 struct 变量不能调用 mut 方法（需 `var`）\n" +
+			"4. **match 穷尽**: match 必须覆盖所有分支，否则编译错误；用 `case _ =>` 作默认分支\n" +
+			"5. **spawn 捕获**: spawn 块内不能直接捕获外部 `var` 变量；共享可变状态用 Mutex/Atomic\n" +
+			"6. **命名参数**: `func foo(x!: Int64)` 调用时必须 `foo(x: 42)`，带 `name:` 语法\n" +
+			"7. **无分号**: 仓颉不使用分号结尾（除非同一行多条语句）\n" +
+			"8. **Range**: `0..n` 左闭右开 [0,n)，`0..=n` 左闭右闭 [0,n]；`(0..n).step(2)` 设步长\n" +
+			"9. **Option**: 可空类型 `?T`；`??` 提供默认值；`?.` 可选链；`getOrThrow()` 强制解包\n" +
+			"10. **HashMap/HashSet**: key 类型必须同时实现 `Hashable` 和 `Equatable<T>`\n\n" +
+			"---\n\n" +
+			CANGJIE_CODING_RULES +
+			"\n\n---\n\n" +
+			"## 详细参考（按需加载）\n\n" +
+			"以上核心规则和编码规范已内联。以下内容通过 `skill` 工具按需加载，不要一次性全部读取：\n" +
+			"- 完整语法手册 → `cangjie-syntax-detail`\n" +
+			"- 算法/数据结构（集合 API、排序、迭代、递归、DP）→ `cangjie-algorithm`\n" +
+			"- 项目管理（cjpm、workspace、依赖）→ `cangjie-project-management`\n" +
+			"- 工具链（cjc/cjdb/cjcov/cjfmt/cjlint/cjprof）→ `cangjie-toolchains`\n" +
+			"- 网络编程 → `cangjie-network`\n" +
+			"- 宏编程 → `cangjie-macro`\n" +
+			"- FFI/C 互操作 → `cangjie-cffi`\n",
 	},
 	{
 		slug: "orchestrator",

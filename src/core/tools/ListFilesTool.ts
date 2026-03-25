@@ -6,6 +6,7 @@ import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { listFiles } from "../../services/glob/list-files"
 import { getReadablePath } from "../../utils/path"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import type { ToolUse } from "../../shared/tools"
 
@@ -83,7 +84,7 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 		}
 
 		const partialMessage = JSON.stringify({ ...sharedMessageProps, content: "" } satisfies ClineSayTool)
-		await task.ask("tool", partialMessage, block.partial).catch(() => {})
+		await task.ask("tool", partialMessage, block.partial).catch(ignoreAbortError)
 	}
 }
 

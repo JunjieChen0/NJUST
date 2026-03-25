@@ -68,7 +68,7 @@
 		}
 	},
 	"slashCommands": {
-		"description": "Verwalte deine Slash-Befehle, um benutzerdefinierte Workflows und Aktionen schnell auszuführen. <DocsLink>Mehr erfahren</DocsLink>",
+		"description": "Verwalte deine Slash-Befehle, um benutzerdefinierte Workflows und Aktionen schnell auszuführen.",
 		"workspaceCommands": "Workspace-Befehle",
 		"globalCommands": "Globale Befehle",
 		"noWorkspaceCommands": "Noch keine Befehle in diesem Projekt.",
@@ -107,7 +107,7 @@
 	},
 	"codeIndex": {
 		"title": "Codebase-Indexierung",
-		"description": "Konfiguriere Codebase-Indexierungseinstellungen, um semantische Suche in deinem Projekt zu aktivieren. <0>Mehr erfahren</0>",
+		"description": "Konfiguriere Codebase-Indexierungseinstellungen, um semantische Suche in deinem Projekt zu aktivieren.",
 		"statusTitle": "Status",
 		"enableLabel": "Codebase-Indexierung aktivieren",
 		"enableDescription": "Aktiviere die Code-Indizierung für eine verbesserte Suche und ein besseres Kontextverständnis",
@@ -563,7 +563,7 @@
 		},
 		"enable": {
 			"label": "Automatische Kontrollpunkte aktivieren",
-			"description": "Wenn aktiviert, erstellt Roo automatisch Kontrollpunkte während der Aufgabenausführung, was die Überprüfung von Änderungen oder die Rückkehr zu früheren Zuständen erleichtert. <0>Mehr erfahren</0>"
+			"description": "Wenn aktiviert, erstellt Roo automatisch Kontrollpunkte während der Aufgabenausführung, was die Überprüfung von Änderungen oder die Rückkehr zu früheren Zuständen erleichtert."
 		}
 	},
 	"notifications": {
@@ -685,11 +685,11 @@
 		},
 		"outputLineLimit": {
 			"label": "Terminal-Ausgabelimit",
-			"description": "Behält erste und letzte Zeilen und verwirft die mittleren, um unter dem Limit zu bleiben. Niedriger für Token-Ersparnis; höher für mehr Details aus der Mitte für Roo. Roo sieht einen Platzhalter, wo Inhalt übersprungen wird.<0>Mehr erfahren</0>"
+			"description": "Behält erste und letzte Zeilen und verwirft die mittleren, um unter dem Limit zu bleiben. Niedriger für Token-Ersparnis; höher für mehr Details aus der Mitte für Roo. Roo sieht einen Platzhalter, wo Inhalt übersprungen wird."
 		},
 		"outputCharacterLimit": {
 			"label": "Terminal-Zeichenlimit",
-			"description": "Überschreibt das Zeilenlimit, um Speicherprobleme durch eine harte Obergrenze für die Ausgabegröße zu vermeiden. Bei Überschreitung behält es Anfang und Ende und zeigt Roo einen Platzhalter, wo Inhalt übersprungen wird. <0>Mehr erfahren</0>"
+			"description": "Überschreibt das Zeilenlimit, um Speicherprobleme durch eine harte Obergrenze für die Ausgabegröße zu vermeiden. Bei Überschreitung behält es Anfang und Ende und zeigt Roo einen Platzhalter, wo Inhalt übersprungen wird."
 		},
 		"outputPreviewSize": {
 			"label": "Befehlsausgabe-Vorschaugröße",
@@ -702,39 +702,39 @@
 		},
 		"shellIntegrationTimeout": {
 			"label": "Terminal-Shell-Integrations-Timeout",
-			"description": "Wie lange auf VS Code Shell-Integration gewartet wird, bevor Befehle ausgeführt werden. Erhöhe den Wert, wenn deine Shell langsam startet oder du 'Shell-Integration nicht verfügbar'-Fehler siehst. <0>Mehr erfahren</0>"
+			"description": "Wie lange auf VS Code Shell-Integration gewartet wird, bevor Befehle ausgeführt werden. Erhöhe den Wert, wenn deine Shell langsam startet oder du 'Shell-Integration nicht verfügbar'-Fehler siehst."
 		},
 		"shellIntegrationDisabled": {
 			"label": "Inline-Terminal verwenden (empfohlen)",
-			"description": "Führe Befehle im Inline-Terminal (Chat) aus, um Shell-Profile/Integration für schnellere, zuverlässigere Läufe zu umgehen. Wenn deaktiviert, nutzt Roo das VS Code-Terminal mit deinem Shell-Profil, Prompts und Plugins. <0>Mehr erfahren</0>"
+			"description": "Führe Befehle im Inline-Terminal (Chat) aus, um Shell-Profile/Integration für schnellere, zuverlässigere Läufe zu umgehen. Wenn deaktiviert, nutzt Roo das VS Code-Terminal mit deinem Shell-Profil, Prompts und Plugins."
 		},
 		"commandDelay": {
 			"label": "Terminal-Befehlsverzögerung",
-			"description": "Fügt nach jedem Befehl eine kurze Pause hinzu, damit das VS Code-Terminal alle Ausgaben leeren kann (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Verwende dies nur, wenn du fehlende Tail-Ausgabe siehst; sonst lass es bei 0. <0>Mehr erfahren</0>"
+			"description": "Fügt nach jedem Befehl eine kurze Pause hinzu, damit das VS Code-Terminal alle Ausgaben leeren kann (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Verwende dies nur, wenn du fehlende Tail-Ausgabe siehst; sonst lass es bei 0."
 		},
 		"powershellCounter": {
 			"label": "PowerShell-Zähler-Workaround aktivieren",
-			"description": "Schalte dies ein, wenn PowerShell-Ausgabe fehlt oder dupliziert wird; es fügt jedem Befehl einen kleinen Zähler hinzu, um die Ausgabe zu stabilisieren. Lass es ausgeschaltet, wenn die Ausgabe bereits korrekt aussieht. <0>Mehr erfahren</0>"
+			"description": "Schalte dies ein, wenn PowerShell-Ausgabe fehlt oder dupliziert wird; es fügt jedem Befehl einen kleinen Zähler hinzu, um die Ausgabe zu stabilisieren. Lass es ausgeschaltet, wenn die Ausgabe bereits korrekt aussieht."
 		},
 		"zshClearEolMark": {
 			"label": "ZSH-EOL-Markierung löschen",
-			"description": "Schalte dies ein, wenn du verirrte % am Zeilenende siehst oder das Parsen falsch aussieht; es lässt Zshs Zeilenende-Markierung (%) weg. <0>Mehr erfahren</0>"
+			"description": "Schalte dies ein, wenn du verirrte % am Zeilenende siehst oder das Parsen falsch aussieht; es lässt Zshs Zeilenende-Markierung (%) weg."
 		},
 		"zshOhMy": {
 			"label": "Oh My Zsh-Integration aktivieren",
-			"description": "Schalte dies ein, wenn dein Oh My Zsh-Theme/Plugins Shell-Integration erwarten; es setzt ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Schalte dies aus, um das Setzen dieser Variable zu vermeiden. <0>Mehr erfahren</0>"
+			"description": "Schalte dies ein, wenn dein Oh My Zsh-Theme/Plugins Shell-Integration erwarten; es setzt ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Schalte dies aus, um das Setzen dieser Variable zu vermeiden."
 		},
 		"zshP10k": {
 			"label": "Powerlevel10k-Integration aktivieren",
-			"description": "Schalte dies ein, wenn du Powerlevel10k-Shell-Integration verwendest. <0>Mehr erfahren</0>"
+			"description": "Schalte dies ein, wenn du Powerlevel10k-Shell-Integration verwendest."
 		},
 		"zdotdir": {
 			"label": "ZDOTDIR-Handhabung aktivieren",
-			"description": "Schalte dies ein, wenn zsh-Shell-Integration fehlschlägt oder mit deinen Dotfiles kollidiert. <0>Mehr erfahren</0>"
+			"description": "Schalte dies ein, wenn zsh-Shell-Integration fehlschlägt oder mit deinen Dotfiles kollidiert."
 		},
 		"inheritEnv": {
 			"label": "Umgebungsvariablen erben",
-			"description": "Schalte dies ein, um Umgebungsvariablen vom übergeordneten VS Code-Prozess zu erben. <0>Mehr erfahren</0>"
+			"description": "Schalte dies ein, um Umgebungsvariablen vom übergeordneten VS Code-Prozess zu erben."
 		}
 	},
 	"advancedSettings": {
@@ -960,7 +960,7 @@
 		}
 	},
 	"skills": {
-		"description": "Verwalten Sie Skills, die dem Agenten kontextbezogene Anweisungen bereitstellen. Skills werden automatisch angewendet, wenn sie für Ihre Aufgaben relevant sind. <DocsLink>Mehr erfahren</DocsLink>",
+		"description": "Verwalten Sie Skills, die dem Agenten kontextbezogene Anweisungen bereitstellen. Skills werden automatisch angewendet, wenn sie für Ihre Aufgaben relevant sind.",
 		"workspaceSkills": "Workspace-Skills",
 		"globalSkills": "Globale Skills",
 		"noWorkspaceSkills": "Noch keine Skills in diesem Projekt.",

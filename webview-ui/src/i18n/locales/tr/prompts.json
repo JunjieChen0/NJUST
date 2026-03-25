@@ -9,7 +9,7 @@
 		"editModesConfig": "Mod yapılandırmasını düzenle",
 		"editGlobalModes": "Global modları düzenle",
 		"editProjectModes": "Proje modlarını düzenle (.roomodes)",
-		"createModeHelpText": "Modlar, Roo'nun davranışını uyarlayan özel kişiliklerdir. <0>Modları Kullanma Hakkında Bilgi Edinin</0> veya <1>Modları Özelleştirme.</1>",
+		"createModeHelpText": "Modlar, Roo'nun davranışını uyarlayan özel kişiliklerdir. Modları Kullanma Hakkında Bilgi Edinin veya Modları Özelleştirme.",
 		"selectMode": "Modları Ara"
 	},
 	"apiConfiguration": {
@@ -59,7 +59,7 @@
 	},
 	"globalCustomInstructions": {
 		"title": "Tüm Modlar için Özel Talimatlar",
-		"description": "Bu talimatlar tüm modlara uygulanır. Aşağıdaki moda özgü talimatlarla geliştirilebilen temel davranış seti sağlarlar. <0>Daha fazla bilgi edinin</0>",
+		"description": "Bu talimatlar tüm modlara uygulanır. Aşağıdaki moda özgü talimatlarla geliştirilebilen temel davranış seti sağlarlar.",
 		"loadFromFile": "Talimatlar, çalışma alanınızdaki <span>.roo/rules/</span> klasöründen veya global <0>.roo/rules/</0> klasöründen de yüklenebilir (.roorules ve .clinerules kullanımdan kaldırılmıştır ve yakında çalışmayı durduracaktır)."
 	},
 	"importMode": {

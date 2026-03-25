@@ -105,68 +105,7 @@ let result = future.get()
 
 ---
 
-## 3. cjpm.toml 常用配置模板
-
-### 3.1 基本可执行项目
-
-```toml
-[package]
-cjc-version = "0.55.3"
-name = "my_app"
-version = "1.0.0"
-output-type = "executable"
-src-dir = "src"
-target-dir = "target"
-
-[profile.build]
-incremental = true
-```
-
-### 3.2 带依赖的项目
-
-```toml
-[package]
-cjc-version = "0.55.3"
-name = "my_app"
-version = "1.0.0"
-output-type = "executable"
-
-[dependencies]
-my_lib = { path = "./my_lib" }
-
-[test-dependencies]
-mock_lib = { path = "./mock_lib" }
-
-[profile.test]
-timeout-each = "30s"
-parallel = "4"
-```
-
-### 3.3 工作区项目
-
-```toml
-[workspace]
-members = ["app", "lib_core", "lib_utils"]
-build-members = ["app"]
-test-members = ["app", "lib_core"]
-```
-
----
-
-## 4. 仓颉文件类型识别
-
-| 扩展名 | 说明 |
-|---------|------|
-| `.cj` | 仓颉源代码文件 |
-| `_test.cj` | 仓颉测试文件 |
-| `cjpm.toml` | 项目配置文件 |
-| `cjpm.lock` | 依赖锁定文件（不要手动编辑） |
-| `cangjie-format.toml` | cjfmt 格式化配置 |
-| `build.cj` | 构建脚本（钩子） |
-
----
-
-## 5. 常见编译错误处理
+## 3. 常见编译错误处理
 
 | 错误类型 | 常见原因 | 解决方案 |
 |----------|----------|----------|

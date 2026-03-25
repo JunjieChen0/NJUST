@@ -68,7 +68,7 @@
 		}
 	},
 	"slashCommands": {
-		"description": "Zarządzaj poleceniami slash, aby szybko wykonywać niestandardowe przepływy pracy i akcje. <DocsLink>Dowiedz się więcej</DocsLink>",
+		"description": "Zarządzaj poleceniami slash, aby szybko wykonywać niestandardowe przepływy pracy i akcje.",
 		"workspaceCommands": "Polecenia obszaru roboczego",
 		"globalCommands": "Polecenia globalne",
 		"noWorkspaceCommands": "Brak poleceń w tym projekcie.",
@@ -157,7 +157,7 @@
 			"cancelButton": "Anuluj",
 			"confirmButton": "Wyczyść dane"
 		},
-		"description": "Skonfiguruj ustawienia indeksowania bazy kodu, aby włączyć wyszukiwanie semantyczne w swoim projekcie. <0>Dowiedz się więcej</0>",
+		"description": "Skonfiguruj ustawienia indeksowania bazy kodu, aby włączyć wyszukiwanie semantyczne w swoim projekcie.",
 		"statusTitle": "Status",
 		"settingsTitle": "Ustawienia indeksowania",
 		"disabledMessage": "Indeksowanie bazy kodu jest obecnie wyłączone. Włącz je w ustawieniach globalnych, aby skonfigurować opcje indeksowania.",
@@ -563,7 +563,7 @@
 		},
 		"enable": {
 			"label": "Włącz automatyczne punkty kontrolne",
-			"description": "Gdy włączone, Roo automatycznie utworzy punkty kontrolne podczas wykonywania zadań, ułatwiając przeglądanie zmian lub powrót do wcześniejszych stanów. <0>Dowiedz się więcej</0>"
+			"description": "Gdy włączone, Roo automatycznie utworzy punkty kontrolne podczas wykonywania zadań, ułatwiając przeglądanie zmian lub powrót do wcześniejszych stanów."
 		}
 	},
 	"notifications": {
@@ -685,11 +685,11 @@
 		},
 		"outputLineLimit": {
 			"label": "Limit wyjścia terminala",
-			"description": "Zachowuje pierwsze i ostatnie linie i odrzuca środkowe, aby zmieścić się w limicie. Zmniejsz, aby oszczędzać tokeny; zwiększ, aby dać Roo więcej szczegółów ze środka. Roo widzi symbol zastępczy tam, gdzie treść jest pomijana.<0>Dowiedz się więcej</0>"
+			"description": "Zachowuje pierwsze i ostatnie linie i odrzuca środkowe, aby zmieścić się w limicie. Zmniejsz, aby oszczędzać tokeny; zwiększ, aby dać Roo więcej szczegółów ze środka. Roo widzi symbol zastępczy tam, gdzie treść jest pomijana."
 		},
 		"outputCharacterLimit": {
 			"label": "Limit znaków terminala",
-			"description": "Zastępuje limit linii, aby zapobiec problemom z pamięcią, narzucając twardy limit rozmiaru wyjścia. W przypadku przekroczenia zachowuje początek i koniec i pokazuje symbol zastępczy Roo tam, gdzie treść jest pomijana. <0>Dowiedz się więcej</0>"
+			"description": "Zastępuje limit linii, aby zapobiec problemom z pamięcią, narzucając twardy limit rozmiaru wyjścia. W przypadku przekroczenia zachowuje początek i koniec i pokazuje symbol zastępczy Roo tam, gdzie treść jest pomijana."
 		},
 		"outputPreviewSize": {
 			"label": "Rozmiar podglądu wyjścia polecenia",
@@ -702,39 +702,39 @@
 		},
 		"shellIntegrationTimeout": {
 			"label": "Limit czasu integracji powłoki terminala",
-			"description": "Jak długo czekać na integrację powłoki VS Code przed wykonaniem poleceń. Zwiększ, jeśli twoja powłoka wolno się uruchamia lub widzisz błędy 'Integracja Powłoki Niedostępna'. <0>Dowiedz się więcej</0>"
+			"description": "Jak długo czekać na integrację powłoki VS Code przed wykonaniem poleceń. Zwiększ, jeśli twoja powłoka wolno się uruchamia lub widzisz błędy 'Integracja Powłoki Niedostępna'."
 		},
 		"shellIntegrationDisabled": {
 			"label": "Użyj terminala wbudowanego (zalecane)",
-			"description": "Uruchamiaj polecenia w terminalu wbudowanym (czat), aby ominąć profile/integrację powłoki dla szybszych, bardziej niezawodnych uruchomień. Gdy wyłączony, Roo używa terminala VS Code z twoim profilem powłoki, monitami i wtyczkami. <0>Dowiedz się więcej</0>"
+			"description": "Uruchamiaj polecenia w terminalu wbudowanym (czat), aby ominąć profile/integrację powłoki dla szybszych, bardziej niezawodnych uruchomień. Gdy wyłączony, Roo używa terminala VS Code z twoim profilem powłoki, monitami i wtyczkami."
 		},
 		"commandDelay": {
 			"label": "Opóźnienie polecenia terminala",
-			"description": "Dodaje krótką pauzę po każdym poleceniu, aby terminal VS Code mógł opróżnić całe wyjście (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Używaj tylko gdy widzisz brakujące wyjście końcowe; w przeciwnym razie zostaw na 0. <0>Dowiedz się więcej</0>"
+			"description": "Dodaje krótką pauzę po każdym poleceniu, aby terminal VS Code mógł opróżnić całe wyjście (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Używaj tylko gdy widzisz brakujące wyjście końcowe; w przeciwnym razie zostaw na 0."
 		},
 		"powershellCounter": {
 			"label": "Włącz obejście licznika PowerShell",
-			"description": "Włącz gdy brakuje lub jest zduplikowane wyjście PowerShell; dodaje mały licznik do każdego polecenia, aby ustabilizować wyjście. Pozostaw wyłączone, jeśli wyjście już wygląda poprawnie. <0>Dowiedz się więcej</0>"
+			"description": "Włącz gdy brakuje lub jest zduplikowane wyjście PowerShell; dodaje mały licznik do każdego polecenia, aby ustabilizować wyjście. Pozostaw wyłączone, jeśli wyjście już wygląda poprawnie."
 		},
 		"zshClearEolMark": {
 			"label": "Wyczyść znacznik końca linii ZSH",
-			"description": "Włącz gdy widzisz zbłąkane % na końcu linii lub parsowanie wygląda nieprawidłowo; pomija znacznik końca linii (%) Zsh. <0>Dowiedz się więcej</0>"
+			"description": "Włącz gdy widzisz zbłąkane % na końcu linii lub parsowanie wygląda nieprawidłowo; pomija znacznik końca linii (%) Zsh."
 		},
 		"zshOhMy": {
 			"label": "Włącz integrację Oh My Zsh",
-			"description": "Włącz gdy twój motyw/wtyczki Oh My Zsh oczekują integracji powłoki; ustawia ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Wyłącz, aby uniknąć ustawiania tej zmiennej. <0>Dowiedz się więcej</0>"
+			"description": "Włącz gdy twój motyw/wtyczki Oh My Zsh oczekują integracji powłoki; ustawia ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Wyłącz, aby uniknąć ustawiania tej zmiennej."
 		},
 		"zshP10k": {
 			"label": "Włącz integrację Powerlevel10k",
-			"description": "Włącz gdy używasz integracji powłoki Powerlevel10k. <0>Dowiedz się więcej</0>"
+			"description": "Włącz gdy używasz integracji powłoki Powerlevel10k."
 		},
 		"zdotdir": {
 			"label": "Włącz obsługę ZDOTDIR",
-			"description": "Włącz gdy integracja powłoki zsh zawodzi lub jest w konflikcie z twoimi plikami dotfiles. <0>Dowiedz się więcej</0>"
+			"description": "Włącz gdy integracja powłoki zsh zawodzi lub jest w konflikcie z twoimi plikami dotfiles."
 		},
 		"inheritEnv": {
 			"label": "Dziedzicz zmienne środowiskowe",
-			"description": "Włącz, aby dziedziczyć zmienne środowiskowe z procesu nadrzędnego VS Code. <0>Dowiedz się więcej</0>"
+			"description": "Włącz, aby dziedziczyć zmienne środowiskowe z procesu nadrzędnego VS Code."
 		}
 	},
 	"advancedSettings": {
@@ -960,7 +960,7 @@
 		}
 	},
 	"skills": {
-		"description": "Zarządzaj umiejętnościami, które dostarczają kontekstowe instrukcje dla agenta. Umiejętności są automatycznie stosowane, gdy są istotne dla Twoich zadań. <DocsLink>Dowiedz się więcej</DocsLink>",
+		"description": "Zarządzaj umiejętnościami, które dostarczają kontekstowe instrukcje dla agenta. Umiejętności są automatycznie stosowane, gdy są istotne dla Twoich zadań.",
 		"workspaceSkills": "Umiejętności obszaru roboczego",
 		"globalSkills": "Umiejętności Globalne",
 		"noWorkspaceSkills": "Brak umiejętności w tym projekcie.",

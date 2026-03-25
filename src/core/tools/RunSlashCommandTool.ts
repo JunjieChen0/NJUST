@@ -1,3 +1,4 @@
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { getCommand, getCommandNames } from "../../services/command/commands"
@@ -146,7 +147,7 @@ export class RunSlashCommandTool extends BaseTool<"run_slash_command"> {
 			args: args,
 		})
 
-		await task.ask("tool", partialMessage, block.partial).catch(() => {})
+		await task.ask("tool", partialMessage, block.partial).catch(ignoreAbortError)
 	}
 }
 

@@ -27,11 +27,6 @@ vi.mock("@/i18n/TranslationContext", () => ({
 	}),
 }))
 
-// Mock the doc links utility
-vi.mock("@/utils/docLinks", () => ({
-	buildDocLink: (path: string, anchor?: string) => `https://docs.example.com/${path}${anchor ? `#${anchor}` : ""}`,
-}))
-
 // Mock modes
 vi.mock("@roo/modes", () => ({
 	getAllModes: () => [

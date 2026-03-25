@@ -68,7 +68,7 @@
 		}
 	},
 	"slashCommands": {
-		"description": "사용자 지정 워크플로와 작업을 신속하게 실행하기 위해 슬래시 명령을 관리합니다. <DocsLink>더 알아보기</DocsLink>",
+		"description": "사용자 지정 워크플로와 작업을 신속하게 실행하기 위해 슬래시 명령을 관리합니다. 더 알아보기",
 		"workspaceCommands": "워크스페이스 명령",
 		"globalCommands": "글로벌 명령",
 		"noWorkspaceCommands": "이 프로젝트에 명령이 아직 없습니다.",
@@ -157,7 +157,7 @@
 			"cancelButton": "취소",
 			"confirmButton": "데이터 지우기"
 		},
-		"description": "프로젝트의 시맨틱 검색을 활성화하기 위한 코드베이스 인덱싱 설정을 구성합니다. <0>자세히 알아보기</0>",
+		"description": "프로젝트의 시맨틱 검색을 활성화하기 위한 코드베이스 인덱싱 설정을 구성합니다.",
 		"statusTitle": "상태",
 		"settingsTitle": "인덱싱 설정",
 		"disabledMessage": "코드베이스 인덱싱이 현재 비활성화되어 있습니다. 인덱싱 옵션을 구성하려면 전역 설정에서 활성화하세요.",
@@ -563,7 +563,7 @@
 		},
 		"enable": {
 			"label": "자동 체크포인트 활성화",
-			"description": "활성화되면 Roo는 작업 실행 중에 자동으로 체크포인트를 생성하여 변경 사항을 검토하거나 이전 상태로 되돌리기 쉽게 합니다. <0>더 알아보기</0>"
+			"description": "활성화되면 Roo는 작업 실행 중에 자동으로 체크포인트를 생성하여 변경 사항을 검토하거나 이전 상태로 되돌리기 쉽게 합니다. 더 알아보기"
 		}
 	},
 	"notifications": {
@@ -685,11 +685,11 @@
 		},
 		"outputLineLimit": {
 			"label": "터미널 출력 제한",
-			"description": "제한 내로 유지하기 위해 첫 줄과 마지막 줄을 유지하고 중간을 삭제합니다. 토큰을 절약하려면 낮추고; Roo에게 더 많은 중간 세부 정보를 제공하려면 높입니다. Roo는 콘텐츠가 건너뛴 곳에 자리 표시자를 봅니다.<0>자세히 알아보기</0>"
+			"description": "제한 내로 유지하기 위해 첫 줄과 마지막 줄을 유지하고 중간을 삭제합니다. 토큰을 절약하려면 낮추고; Roo에게 더 많은 중간 세부 정보를 제공하려면 높입니다. Roo는 콘텐츠가 건너뛴 곳에 자리 표시자를 봅니다."
 		},
 		"outputCharacterLimit": {
 			"label": "터미널 문자 제한",
-			"description": "출력 크기에 대한 엄격한 상한을 적용하여 메모리 문제를 방지하기 위해 줄 제한을 재정의합니다. 초과하면 시작과 끝을 유지하고 내용이 생략된 곳에 Roo에게 자리 표시자를 표시합니다. <0>자세히 알아보기</0>"
+			"description": "출력 크기에 대한 엄격한 상한을 적용하여 메모리 문제를 방지하기 위해 줄 제한을 재정의합니다. 초과하면 시작과 끝을 유지하고 내용이 생략된 곳에 Roo에게 자리 표시자를 표시합니다."
 		},
 		"outputPreviewSize": {
 			"label": "명령 출력 미리보기 크기",
@@ -702,39 +702,39 @@
 		},
 		"shellIntegrationTimeout": {
 			"label": "터미널 셸 통합 시간 초과",
-			"description": "명령을 실행하기 전에 VS Code 셸 통합을 기다리는 시간입니다. 셸이 느리게 시작되거나 '셸 통합을 사용할 수 없음' 오류가 표시되면 이 값을 늘리십시오. <0>자세히 알아보기</0>"
+			"description": "명령을 실행하기 전에 VS Code 셸 통합을 기다리는 시간입니다. 셸이 느리게 시작되거나 '셸 통합을 사용할 수 없음' 오류가 표시되면 이 값을 늘리십시오."
 		},
 		"shellIntegrationDisabled": {
 			"label": "인라인 터미널 사용(권장)",
-			"description": "더 빠르고 안정적인 실행을 위해 셸 프로필/통합��� 우회하려면 인라인 터미널(채팅)에�� 명령을 실행하십시오. 비활성화하면 Roo는 셸 프로필, 프롬프트 및 플러그인과 함께 VS Code 터미널을 사용합니다. <0>자세히 알아보기</0>"
+			"description": "더 빠르고 안정적인 실행을 위해 셸 프로필/통합��� 우회하려면 인라인 터미널(채팅)에�� 명령을 실행하십시오. 비활성화하면 Roo는 셸 프로필, 프롬프트 및 플러그인과 함께 VS Code 터미널을 사용합니다."
 		},
 		"commandDelay": {
 			"label": "터미널 명령 지연",
-			"description": "VS Code 터미널이 모든 출력을 플러시할 수 있도록 각 명령 후에 짧은 일시 중지를 추가합니다(bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). 누락된 꼬리 출력이 표시되는 경우에만 사용하고, 그렇지 않으면 0으로 둡니다. <0>자세히 알아보기</0>"
+			"description": "VS Code 터미널이 모든 출력을 플러시할 수 있도록 각 명령 후에 짧은 일시 중지를 추가합니다(bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). 누락된 꼬리 출력이 표시되는 경우에만 사용하고, 그렇지 않으면 0으로 둡니다."
 		},
 		"powershellCounter": {
 			"label": "PowerShell 카운터 해결 방법 활성화",
-			"description": "PowerShell 출력이 누락되거나 중복될 때 이 기능을 켜십시오. 출력을 안정화하기 위해 각 명령에 작은 카운터를 추가합니다. 출력이 이미 올바르게 표시되면 이 기능을 끄십시오. <0>자세히 알아보기</0>"
+			"description": "PowerShell 출력이 누락되거나 중복될 때 이 기능을 켜십시오. 출력을 안정화하기 위해 각 명령에 작은 카운터를 추가합니다. 출력이 이미 올바르게 표시되면 이 기능을 끄십시오."
 		},
 		"zshClearEolMark": {
 			"label": "ZSH EOL 표시 지우기",
-			"description": "줄 끝에 떠도는 %가 보이거나 구문 분석이 잘못된 것 같을 때 이 기능을 켜십시오. Zsh의 줄 끝 표시(%)를 생략합니다. <0>자세히 알아보기</0>"
+			"description": "줄 끝에 떠도는 %가 보이거나 구문 분석이 잘못된 것 같을 때 이 기능을 켜십시오. Zsh의 줄 끝 표시(%)를 생략합니다."
 		},
 		"zshOhMy": {
 			"label": "Oh My Zsh 통합 활성화",
-			"description": "Oh My Zsh 테마/플러그인이 셸 통합을 예상할 때 이 기능을 켜십시오. ITERM_SHELL_INTEGRATION_INSTALLED=Yes를 설정합니다. 해당 변수를 설정하지 않으려면 이 기능을 끄십시오. <0>자세히 알아보기</0>"
+			"description": "Oh My Zsh 테마/플러그인이 셸 통합을 예상할 때 이 기능을 켜십시오. ITERM_SHELL_INTEGRATION_INSTALLED=Yes를 설정합니다. 해당 변수를 설정하지 않으려면 이 기능을 끄십시오."
 		},
 		"zshP10k": {
 			"label": "Powerlevel10k 통합 활성화",
-			"description": "Powerlevel10k 셸 통합을 사용할 때 이 기능을 켜십시오. <0>자세히 알아보기</0>"
+			"description": "Powerlevel10k 셸 통합을 사용할 때 이 기능을 켜십시오."
 		},
 		"zdotdir": {
 			"label": "ZDOTDIR 처리 활성화",
-			"description": "zsh 셸 통합이 실패하거나 점 파일과 충돌할 때 이 기능을 켜십시오. <0>자세히 알아보기</0>"
+			"description": "zsh 셸 통합이 실패하거나 점 파일과 충돌할 때 이 기능을 켜십시오."
 		},
 		"inheritEnv": {
 			"label": "환경 변수 상속",
-			"description": "부모 VS Code 프로세���에서 환경 변수를 상속하려면 이 기능을 켜십시오. <0>자세히 알아보기</0>"
+			"description": "부모 VS Code 프로세���에서 환경 변수를 상속하려면 이 기능을 켜십시오."
 		}
 	},
 	"advancedSettings": {
@@ -960,7 +960,7 @@
 		}
 	},
 	"skills": {
-		"description": "에이전트에 컨텍스트 지침을 제공하는 스킬을 관리합니다. 스킬은 작업과 관련이 있을 때 자동으로 적용됩니다. <DocsLink>자세히 알아보기</DocsLink>",
+		"description": "에이전트에 컨텍스트 지침을 제공하는 스킬을 관리합니다. 스킬은 작업과 관련이 있을 때 자동으로 적용됩니다.",
 		"workspaceSkills": "워크스페이스 스킬",
 		"globalSkills": "전역 스킬",
 		"noWorkspaceSkills": "이 프로젝트에 스킬이 아직 없습니다.",

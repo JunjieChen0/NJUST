@@ -19,6 +19,7 @@ import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { RecordSource } from "../context-tracking/FileContextTrackerTypes"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { getReadablePath } from "../../utils/path"
 import { extractTextFromFile, addLineNumbers, getSupportedBinaryFormats } from "../../integrations/misc/extract-text"
 import { readWithIndentation, readWithSlice } from "../../integrations/misc/indentation-reader"
@@ -657,7 +658,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			...sharedMessageProps,
 			content: undefined,
 		} satisfies ClineSayTool)
-		await task.ask("tool", partialMessage, block.partial).catch(() => {})
+		await task.ask("tool", partialMessage, block.partial).catch(ignoreAbortError)
 	}
 
 	/**

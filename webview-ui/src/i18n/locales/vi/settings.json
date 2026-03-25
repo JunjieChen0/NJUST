@@ -68,7 +68,7 @@
 		}
 	},
 	"slashCommands": {
-		"description": "Quản lý các lệnh slash của bạn để thực thi nhanh các quy trình công việc và hành động tùy chỉnh. <DocsLink>Tìm hiểu thêm</DocsLink>",
+		"description": "Quản lý các lệnh slash của bạn để thực thi nhanh các quy trình công việc và hành động tùy chỉnh.",
 		"workspaceCommands": "Lệnh không gian làm việc",
 		"globalCommands": "Lệnh toàn cầu",
 		"noWorkspaceCommands": "Chưa có lệnh trong dự án này.",
@@ -157,7 +157,7 @@
 			"cancelButton": "Hủy",
 			"confirmButton": "Xóa dữ liệu"
 		},
-		"description": "Cấu hình cài đặt lập chỉ mục mã nguồn để kích hoạt tìm kiếm ngữ nghĩa cho dự án của bạn. <0>Tìm hiểu thêm</0>",
+		"description": "Cấu hình cài đặt lập chỉ mục mã nguồn để kích hoạt tìm kiếm ngữ nghĩa cho dự án của bạn.",
 		"statusTitle": "Trạng thái",
 		"settingsTitle": "Cài đặt lập chỉ mục",
 		"disabledMessage": "Lập chỉ mục mã nguồn hiện đang bị tắt. Bật nó trong cài đặt chung để cấu hình các tùy chọn lập chỉ mục.",
@@ -563,7 +563,7 @@
 		},
 		"enable": {
 			"label": "Bật điểm kiểm tra tự động",
-			"description": "Khi được bật, Roo sẽ tự động tạo các điểm kiểm tra trong quá trình thực hiện nhiệm vụ, giúp dễ dàng xem lại các thay đổi hoặc quay lại trạng thái trước đó. <0>Tìm hiểu thêm</0>"
+			"description": "Khi được bật, Roo sẽ tự động tạo các điểm kiểm tra trong quá trình thực hiện nhiệm vụ, giúp dễ dàng xem lại các thay đổi hoặc quay lại trạng thái trước đó."
 		}
 	},
 	"notifications": {
@@ -685,11 +685,11 @@
 		},
 		"outputLineLimit": {
 			"label": "Giới hạn đầu ra của terminal",
-			"description": "Giữ lại các dòng đầu tiên và cuối cùng và loại bỏ các dòng ở giữa để ở dưới giới hạn. Giảm xuống để tiết kiệm token; tăng lên để cung cấp cho Roo thêm chi tiết ở giữa. Roo thấy một trình giữ chỗ nơi nội dung bị bỏ qua.<0>Tìm hiểu thêm</0>"
+			"description": "Giữ lại các dòng đầu tiên và cuối cùng và loại bỏ các dòng ở giữa để ở dưới giới hạn. Giảm xuống để tiết kiệm token; tăng lên để cung cấp cho Roo thêm chi tiết ở giữa. Roo thấy một trình giữ chỗ nơi nội dung bị bỏ qua."
 		},
 		"outputCharacterLimit": {
 			"label": "Giới hạn ký tự terminal",
-			"description": "Ghi đè giới hạn dòng để tránh vấn đề bộ nhớ bằng cách áp đặt giới hạn cứng cho kích thước đầu ra. Nếu vượt quá, giữ đầu và cuối, hiển thị placeholder cho Roo nơi nội dung bị bỏ qua. <0>Tìm hiểu thêm</0>"
+			"description": "Ghi đè giới hạn dòng để tránh vấn đề bộ nhớ bằng cách áp đặt giới hạn cứng cho kích thước đầu ra. Nếu vượt quá, giữ đầu và cuối, hiển thị placeholder cho Roo nơi nội dung bị bỏ qua."
 		},
 		"outputPreviewSize": {
 			"label": "Kích thước xem trước đầu ra lệnh",
@@ -702,39 +702,39 @@
 		},
 		"shellIntegrationTimeout": {
 			"label": "Timeout tích hợp shell terminal",
-			"description": "Thời gian đợi tích hợp shell VS Code trước khi chạy lệnh. Tăng nếu shell khởi động chậm hoặc thấy lỗi 'Shell Integration Unavailable'. <0>Tìm hiểu thêm</0>"
+			"description": "Thời gian đợi tích hợp shell VS Code trước khi chạy lệnh. Tăng nếu shell khởi động chậm hoặc thấy lỗi 'Shell Integration Unavailable'."
 		},
 		"shellIntegrationDisabled": {
 			"label": "Sử dụng Terminal nội tuyến (được khuyến nghị)",
-			"description": "Chạy lệnh trong Terminal nội tuyến (trò chuyện) để bỏ qua hồ sơ/tích hợp shell để chạy nhanh hơn, đáng tin cậy hơn. Khi bị tắt, Roo sử dụng terminal VS Code với hồ sơ shell, lời nhắc và plugin của bạn. <0>Tìm hiểu thêm</0>"
+			"description": "Chạy lệnh trong Terminal nội tuyến (trò chuyện) để bỏ qua hồ sơ/tích hợp shell để chạy nhanh hơn, đáng tin cậy hơn. Khi bị tắt, Roo sử dụng terminal VS Code với hồ sơ shell, lời nhắc và plugin của bạn."
 		},
 		"commandDelay": {
 			"label": "Delay lệnh terminal",
-			"description": "Thêm khoảng dừng ngắn sau mỗi lệnh để VS Code terminal flush tất cả output (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Chỉ dùng nếu thiếu tail output; nếu không để ở 0. <0>Tìm hiểu thêm</0>"
+			"description": "Thêm khoảng dừng ngắn sau mỗi lệnh để VS Code terminal flush tất cả output (bash/zsh: PROMPT_COMMAND sleep; PowerShell: start-sleep). Chỉ dùng nếu thiếu tail output; nếu không để ở 0."
 		},
 		"powershellCounter": {
 			"label": "Bật workaround bộ đếm PowerShell",
-			"description": "Bật khi output PowerShell thiếu hoặc trùng lặp; thêm counter nhỏ vào mỗi lệnh để ổn định output. Tắt nếu output đã đúng. <0>Tìm hiểu thêm</0>"
+			"description": "Bật khi output PowerShell thiếu hoặc trùng lặp; thêm counter nhỏ vào mỗi lệnh để ổn định output. Tắt nếu output đã đúng."
 		},
 		"zshClearEolMark": {
 			"label": "Xóa dấu EOL của ZSH",
-			"description": "Bật tính năng này khi bạn thấy các ký tự % lạc lõng ở cuối dòng hoặc quá trình phân tích cú pháp có vẻ sai; nó sẽ bỏ qua dấu cuối dòng (%) của Zsh. <0>Tìm hiểu thêm</0>"
+			"description": "Bật tính năng này khi bạn thấy các ký tự % lạc lõng ở cuối dòng hoặc quá trình phân tích cú pháp có vẻ sai; nó sẽ bỏ qua dấu cuối dòng (%) của Zsh."
 		},
 		"zshOhMy": {
 			"label": "Bật tích hợp Oh My Zsh",
-			"description": "Bật tính năng này khi chủ đề/plugin Oh My Zsh của bạn mong đợi tích hợp shell; nó sẽ đặt ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Tắt tính năng này để tránh đặt biến đó. <0>Tìm hiểu thêm</0>"
+			"description": "Bật tính năng này khi chủ đề/plugin Oh My Zsh của bạn mong đợi tích hợp shell; nó sẽ đặt ITERM_SHELL_INTEGRATION_INSTALLED=Yes. Tắt tính năng này để tránh đặt biến đó."
 		},
 		"zshP10k": {
 			"label": "Bật tích hợp Powerlevel10k",
-			"description": "Bật tính năng này khi sử dụng tích hợp shell Powerlevel10k. <0>Tìm hiểu thêm</0>"
+			"description": "Bật tính năng này khi sử dụng tích hợp shell Powerlevel10k."
 		},
 		"zdotdir": {
 			"label": "Bật xử lý ZDOTDIR",
-			"description": "Bật tính năng này khi tích hợp shell zsh không thành công hoặc xung đột với các tệp dotfile của bạn. <0>Tìm hiểu thêm</0>"
+			"description": "Bật tính năng này khi tích hợp shell zsh không thành công hoặc xung đột với các tệp dotfile của bạn."
 		},
 		"inheritEnv": {
 			"label": "Kế thừa biến môi trường",
-			"description": "Bật tính năng này để kế thừa các biến môi trường từ quy trình mẹ của VS Code. <0>Tìm hiểu thêm</0>"
+			"description": "Bật tính năng này để kế thừa các biến môi trường từ quy trình mẹ của VS Code."
 		}
 	},
 	"advancedSettings": {
@@ -960,7 +960,7 @@
 		}
 	},
 	"skills": {
-		"description": "Quản lý các skill cung cấp hướng dẫn theo ngữ cảnh cho agent. Các skill được áp dụng tự động khi chúng liên quan đến nhiệm vụ của bạn. <DocsLink>Tìm hiểu thêm</DocsLink>",
+		"description": "Quản lý các skill cung cấp hướng dẫn theo ngữ cảnh cho agent. Các skill được áp dụng tự động khi chúng liên quan đến nhiệm vụ của bạn.",
 		"workspaceSkills": "Kỹ năng không gian làm việc",
 		"globalSkills": "Skills Toàn Cục",
 		"noWorkspaceSkills": "Chưa có kỹ năng trong dự án này.",

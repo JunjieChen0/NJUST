@@ -170,7 +170,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		const { randomUUID } = await import("crypto")
 		const token = randomUUID()
 		await context.globalState.update("njustCloudDeviceToken", token)
-		outputChannel.appendLine(`[CloudAgent] Generated device token: ${token.slice(0, 8)}...`)
+		const debug = vscode.workspace.getConfiguration(Package.name).get<boolean>("debug")
+		if (debug) {
+			outputChannel.appendLine(`[CloudAgent] Generated device token (debug): ${token.slice(0, 8)}...`)
+		} else {
+			outputChannel.appendLine("[CloudAgent] Device token generated and saved.")
+		}
 	}
 
 	// Sync device token into workspace config so Task can read it.

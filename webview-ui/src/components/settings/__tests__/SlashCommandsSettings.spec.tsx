@@ -27,11 +27,6 @@ vi.mock("@/i18n/TranslationContext", () => ({
 	}),
 }))
 
-// Mock the doc links utility
-vi.mock("@/utils/docLinks", () => ({
-	buildDocLink: (path: string, anchor?: string) => `https://docs.example.com/${path}${anchor ? `#${anchor}` : ""}`,
-}))
-
 // Mock UI components
 vi.mock("@/components/ui", () => ({
 	AlertDialog: ({ children, open }: any) => (

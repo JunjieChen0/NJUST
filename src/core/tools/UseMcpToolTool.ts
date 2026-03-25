@@ -4,6 +4,7 @@ import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { t } from "../../i18n"
 import type { ToolUse } from "../../shared/tools"
+import { ignoreAbortError } from "../../utils/errorHandling"
 import { toolNamesMatch } from "../../utils/mcp-name"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
@@ -89,7 +90,7 @@ export class UseMcpToolTool extends BaseTool<"use_mcp_tool"> {
 			arguments: params.arguments,
 		} satisfies ClineAskUseMcpServer)
 
-		await task.ask("use_mcp_server", partialMessage, true).catch(() => {})
+		await task.ask("use_mcp_server", partialMessage, true).catch(ignoreAbortError)
 	}
 
 	private async validateParams(

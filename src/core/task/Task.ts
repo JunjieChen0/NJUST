@@ -86,14 +86,6 @@ import { calculateApiCostAnthropic, calculateApiCostOpenAI } from "../../shared/
 import { getWorkspacePath } from "../../utils/path"
 import { CloudAgentClient } from "../../services/cloud-agent/CloudAgentClient"
 import type { CloudAgentCallbacks } from "../../services/cloud-agent/types"
-import {
-	execReadFile,
-	execWriteFile,
-	execListFiles,
-	execSearchFiles,
-	execCommand,
-	execApplyDiff,
-} from "../../services/mcp-server/tool-executors"
 import { sanitizeToolUseId } from "../../utils/tool-id"
 import { getTaskDirectoryPath } from "../../utils/storage"
 
@@ -2450,12 +2442,22 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		await this.initiateTaskLoop([])
 	}
 
-	// Cloud Agent Loop (MCP protocol)
+	// Cloud Agent loop: synchronous REST to cloud service (GET /health, POST /v1/run). Streaming/tool callbacks are not used by the extension client.
 
 	private async initiateCloudAgentLoop(userMessage: string, images?: string[]): Promise<void> {
 		const config = vscode.workspace.getConfiguration(Package.name)
-		const serverUrl = config.get<string>("cloudAgent.serverUrl", "http://120.79.250.232:8765")
+		const serverUrl = (config.get<string>("cloudAgent.serverUrl", "") ?? "").trim()
 		const deviceToken = config.get<string>("cloudAgent.deviceToken", "")
+		const apiKey = (config.get<string>("cloudAgent.apiKey", "") ?? "").trim()
+		const requestTimeoutMs = config.get<number>("cloudAgent.requestTimeoutMs", 0) ?? 0
+
+		if (!serverUrl) {
+			await this.say(
+				"error",
+				"Cloud Agent server URL is not configured. Set njust-ai-cj.cloudAgent.serverUrl (e.g. http://127.0.0.1:4000 for the local mock).",
+			)
+			return
+		}
 
 		if (!deviceToken) {
 			await this.say("error", "Cloud Agent device token not found. Please restart VS Code.")
@@ -2477,113 +2479,49 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			onError: async (message) => {
 				await this.say("error", message)
 			},
-			onToolExecution: async (name, args) => {
-				return await this.executeCloudToolCall(name, args)
-			},
 		}
 
-		const client = new CloudAgentClient(serverUrl, deviceToken, callbacks)
+		const requestAbort = new AbortController()
+		this.currentRequestAbortController = requestAbort
+
+		const client = new CloudAgentClient(serverUrl, deviceToken, callbacks, {
+			apiKey: apiKey || undefined,
+			signal: requestAbort.signal,
+			requestTimeoutMs: requestTimeoutMs > 0 ? requestTimeoutMs : undefined,
+		})
 		this.emit(NJUST_AI_CJEventName.TaskStarted)
 
 		await this.say("api_req_started", JSON.stringify({ request: "Cloud Agent task submitted" }))
 
 		try {
 			await client.connect()
-			const result = await client.submitTask(this.taskId, userMessage, this.cwd)
-			await this.say("api_req_finished", JSON.stringify({ tokensIn: 0, tokensOut: 0, cost: 0 }))
-
-			if (result) {
-				await this.say("text", result)
-			}
+			const runResult = await client.submitTask(this.taskId, userMessage, this.cwd, images)
+			await this.say(
+				"api_req_finished",
+				JSON.stringify({
+					tokensIn: runResult.tokensIn,
+					tokensOut: runResult.tokensOut,
+					cost: runResult.cost,
+				}),
+			)
 		} catch (error) {
 			if (this.abort) return
+			const isAbort =
+				error instanceof Error &&
+				(error.name === "AbortError" || /aborted|timeout/i.test(error.message))
+			if (isAbort) {
+				const errorMsg = error instanceof Error ? error.message : String(error)
+				await this.say("error", `Cloud Agent request was cancelled or timed out: ${errorMsg}`)
+				await this.ask("api_req_failed", errorMsg)
+				return
+			}
 			const errorMsg = error instanceof Error ? error.message : String(error)
 			await this.say("error", `Cloud Agent error: ${errorMsg}`)
 			await this.ask("api_req_failed", errorMsg)
 		} finally {
+			this.currentRequestAbortController = undefined
 			await client.disconnect()
 		}
-	}
-
-	private cloudToolToSayTool(name: string, args: Record<string, unknown>): { tool: string; path?: string; content?: string; diff?: string } {
-		switch (name) {
-			case "read_file":
-				return { tool: "readFile", path: String(args.path ?? "") }
-			case "write_to_file":
-				return { tool: "newFileCreated", path: String(args.path ?? ""), content: String(args.content ?? "") }
-			case "list_files":
-				return { tool: args.recursive ? "listFilesRecursive" : "listFilesTopLevel", path: String(args.path ?? "") }
-			case "search_files":
-				return { tool: "searchFiles", path: String(args.path ?? "") }
-			case "execute_command":
-				return { tool: "readCommandOutput", content: String(args.command ?? "") }
-			case "apply_diff":
-				return { tool: "appliedDiff", path: String(args.path ?? ""), diff: String(args.diff ?? "") }
-			default:
-				return { tool: "readFile", path: name }
-		}
-	}
-
-	private async executeCloudToolCall(
-		name: string,
-		args: Record<string, unknown>,
-	): Promise<string> {
-		const sayTool = this.cloudToolToSayTool(name, args)
-		const { response } = await this.ask("tool", JSON.stringify(sayTool))
-
-		if (response !== "yesButtonClicked") {
-			throw new Error("Tool call rejected by user")
-		}
-
-		const cwd = this.cwd
-		let result: string
-
-		switch (name) {
-			case "read_file":
-				result = await execReadFile(cwd, {
-					path: String(args.path ?? ""),
-					start_line: args.start_line as number | undefined,
-					end_line: args.end_line as number | undefined,
-				})
-				break
-			case "write_to_file":
-				result = await execWriteFile(cwd, {
-					path: String(args.path ?? ""),
-					content: String(args.content ?? ""),
-				})
-				break
-			case "list_files":
-				result = await execListFiles(cwd, {
-					path: String(args.path ?? ""),
-					recursive: args.recursive as boolean | undefined,
-				})
-				break
-			case "search_files":
-				result = await execSearchFiles(cwd, {
-					path: String(args.path ?? ""),
-					regex: String(args.regex ?? ""),
-					file_pattern: args.file_pattern as string | undefined,
-				})
-				break
-			case "execute_command":
-				result = await execCommand(cwd, {
-					command: String(args.command ?? ""),
-					cwd: args.cwd as string | undefined,
-					timeout: args.timeout as number | undefined,
-				})
-				break
-			case "apply_diff":
-				result = await execApplyDiff(cwd, {
-					path: String(args.path ?? ""),
-					diff: String(args.diff ?? ""),
-				})
-				break
-			default:
-				throw new Error(`Unknown tool: ${name}`)
-		}
-
-		await this.say("text", `[${name}] completed`)
-		return result
 	}
 
 	// Task Loop

@@ -7,6 +7,7 @@ import {
 	buildSkillResult,
 	resolveSkillContentForMode,
 } from "../../services/skills/skillInvocation"
+import { ignoreAbortError } from "../../utils/errorHandling"
 
 interface SkillParams {
 	skill: string
@@ -90,7 +91,7 @@ export class SkillTool extends BaseTool<"skill"> {
 			args: args,
 		})
 
-		await task.ask("tool", partialMessage, block.partial).catch(() => {})
+		await task.ask("tool", partialMessage, block.partial).catch(ignoreAbortError)
 	}
 }
 
