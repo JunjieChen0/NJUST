@@ -1,0 +1,14 @@
+{
+  "packageInformation": {
+    "helloworld": {
+      "rootPackageName": "helloworld",
+      "fileNameHash": "6398821126623990014",
+      "timeStamp": 1774517317,
+      "buildFlag": true,
+      "exeName": "main",
+      "hasSubPkgs": false
+    }
+  },
+  "jsonHash": "-5295430659271539697",
+  "rootPackageName": "helloworld"
+}

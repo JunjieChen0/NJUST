@@ -1,4 +1,12 @@
-export type WebSearchProviderName = "tavily" | "bing" | "google" | "baidu" | "serpapi" | "duckduckgo" | "baidu-free"
+export type WebSearchProviderName =
+	| "tavily"
+	| "bing"
+	| "google"
+	| "baidu"
+	| "serpapi"
+	| "duckduckgo"
+	| "baidu-free"
+	| "sogou-free"
 
 export interface WebSearchResult {
 	title: string
@@ -15,6 +23,112 @@ function makeAbortController(timeoutMs = 15_000) {
 	const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 	return { controller, clear: () => clearTimeout(timeoutId) }
 }
+
+/** Undici/Node often surfaces low-level errors as `fetch failed` with `error.cause`. */
+function formatFetchFailureMessage(error: unknown): string {
+	if (!(error instanceof Error)) {
+		return String(error)
+	}
+	const parts = [error.message]
+	const c = (error as Error & { cause?: unknown }).cause
+	if (c instanceof Error && c.message && !error.message.includes(c.message)) {
+		parts.push(`(${c.message})`)
+	} else if (typeof c === "object" && c !== null && "code" in c) {
+		parts.push(`(code: ${String((c as { code?: unknown }).code)})`)
+	}
+	return parts.join(" ")
+}
+
+/** Node/undici exposes multiple Set-Cookie via getSetCookie(); use for Sogou session warm-up. */
+function collectCookieHeaderFromResponse(res: Response): string {
+	const headers = res.headers as Headers & { getSetCookie?: () => string[] }
+	if (typeof headers.getSetCookie !== "function") {
+		return ""
+	}
+	const pairs = headers
+		.getSetCookie()
+		.map((line) => line.split(";")[0]?.trim())
+		.filter((p): p is string => Boolean(p))
+	return pairs.join("; ")
+}
+
+/** True when Sogou returned a captcha / block page (only use after organic parse yielded zero results). */
+function isSogouLikelyBlockedPage(html: string): boolean {
+	const t = html.slice(0, 120_000).toLowerCase()
+	if (/<title>[^<]*(?:安全验证|访问异常|人机验证)[^<]*<\/title>/i.test(html)) {
+		return true
+	}
+	if (t.includes("secuniq") && (t.includes("验证码") || t.includes("verify"))) {
+		return true
+	}
+	if (t.includes("/antispider/") || t.includes("antispider/index")) {
+		return true
+	}
+	return false
+}
+
+function normalizeMaybeProtocolRelativeUrl(href: string): string {
+	const h = href.trim()
+	if (h.startsWith("//")) {
+		return `https:${h}`
+	}
+	return h
+}
+
+/** Baidu SERP title links: /link?, baidu.php?, optional // or http(s). */
+function isBaiduSerpJumpHref(href: string): boolean {
+	const n = normalizeMaybeProtocolRelativeUrl(href)
+	return /^https?:\/\/(?:www\.)?baidu\.com\/(?:link\?|baidu\.php\?)/i.test(n)
+}
+
+function stripHtmlTags(html: string): string {
+	return html
+		.replace(/<!--[\s\S]*?-->/g, "")
+		.replace(/<[^>]*>/g, "")
+		.replace(/&amp;/g, "&")
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&#x27;/g, "'")
+		.replace(/&#39;/g, "'")
+		.replace(/&nbsp;/g, " ")
+		.replace(/\s+/g, " ")
+}
+
+function extractSnippetFromBlock(block: string, patterns: RegExp[]): string {
+	for (const pattern of patterns) {
+		const m = block.match(pattern)
+		if (m) {
+			const text = stripHtmlTags(m[1]).trim()
+			if (text.length >= 15) {
+				return text.substring(0, 300)
+			}
+		}
+	}
+	return ""
+}
+
+function extractBaiduSnippet(html: string, afterPos: number): string {
+	const block = html.substring(afterPos, afterPos + 5000)
+	return extractSnippetFromBlock(block, BAIDU_SNIPPET_PATTERNS)
+}
+
+const BAIDU_SNIPPET_PATTERNS: RegExp[] = [
+	/class="[^"]*c-abstract[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span)>/i,
+	/class="[^"]*cos-text-body[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span|p)>/i,
+	/class="[^"]*(?:content-right|c-span-last)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span)>/i,
+	/class="[^"]*(?:content|abstract|desc|paragraph|summary)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span|p)>/i,
+	/<span[^>]+class="[^"]*"[^>]*>([\s\S]{30,600}?)<\/span>/i,
+	/<p[^>]*>([\s\S]{20,500}?)<\/p>/i,
+]
+
+const SOGOU_SNIPPET_PATTERNS: RegExp[] = [
+	/class="[^"]*space-txt[^"]*"[^>]*>([\s\S]*?)<\/(?:div|p)>/i,
+	/class="[^"]*(?:str_info|star-wiki)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|p)>/i,
+	/class="[^"]*txt-info[^"]*"[^>]*>([\s\S]*?)<\/(?:div|p)>/i,
+	/class="[^"]*(?:rb|text|desc)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|p|span)>/i,
+	/<p[^>]*>([\s\S]{20,500}?)<\/p>/i,
+]
 
 export class TavilySearchProvider implements WebSearchProvider {
 	constructor(private apiKey: string) {}
@@ -233,18 +347,56 @@ export class BaiduSearchProvider implements WebSearchProvider {
 }
 
 export class BaiduFreeSearchProvider implements WebSearchProvider {
+	private sogouFallback?: SogouFreeSearchProvider
+
 	async search(query: string, count: number): Promise<WebSearchResult[]> {
-		const { controller, clear } = makeAbortController(15_000)
+		let baiduError: string | undefined
 
 		try {
-			const params = new URLSearchParams({ wd: query, rn: String(Math.min(count, 10)) })
+			const results = await this.fetchBaidu(query, count)
+			if (results.length > 0) {
+				return results
+			}
+			baiduError = "Baidu returned no parseable results (anti-bot or layout change)."
+		} catch (error) {
+			if (error instanceof Error && error.name === "AbortError") {
+				baiduError = "Baidu search timed out."
+			} else {
+				baiduError = formatFetchFailureMessage(error)
+			}
+		}
+
+		try {
+			this.sogouFallback ??= new SogouFreeSearchProvider()
+			const results = await this.sogouFallback.search(query, count)
+			if (results.length > 0) {
+				return results
+			}
+			throw new Error("Sogou fallback returned no results")
+		} catch (fallbackErr) {
+			const fb = formatFetchFailureMessage(fallbackErr)
+			throw new Error(
+				`Baidu search failed: ${baiduError}. ` +
+					`Sogou fallback also failed: ${fb}. ` +
+					"Check network/proxy, or set web search provider to Tavily/Bing/Google in settings.",
+			)
+		}
+	}
+
+	private async fetchBaidu(query: string, count: number): Promise<WebSearchResult[]> {
+		const { controller, clear } = makeAbortController(15_000)
+		try {
+			const params = new URLSearchParams({ wd: query, rn: String(Math.min(count, 10)), ie: "utf-8" })
 			const response = await fetch(`https://www.baidu.com/s?${params}`, {
 				headers: {
 					"User-Agent":
 						"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-					Accept: "text/html",
+					Accept: "text/html,application/xhtml+xml",
 					"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+					Referer: "https://www.baidu.com/",
+					Connection: "keep-alive",
 				},
+				redirect: "follow",
 				signal: controller.signal,
 			})
 
@@ -253,56 +405,154 @@ export class BaiduFreeSearchProvider implements WebSearchProvider {
 			}
 
 			const html = await response.text()
-			return this.parseResults(html, count)
-		} catch (error) {
-			if (error instanceof Error && error.name === "AbortError") {
-				throw new Error("Baidu search timed out.")
-			}
-			throw new Error(`Baidu search failed: ${error instanceof Error ? error.message : String(error)}`)
+			return this.parseBaiduResults(html, count)
 		} finally {
 			clear()
 		}
 	}
 
-	private parseResults(html: string, maxResults: number): WebSearchResult[] {
+	private parseBaiduResults(html: string, maxResults: number): WebSearchResult[] {
 		const results: WebSearchResult[] = []
+		const seenUrl = new Set<string>()
 
-		const h3Regex =
-			/<h3[^>]*>[\s\S]*?<a[^>]+href="(https?:\/\/www\.baidu\.com\/link\?[^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/h3>/gi
-		let match: RegExpExecArray | null
-
-		while ((match = h3Regex.exec(html)) !== null && results.length < maxResults) {
-			const url = match[1]
-			const title = this.stripHtml(match[2]).trim()
-
-			if (!title || title.length < 2) continue
-
-			const afterPos = match.index + match[0].length
-			const afterBlock = html.substring(afterPos, afterPos + 4000)
-			const snippetMatch =
-				afterBlock.match(/class="[^"]*cos-text-body[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span|p)>/i) ||
-				afterBlock.match(/<p[^>]*>([\s\S]{20,500}?)<\/p>/i) ||
-				afterBlock.match(/class="[^"]*(?:content|abstract|desc|paragraph)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span|p)>/i) ||
-				afterBlock.match(/class="[^"]*c-abstract[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span)>/i)
-			const snippet = snippetMatch ? this.stripHtml(snippetMatch[1]).trim().substring(0, 300) : ""
-
+		const pushResult = (rawHref: string, titleHtml: string, snippetAfterIndex: number) => {
+			if (!isBaiduSerpJumpHref(rawHref)) return
+			const url = normalizeMaybeProtocolRelativeUrl(rawHref)
+			const title = stripHtmlTags(titleHtml).trim()
+			if (!title || title.length < 2) return
+			if (seenUrl.has(url)) return
+			seenUrl.add(url)
+			const snippet = extractBaiduSnippet(html, snippetAfterIndex)
 			results.push({ title, url, snippet })
+		}
+
+		// Any <h3>…<a href="…">…</a>…</h3> where href is a Baidu jump URL (link? / baidu.php?, // or http(s))
+		const h3Regex = /<h3[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/h3>/gi
+		let match: RegExpExecArray | null
+		while ((match = h3Regex.exec(html)) !== null && results.length < maxResults) {
+			pushResult(match[1], match[2], match.index + match[0].length)
+		}
+
+		if (results.length < maxResults) {
+			const containerRegex =
+				/class="[^"]*c-container[^"]*"[^>]*(?:data-click[^>]*)?>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>([\s\S]*?)(?=class="[^"]*c-container|$)/gi
+			while ((match = containerRegex.exec(html)) !== null && results.length < maxResults) {
+				const linkMatch = match[1].match(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i)
+				if (!linkMatch) continue
+				const rawHref = linkMatch[1]
+				if (!isBaiduSerpJumpHref(rawHref)) continue
+				const url = normalizeMaybeProtocolRelativeUrl(rawHref)
+				const title = stripHtmlTags(linkMatch[2]).trim()
+				if (!title || title.length < 2) continue
+				if (seenUrl.has(url)) continue
+				seenUrl.add(url)
+				const snippet = extractSnippetFromBlock(match[2], BAIDU_SNIPPET_PATTERNS)
+				results.push({ title, url, snippet })
+			}
 		}
 
 		return results
 	}
+}
 
-	private stripHtml(html: string): string {
-		return html
-			.replace(/<[^>]*>/g, "")
-			.replace(/&amp;/g, "&")
-			.replace(/&lt;/g, "<")
-			.replace(/&gt;/g, ">")
-			.replace(/&quot;/g, '"')
-			.replace(/&#x27;/g, "'")
-			.replace(/&nbsp;/g, " ")
-			.replace(/<!--[\s\S]*?-->/g, "")
-			.replace(/\s+/g, " ")
+export class SogouFreeSearchProvider implements WebSearchProvider {
+	private static readonly UA =
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+	async search(query: string, count: number): Promise<WebSearchResult[]> {
+		const { controller, clear } = makeAbortController(22_000)
+
+		try {
+			let cookieHeader = ""
+			try {
+				const warm = await fetch("https://www.sogou.com/", {
+					headers: {
+						"User-Agent": SogouFreeSearchProvider.UA,
+						Accept: "text/html,application/xhtml+xml",
+						"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+						"Upgrade-Insecure-Requests": "1",
+					},
+					redirect: "follow",
+					signal: controller.signal,
+				})
+				cookieHeader = collectCookieHeaderFromResponse(warm)
+			} catch {
+				// Warm-up is best-effort; continue without cookies
+			}
+
+			const params = new URLSearchParams({ query, ie: "utf8" })
+			const response = await fetch(`https://www.sogou.com/web?${params}`, {
+				headers: {
+					"User-Agent": SogouFreeSearchProvider.UA,
+					Accept: "text/html,application/xhtml+xml",
+					"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+					Referer: "https://www.sogou.com/",
+					...(cookieHeader ? { Cookie: cookieHeader } : {}),
+					"Sec-Fetch-Dest": "document",
+					"Sec-Fetch-Mode": "navigate",
+					"Sec-Fetch-Site": "same-origin",
+					"Sec-Fetch-User": "?1",
+					"Upgrade-Insecure-Requests": "1",
+				},
+				redirect: "follow",
+				signal: controller.signal,
+			})
+
+			if (!response.ok) {
+				throw new Error(`Sogou returned ${response.status}`)
+			}
+
+			const html = await response.text()
+			const results = this.parseSogouResults(html, count)
+			if (results.length > 0) {
+				return results
+			}
+
+			if (isSogouLikelyBlockedPage(html)) {
+				throw new Error(
+					"Sogou returned a verification / anti-bot page (no organic results). Try again later or use Tavily/Baidu API in settings.",
+				)
+			}
+
+			return []
+		} catch (error) {
+			if (error instanceof Error && error.name === "AbortError") {
+				throw new Error("Sogou search timed out.")
+			}
+			throw new Error(`Sogou search failed: ${error instanceof Error ? error.message : String(error)}`)
+		} finally {
+			clear()
+		}
+	}
+
+	private parseSogouResults(html: string, maxResults: number): WebSearchResult[] {
+		const results: WebSearchResult[] = []
+		const seen = new Set<string>()
+		const h3Regex = /<h3[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/h3>/gi
+		let match: RegExpExecArray | null
+
+		while ((match = h3Regex.exec(html)) !== null && results.length < maxResults) {
+			let url = match[1]
+			const title = stripHtmlTags(match[2]).trim()
+			if (!title || title.length < 2) continue
+
+			if (url.startsWith("/link?")) {
+				url = `https://www.sogou.com${url}`
+			}
+
+			// Skip in-page nav / vertical tabs (still h3+a but not web results)
+			if (url.includes("sogou.com/sogou?") && title.includes("相关")) {
+				continue
+			}
+
+			if (seen.has(url)) continue
+			seen.add(url)
+
+			const afterBlock = html.substring(match.index + match[0].length, match.index + match[0].length + 3000)
+			const snippet = extractSnippetFromBlock(afterBlock, SOGOU_SNIPPET_PATTERNS)
+			results.push({ title, url, snippet })
+		}
+		return results
 	}
 }
 
@@ -461,6 +711,8 @@ export function createSearchProvider(
 			return new DuckDuckGoSearchProvider()
 		case "baidu-free":
 			return new BaiduFreeSearchProvider()
+		case "sogou-free":
+			return new SogouFreeSearchProvider()
 		case "tavily":
 		default:
 			return new TavilySearchProvider(apiKey)
@@ -468,8 +720,17 @@ export function createSearchProvider(
 }
 
 export const SEARCH_PROVIDER_INFO: Record<WebSearchProviderName, { label: string; keyHint: string; noKey?: boolean }> = {
-	"baidu-free": { label: "Baidu Free (百度免费)", keyHint: "", noKey: true },
-	duckduckgo: { label: "DuckDuckGo (Free)", keyHint: "", noKey: true },
+	"baidu-free": {
+		label: "百度免费 (Baidu Free)",
+		keyHint: "无需密钥；百度失败时自动切搜狗",
+		noKey: true,
+	},
+	"sogou-free": {
+		label: "搜狗免费 (Sogou Free)",
+		keyHint: "无需密钥；国内可用",
+		noKey: true,
+	},
+	duckduckgo: { label: "DuckDuckGo (Free)", keyHint: "No key; may not work in China", noKey: true },
 	tavily: { label: "Tavily", keyHint: "https://tavily.com" },
 	bing: { label: "Bing", keyHint: "Azure Portal → Bing Search API" },
 	google: { label: "Google", keyHint: "API_KEY|CX_ID (Google Custom Search)" },

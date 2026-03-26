@@ -12,6 +12,7 @@ import {
 	FileUp,
 	Loader2,
 	AlertTriangle,
+	Mic,
 } from "lucide-react"
 
 import type { ExtensionMessage } from "@njust-ai-cj/types"
@@ -43,6 +44,7 @@ import { MAX_IMAGES_PER_MESSAGE } from "./ChatView"
 import ContextMenu from "./ContextMenu"
 import { IndexingStatusBadge } from "./IndexingStatusBadge"
 import { usePromptHistory } from "./hooks/usePromptHistory"
+import { useVoiceInput } from "./hooks/useVoiceInput"
 
 interface ChatTextAreaProps {
 	inputValue: string
@@ -110,6 +112,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			enterBehavior,
 			lockApiConfigAcrossModes,
 			enableWebSearch,
+			language,
 		} = useExtensionState()
 
 		// Find the ID and display text for the currently selected API configuration.
@@ -958,6 +961,55 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
 		const [isTtsPlaying, setIsTtsPlaying] = useState(false)
 
+		const {
+			supported: voiceInputSupported,
+			isListening: isVoiceListening,
+			isTranscribing: isVoiceTranscribing,
+			lastError: voiceInputError,
+			toggleListening: toggleVoiceInput,
+			stopListening: stopVoiceInput,
+		} = useVoiceInput(inputValue, setInputValue, language, (key, opts) => t(key, opts))
+
+		/** 右下角：主聊天无内容且非流式时显示麦克风；有输入/图片、流式或编辑消息模式时显示发送/停止 */
+		const showSendOrStopInsteadOfMic = hasInputContent || isStreaming || isEditMode
+
+		useEffect(() => {
+			if (showSendOrStopInsteadOfMic && (isVoiceListening || isVoiceTranscribing)) {
+				stopVoiceInput()
+			}
+		}, [showSendOrStopInsteadOfMic, isVoiceListening, isVoiceTranscribing, stopVoiceInput])
+
+		const voiceInputTooltip = useMemo(() => {
+			if (!voiceInputSupported) {
+				return t("chat:voiceInput.notSupported")
+			}
+			if (isVoiceTranscribing) {
+				return t("chat:voiceInput.transcribing")
+			}
+			const parts: string[] = []
+			if (isVoiceListening) {
+				parts.push(t("chat:voiceInput.listening"))
+			} else {
+				parts.push(t("chat:voiceInput.start"))
+				parts.push(t("chat:voiceInput.hintWhisper"))
+			}
+			if (voiceInputError && voiceInputError !== "no-speech" && voiceInputError !== "aborted") {
+				const shortCode = /^[\w-]+$/.test(voiceInputError)
+				if (!shortCode) {
+					parts.push(voiceInputError)
+				} else if (voiceInputError === "not-allowed" || voiceInputError === "service-not-allowed") {
+					parts.push(t("chat:voiceInput.errorDenied"))
+				} else if (voiceInputError === "network") {
+					parts.push(t("chat:voiceInput.errorNetwork"))
+				} else if (voiceInputError === "mic-denied") {
+					parts.push(t("chat:voiceInput.errorMicDenied"))
+				} else {
+					parts.push(t("chat:voiceInput.errorGeneric", { code: voiceInputError }))
+				}
+			}
+			return parts.join("\n")
+		}, [voiceInputSupported, isVoiceListening, isVoiceTranscribing, voiceInputError, t])
+
 		useEvent("message", (event: MessageEvent) => {
 			const message: ExtensionMessage = event.data
 
@@ -1256,50 +1308,97 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 										</button>
 									</StandardTooltip>
 								)}
-								{/* Send/Stop button - morphs based on streaming state, always visible in edit mode */}
-								<StandardTooltip
-									content={
-										isEditMode
-											? t("chat:pressToSend", { keyCombination: sendKeyCombination })
-											: isStreaming
-												? t("chat:stop.title")
-												: t("chat:pressToSend", { keyCombination: sendKeyCombination })
-									}>
-									<button
-										aria-label={
+								{/* 右下角：无输入时麦克风；有输入/图片或流式时发送/停止 */}
+								{showSendOrStopInsteadOfMic ? (
+									<StandardTooltip
+										content={
 											isEditMode
 												? t("chat:pressToSend", { keyCombination: sendKeyCombination })
 												: isStreaming
 													? t("chat:stop.title")
 													: t("chat:pressToSend", { keyCombination: sendKeyCombination })
-										}
-										disabled={false}
-										onClick={isStreaming ? onStop : onSend}
-										className={cn(
-											"relative inline-flex items-center justify-center",
-											"bg-transparent border-none p-1.5",
-											"rounded-full min-w-[28px] min-h-[28px]",
-											"text-vscode-descriptionForeground hover:text-vscode-foreground",
-											"transition-all duration-200",
-											isEditMode || isStreaming || hasInputContent
-												? "opacity-100 hover:opacity-100 pointer-events-auto"
-												: "opacity-0 pointer-events-none",
-											(isEditMode || isStreaming || hasInputContent) &&
+										}>
+										<button
+											aria-label={
+												isEditMode
+													? t("chat:pressToSend", { keyCombination: sendKeyCombination })
+													: isStreaming
+														? t("chat:stop.title")
+														: t("chat:pressToSend", { keyCombination: sendKeyCombination })
+											}
+											disabled={false}
+											onClick={isStreaming ? onStop : onSend}
+											className={cn(
+												"relative inline-flex items-center justify-center",
+												"bg-transparent border-none p-1.5",
+												"rounded-full min-w-[28px] min-h-[28px]",
+												"text-vscode-descriptionForeground hover:text-vscode-foreground",
+												"transition-all duration-200",
+												"opacity-100 hover:opacity-100 pointer-events-auto",
 												"hover:bg-[rgba(255,255,255,0.03)] hover:border-[rgba(255,255,255,0.15)]",
-											"focus:outline-none focus-visible:ring-1 focus-visible:ring-vscode-focusBorder",
-											(isEditMode || isStreaming || hasInputContent) &&
+												"focus:outline-none focus-visible:ring-1 focus-visible:ring-vscode-focusBorder",
 												"active:bg-[rgba(255,255,255,0.1)]",
-											(isEditMode || isStreaming || hasInputContent) && "cursor-pointer",
-											isStreaming &&
-												"bg-vscode-button-background hover:bg-vscode-button-background",
-										)}>
-										{isStreaming ? (
-											<Square className="size-4 stroke-none fill-vscode-button-foreground" />
-										) : (
-											<SendHorizontal className="size-4" />
-										)}
-									</button>
-								</StandardTooltip>
+												"cursor-pointer",
+												isStreaming &&
+													"bg-vscode-button-background hover:bg-vscode-button-background",
+											)}>
+											{isStreaming ? (
+												<Square className="size-4 stroke-none fill-vscode-button-foreground" />
+											) : (
+												<SendHorizontal className="size-4" />
+											)}
+										</button>
+									</StandardTooltip>
+								) : (
+									<StandardTooltip content={voiceInputTooltip}>
+										<span className="inline-flex">
+											<button
+												type="button"
+												disabled={!voiceInputSupported || isVoiceTranscribing}
+												aria-label={
+													!voiceInputSupported
+														? t("chat:voiceInput.notSupported")
+														: isVoiceTranscribing
+															? t("chat:voiceInput.transcribing")
+															: isVoiceListening
+																? t("chat:voiceInput.stop")
+																: t("chat:voiceInput.start")
+												}
+												aria-pressed={voiceInputSupported && isVoiceListening}
+												onClick={toggleVoiceInput}
+												className={cn(
+													"relative inline-flex items-center justify-center",
+													"bg-transparent border-none p-1.5",
+													"rounded-full min-w-[28px] min-h-[28px]",
+													"transition-all duration-200",
+													"opacity-100 pointer-events-auto",
+													isVoiceTranscribing
+														? "text-vscode-focusBorder cursor-wait"
+														: isVoiceListening
+															? "text-[#f48771] cursor-pointer"
+															: voiceInputSupported
+																? "text-vscode-foreground hover:text-vscode-foreground cursor-pointer"
+																: "text-vscode-descriptionForeground cursor-not-allowed",
+													voiceInputSupported &&
+														!isVoiceTranscribing &&
+														"hover:bg-[rgba(255,255,255,0.06)] hover:border-[rgba(255,255,255,0.15)]",
+													voiceInputSupported &&
+														!isVoiceTranscribing &&
+														"active:bg-[rgba(255,255,255,0.1)]",
+													"focus:outline-none focus-visible:ring-1 focus-visible:ring-vscode-focusBorder",
+												)}>
+												{isVoiceTranscribing ? (
+													<Loader2 className="size-4 animate-spin" aria-hidden />
+												) : (
+													<Mic
+														className={cn("size-4", isVoiceListening && "animate-pulse")}
+														aria-hidden
+													/>
+												)}
+											</button>
+										</span>
+									</StandardTooltip>
+								)}
 							</div>
 
 							{!inputValue && (

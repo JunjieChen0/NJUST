@@ -135,6 +135,22 @@
 	"sendMessage": "发送消息",
 	"pressToSend": "按 {{keyCombination}} 发送",
 	"stopTts": "停止文本转语音",
+	"voiceInput": {
+		"start": "语音输入",
+		"stop": "停止录音",
+		"listening": "正在录音…再次点击将发送音频进行转写",
+		"transcribing": "正在将语音转为文字…",
+		"hintWhisper": "使用麦克风录音，并通过 OpenAI Whisper 转写（当前或「增强提示」中的 OpenAI 配置）",
+		"notSupported": "当前界面无法使用麦克风进行语音输入",
+		"errorDenied": "无法使用麦克风（权限被拒绝或已阻止）",
+		"errorMicDenied": "无法访问麦克风",
+		"errorNetwork": "语音识别网络或服务错误",
+		"errorGeneric": "语音识别出错（{{code}}）",
+		"errorNoOpenAi": "未找到 OpenAI / OpenAI(Native) 的 API 密钥。请使用 OpenAI 类配置，或在设置中为「增强提示」指定该类配置。",
+		"errorTranscriptionFailed": "语音转文字失败",
+		"errorInvalidRequest": "音频无效或为空",
+		"errorAudioTooLarge": "录音过大，无法发送"
+	},
 	"webSearch": {
 		"label": "联网",
 		"enable": "启用联网搜索",

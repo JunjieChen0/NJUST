@@ -8,7 +8,8 @@ import { Section } from "./Section"
 import { SearchableSetting } from "./SearchableSetting"
 
 const PROVIDERS = [
-	{ value: "baidu-free", label: "Baidu Free / 百度免费 (推荐)", noKey: true },
+	{ value: "baidu-free", label: "百度免费 (推荐，自动备选搜狗)", noKey: true },
+	{ value: "sogou-free", label: "搜狗免费 (国内可用)", noKey: true },
 	{ value: "duckduckgo", label: "DuckDuckGo (Free, 需翻墙)", noKey: true },
 	{ value: "tavily", label: "Tavily" },
 	{ value: "bing", label: "Bing (Microsoft)" },
@@ -26,7 +27,7 @@ const SERPAPI_ENGINES = [
 	{ value: "duckduckgo", label: "DuckDuckGo" },
 ] as const
 
-const NO_KEY_PROVIDERS = new Set(["baidu-free", "duckduckgo"])
+const NO_KEY_PROVIDERS = new Set(["baidu-free", "sogou-free", "duckduckgo"])
 
 type WebSearchSettingsProps = HTMLAttributes<HTMLDivElement> & {
 	enableWebSearch?: boolean

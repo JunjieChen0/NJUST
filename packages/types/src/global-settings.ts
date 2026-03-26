@@ -230,7 +230,9 @@ export const globalSettingsSchema = z.object({
 	disabledTools: z.array(toolNamesSchema).optional(),
 
 	enableWebSearch: z.boolean().optional(),
-	webSearchProvider: z.enum(["baidu-free", "duckduckgo", "tavily", "bing", "google", "baidu", "serpapi"]).optional(),
+	webSearchProvider: z
+		.enum(["baidu-free", "sogou-free", "duckduckgo", "tavily", "bing", "google", "baidu", "serpapi"])
+		.optional(),
 	serpApiEngine: z.enum(["bing", "google", "baidu", "yandex", "yahoo", "duckduckgo"]).optional(),
 	webSearchApiKey: z.string().optional(),
 })

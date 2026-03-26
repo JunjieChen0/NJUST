@@ -171,6 +171,22 @@
 	"sendMessage": "Send message",
 	"pressToSend": "Press {{keyCombination}} to send",
 	"stopTts": "Stop text-to-speech",
+	"voiceInput": {
+		"start": "Voice input",
+		"stop": "Stop recording",
+		"listening": "Recording… click again to send audio for transcription.",
+		"transcribing": "Transcribing speech…",
+		"hintWhisper": "Uses your microphone, then OpenAI Whisper (current or Enhance-prompt OpenAI profile).",
+		"notSupported": "Voice input needs microphone access in this webview",
+		"errorDenied": "Microphone permission denied or blocked",
+		"errorMicDenied": "Could not access the microphone",
+		"errorNetwork": "Speech recognition network or service error",
+		"errorGeneric": "Voice input error ({{code}})",
+		"errorNoOpenAi": "No OpenAI / OpenAI (Native) API key found. Use an OpenAI profile or set Enhance Prompt to one.",
+		"errorTranscriptionFailed": "Speech-to-text failed",
+		"errorInvalidRequest": "Invalid or empty audio",
+		"errorAudioTooLarge": "Recording is too large to send"
+	},
 	"webSearch": {
 		"label": "Web",
 		"enable": "Enable web search",

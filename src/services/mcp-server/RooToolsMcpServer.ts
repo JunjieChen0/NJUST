@@ -33,13 +33,19 @@ export class RooToolsMcpServer {
 		this.options = options
 	}
 
+	updateWorkspacePath(newPath: string): void {
+		this.options.workspacePath = newPath
+	}
+
+	private get cwd(): string {
+		return this.options.workspacePath
+	}
+
 	private createMcpServer(): McpServer {
 		const server = new McpServer(
 			{ name: "roo-tools", version: "1.0.0" },
 			{ capabilities: { tools: {} } },
 		)
-
-		const cwd = this.options.workspacePath
 
 		server.tool(
 			"read_file",
@@ -51,7 +57,7 @@ export class RooToolsMcpServer {
 			},
 			async (params) => {
 				try {
-					const result = await execReadFile(cwd, params)
+					const result = await execReadFile(this.cwd, params)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: any) {
 					return { content: [{ type: "text" as const, text: `Error: ${e.message}` }], isError: true }
@@ -68,7 +74,7 @@ export class RooToolsMcpServer {
 			},
 			async (params) => {
 				try {
-					const result = await execWriteFile(cwd, params)
+					const result = await execWriteFile(this.cwd, params)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: any) {
 					return { content: [{ type: "text" as const, text: `Error: ${e.message}` }], isError: true }
@@ -85,7 +91,7 @@ export class RooToolsMcpServer {
 			},
 			async (params) => {
 				try {
-					const result = await execListFiles(cwd, params)
+					const result = await execListFiles(this.cwd, params)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: any) {
 					return { content: [{ type: "text" as const, text: `Error: ${e.message}` }], isError: true }
@@ -103,7 +109,7 @@ export class RooToolsMcpServer {
 			},
 			async (params) => {
 				try {
-					const result = await execSearchFiles(cwd, params)
+					const result = await execSearchFiles(this.cwd, params)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: any) {
 					return { content: [{ type: "text" as const, text: `Error: ${e.message}` }], isError: true }
@@ -122,7 +128,7 @@ export class RooToolsMcpServer {
 			async (params) => {
 				try {
 					const result = await execCommand(
-						cwd,
+						this.cwd,
 						params,
 						this.options.allowedCommands,
 						this.options.deniedCommands,
@@ -143,7 +149,7 @@ export class RooToolsMcpServer {
 			},
 			async (params) => {
 				try {
-					const result = await execApplyDiff(cwd, params)
+					const result = await execApplyDiff(this.cwd, params)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: any) {
 					return { content: [{ type: "text" as const, text: `Error: ${e.message}` }], isError: true }

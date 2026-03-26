@@ -15,6 +15,7 @@ import {
 	type Command as SlashCommand,
 	type WebviewMessage,
 	type EditQueuedMessagePayload,
+	type ProviderSettings,
 	NJUST_AI_CJSettings,
 	NJUST_AI_CONFIG_DIR,
 	ExperimentId,
@@ -38,6 +39,10 @@ import {
 	handleOpenSkillFile,
 } from "./skillsMessageHandler"
 import { changeLanguage, t } from "../../i18n"
+import {
+	getWhisperCredentialsFromProviderSettings,
+	transcribeWithOpenAiWhisper,
+} from "../../utils/openai-audio-transcription"
 import { Package } from "../../shared/package"
 import { type RouterName, toRouterName } from "../../shared/api"
 import { MessageEnhancer } from "./messageEnhancer"
@@ -1583,6 +1588,97 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				}
 			}
 			break
+
+		case "transcribeAudio": {
+			const requestId = message.transcriptionRequestId
+			const postError = async (values: Record<string, unknown>) => {
+				await provider.postMessageToWebview({
+					type: "transcriptionError",
+					transcriptionRequestId: requestId,
+					values,
+				})
+			}
+
+			if (!requestId || typeof message.audioBase64 !== "string" || !message.audioBase64.trim()) {
+				await postError({ errorI18nKey: "chat:voiceInput.errorInvalidRequest" })
+				break
+			}
+
+			if (message.audioBase64.length > 36 * 1024 * 1024) {
+				await postError({ errorI18nKey: "chat:voiceInput.errorAudioTooLarge" })
+				break
+			}
+
+			try {
+				let buf: Buffer
+				try {
+					buf = Buffer.from(message.audioBase64, "base64")
+				} catch {
+					await postError({ errorI18nKey: "chat:voiceInput.errorInvalidRequest" })
+					break
+				}
+
+				if (buf.length === 0) {
+					await postError({ errorI18nKey: "chat:voiceInput.errorInvalidRequest" })
+					break
+				}
+
+				const state = await provider.getState()
+				const { apiConfiguration, enhancementApiConfigId, listApiConfigMeta = [] } = state
+
+				let creds = getWhisperCredentialsFromProviderSettings(apiConfiguration)
+				if (
+					!creds &&
+					enhancementApiConfigId &&
+					listApiConfigMeta.some((m) => m.id === enhancementApiConfigId)
+				) {
+					try {
+						const { name: _n, ...profile } = await provider.providerSettingsManager.getProfile({
+							id: enhancementApiConfigId,
+						})
+						creds = getWhisperCredentialsFromProviderSettings(profile as ProviderSettings)
+					} catch (e) {
+						provider.log(
+							`transcribeAudio enhancement profile: ${e instanceof Error ? e.message : String(e)}`,
+						)
+					}
+				}
+
+				if (!creds) {
+					await postError({ errorI18nKey: "chat:voiceInput.errorNoOpenAi" })
+					break
+				}
+
+				const mime = message.audioMimeType?.trim() || "audio/webm"
+				const ext = mime.includes("mp4") ? "m4a" : mime.includes("wav") ? "wav" : "webm"
+				const langRaw = message.values?.language
+				const language = typeof langRaw === "string" && langRaw.length >= 2 ? langRaw : undefined
+
+				const text = await transcribeWithOpenAiWhisper({
+					apiKey: creds.apiKey,
+					baseUrl: creds.baseUrl,
+					audioBuffer: buf,
+					mimeType: mime,
+					filename: `recording.${ext}`,
+					language,
+				})
+
+				await provider.postMessageToWebview({
+					type: "transcriptionResult",
+					text,
+					transcriptionRequestId: requestId,
+				})
+			} catch (error) {
+				provider.log(
+					`transcribeAudio: ${error instanceof Error ? error.message : JSON.stringify(error)}`,
+				)
+				await postError({
+					errorI18nKey: "chat:voiceInput.errorTranscriptionFailed",
+					detail: error instanceof Error ? error.message : String(error),
+				})
+			}
+			break
+		}
 		case "getSystemPrompt":
 			try {
 				const systemPrompt = await generateSystemPrompt(provider, message)

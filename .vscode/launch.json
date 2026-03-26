@@ -10,7 +10,7 @@
 			"type": "extensionHost",
 			"request": "launch",
 			"runtimeExecutable": "${execPath}",
-			"args": ["--disable-extensions", "--extensionDevelopmentPath=${workspaceFolder}/src"],
+			"args": ["--disable-extensions", "--extensionDevelopmentPath=${workspaceFolder}/src", "D:\\NJUST_AI\\test-workspace"],
 			"sourceMaps": true,
 			"outFiles": ["${workspaceFolder}/src/dist/**/*.js"],
 			"preLaunchTask": "${defaultBuildTask}",

@@ -388,11 +388,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		const port = mcpServerConfig.get<number>("mcpServer.port", 3100)
 		const bindAddress = mcpServerConfig.get<string>("mcpServer.bindAddress", "127.0.0.1")
 		const authToken = mcpServerConfig.get<string>("mcpServer.authToken", "") || undefined
-		const workspacePath = getWorkspacePath()
 
-		if (workspacePath) {
+		const startMcpServer = (wsPath: string) => {
 			rooToolsMcpServer = new RooToolsMcpServer({
-				workspacePath,
+				workspacePath: wsPath,
 				port,
 				bindAddress,
 				authToken,
@@ -403,7 +402,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			rooToolsMcpServer
 				.start()
 				.then(() => {
-					outputChannel.appendLine(`[McpToolsServer] Started on http://${bindAddress}:${port}/mcp`)
+					outputChannel.appendLine(`[McpToolsServer] Started on http://${bindAddress}:${port}/mcp (workspace: ${wsPath})`)
 					if (bindAddress === "0.0.0.0") {
 						outputChannel.appendLine(
 							`[McpToolsServer] WARNING: Server is accessible from remote machines. Ensure authToken is set and firewall rules are configured.`,
@@ -422,6 +421,27 @@ export async function activate(context: vscode.ExtensionContext) {
 				},
 			})
 		}
+
+		const workspacePath = getWorkspacePath()
+
+		if (workspacePath) {
+			startMcpServer(workspacePath)
+		}
+
+		context.subscriptions.push(
+			vscode.workspace.onDidChangeWorkspaceFolders(() => {
+				const newPath = getWorkspacePath()
+				if (!newPath) {
+					return
+				}
+				if (rooToolsMcpServer) {
+					rooToolsMcpServer.updateWorkspacePath(newPath)
+					outputChannel.appendLine(`[McpToolsServer] Workspace path updated to: ${newPath}`)
+				} else {
+					startMcpServer(newPath)
+				}
+			}),
+		)
 	}
 
 	// Allows other extensions to activate once Roo is ready.

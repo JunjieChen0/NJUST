@@ -87,6 +87,8 @@ export interface ExtensionMessage {
 		| "skills"
 		| "fileContent"
 		| "planUpdate"
+		| "transcriptionResult"
+		| "transcriptionError"
 	text?: string
 	/** For fileContent: { path, content, error? } */
 	fileContent?: { path: string; content: string | null; error?: string }
@@ -171,6 +173,8 @@ export interface ExtensionMessage {
 	taskHistory?: HistoryItem[] // For taskHistoryUpdated: full sorted task history
 	/** For taskHistoryItemUpdated: single updated/added history item */
 	taskHistoryItem?: HistoryItem
+	/** Matches webview `transcribeAudio` when posting `transcriptionResult` / `transcriptionError` */
+	transcriptionRequestId?: string
 }
 
 export interface OpenAiCodexRateLimitsMessage {
@@ -257,7 +261,7 @@ export type ExtensionState = Pick<
 	checkpointTimeout: number // Timeout for checkpoint initialization in seconds (default: 15)
 	enableWebSearch: boolean
 	fontFamily?: "serif" | "sans-serif" | "default"
-	webSearchProvider?: "baidu-free" | "duckduckgo" | "tavily" | "bing" | "google" | "baidu" | "serpapi"
+	webSearchProvider?: "baidu-free" | "sogou-free" | "duckduckgo" | "tavily" | "bing" | "google" | "baidu" | "serpapi"
 	serpApiEngine?: "bing" | "google" | "baidu" | "yandex" | "yahoo" | "duckduckgo"
 	webSearchApiKey?: string
 	maxOpenTabsContext: number // Maximum number of VSCode open tabs to include in context (0-500)
@@ -484,6 +488,7 @@ export interface WebviewMessage {
 		| "requestModes"
 		| "switchMode"
 		| "debugSetting"
+		| "transcribeAudio"
 		// Skills messages
 		| "testWebSearch"
 		| "requestSkills"
@@ -596,6 +601,12 @@ export interface WebviewMessage {
 	planId?: string
 	stepId?: string
 	description?: string
+	/** Raw audio for `transcribeAudio` (e.g. webm from MediaRecorder), base64-encoded */
+	audioBase64?: string
+	/** MIME type for `audioBase64` (e.g. audio/webm) */
+	audioMimeType?: string
+	/** Correlate `transcriptionResult` / `transcriptionError` with the webview request */
+	transcriptionRequestId?: string
 }
 
 export interface RequestOpenAiCodexRateLimitsMessage {
