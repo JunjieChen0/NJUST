@@ -29,7 +29,6 @@
 		"providers": "Proveïdors",
 		"modes": "Modes",
 		"mcp": "Servidors MCP",
-		"worktrees": "Worktrees",
 		"autoApprove": "Auto-aprovació",
 		"checkpoints": "Punts de control",
 		"notifications": "Notificacions",
@@ -242,7 +241,7 @@
 			},
 			"protected": {
 				"label": "Incloure fitxers protegits",
-				"description": "Permetre a Roo crear i editar fitxers protegits (com .rooignore i fitxers de configuració .roo/) sense requerir aprovació."
+				"description": "Permetre a Roo crear i editar fitxers protegits (com .rooignore i fitxers de configuració .njust_ai/) sense requerir aprovació."
 			}
 		},
 		"mcp": {
@@ -671,7 +670,7 @@
 		},
 		"enableSubfolderRules": {
 			"label": "Activa les regles dels subdirectoris",
-			"description": "Descobreix i carrega recursivament fitxers .roo/rules i AGENTS.md des de subdirectoris. Útil per a monorepos amb regles per paquet."
+			"description": "Descobreix i carrega recursivament fitxers .njust_ai/rules i AGENTS.md des de subdirectoris. Útil per a monorepos amb regles per paquet."
 		}
 	},
 	"terminal": {
@@ -815,9 +814,9 @@
 		},
 		"CUSTOM_TOOLS": {
 			"name": "Habilitar eines personalitzades",
-			"description": "Quan està habilitat, Roo pot carregar i utilitzar eines TypeScript/JavaScript personalitzades des del directori .roo/tools del vostre projecte o ~/.roo/tools per a eines globals. Nota: aquestes eines s'aprovaran automàticament.",
+			"description": "Quan està habilitat, Roo pot carregar i utilitzar eines TypeScript/JavaScript personalitzades des del directori .njust_ai/tools del vostre projecte o ~/.njust_ai/tools per a eines globals. Nota: aquestes eines s'aprovaran automàticament.",
 			"toolsHeader": "Eines personalitzades disponibles",
-			"noTools": "No s'han carregat eines personalitzades. Afegiu fitxers .ts o .js al directori .roo/tools del vostre projecte o ~/.roo/tools per a eines globals.",
+			"noTools": "No s'han carregat eines personalitzades. Afegiu fitxers .ts o .js al directori .njust_ai/tools del vostre projecte o ~/.njust_ai/tools per a eines globals.",
 			"refreshButton": "Actualitzar",
 			"refreshing": "Actualitzant...",
 			"refreshSuccess": "Eines actualitzades correctament",

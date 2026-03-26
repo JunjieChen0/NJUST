@@ -52,15 +52,15 @@ describe("RooConfigService", () => {
 	})
 
 	describe("getGlobalRooDirectory", () => {
-		it("should return correct path for global .roo directory", () => {
+		it("should return correct path for global .njust_ai directory", () => {
 			const result = getGlobalRooDirectory()
-			expect(result).toBe(path.join("/mock/home", ".roo"))
+			expect(result).toBe(path.join("/mock/home", ".njust_ai"))
 		})
 
 		it("should handle different home directories", () => {
 			mockHomedir.mockReturnValue("/different/home")
 			const result = getGlobalRooDirectory()
-			expect(result).toBe(path.join("/different/home", ".roo"))
+			expect(result).toBe(path.join("/different/home", ".njust_ai"))
 		})
 	})
 
@@ -68,7 +68,7 @@ describe("RooConfigService", () => {
 		it("should return correct path for given cwd", () => {
 			const cwd = "/custom/project/path"
 			const result = getProjectRooDirectoryForCwd(cwd)
-			expect(result).toBe(path.join(cwd, ".roo"))
+			expect(result).toBe(path.join(cwd, ".njust_ai"))
 		})
 	})
 
@@ -242,7 +242,7 @@ describe("RooConfigService", () => {
 
 			const result = getRooDirectoriesForCwd(cwd)
 
-			expect(result).toEqual([path.join("/mock/home", ".roo"), path.join(cwd, ".roo")])
+			expect(result).toEqual([path.join("/mock/home", ".njust_ai"), path.join(cwd, ".njust_ai")])
 		})
 	})
 
@@ -325,13 +325,13 @@ describe("RooConfigService", () => {
 
 			await loadConfiguration("rules/rules.md", "/project/path")
 
-			expect(mockReadFile).toHaveBeenCalledWith(path.join("/mock/home", ".roo", "rules/rules.md"), "utf-8")
-			expect(mockReadFile).toHaveBeenCalledWith(path.join("/project/path", ".roo", "rules/rules.md"), "utf-8")
+			expect(mockReadFile).toHaveBeenCalledWith(path.join("/mock/home", ".njust_ai", "rules/rules.md"), "utf-8")
+			expect(mockReadFile).toHaveBeenCalledWith(path.join("/project/path", ".njust_ai", "rules/rules.md"), "utf-8")
 		})
 	})
 
 	describe("discoverSubfolderRooDirectories", () => {
-		it("should return empty array when no subfolder .roo directories found", async () => {
+		it("should return empty array when no subfolder .njust_ai directories found", async () => {
 			mockExecuteRipgrep.mockResolvedValue([])
 
 			const result = await discoverSubfolderRooDirectories("/project/path")
@@ -339,61 +339,61 @@ describe("RooConfigService", () => {
 			expect(result).toEqual([])
 		})
 
-		it("should discover .roo directories from subfolders", async () => {
-			// Find any file inside .roo directories
+		it("should discover .njust_ai directories from subfolders", async () => {
+			// Find any file inside .njust_ai directories
 			mockExecuteRipgrep.mockResolvedValueOnce([
-				{ path: "package-a/.roo/rules/rule.md", type: "file" },
-				{ path: "package-b/.roo/rules-code/rule.md", type: "file" },
+				{ path: "package-a/.njust_ai/rules/rule.md", type: "file" },
+				{ path: "package-b/.njust_ai/rules-code/rule.md", type: "file" },
 			])
 
 			const result = await discoverSubfolderRooDirectories("/project/path")
 
 			expect(result).toEqual([
-				path.join("/project/path", "package-a", ".roo"),
-				path.join("/project/path", "package-b", ".roo"),
+				path.join("/project/path", "package-a", ".njust_ai"),
+				path.join("/project/path", "package-b", ".njust_ai"),
 			])
 		})
 
 		it("should sort discovered directories alphabetically", async () => {
 			mockExecuteRipgrep.mockResolvedValueOnce([
-				{ path: "zebra/.roo/rules/rule.md", type: "file" },
-				{ path: "apple/.roo/rules/rule.md", type: "file" },
-				{ path: "mango/.roo/rules/rule.md", type: "file" },
+				{ path: "zebra/.njust_ai/rules/rule.md", type: "file" },
+				{ path: "apple/.njust_ai/rules/rule.md", type: "file" },
+				{ path: "mango/.njust_ai/rules/rule.md", type: "file" },
 			])
 
 			const result = await discoverSubfolderRooDirectories("/project/path")
 
 			expect(result).toEqual([
-				path.join("/project/path", "apple", ".roo"),
-				path.join("/project/path", "mango", ".roo"),
-				path.join("/project/path", "zebra", ".roo"),
+				path.join("/project/path", "apple", ".njust_ai"),
+				path.join("/project/path", "mango", ".njust_ai"),
+				path.join("/project/path", "zebra", ".njust_ai"),
 			])
 		})
 
-		it("should exclude root .roo directory", async () => {
-			// This would match the root .roo, which should be excluded
+		it("should exclude root .njust_ai directory", async () => {
+			// This would match the root .njust_ai, which should be excluded
 			mockExecuteRipgrep.mockResolvedValueOnce([
-				{ path: ".roo/rules/rule.md", type: "file" }, // This is root - should be excluded
-				{ path: "subfolder/.roo/rules/rule.md", type: "file" },
+				{ path: ".njust_ai/rules/rule.md", type: "file" }, // This is root - should be excluded
+				{ path: "subfolder/.njust_ai/rules/rule.md", type: "file" },
 			])
 
 			const result = await discoverSubfolderRooDirectories("/project/path")
 
 			// Should only include subfolder, not root
-			expect(result).toEqual([path.join("/project/path", "subfolder", ".roo")])
+			expect(result).toEqual([path.join("/project/path", "subfolder", ".njust_ai")])
 		})
 
 		it("should handle nested subdirectories", async () => {
 			mockExecuteRipgrep.mockResolvedValueOnce([
-				{ path: "packages/core/.roo/rules/rule.md", type: "file" },
-				{ path: "packages/utils/.roo/rules-code/rule.md", type: "file" },
+				{ path: "packages/core/.njust_ai/rules/rule.md", type: "file" },
+				{ path: "packages/utils/.njust_ai/rules-code/rule.md", type: "file" },
 			])
 
 			const result = await discoverSubfolderRooDirectories("/project/path")
 
 			expect(result).toEqual([
-				path.join("/project/path", "packages/core", ".roo"),
-				path.join("/project/path", "packages/utils", ".roo"),
+				path.join("/project/path", "packages/core", ".njust_ai"),
+				path.join("/project/path", "packages/utils", ".njust_ai"),
 			])
 		})
 
@@ -405,49 +405,49 @@ describe("RooConfigService", () => {
 			expect(result).toEqual([])
 		})
 
-		it("should deduplicate .roo directories from multiple files", async () => {
+		it("should deduplicate .njust_ai directories from multiple files", async () => {
 			mockExecuteRipgrep.mockResolvedValueOnce([
-				{ path: "package-a/.roo/rules/rule1.md", type: "file" },
-				{ path: "package-a/.roo/rules/rule2.md", type: "file" },
-				{ path: "package-a/.roo/rules-code/rule3.md", type: "file" },
+				{ path: "package-a/.njust_ai/rules/rule1.md", type: "file" },
+				{ path: "package-a/.njust_ai/rules/rule2.md", type: "file" },
+				{ path: "package-a/.njust_ai/rules-code/rule3.md", type: "file" },
 			])
 
 			const result = await discoverSubfolderRooDirectories("/project/path")
 
-			// Should only include package-a/.roo once
-			expect(result).toEqual([path.join("/project/path", "package-a", ".roo")])
+			// Should only include package-a/.njust_ai once
+			expect(result).toEqual([path.join("/project/path", "package-a", ".njust_ai")])
 		})
 
-		it("should discover .roo directories with any content", async () => {
-			// Should find .roo directories regardless of what's inside them
+		it("should discover .njust_ai directories with any content", async () => {
+			// Should find .njust_ai directories regardless of what's inside them
 			mockExecuteRipgrep.mockResolvedValueOnce([
-				{ path: "package-a/.roo/rules/rule.md", type: "file" },
-				{ path: "package-b/.roo/rules-code/code-rule.md", type: "file" },
-				{ path: "package-c/.roo/rules-architect/arch-rule.md", type: "file" },
-				{ path: "package-d/.roo/config/settings.json", type: "file" },
+				{ path: "package-a/.njust_ai/rules/rule.md", type: "file" },
+				{ path: "package-b/.njust_ai/rules-code/code-rule.md", type: "file" },
+				{ path: "package-c/.njust_ai/rules-architect/arch-rule.md", type: "file" },
+				{ path: "package-d/.njust_ai/config/settings.json", type: "file" },
 			])
 
 			const result = await discoverSubfolderRooDirectories("/project/path")
 
 			expect(result).toEqual([
-				path.join("/project/path", "package-a", ".roo"),
-				path.join("/project/path", "package-b", ".roo"),
-				path.join("/project/path", "package-c", ".roo"),
-				path.join("/project/path", "package-d", ".roo"),
+				path.join("/project/path", "package-a", ".njust_ai"),
+				path.join("/project/path", "package-b", ".njust_ai"),
+				path.join("/project/path", "package-c", ".njust_ai"),
+				path.join("/project/path", "package-d", ".njust_ai"),
 			])
 		})
 	})
 
 	describe("getAllRooDirectoriesForCwd", () => {
 		it("should return global, project, and subfolder directories", async () => {
-			mockExecuteRipgrep.mockResolvedValueOnce([{ path: "subfolder/.roo/rules/rule.md", type: "file" }])
+			mockExecuteRipgrep.mockResolvedValueOnce([{ path: "subfolder/.njust_ai/rules/rule.md", type: "file" }])
 
 			const result = await getAllRooDirectoriesForCwd("/project/path")
 
 			expect(result).toEqual([
-				path.join("/mock/home", ".roo"), // global
-				path.join("/project/path", ".roo"), // project
-				path.join("/project/path", "subfolder", ".roo"), // subfolder
+				path.join("/mock/home", ".njust_ai"), // global
+				path.join("/project/path", ".njust_ai"), // project
+				path.join("/project/path", "subfolder", ".njust_ai"), // subfolder
 			])
 		})
 
@@ -456,35 +456,35 @@ describe("RooConfigService", () => {
 
 			const result = await getAllRooDirectoriesForCwd("/project/path")
 
-			expect(result).toEqual([path.join("/mock/home", ".roo"), path.join("/project/path", ".roo")])
+			expect(result).toEqual([path.join("/mock/home", ".njust_ai"), path.join("/project/path", ".njust_ai")])
 		})
 
 		it("should maintain order: global, project, subfolders (alphabetically)", async () => {
 			mockExecuteRipgrep.mockResolvedValueOnce([
-				{ path: "zebra/.roo/rules/rule.md", type: "file" },
-				{ path: "apple/.roo/rules/rule.md", type: "file" },
+				{ path: "zebra/.njust_ai/rules/rule.md", type: "file" },
+				{ path: "apple/.njust_ai/rules/rule.md", type: "file" },
 			])
 
 			const result = await getAllRooDirectoriesForCwd("/project/path")
 
 			expect(result).toEqual([
-				path.join("/mock/home", ".roo"), // global first
-				path.join("/project/path", ".roo"), // project second
-				path.join("/project/path", "apple", ".roo"), // subfolders alphabetically
-				path.join("/project/path", "zebra", ".roo"),
+				path.join("/mock/home", ".njust_ai"), // global first
+				path.join("/project/path", ".njust_ai"), // project second
+				path.join("/project/path", "apple", ".njust_ai"), // subfolders alphabetically
+				path.join("/project/path", "zebra", ".njust_ai"),
 			])
 		})
 	})
 
 	describe("getAgentsDirectoriesForCwd", () => {
-		it("should return root directory and parent directories of subfolder .roo dirs", async () => {
-			mockExecuteRipgrep.mockResolvedValueOnce([{ path: "package-a/.roo/rules/rule.md", type: "file" }])
+		it("should return root directory and parent directories of subfolder .njust_ai dirs", async () => {
+			mockExecuteRipgrep.mockResolvedValueOnce([{ path: "package-a/.njust_ai/rules/rule.md", type: "file" }])
 
 			const result = await getAgentsDirectoriesForCwd("/project/path")
 
 			expect(result).toEqual([
 				"/project/path", // root
-				path.join("/project/path", "package-a"), // parent of .roo
+				path.join("/project/path", "package-a"), // parent of .njust_ai
 			])
 		})
 
@@ -498,9 +498,9 @@ describe("RooConfigService", () => {
 
 		it("should include multiple subfolder parent directories", async () => {
 			mockExecuteRipgrep.mockResolvedValueOnce([
-				{ path: "package-a/.roo/rules/rule.md", type: "file" },
-				{ path: "package-b/.roo/rules-code/rule.md", type: "file" },
-				{ path: "packages/core/.roo/rules/rule.md", type: "file" },
+				{ path: "package-a/.njust_ai/rules/rule.md", type: "file" },
+				{ path: "package-b/.njust_ai/rules-code/rule.md", type: "file" },
+				{ path: "packages/core/.njust_ai/rules/rule.md", type: "file" },
 			])
 
 			const result = await getAgentsDirectoriesForCwd("/project/path")

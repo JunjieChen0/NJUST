@@ -2,30 +2,34 @@ import * as path from "path"
 import * as os from "os"
 import fs from "fs/promises"
 
+import { NJUST_AI_CONFIG_DIR } from "@njust-ai-cj/types"
+
+const NJUST_AI_CONFIG_DIR_REGEX = NJUST_AI_CONFIG_DIR.replace(/\./g, "\\.")
+
 /**
- * Gets the global .roo directory path based on the current platform
+ * Gets the global .njust_ai directory path based on the current platform
  *
- * @returns The absolute path to the global .roo directory
+ * @returns The absolute path to the global .njust_ai directory
  *
  * @example Platform-specific paths:
  * ```
- * // macOS/Linux: ~/.roo/
- * // Example: /Users/john/.roo
+ * // macOS/Linux: ~/.njust_ai/
+ * // Example: /Users/john/.njust_ai
  *
- * // Windows: %USERPROFILE%\.roo\
- * // Example: C:\Users\john\.roo
+ * // Windows: %USERPROFILE%\.njust_ai\
+ * // Example: C:\Users\john\.njust_ai
  * ```
  *
  * @example Usage:
  * ```typescript
  * const globalDir = getGlobalRooDirectory()
- * // Returns: "/Users/john/.roo" (on macOS/Linux)
- * // Returns: "C:\\Users\\john\\.roo" (on Windows)
+ * // Returns: "/Users/john/.njust_ai" (on macOS/Linux)
+ * // Returns: "C:\\Users\\john\\.njust_ai" (on Windows)
  * ```
  */
 export function getGlobalRooDirectory(): string {
 	const homeDir = os.homedir()
-	return path.join(homeDir, ".roo")
+	return path.join(homeDir, NJUST_AI_CONFIG_DIR)
 }
 
 /**
@@ -73,24 +77,24 @@ export function getProjectAgentsDirectoryForCwd(cwd: string): string {
 }
 
 /**
- * Gets the project-local .roo directory path for a given cwd
+ * Gets the project-local .njust_ai directory path for a given cwd
  *
  * @param cwd - Current working directory (project path)
- * @returns The absolute path to the project-local .roo directory
+ * @returns The absolute path to the project-local .njust_ai directory
  *
  * @example
  * ```typescript
  * const projectDir = getProjectRooDirectoryForCwd('/Users/john/my-project')
- * // Returns: "/Users/john/my-project/.roo"
+ * // Returns: "/Users/john/my-project/.njust_ai"
  *
  * const windowsProjectDir = getProjectRooDirectoryForCwd('C:\\Users\\john\\my-project')
- * // Returns: "C:\\Users\\john\\my-project\\.roo"
+ * // Returns: "C:\\Users\\john\\my-project\\.njust_ai"
  * ```
  *
  * @example Directory structure:
  * ```
  * /Users/john/my-project/
- * ├── .roo/                    # Project-local configuration directory
+ * ├── .njust_ai/                    # Project-local configuration directory
  * │   ├── rules/
  * │   │   └── rules.md
  * │   ├── custom-instructions.md
@@ -102,7 +106,7 @@ export function getProjectAgentsDirectoryForCwd(cwd: string): string {
  * ```
  */
 export function getProjectRooDirectoryForCwd(cwd: string): string {
-	return path.join(cwd, ".roo")
+	return path.join(cwd, NJUST_AI_CONFIG_DIR)
 }
 
 /**
@@ -156,36 +160,36 @@ export async function readFileIfExists(filePath: string): Promise<string | null>
 }
 
 /**
- * Discovers all .roo directories in subdirectories of the workspace
+ * Discovers all .njust_ai directories in subdirectories of the workspace
  *
  * @param cwd - Current working directory (workspace root)
- * @returns Array of absolute paths to .roo directories found in subdirectories,
- *          sorted alphabetically. Does not include the root .roo directory.
+ * @returns Array of absolute paths to .njust_ai directories found in subdirectories,
+ *          sorted alphabetically. Does not include the root .njust_ai directory.
  *
  * @example
  * ```typescript
  * const subfolderRoos = await discoverSubfolderRooDirectories('/Users/john/monorepo')
  * // Returns:
  * // [
- * //   '/Users/john/monorepo/package-a/.roo',
- * //   '/Users/john/monorepo/package-b/.roo',
- * //   '/Users/john/monorepo/packages/shared/.roo'
+ * //   '/Users/john/monorepo/package-a/.njust_ai',
+ * //   '/Users/john/monorepo/package-b/.njust_ai',
+ * //   '/Users/john/monorepo/packages/shared/.njust_ai'
  * // ]
  * ```
  *
  * @example Directory structure:
  * ```
  * /Users/john/monorepo/
- * ├── .roo/                    # Root .roo (NOT included - use getProjectRooDirectoryForCwd)
+ * ├── .njust_ai/                    # Root .njust_ai (NOT included - use getProjectRooDirectoryForCwd)
  * ├── package-a/
- * │   └── .roo/                # Included
+ * │   └── .njust_ai/                # Included
  * │       └── rules/
  * ├── package-b/
- * │   └── .roo/                # Included
+ * │   └── .njust_ai/                # Included
  * │       └── rules-code/
  * └── packages/
  *     └── shared/
- *         └── .roo/            # Included (nested)
+ *         └── .njust_ai/            # Included (nested)
  *             └── rules/
  * ```
  */
@@ -196,14 +200,14 @@ export async function discoverSubfolderRooDirectories(cwd: string): Promise<stri
 		// available in the webview context
 		const { executeRipgrep } = await import("../search/file-search")
 
-		// Use ripgrep to find any file inside any .roo directory
-		// This efficiently discovers all .roo folders regardless of their content
+		// Use ripgrep to find any file inside any .njust_ai directory
+		// This efficiently discovers all .njust_ai folders regardless of their content
 		const args = [
 			"--files",
 			"--hidden",
 			"--follow",
 			"-g",
-			"**/.roo/**",
+			`**/${NJUST_AI_CONFIG_DIR}/**`,
 			"-g",
 			"!node_modules/**",
 			"-g",
@@ -213,17 +217,16 @@ export async function discoverSubfolderRooDirectories(cwd: string): Promise<stri
 
 		const results = await executeRipgrep({ args, workspacePath: cwd })
 
-		// Extract unique .roo directory paths
+		// Extract unique config directory paths under workspace
 		const rooDirs = new Set<string>()
-		const rootRooDir = path.join(cwd, ".roo")
+		const rootRooDir = path.join(cwd, NJUST_AI_CONFIG_DIR)
 
 		for (const result of results) {
-			// Match paths like "subfolder/.roo/anything" or "subfolder/nested/.roo/anything"
-			// Handle both forward slashes (Unix) and backslashes (Windows)
-			const match = result.path.match(/^(.+?)[/\\]\.roo[/\\]/)
+			// Match paths like "subfolder/.njust_ai/anything" or nested variants
+			const match = result.path.match(new RegExp(`^(.+?)[/\\\\]${NJUST_AI_CONFIG_DIR_REGEX}[/\\\\]`))
 			if (match) {
-				const rooDir = path.join(cwd, match[1], ".roo")
-				// Exclude the root .roo directory (already handled by getProjectRooDirectoryForCwd)
+				const rooDir = path.join(cwd, match[1], NJUST_AI_CONFIG_DIR)
+				// Exclude the root .njust_ai directory (already handled by getProjectRooDirectoryForCwd)
 				if (rooDir !== rootRooDir) {
 					rooDirs.add(rooDir)
 				}
@@ -239,7 +242,7 @@ export async function discoverSubfolderRooDirectories(cwd: string): Promise<stri
 }
 
 /**
- * Gets the ordered list of .roo directories to check (global first, then project-local)
+ * Gets the ordered list of .njust_ai directories to check (global first, then project-local)
  *
  * @param cwd - Current working directory (project path)
  * @returns Array of directory paths to check in order [global, project-local]
@@ -250,20 +253,20 @@ export async function discoverSubfolderRooDirectories(cwd: string): Promise<stri
  * const directories = getRooDirectoriesForCwd('/Users/john/my-project')
  * // Returns:
  * // [
- * //   '/Users/john/.roo',           // Global directory
- * //   '/Users/john/my-project/.roo' // Project-local directory
+ * //   '/Users/john/.njust_ai',           // Global directory
+ * //   '/Users/john/my-project/.njust_ai' // Project-local directory
  * // ]
  * ```
  *
  * @example Directory structure:
  * ```
  * /Users/john/
- * ├── .roo/                    # Global configuration
+ * ├── .njust_ai/                    # Global configuration
  * │   ├── rules/
  * │   │   └── rules.md
  * │   └── custom-instructions.md
  * └── my-project/
- *     ├── .roo/                # Project-specific configuration
+ *     ├── .njust_ai/                # Project-specific configuration
  *     │   ├── rules/
  *     │   │   └── rules.md     # Overrides global rules
  *     │   └── project-notes.md
@@ -284,21 +287,21 @@ export function getRooDirectoriesForCwd(cwd: string): string[] {
 }
 
 /**
- * Gets the ordered list of all .roo directories including subdirectories
+ * Gets the ordered list of all .njust_ai directories including subdirectories
  *
  * @param cwd - Current working directory (project path)
  * @returns Array of directory paths in order: [global, project-local, ...subfolders (alphabetically)]
  *
  * @example
  * ```typescript
- * // For a monorepo at /Users/john/monorepo with .roo in subfolders
+ * // For a monorepo at /Users/john/monorepo with .njust_ai in subfolders
  * const directories = await getAllRooDirectoriesForCwd('/Users/john/monorepo')
  * // Returns:
  * // [
- * //   '/Users/john/.roo',                    // Global directory
- * //   '/Users/john/monorepo/.roo',           // Project-local directory
- * //   '/Users/john/monorepo/package-a/.roo', // Subfolder (alphabetical)
- * //   '/Users/john/monorepo/package-b/.roo'  // Subfolder (alphabetical)
+ * //   '/Users/john/.njust_ai',                    // Global directory
+ * //   '/Users/john/monorepo/.njust_ai',           // Project-local directory
+ * //   '/Users/john/monorepo/package-a/.njust_ai', // Subfolder (alphabetical)
+ * //   '/Users/john/monorepo/package-b/.njust_ai'  // Subfolder (alphabetical)
  * // ]
  * ```
  */
@@ -311,7 +314,7 @@ export async function getAllRooDirectoriesForCwd(cwd: string): Promise<string[]>
 	// Add project-local directory second
 	directories.push(getProjectRooDirectoryForCwd(cwd))
 
-	// Discover and add subfolder .roo directories
+	// Discover and add subfolder .njust_ai directories
 	const subfolderDirs = await discoverSubfolderRooDirectories(cwd)
 	directories.push(...subfolderDirs)
 
@@ -319,10 +322,10 @@ export async function getAllRooDirectoriesForCwd(cwd: string): Promise<string[]>
 }
 
 /**
- * Gets parent directories containing .roo folders, in order from root to subfolders
+ * Gets parent directories containing .njust_ai folders, in order from root to subfolders
  *
  * @param cwd - Current working directory (project path)
- * @returns Array of parent directory paths (not .roo paths) containing AGENTS.md or .roo
+ * @returns Array of parent directory paths (not .njust_ai paths) containing AGENTS.md or .njust_ai
  *
  * @example
  * ```typescript
@@ -336,10 +339,10 @@ export async function getAgentsDirectoriesForCwd(cwd: string): Promise<string[]>
 	// Always include the root directory
 	directories.push(cwd)
 
-	// Get all subfolder .roo directories
+	// Get all subfolder .njust_ai directories
 	const subfolderRooDirs = await discoverSubfolderRooDirectories(cwd)
 
-	// Extract parent directories (remove .roo from path)
+	// Extract parent directories (remove .njust_ai from path)
 	for (const rooDir of subfolderRooDirs) {
 		const parentDir = path.dirname(rooDir)
 		directories.push(parentDir)
@@ -349,9 +352,9 @@ export async function getAgentsDirectoriesForCwd(cwd: string): Promise<string[]>
 }
 
 /**
- * Loads configuration from multiple .roo directories with project overriding global
+ * Loads configuration from multiple .njust_ai directories with project overriding global
  *
- * @param relativePath - The relative path within each .roo directory (e.g., 'rules/rules.md')
+ * @param relativePath - The relative path within each .njust_ai directory (e.g., 'rules/rules.md')
  * @param cwd - Current working directory (project path)
  * @returns Object with global and project content, plus merged content
  *
@@ -362,8 +365,8 @@ export async function getAgentsDirectoriesForCwd(cwd: string): Promise<string[]>
  *
  * // Returns:
  * // {
- * //   global: "Global rules content...",     // From ~/.roo/rules/rules.md
- * //   project: "Project rules content...",   // From /Users/john/my-project/.roo/rules/rules.md
+ * //   global: "Global rules content...",     // From ~/.njust_ai/rules/rules.md
+ * //   project: "Project rules content...",   // From /Users/john/my-project/.njust_ai/rules/rules.md
  * //   merged: "Global rules content...\n\n# Project-specific rules (override global):\n\nProject rules content..."
  * // }
  * ```
@@ -374,8 +377,8 @@ export async function getAgentsDirectoriesForCwd(cwd: string): Promise<string[]>
  * cwd: '/Users/john/my-project'
  *
  * Reads from:
- * - Global: /Users/john/.roo/rules/rules.md
- * - Project: /Users/john/my-project/.roo/rules/rules.md
+ * - Global: /Users/john/.njust_ai/rules/rules.md
+ * - Project: /Users/john/my-project/.njust_ai/rules/rules.md
  *
  * Other common relativePath examples:
  * - 'custom-instructions.md'

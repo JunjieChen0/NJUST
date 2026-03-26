@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react"
 import type { HistoryItem } from "@njust-ai-cj/types"
 import type { DisplayHistoryItem, SubtaskTreeNode, TaskGroup, GroupedTasksResult } from "./types"
+import { type HistorySortOption, compareHistoryTasksForSort } from "./historyTaskSort"
 
 /**
  * Recursively builds a subtask tree node for the given task.
@@ -9,18 +10,21 @@ import type { DisplayHistoryItem, SubtaskTreeNode, TaskGroup, GroupedTasksResult
  * @param task - The task to build a tree node for
  * @param childrenMap - Map of parentId → direct children
  * @param expandedIds - Set of task IDs whose children are currently expanded
- * @returns A SubtaskTreeNode with recursively built children sorted by ts (newest first)
+ * @returns A SubtaskTreeNode with recursively built children sorted per `sortOption`
  */
 export function buildSubtree(
 	task: HistoryItem,
 	childrenMap: Map<string, HistoryItem[]>,
 	expandedIds: Set<string>,
+	sortOption: HistorySortOption = "newest",
 ): SubtaskTreeNode {
-	const directChildren = (childrenMap.get(task.id) || []).slice().sort((a, b) => b.ts - a.ts)
+	const directChildren = (childrenMap.get(task.id) || [])
+		.slice()
+		.sort((a, b) => compareHistoryTasksForSort(a, b, sortOption, false))
 
 	return {
 		item: task as DisplayHistoryItem,
-		children: directChildren.map((child) => buildSubtree(child, childrenMap, expandedIds)),
+		children: directChildren.map((child) => buildSubtree(child, childrenMap, expandedIds, sortOption)),
 		isExpanded: expandedIds.has(task.id),
 	}
 }
@@ -31,9 +35,14 @@ export function buildSubtree(
  *
  * @param tasks - The list of tasks to group
  * @param searchQuery - Current search query (empty string means not searching)
+ * @param sortOption - Same ordering as the history list (grouped view respects this)
  * @returns GroupedTasksResult with groups, flatTasks, toggleExpand, and isSearchMode
  */
-export function useGroupedTasks(tasks: HistoryItem[], searchQuery: string): GroupedTasksResult {
+export function useGroupedTasks(
+	tasks: HistoryItem[],
+	searchQuery: string,
+	sortOption: HistorySortOption = "newest",
+): GroupedTasksResult {
 	const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
 	const isSearchMode = searchQuery.trim().length > 0
@@ -72,20 +81,25 @@ export function useGroupedTasks(tasks: HistoryItem[], searchQuery: string): Grou
 
 		// Build groups from root tasks with recursively nested subtask trees
 		const taskGroups: TaskGroup[] = rootTasks.map((parent) => {
-			const directChildren = (childrenMap.get(parent.id) || []).slice().sort((a, b) => b.ts - a.ts)
+			const directChildren = (childrenMap.get(parent.id) || [])
+				.slice()
+				.sort((a, b) => compareHistoryTasksForSort(a, b, sortOption, false))
 
 			return {
 				parent: parent as DisplayHistoryItem,
-				subtasks: directChildren.map((child) => buildSubtree(child, childrenMap, expandedIds)),
+				subtasks: directChildren.map((child) =>
+					buildSubtree(child, childrenMap, expandedIds, sortOption),
+				),
 				isExpanded: expandedIds.has(parent.id),
 			}
 		})
 
-		// Sort groups by parent timestamp (newest first)
-		taskGroups.sort((a, b) => b.parent.ts - a.parent.ts)
+		taskGroups.sort((a, b) =>
+			compareHistoryTasksForSort(a.parent, b.parent, sortOption, false),
+		)
 
 		return taskGroups
-	}, [tasks, taskMap, isSearchMode, expandedIds])
+	}, [tasks, taskMap, isSearchMode, expandedIds, sortOption])
 
 	// Flatten tasks for search mode with isSubtask flag
 	const flatTasks = useMemo((): DisplayHistoryItem[] | null => {

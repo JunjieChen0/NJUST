@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
+import { NJUST_AI_CONFIG_DIR } from "@njust-ai-cj/types"
 import { parseCangjieDefinitions, type CangjieDef } from "../../../services/tree-sitter/cangjieParser"
 import { CangjieSymbolIndex, type SymbolEntry } from "../../../services/cangjie-lsp/CangjieSymbolIndex"
 
@@ -606,7 +607,9 @@ function mapDiagnosticsToDocContext(diagnostics: vscode.Diagnostic[]): string[] 
 		for (const pattern of CJC_ERROR_PATTERNS) {
 			if (pattern.pattern.test(msg) && !matchedCategories.has(pattern.category)) {
 				matchedCategories.add(pattern.category)
-				const docPathsStr = pattern.docPaths.map((p) => `.roo/skills/cangjie-full-docs/${p}`).join(", ")
+				const docPathsStr = pattern.docPaths
+					.map((p) => `${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/${p}`)
+					.join(", ")
 				sections.push(
 					`- **${pattern.category}**: ${pattern.suggestion}\n  参考文档: ${docPathsStr}`,
 				)
@@ -618,10 +621,10 @@ function mapDiagnosticsToDocContext(diagnostics: vscode.Diagnostic[]): string[] 
 }
 
 /**
- * Resolve the .roo/skills/cangjie-full-docs base path relative to the workspace.
+ * Resolve the .njust_ai/skills/cangjie-full-docs base path relative to the workspace.
  */
 function resolveDocsBasePath(cwd: string): string {
-	return path.join(cwd, ".roo", "skills", "cangjie-full-docs")
+	return path.join(cwd, NJUST_AI_CONFIG_DIR, "skills", "cangjie-full-docs")
 }
 
 // ---------------------------------------------------------------------------
@@ -1049,7 +1052,9 @@ export function getCangjieContextSection(cwd: string, mode: string): string {
 			if (docMappings.length > 0) {
 				const importContext = docMappings
 					.map((m) => {
-						const paths = m.docPaths.map((p) => `.roo/skills/cangjie-full-docs/${p}`).join(", ")
+						const paths = m.docPaths
+							.map((p) => `${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/${p}`)
+							.join(", ")
 						return `- \`${m.prefix}\`: ${m.summary} → ${paths}`
 					})
 					.join("\n")
@@ -1076,11 +1081,11 @@ export function getCangjieContextSection(cwd: string, mode: string): string {
 	if (docsExist) {
 		sections.push(
 			`## 仓颉文档检索指引\n\n` +
-			`项目中包含完整的仓颉语言文档（.roo/skills/cangjie-full-docs/），按以下索引查阅：\n` +
-			`- 语言特性索引: .roo/skills/cangjie-full-docs/kernel/index.md\n` +
-			`- 标准库索引: .roo/skills/cangjie-full-docs/std.md\n` +
-			`- 扩展标准库索引: .roo/skills/cangjie-full-docs/stdx.md\n` +
-			`- 工具链索引: .roo/skills/cangjie-full-docs/tools/index.md\n\n` +
+			`项目中包含完整的仓颉语言文档（${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/），按以下索引查阅：\n` +
+			`- 语言特性索引: ${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/kernel/index.md\n` +
+			`- 标准库索引: ${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/std.md\n` +
+			`- 扩展标准库索引: ${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/stdx.md\n` +
+			`- 工具链索引: ${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/tools/index.md\n\n` +
 			`遇到不确定的 API 或语法时，优先通过索引文件定位并读取对应文档，确保给出准确信息。`,
 		)
 	}
@@ -1163,7 +1168,7 @@ export function enhanceCjcErrorOutput(errorOutput: string, cwd: string): string 
 		if (pattern.pattern.test(errorOutput) && !seen.has(pattern.category)) {
 			seen.add(pattern.category)
 			const docPaths = docsExist
-				? pattern.docPaths.map((p) => `.roo/skills/cangjie-full-docs/${p}`).join(", ")
+				? pattern.docPaths.map((p) => `${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/${p}`).join(", ")
 				: ""
 			const ref = docPaths ? ` (参考: ${docPaths})` : ""
 			const directive = getErrorFixDirective(errorOutput)

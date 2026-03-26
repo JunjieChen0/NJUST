@@ -23,14 +23,14 @@ describe("getApiRequestTimeout", () => {
 		})
 	})
 
-	it("should return default timeout of 600000ms when no configuration is set", () => {
-		mockGetConfig.mockReturnValue(600)
+	it("should return default timeout of 300000ms when no configuration is set", () => {
+		mockGetConfig.mockReturnValue(300)
 
 		const timeout = getApiRequestTimeout()
 
 		expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith("njust-ai-cj")
-		expect(mockGetConfig).toHaveBeenCalledWith("apiRequestTimeout", 600)
-		expect(timeout).toBe(600000) // 600 seconds in milliseconds
+		expect(mockGetConfig).toHaveBeenCalledWith("apiRequestTimeout", 300)
+		expect(timeout).toBe(300000) // 300 seconds in milliseconds
 	})
 
 	it("should return custom timeout in milliseconds", () => {
@@ -65,7 +65,7 @@ describe("getApiRequestTimeout", () => {
 
 		const timeout = getApiRequestTimeout()
 
-		expect(timeout).toBe(600000) // Should fall back to default 600 seconds
+		expect(timeout).toBe(300000) // Should fall back to default 300 seconds
 	})
 
 	it("should handle undefined by using default", () => {
@@ -73,7 +73,7 @@ describe("getApiRequestTimeout", () => {
 
 		const timeout = getApiRequestTimeout()
 
-		expect(timeout).toBe(600000) // Should fall back to default 600 seconds
+		expect(timeout).toBe(300000) // Should fall back to default 300 seconds
 	})
 
 	it("should handle NaN by using default", () => {
@@ -81,7 +81,7 @@ describe("getApiRequestTimeout", () => {
 
 		const timeout = getApiRequestTimeout()
 
-		expect(timeout).toBe(600000) // Should fall back to default 600 seconds
+		expect(timeout).toBe(300000) // Should fall back to default 300 seconds
 	})
 
 	it("should handle string values by using default", () => {
@@ -89,7 +89,7 @@ describe("getApiRequestTimeout", () => {
 
 		const timeout = getApiRequestTimeout()
 
-		expect(timeout).toBe(600000) // Should fall back to default since it's not a number
+		expect(timeout).toBe(300000) // Should fall back to default since it's not a number
 	})
 
 	it("should handle boolean values by using default", () => {
@@ -97,6 +97,6 @@ describe("getApiRequestTimeout", () => {
 
 		const timeout = getApiRequestTimeout()
 
-		expect(timeout).toBe(600000) // Should fall back to default since it's not a number
+		expect(timeout).toBe(300000) // Should fall back to default since it's not a number
 	})
 })

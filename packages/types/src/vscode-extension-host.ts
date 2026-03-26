@@ -14,7 +14,6 @@ import type { McpServer } from "./mcp.js"
 import type { ModelRecord, RouterModels } from "./model.js"
 import type { OpenAiCodexRateLimitInfo } from "./providers/openai-codex-rate-limits.js"
 import type { SkillMetadata } from "./skills.js"
-import type { WorktreeIncludeStatus } from "./worktree.js"
 
 /**
  * ExtensionMessage
@@ -27,6 +26,7 @@ export interface ExtensionMessage {
 		| "taskHistoryUpdated"
 		| "taskHistoryItemUpdated"
 		| "selectedImages"
+		| "selectedContextFiles"
 		| "theme"
 		| "workspaceUpdated"
 		| "invoke"
@@ -83,16 +83,7 @@ export interface ExtensionMessage {
 		| "modes"
 		| "taskWithAggregatedCosts"
 		| "openAiCodexRateLimits"
-		// Worktree response types
-		| "worktreeList"
-		| "worktreeResult"
-		| "worktreeCopyProgress"
-		| "branchList"
-		| "worktreeDefaults"
-		| "worktreeIncludeStatus"
-		| "branchWorktreeIncludeResult"
 		| "webSearchStatus"
-		| "folderSelected"
 		| "skills"
 		| "fileContent"
 		| "planUpdate"
@@ -161,6 +152,8 @@ export interface ExtensionMessage {
 	messageTs?: number
 	hasCheckpoint?: boolean
 	context?: string
+	/** For selectedContextFiles: absolute paths from the file picker */
+	contextFilePaths?: string[]
 	commands?: Command[]
 	queuedMessages?: QueuedMessage[]
 	list?: string[] // For dismissedUpsells
@@ -178,53 +171,6 @@ export interface ExtensionMessage {
 	taskHistory?: HistoryItem[] // For taskHistoryUpdated: full sorted task history
 	/** For taskHistoryItemUpdated: single updated/added history item */
 	taskHistoryItem?: HistoryItem
-	// Worktree response properties
-	worktrees?: Array<{
-		path: string
-		branch: string
-		commitHash: string
-		isCurrent: boolean
-		isBare: boolean
-		isDetached: boolean
-		isLocked: boolean
-		lockReason?: string
-	}>
-	isGitRepo?: boolean
-	isMultiRoot?: boolean
-	isSubfolder?: boolean
-	gitRootPath?: string
-	worktreeResult?: {
-		success: boolean
-		message: string
-		worktree?: {
-			path: string
-			branch: string
-			commitHash: string
-			isCurrent: boolean
-			isBare: boolean
-			isDetached: boolean
-			isLocked: boolean
-			lockReason?: string
-		}
-	}
-	localBranches?: string[]
-	remoteBranches?: string[]
-	currentBranch?: string
-	suggestedBranch?: string
-	suggestedPath?: string
-	worktreeIncludeExists?: boolean
-	worktreeIncludeStatus?: WorktreeIncludeStatus
-	hasGitignore?: boolean
-	gitignoreContent?: string
-	// branchWorktreeIncludeResult
-	branch?: string
-	hasWorktreeInclude?: boolean
-	// worktreeCopyProgress (size-based)
-	copyProgressBytesCopied?: number
-	copyProgressTotalBytes?: number
-	copyProgressItemName?: string
-	// folderSelected
-	path?: string
 }
 
 export interface OpenAiCodexRateLimitsMessage {
@@ -291,7 +237,6 @@ export type ExtensionState = Pick<
 	| "includeCurrentCost"
 	| "maxGitStatusFiles"
 	| "requestDelaySeconds"
-	| "showWorktreesInHomeScreen"
 	| "disabledTools"
 > & {
 	lockApiConfigAcrossModes?: boolean
@@ -414,6 +359,7 @@ export interface WebviewMessage {
 		| "clearTask"
 		| "didShowAnnouncement"
 		| "selectImages"
+		| "selectContextFiles"
 		| "exportCurrentTask"
 		| "shareCurrentTask"
 		| "showTaskWithId"
@@ -538,18 +484,6 @@ export interface WebviewMessage {
 		| "requestModes"
 		| "switchMode"
 		| "debugSetting"
-		// Worktree messages
-		| "listWorktrees"
-		| "createWorktree"
-		| "deleteWorktree"
-		| "switchWorktree"
-		| "getAvailableBranches"
-		| "getWorktreeDefaults"
-		| "getWorktreeIncludeStatus"
-		| "checkBranchWorktreeInclude"
-		| "createWorktreeInclude"
-		| "checkoutBranch"
-		| "browseForWorktreePath"
 		// Skills messages
 		| "testWebSearch"
 		| "requestSkills"
@@ -658,14 +592,6 @@ export interface WebviewMessage {
 	updatedSettings?: NJUST_AI_CJSettings
 	/** Task configuration applied via `createTask()` when starting a cloud task. */
 	taskConfiguration?: NJUST_AI_CJSettings
-	// Worktree properties
-	worktreePath?: string
-	worktreeBranch?: string
-	worktreeBaseBranch?: string
-	worktreeCreateNewBranch?: boolean
-	worktreeForce?: boolean
-	worktreeNewWindow?: boolean
-	worktreeIncludeContent?: string
 	action?: string
 	planId?: string
 	stepId?: string

@@ -136,8 +136,6 @@ export interface ExtensionStateContextType extends ExtensionState {
 	setIncludeCurrentTime: (value: boolean) => void
 	includeCurrentCost?: boolean
 	setIncludeCurrentCost: (value: boolean) => void
-	showWorktreesInHomeScreen: boolean
-	setShowWorktreesInHomeScreen: (value: boolean) => void
 	skills?: SkillMetadata[]
 }
 
@@ -205,7 +203,8 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		webSearchApiKey: "",
 		language: "en",
 		fontFamily: "serif",
-		writeDelayMs: 1000,
+		writeDelayMs: 400,
+		terminalOutputPreviewSize: "small",
 		terminalShellIntegrationTimeout: 4000,
 		mcpEnabled: true,
 		taskSyncEnabled: false,
@@ -219,7 +218,7 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		hasOpenedModeSelector: false, // Default to false (not opened yet)
 		autoApprovalEnabled: false,
 		customModes: [],
-		maxOpenTabsContext: 20,
+		maxOpenTabsContext: 10,
 		maxWorkspaceFiles: 200,
 	cwd: "",
 	showRooIgnoredFiles: true, // Default to showing .rooignore'd files with lock symbol (current behavior).
@@ -243,7 +242,7 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		organizationAllowList: ORGANIZATION_ALLOW_ALL,
 		organizationSettingsVersion: -1,
 		autoCondenseContext: true,
-		autoCondenseContextPercent: 100,
+		autoCondenseContextPercent: 70,
 		profileThresholds: {},
 		codebaseIndexConfig: {
 			codebaseIndexEnabled: true,
@@ -569,9 +568,6 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		includeCurrentCost,
 		setIncludeCurrentCost,
 		skills,
-		showWorktreesInHomeScreen: state.showWorktreesInHomeScreen ?? true,
-		setShowWorktreesInHomeScreen: (value) =>
-			setState((prevState) => ({ ...prevState, showWorktreesInHomeScreen: value })),
 	}
 
 	return <ExtensionStateContext.Provider value={contextValue}>{children}</ExtensionStateContext.Provider>

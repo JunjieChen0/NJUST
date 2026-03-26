@@ -29,7 +29,6 @@
 		"providers": "Proveedores",
 		"modes": "Modos",
 		"mcp": "Servidores MCP",
-		"worktrees": "Worktrees",
 		"autoApprove": "Auto-aprobación",
 		"checkpoints": "Puntos de control",
 		"notifications": "Notificaciones",
@@ -242,7 +241,7 @@
 			},
 			"protected": {
 				"label": "Incluir archivos protegidos",
-				"description": "Permitir a Roo crear y editar archivos protegidos (como .rooignore y archivos de configuración .roo/) sin requerir aprobación."
+				"description": "Permitir a Roo crear y editar archivos protegidos (como .rooignore y archivos de configuración .njust_ai/) sin requerir aprobación."
 			}
 		},
 		"mcp": {
@@ -671,7 +670,7 @@
 		},
 		"enableSubfolderRules": {
 			"label": "Activar reglas de subcarpetas",
-			"description": "Descubrir y cargar recursivamente archivos .roo/rules y AGENTS.md desde subdirectorios. Útil para monorepos con reglas por paquete."
+			"description": "Descubrir y cargar recursivamente archivos .njust_ai/rules y AGENTS.md desde subdirectorios. Útil para monorepos con reglas por paquete."
 		}
 	},
 	"terminal": {
@@ -815,9 +814,9 @@
 		},
 		"CUSTOM_TOOLS": {
 			"name": "Habilitar herramientas personalizadas",
-			"description": "Cuando está habilitado, Roo puede cargar y usar herramientas TypeScript/JavaScript personalizadas desde el directorio .roo/tools de tu proyecto o ~/.roo/tools para herramientas globales. Nota: estas herramientas se aprobarán automáticamente.",
+			"description": "Cuando está habilitado, Roo puede cargar y usar herramientas TypeScript/JavaScript personalizadas desde el directorio .njust_ai/tools de tu proyecto o ~/.njust_ai/tools para herramientas globales. Nota: estas herramientas se aprobarán automáticamente.",
 			"toolsHeader": "Herramientas personalizadas disponibles",
-			"noTools": "No hay herramientas personalizadas cargadas. Añade archivos .ts o .js al directorio .roo/tools de tu proyecto o ~/.roo/tools para herramientas globales.",
+			"noTools": "No hay herramientas personalizadas cargadas. Añade archivos .ts o .js al directorio .njust_ai/tools de tu proyecto o ~/.njust_ai/tools para herramientas globales.",
 			"refreshButton": "Actualizar",
 			"refreshing": "Actualizando...",
 			"refreshSuccess": "Herramientas actualizadas correctamente",

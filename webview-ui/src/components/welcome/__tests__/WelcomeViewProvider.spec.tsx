@@ -198,7 +198,7 @@ describe("WelcomeViewProvider", () => {
 			expect(screen.getByTestId("radio-custom")).toBeInTheDocument()
 
 			// Should show Roo provider description
-			expect(screen.getByText(/welcome:providerSignup.rooCloudDescription/)).toBeInTheDocument()
+			expect(screen.getByText(/welcome:providerSignup.njust_aiCloudDescription/)).toBeInTheDocument()
 
 			// Should show custom provider description
 			expect(screen.getByText(/welcome:providerSignup.useAnotherProviderDescription/)).toBeInTheDocument()

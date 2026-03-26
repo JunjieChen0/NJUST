@@ -1,7 +1,18 @@
 import React, { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useEvent } from "react-use"
 import DynamicTextArea from "react-textarea-autosize"
-import { VolumeX, Image, WandSparkles, SendHorizontal, X, ListEnd, Square, Globe, Loader2, AlertTriangle } from "lucide-react"
+import {
+	VolumeX,
+	WandSparkles,
+	SendHorizontal,
+	X,
+	ListEnd,
+	Square,
+	Globe,
+	FileUp,
+	Loader2,
+	AlertTriangle,
+} from "lucide-react"
 
 import type { ExtensionMessage } from "@njust-ai-cj/types"
 
@@ -42,7 +53,8 @@ interface ChatTextAreaProps {
 	selectedImages: string[]
 	setSelectedImages: React.Dispatch<React.SetStateAction<string[]>>
 	onSend: () => void
-	onSelectImages: () => void
+	/** Workspace file picker: non-images → @-mentions, images → attachments (main chat; edit mode passes context). */
+	onSelectContextFiles?: () => void
 	shouldDisableImages: boolean
 	onHeightChange?: (height: number) => void
 	mode: Mode
@@ -67,7 +79,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			selectedImages,
 			setSelectedImages,
 			onSend,
-			onSelectImages,
+			onSelectContextFiles,
 			shouldDisableImages,
 			onHeightChange,
 			mode,
@@ -823,6 +835,44 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			[updateCursorPosition],
 		)
 
+		const insertMentionPathsAtCursor = useCallback(
+			(paths: string[]) => {
+				const trimmed = paths.map((p) => p.trim()).filter(Boolean)
+				if (trimmed.length === 0) {
+					return
+				}
+
+				let newValue = inputValue.slice(0, cursorPosition)
+				let totalLength = 0
+
+				for (let i = 0; i < trimmed.length; i++) {
+					const mentionText = convertToMentionPath(trimmed[i], cwd)
+					newValue += mentionText
+					totalLength += mentionText.length
+					if (i < trimmed.length - 1) {
+						newValue += " "
+						totalLength += 1
+					}
+				}
+
+				newValue += " " + inputValue.slice(cursorPosition)
+				totalLength += 1
+
+				setInputValue(newValue)
+				const newCursorPosition = cursorPosition + totalLength
+				setCursorPosition(newCursorPosition)
+				setIntendedCursorPosition(newCursorPosition)
+			},
+			[
+				inputValue,
+				cursorPosition,
+				cwd,
+				setInputValue,
+				setCursorPosition,
+				setIntendedCursorPosition,
+			],
+		)
+
 		const handleDrop = useCallback(
 			async (e: React.DragEvent<HTMLDivElement>) => {
 				e.preventDefault()
@@ -833,39 +883,10 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				// When textFieldList is empty, it may attempt to use textUriList obtained from drag-and-drop tabs; if not empty, it will use textFieldList.
 				const text = textFieldList || textUriList
 				if (text) {
-					// Split text on newlines to handle multiple files
 					const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "")
-
 					if (lines.length > 0) {
-						// Process each line as a separate file path
-						let newValue = inputValue.slice(0, cursorPosition)
-						let totalLength = 0
-
-						// Using a standard for loop instead of forEach for potential performance gains.
-						for (let i = 0; i < lines.length; i++) {
-							const line = lines[i]
-							// Convert each path to a mention-friendly format
-							const mentionText = convertToMentionPath(line, cwd)
-							newValue += mentionText
-							totalLength += mentionText.length
-
-							// Add space after each mention except the last one
-							if (i < lines.length - 1) {
-								newValue += " "
-								totalLength += 1
-							}
-						}
-
-						// Add space after the last mention and append the rest of the input
-						newValue += " " + inputValue.slice(cursorPosition)
-						totalLength += 1
-
-						setInputValue(newValue)
-						const newCursorPosition = cursorPosition + totalLength
-						setCursorPosition(newCursorPosition)
-						setIntendedCursorPosition(newCursorPosition)
+						insertMentionPathsAtCursor(lines)
 					}
-
 					return
 				}
 
@@ -873,14 +894,26 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
 				if (files.length > 0) {
 					const acceptedTypes = ["png", "jpeg", "webp"]
+					const pathsForMentions: string[] = []
+					const imageFilesToEmbed: File[] = []
 
-					const imageFiles = files.filter((file) => {
+					for (const file of files) {
+						const diskPath = (file as File & { path?: string }).path
 						const [type, subtype] = file.type.split("/")
-						return type === "image" && acceptedTypes.includes(subtype)
-					})
+						const isImage = type === "image" && acceptedTypes.includes(subtype)
+						if (isImage && !shouldDisableImages) {
+							imageFilesToEmbed.push(file)
+						} else if (diskPath) {
+							pathsForMentions.push(diskPath)
+						}
+					}
 
-					if (!shouldDisableImages && imageFiles.length > 0) {
-						const imagePromises = imageFiles.map((file) => {
+					if (pathsForMentions.length > 0) {
+						insertMentionPathsAtCursor(pathsForMentions)
+					}
+
+					if (imageFilesToEmbed.length > 0) {
+						const imagePromises = imageFilesToEmbed.map((file) => {
 							return new Promise<string | null>((resolve) => {
 								const reader = new FileReader()
 
@@ -916,12 +949,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				}
 			},
 			[
-				cursorPosition,
-				cwd,
-				inputValue,
-				setInputValue,
-				setCursorPosition,
-				setIntendedCursorPosition,
+				insertMentionPathsAtCursor,
 				shouldDisableImages,
 				setSelectedImages,
 				t,
@@ -971,16 +999,14 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					<div
 						className={cn("chat-text-area", !isEditMode && "relative", "flex", "flex-col", "outline-none")}
 						onDrop={handleDrop}
-						onDragOver={(e) => {
-							// Only allowed to drop images/files on shift key pressed.
-							if (!e.shiftKey) {
-								setIsDraggingOver(false)
-								return
-							}
-
+						onDragOverCapture={(e) => {
 							e.preventDefault()
 							setIsDraggingOver(true)
-							e.dataTransfer.dropEffect = "copy"
+							try {
+								e.dataTransfer.dropEffect = "copy"
+							} catch {
+								// Some platforms may not allow mutating dataTransfer here
+							}
 						}}
 						onDragLeave={(e) => {
 							e.preventDefault()
@@ -1139,31 +1165,27 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							/>
 
 							<div className="absolute bottom-2 right-1 z-30 flex flex-col items-center gap-0">
-								<StandardTooltip content={t("chat:addImages")}>
-									<button
-										aria-label={t("chat:addImages")}
-										disabled={shouldDisableImages}
-										onClick={!shouldDisableImages ? onSelectImages : undefined}
-										className={cn(
-											"relative inline-flex items-center justify-center",
-											"bg-transparent border-none p-1.5",
-											"rounded-md min-w-[28px] min-h-[28px]",
-											"text-vscode-descriptionForeground hover:text-vscode-foreground",
-											"transition-all duration-1000",
-											"cursor-pointer",
-											!shouldDisableImages
-												? "opacity-50 hover:opacity-100 delay-750 pointer-events-auto"
-												: "opacity-0 pointer-events-none duration-200 delay-0",
-											!shouldDisableImages &&
+								{onSelectContextFiles && (
+									<StandardTooltip content={t("chat:addFiles")}>
+										<button
+											type="button"
+											aria-label={t("chat:uploadDocument")}
+											onClick={onSelectContextFiles}
+											className={cn(
+												"relative inline-flex items-center justify-center",
+												"bg-transparent border-none p-1.5",
+												"rounded-md min-w-[28px] min-h-[28px]",
+												"text-vscode-descriptionForeground hover:text-vscode-foreground",
+												"transition-all duration-1000",
+												"cursor-pointer opacity-50 hover:opacity-100 delay-750 pointer-events-auto",
 												"hover:bg-[rgba(255,255,255,0.03)] hover:border-[rgba(255,255,255,0.15)]",
-											"focus:outline-none focus-visible:ring-1 focus-visible:ring-vscode-focusBorder",
-											!shouldDisableImages && "active:bg-[rgba(255,255,255,0.1)]",
-											shouldDisableImages &&
-												"opacity-40 cursor-not-allowed grayscale-[30%] hover:bg-transparent hover:border-[rgba(255,255,255,0.08)] active:bg-transparent",
-										)}>
-										<Image className="w-4 h-4" />
-									</button>
-								</StandardTooltip>
+												"focus:outline-none focus-visible:ring-1 focus-visible:ring-vscode-focusBorder",
+												"active:bg-[rgba(255,255,255,0.1)]",
+											)}>
+											<FileUp className="w-4 h-4" />
+										</button>
+									</StandardTooltip>
+								)}
 								{isEditMode ? (
 									<StandardTooltip content={t("chat:cancel.title")}>
 										<button

@@ -441,3 +441,204 @@ def level_order(root):
 | Dijkstra (二叉堆) | O((V+E) log V) | O(V) |
 | 并查集 (路径压缩+按秩) | ~O(α(n)) ≈ O(1) | O(n) |
 | 动态规划 | 取决于状态数 × 转移 | 取决于状态数 |
+
+---
+
+## 9. Stress Test 对拍模板
+
+在暴力解和优化解之间进行随机数据对拍，快速发现 WA：
+
+```python
+import random
+
+def brute_force(arr, target):
+    """暴力解——保证正确但可能慢"""
+    # ... 你的暴力实现 ...
+    pass
+
+def optimized(arr, target):
+    """优化解——需要验证"""
+    # ... 你的优化实现 ...
+    pass
+
+def stress_test(iterations=10000, max_n=20, max_val=100):
+    for i in range(iterations):
+        n = random.randint(1, max_n)
+        arr = [random.randint(-max_val, max_val) for _ in range(n)]
+        target = random.randint(-max_val, max_val)
+        expected = brute_force(arr[:], target)
+        actual = optimized(arr[:], target)
+        if expected != actual:
+            print(f"MISMATCH at iteration {i}:")
+            print(f"  input:    arr={arr}, target={target}")
+            print(f"  expected: {expected}")
+            print(f"  actual:   {actual}")
+            return
+    print(f"OK — {iterations} random tests passed")
+
+stress_test()
+```
+
+```cpp
+// C++ stress test 骨架
+#include <bits/stdc++.h>
+using namespace std;
+mt19937 rng(42);
+
+int brute(vector<int>& a) { /* 暴力解 */ return 0; }
+int solve(vector<int>& a) { /* 优化解 */ return 0; }
+
+int main() {
+    for (int t = 0; t < 100000; t++) {
+        int n = rng() % 20 + 1;
+        vector<int> a(n);
+        for (auto& x : a) x = rng() % 201 - 100;
+        auto a2 = a;
+        int exp = brute(a), got = solve(a2);
+        if (exp != got) {
+            cout << "MISMATCH at t=" << t << endl;
+            for (int x : a) cout << x << " ";
+            cout << "\nexpected=" << exp << " got=" << got << endl;
+            return 1;
+        }
+    }
+    cout << "OK" << endl;
+}
+```
+
+---
+
+## 10. 进阶数据结构
+
+### 10.1 Trie（前缀树）
+
+```python
+class TrieNode:
+    def __init__(self):
+        self.children = {}
+        self.is_end = False
+
+class Trie:
+    def __init__(self):
+        self.root = TrieNode()
+
+    def insert(self, word):
+        node = self.root
+        for ch in word:
+            if ch not in node.children:
+                node.children[ch] = TrieNode()
+            node = node.children[ch]
+        node.is_end = True
+
+    def search(self, word):
+        node = self._find(word)
+        return node is not None and node.is_end
+
+    def starts_with(self, prefix):
+        return self._find(prefix) is not None
+
+    def _find(self, s):
+        node = self.root
+        for ch in s:
+            if ch not in node.children:
+                return None
+            node = node.children[ch]
+        return node
+```
+
+### 10.2 单调栈
+
+```python
+def next_greater_elements(nums):
+    """返回每个元素右边第一个更大元素的索引，不存在则 -1"""
+    n = len(nums)
+    result = [-1] * n
+    stack = []  # 存索引，栈内元素对应值单调递减
+    for i in range(n):
+        while stack and nums[stack[-1]] < nums[i]:
+            result[stack.pop()] = i
+        stack.append(i)
+    return result
+```
+
+### 10.3 线段树（区间求和 + 单点修改）
+
+```python
+class SegTree:
+    def __init__(self, data):
+        self.n = len(data)
+        self.tree = [0] * (4 * self.n)
+        self._build(data, 1, 0, self.n - 1)
+
+    def _build(self, data, node, lo, hi):
+        if lo == hi:
+            self.tree[node] = data[lo]
+            return
+        mid = (lo + hi) // 2
+        self._build(data, node * 2, lo, mid)
+        self._build(data, node * 2 + 1, mid + 1, hi)
+        self.tree[node] = self.tree[node * 2] + self.tree[node * 2 + 1]
+
+    def update(self, idx, val, node=1, lo=0, hi=None):
+        if hi is None:
+            hi = self.n - 1
+        if lo == hi:
+            self.tree[node] = val
+            return
+        mid = (lo + hi) // 2
+        if idx <= mid:
+            self.update(idx, val, node * 2, lo, mid)
+        else:
+            self.update(idx, val, node * 2 + 1, mid + 1, hi)
+        self.tree[node] = self.tree[node * 2] + self.tree[node * 2 + 1]
+
+    def query(self, ql, qr, node=1, lo=0, hi=None):
+        if hi is None:
+            hi = self.n - 1
+        if ql <= lo and hi <= qr:
+            return self.tree[node]
+        if qr < lo or hi < ql:
+            return 0
+        mid = (lo + hi) // 2
+        return self.query(ql, qr, node * 2, lo, mid) + \
+               self.query(ql, qr, node * 2 + 1, mid + 1, hi)
+```
+
+### 10.4 树状数组（BIT）
+
+```python
+class BIT:
+    def __init__(self, n):
+        self.n = n
+        self.tree = [0] * (n + 1)
+
+    def update(self, i, delta):
+        i += 1  # 1-indexed
+        while i <= self.n:
+            self.tree[i] += delta
+            i += i & (-i)
+
+    def prefix_sum(self, i):
+        i += 1
+        s = 0
+        while i > 0:
+            s += self.tree[i]
+            i -= i & (-i)
+        return s
+
+    def range_sum(self, l, r):
+        return self.prefix_sum(r) - (self.prefix_sum(l - 1) if l > 0 else 0)
+```
+
+---
+
+## 11. 非刷题练习指引
+
+算法能力不仅来自做题，以下练习同样有效：
+
+| 练习类型 | 示例 | 关注点 |
+| --- | --- | --- |
+| 实现经典结构 | 写一个完整的 LRU Cache / MinHeap / Trie，带单测 | 接口设计、边界、测试覆盖 |
+| 读代码分析 | 分析 Python `list.sort` (TimSort) 或 Go `sort.Slice` 源码 | 均摊/最坏复杂度推导 |
+| 接口选型 | 给定「10M 条记录、按时间范围查询」，比较 B-Tree vs Hash vs 跳表 | 读写比、空间、缓存友好度 |
+| 复杂度预算 | 给定 n ≤ 10⁶ 和 2s 时限，推导允许的最大复杂度 | 常数因子、I/O 瓶颈 |

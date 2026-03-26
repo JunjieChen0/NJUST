@@ -27,6 +27,7 @@ import { getLatestTodo } from "@roo/todo"
 import { vscode } from "@src/utils/vscode"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { useExtensionState } from "@src/context/ExtensionStateContext"
+import { convertToMentionPath } from "@src/utils/path-mentions"
 import { useSelectedModel } from "@src/components/ui/hooks/useSelectedModel"
 import RooHero from "@src/components/welcome/RooHero"
 import RooTips from "@src/components/welcome/RooTips"
@@ -41,7 +42,6 @@ import TaskHeader from "./TaskHeader"
 import ProfileViolationWarning from "./ProfileViolationWarning"
 import { CheckpointWarning } from "./CheckpointWarning"
 import { QueuedMessages } from "./QueuedMessages"
-import { WorktreeSelector } from "./WorktreeSelector"
 import FileChangesPanel from "./FileChangesPanel"
 import { useScrollLifecycle } from "@src/hooks/useScrollLifecycle"
 
@@ -84,7 +84,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		soundEnabled,
 		soundVolume,
 		messageQueue = [],
-		showWorktreesInHomeScreen,
+		cwd = "",
 	} = useExtensionState()
 
 	// Show a WarningRow when the user sends a message with a retired provider.
@@ -833,7 +833,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 
 	const { info: model } = useSelectedModel(apiConfiguration)
 
-	const selectImages = useCallback(() => vscode.postMessage({ type: "selectImages" }), [])
+	const selectContextFiles = useCallback(() => vscode.postMessage({ type: "selectContextFiles" }), [])
 
 	const shouldDisableImages = !model?.supportsImages || selectedImages.length >= MAX_IMAGES_PER_MESSAGE
 
@@ -863,6 +863,28 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 						)
 					}
 					break
+				case "selectedContextFiles": {
+					if (message.context === "edit") {
+						break
+					}
+					const paths = message.contextFilePaths
+					if (paths?.length) {
+						setInputValue((current) => {
+							const mentions = paths.map((p) => convertToMentionPath(p, cwd)).join(" ")
+							if (!mentions) {
+								return current
+							}
+							const needsSep = current.length > 0 && !/\s$/.test(current)
+							return `${current}${needsSep ? " " : ""}${mentions} `
+						})
+					}
+					if (message.images?.length) {
+						setSelectedImages((prevImages: string[]) =>
+							appendImages(prevImages, message.images, MAX_IMAGES_PER_MESSAGE),
+						)
+					}
+					break
+				}
 				case "invoke":
 					switch (message.invoke!) {
 						case "newChat":
@@ -935,6 +957,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			handleSecondaryButtonClick,
 			setCheckpointWarning,
 			playSound,
+			cwd,
 		],
 	)
 
@@ -1579,8 +1602,6 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 				</div>
 			)}
 
-			{!task && showWorktreesInHomeScreen && <WorktreeSelector />}
-
 			{task && (
 				<>
 					<div className="grow flex" ref={scrollContainerRef}>
@@ -1710,7 +1731,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 				selectedImages={selectedImages}
 				setSelectedImages={setSelectedImages}
 				onSend={() => handleSendMessage(inputValue, selectedImages)}
-				onSelectImages={selectImages}
+				onSelectContextFiles={selectContextFiles}
 				shouldDisableImages={shouldDisableImages}
 				onHeightChange={() => {
 					if (isAtBottomRef.current && scrollPhaseRef.current !== "USER_BROWSING_HISTORY") {

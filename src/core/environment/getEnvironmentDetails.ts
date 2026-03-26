@@ -5,7 +5,7 @@ import * as vscode from "vscode"
 import pWaitFor from "p-wait-for"
 import delay from "delay"
 
-import type { ExperimentId } from "@njust-ai-cj/types"
+import { type ExperimentId, DEFAULT_MAX_OPEN_TABS_CONTEXT } from "@njust-ai-cj/types"
 
 import { defaultModeSlug, getFullModeDetails } from "../../shared/modes"
 import { getApiMetrics } from "../../shared/getApiMetrics"
@@ -45,7 +45,7 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 	}
 
 	const { maxOpenTabsContext } = state ?? {}
-	const maxTabs = maxOpenTabsContext ?? 20
+	const maxTabs = maxOpenTabsContext ?? DEFAULT_MAX_OPEN_TABS_CONTEXT
 	const openTabPaths = vscode.window.tabGroups.all
 		.flatMap((group) => group.tabs)
 		.filter((tab) => tab.input instanceof vscode.TabInputText)

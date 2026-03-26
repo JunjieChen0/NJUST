@@ -4,7 +4,9 @@ import { Fzf } from "fzf"
 import { highlightFzfMatch } from "@/utils/highlight"
 import { useExtensionState } from "@/context/ExtensionStateContext"
 
-type SortOption = "newest" | "oldest" | "mostExpensive" | "mostTokens" | "mostRelevant"
+import { type HistorySortOption, compareHistoryTasksForSort } from "./historyTaskSort"
+
+type SortOption = HistorySortOption
 
 export const useTaskSearch = () => {
 	const { taskHistory, cwd } = useExtensionState()
@@ -57,25 +59,10 @@ export const useTaskSearch = () => {
 			})
 		}
 
-		// Then sort the results
-		return [...results].sort((a, b) => {
-			switch (sortOption) {
-				case "oldest":
-					return (a.ts || 0) - (b.ts || 0)
-				case "mostExpensive":
-					return (b.totalCost || 0) - (a.totalCost || 0)
-				case "mostTokens":
-					const aTokens = (a.tokensIn || 0) + (a.tokensOut || 0) + (a.cacheWrites || 0) + (a.cacheReads || 0)
-					const bTokens = (b.tokensIn || 0) + (b.tokensOut || 0) + (b.cacheWrites || 0) + (b.cacheReads || 0)
-					return bTokens - aTokens
-				case "mostRelevant":
-					// Keep fuse order if searching, otherwise sort by newest
-					return searchQuery ? 0 : (b.ts || 0) - (a.ts || 0)
-				case "newest":
-				default:
-					return (b.ts || 0) - (a.ts || 0)
-			}
-		})
+		const searchActive = searchQuery.trim().length > 0
+		return [...results].sort((a, b) =>
+			compareHistoryTasksForSort(a, b, sortOption, searchActive),
+		)
 	}, [presentableTasks, searchQuery, fzf, sortOption])
 
 	return {

@@ -515,12 +515,12 @@ describe("ClineProvider", () => {
 			soundEnabled: false,
 			ttsEnabled: false,
 			enableCheckpoints: false,
-			writeDelayMs: 1000,
+			writeDelayMs: 400,
 			mcpEnabled: true,
 			mode: defaultModeSlug,
 			customModes: [],
 			experiments: experimentDefault,
-			maxOpenTabsContext: 20,
+			maxOpenTabsContext: 10,
 			maxWorkspaceFiles: 200,
 			showRooIgnoredFiles: false,
 			enableSubfolderRules: false,
@@ -530,7 +530,7 @@ describe("ClineProvider", () => {
 			cloudUserInfo: null,
 			organizationAllowList: ORGANIZATION_ALLOW_ALL,
 			autoCondenseContext: true,
-			autoCondenseContextPercent: 100,
+			autoCondenseContextPercent: 70,
 			cloudIsAuthenticated: false,
 			sharingEnabled: false,
 			publicSharingEnabled: false,
@@ -660,7 +660,7 @@ describe("ClineProvider", () => {
 
 			// Set up parent-child relationship
 			;(childTask as any).parentTask = parentTask
-			;(childTask as any).rootTask = parentTask
+			;(childTask as any).njust_aitTask = parentTask
 
 			// Mock the provider methods
 			const clearTaskSpy = vi.spyOn(provider, "clearTask").mockResolvedValue(undefined)
@@ -766,14 +766,14 @@ describe("ClineProvider", () => {
 		expect(state.language).toBe("pt-BR")
 	})
 
-	test("writeDelayMs defaults to 1000ms", async () => {
+	test("writeDelayMs defaults to 400ms", async () => {
 		// Mock globalState.get to return undefined for writeDelayMs
 		;(mockContext.globalState.get as any).mockImplementation((key: string) =>
 			key === "writeDelayMs" ? undefined : null,
 		)
 
 		const state = await provider.getState()
-		expect(state.writeDelayMs).toBe(1000)
+		expect(state.writeDelayMs).toBe(400)
 	})
 
 	test("handles writeDelayMs message", async () => {
@@ -835,14 +835,14 @@ describe("ClineProvider", () => {
 		expect(mockPostMessage).toHaveBeenCalled()
 	})
 
-	test("autoCondenseContextPercent defaults to 100", async () => {
+	test("autoCondenseContextPercent defaults to 70", async () => {
 		// Mock globalState.get to return undefined for autoCondenseContextPercent
 		;(mockContext.globalState.get as any).mockImplementation((key: string) =>
 			key === "autoCondenseContextPercent" ? undefined : null,
 		)
 
 		const state = await provider.getState()
-		expect(state.autoCondenseContextPercent).toBe(100)
+		expect(state.autoCondenseContextPercent).toBe(70)
 	})
 
 	test("handles autoCondenseContextPercent message", async () => {
@@ -2076,13 +2076,13 @@ describe("Project MCP Settings", () => {
 		})
 
 		// Check that fs.mkdir was called with the correct path
-		expect(mockedFs.mkdir).toHaveBeenCalledWith("/test/workspace/.roo", { recursive: true })
+		expect(mockedFs.mkdir).toHaveBeenCalledWith("/test/workspace/.njust_ai", { recursive: true })
 
 		// Verify file was created with default content
-		expect(safeWriteJson).toHaveBeenCalledWith("/test/workspace/.roo/mcp.json", { mcpServers: {} })
+		expect(safeWriteJson).toHaveBeenCalledWith("/test/workspace/.njust_ai/mcp.json", { mcpServers: {} })
 
 		// Check that openFile was called
-		expect(openFileSpy).toHaveBeenCalledWith("/test/workspace/.roo/mcp.json")
+		expect(openFileSpy).toHaveBeenCalledWith("/test/workspace/.njust_ai/mcp.json")
 	})
 
 	test("handles openProjectMcpSettings when workspace is not open", async () => {
@@ -2117,7 +2117,7 @@ describe("Project MCP Settings", () => {
 
 		// Verify error message was shown
 		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-			expect.stringContaining("Failed to create or open .roo/mcp.json"),
+			expect.stringContaining("Failed to create or open .njust_ai/mcp.json"),
 		)
 	})
 })

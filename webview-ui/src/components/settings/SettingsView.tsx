@@ -11,7 +11,6 @@ import React, {
 } from "react"
 import {
 	CheckCheck,
-	GitBranch,
 	Bell,
 	Database,
 	SquareTerminal,
@@ -81,7 +80,6 @@ import { SkillsSettings } from "./SkillsSettings"
 import { UISettings } from "./UISettings"
 import ModesView from "../modes/ModesView"
 import McpView from "../mcp/McpView"
-import { WorktreesView } from "../worktrees/WorktreesView"
 import { SettingsSearch } from "./SettingsSearch"
 import { useSearchIndexRegistry, SearchIndexProvider } from "./useSettingsSearch"
 
@@ -108,7 +106,6 @@ export const sectionNames = [
 	"webSearch",
 	"modes",
 	"mcp",
-	"worktrees",
 	"prompts",
 	"ui",
 	"experimental",
@@ -396,9 +393,9 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 					terminalZshOhMy,
 					terminalZshP10k,
 					terminalZdotdir,
-					terminalOutputPreviewSize: terminalOutputPreviewSize ?? "medium",
+					terminalOutputPreviewSize: terminalOutputPreviewSize ?? "small",
 					mcpEnabled,
-					maxOpenTabsContext: Math.min(Math.max(0, maxOpenTabsContext ?? 20), 500),
+					maxOpenTabsContext: Math.min(Math.max(0, maxOpenTabsContext ?? 10), 500),
 					maxWorkspaceFiles: Math.min(Math.max(0, maxWorkspaceFiles ?? 200), 500),
 					showRooIgnoredFiles: showRooIgnoredFiles ?? true,
 					enableSubfolderRules: enableSubfolderRules ?? false,
@@ -519,7 +516,6 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 			{ id: "terminal", icon: SquareTerminal },
 			{ id: "webSearch", icon: Search },
 			{ id: "prompts", icon: MessageSquare },
-			{ id: "worktrees", icon: GitBranch },
 			{ id: "ui", icon: Glasses },
 			{ id: "experimental", icon: FlaskConical },
 			{ id: "appearance", icon: Paintbrush },
@@ -882,9 +878,6 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 
 						{/* MCP Section */}
 						{renderTab === "mcp" && <McpView />}
-
-						{/* Worktrees Section */}
-						{renderTab === "worktrees" && <WorktreesView />}
 
 						{/* Prompts Section */}
 						{renderTab === "prompts" && (

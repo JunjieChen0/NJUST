@@ -51,11 +51,11 @@ vi.mock("../../../../services/roo-config", () => ({
 
 import { loadRuleFiles, addCustomInstructions } from "../custom-instructions"
 
-describe("custom-instructions global .roo support", () => {
+describe("custom-instructions global .njust_ai support", () => {
 	const mockCwd = "/mock/project"
 	const mockHomeDir = "/mock/home"
-	const globalRooDir = path.join(mockHomeDir, ".roo")
-	const projectRooDir = path.join(mockCwd, ".roo")
+	const globalRooDir = path.join(mockHomeDir, ".njust_ai")
+	const projectRooDir = path.join(mockCwd, ".njust_ai")
 
 	beforeEach(() => {
 		vi.clearAllMocks()
@@ -63,7 +63,7 @@ describe("custom-instructions global .roo support", () => {
 		mockGetRooDirectoriesForCwd.mockReturnValue([globalRooDir, projectRooDir])
 		// getAllRooDirectoriesForCwd is now async and returns the same directories by default
 		mockGetAllRooDirectoriesForCwd.mockResolvedValue([globalRooDir, projectRooDir])
-		// getAgentsDirectoriesForCwd returns parent directories (without .roo)
+		// getAgentsDirectoriesForCwd returns parent directories (without .njust_ai)
 		mockGetAgentsDirectoriesForCwd.mockResolvedValue([mockCwd])
 		mockGetGlobalRooDirectory.mockReturnValue(globalRooDir)
 		// Default lstat to reject (file not found)
@@ -173,7 +173,7 @@ describe("custom-instructions global .roo support", () => {
 			expect(globalIndex).toBeLessThan(projectIndex)
 		})
 
-		it("should fall back to legacy .roorules file when no .roo/rules directories exist", async () => {
+		it("should fall back to legacy .roorules file when no .njust_ai/rules directories exist", async () => {
 			// Mock directory existence - neither exist
 			mockStat
 				.mockRejectedValueOnce(new Error("ENOENT")) // global rules dir doesn't exist

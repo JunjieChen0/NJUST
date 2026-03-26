@@ -29,7 +29,6 @@
 		"providers": "Provider",
 		"modes": "Mode",
 		"mcp": "Server MCP",
-		"worktrees": "Worktrees",
 		"autoApprove": "Auto-Approve",
 		"checkpoints": "Checkpoint",
 		"notifications": "Notifikasi",
@@ -242,7 +241,7 @@
 			},
 			"protected": {
 				"label": "Sertakan file yang dilindungi",
-				"description": "Izinkan Roo membuat dan mengedit file yang dilindungi (seperti .rooignore dan file konfigurasi .roo/) tanpa memerlukan persetujuan."
+				"description": "Izinkan Roo membuat dan mengedit file yang dilindungi (seperti .rooignore dan file konfigurasi .njust_ai/) tanpa memerlukan persetujuan."
 			}
 		},
 		"mcp": {
@@ -671,7 +670,7 @@
 		},
 		"enableSubfolderRules": {
 			"label": "Aktifkan aturan subfolder",
-			"description": "Temukan dan muat file .roo/rules dan AGENTS.md secara rekursif dari subdirektori. Berguna untuk monorepo dengan aturan per-paket."
+			"description": "Temukan dan muat file .njust_ai/rules dan AGENTS.md secara rekursif dari subdirektori. Berguna untuk monorepo dengan aturan per-paket."
 		}
 	},
 	"terminal": {
@@ -815,9 +814,9 @@
 		},
 		"CUSTOM_TOOLS": {
 			"name": "Aktifkan tool kustom",
-			"description": "Ketika diaktifkan, Roo dapat memuat dan menggunakan tool TypeScript/JavaScript kustom dari direktori .roo/tools proyek Anda atau ~/.roo/tools untuk tool global. Catatan: tool ini akan disetujui otomatis.",
+			"description": "Ketika diaktifkan, Roo dapat memuat dan menggunakan tool TypeScript/JavaScript kustom dari direktori .njust_ai/tools proyek Anda atau ~/.njust_ai/tools untuk tool global. Catatan: tool ini akan disetujui otomatis.",
 			"toolsHeader": "Tool Kustom yang Tersedia",
-			"noTools": "Tidak ada tool kustom yang dimuat. Tambahkan file .ts atau .js ke direktori .roo/tools proyek Anda atau ~/.roo/tools untuk tool global.",
+			"noTools": "Tidak ada tool kustom yang dimuat. Tambahkan file .ts atau .js ke direktori .njust_ai/tools proyek Anda atau ~/.njust_ai/tools untuk tool global.",
 			"refreshButton": "Refresh",
 			"refreshing": "Merefresh...",
 			"refreshSuccess": "Tool berhasil direfresh",

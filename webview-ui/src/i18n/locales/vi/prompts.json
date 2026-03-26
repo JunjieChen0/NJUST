@@ -49,7 +49,7 @@
 		"title": "Hướng dẫn tùy chỉnh dành riêng cho chế độ (tùy chọn)",
 		"resetToDefault": "Đặt lại về mặc định",
 		"description": "Thêm hướng dẫn hành vi dành riêng cho chế độ {{modeName}}.",
-		"loadFromFile": "Hướng dẫn tùy chỉnh cụ thể cho chế độ {{mode}} cũng có thể được tải từ thư mục <span>.roo/rules-{{slug}}/</span> trong không gian làm việc của bạn hoặc từ toàn cục <0>.roo/rules-{{slug}}/</0> (.roorules-{{slug}} và .clinerules-{{slug}} đã lỗi thời và sẽ ngừng hoạt động sớm)."
+		"loadFromFile": "Hướng dẫn tùy chỉnh cụ thể cho chế độ {{mode}} cũng có thể được tải từ thư mục <span>.njust_ai/rules-{{slug}}/</span> trong không gian làm việc của bạn hoặc từ toàn cục <0>.njust_ai/rules-{{slug}}/</0> (.roorules-{{slug}} và .clinerules-{{slug}} đã lỗi thời và sẽ ngừng hoạt động sớm)."
 	},
 	"exportMode": {
 		"title": "Xuất chế độ",
@@ -60,7 +60,7 @@
 	"globalCustomInstructions": {
 		"title": "Hướng dẫn tùy chỉnh cho tất cả các chế độ",
 		"description": "Những hướng dẫn này áp dụng cho tất cả các chế độ. Chúng cung cấp một bộ hành vi cơ bản có thể được nâng cao bởi hướng dẫn dành riêng cho chế độ bên dưới.",
-		"loadFromFile": "Hướng dẫn cũng có thể được tải từ thư mục <span>.roo/rules/</span> trong không gian làm việc của bạn hoặc từ toàn cục <0>.roo/rules/</0> (.roorules và .clinerules đã lỗi thời và sẽ ngừng hoạt động sớm)."
+		"loadFromFile": "Hướng dẫn cũng có thể được tải từ thư mục <span>.njust_ai/rules/</span> trong không gian làm việc của bạn hoặc từ toàn cục <0>.njust_ai/rules/</0> (.roorules và .clinerules đã lỗi thời và sẽ ngừng hoạt động sớm)."
 	},
 	"importMode": {
 		"selectLevel": "Chọn nơi để nhập chế độ này:",
@@ -72,7 +72,7 @@
 		},
 		"project": {
 			"label": "Cấp độ dự án",
-			"description": "Chỉ có sẵn trong không gian làm việc này. Nếu chế độ đã xuất có chứa tệp quy tắc, chúng sẽ được tạo lại trong thư mục .roo/rules-{slug}/."
+			"description": "Chỉ có sẵn trong không gian làm việc này. Nếu chế độ đã xuất có chứa tệp quy tắc, chúng sẽ được tạo lại trong thư mục .njust_ai/rules-{slug}/."
 		}
 	},
 	"systemPrompt": {

@@ -9,7 +9,14 @@ import {
 import { Trans } from "react-i18next"
 import { ChevronDown, X, Upload, Download } from "lucide-react"
 
-import { ModeConfig, GroupEntry, PromptComponent, ToolGroup, modeConfigSchema } from "@njust-ai-cj/types"
+import {
+	ModeConfig,
+	GroupEntry,
+	PromptComponent,
+	ToolGroup,
+	modeConfigSchema,
+	NJUST_AI_CONFIG_DIR,
+} from "@njust-ai-cj/types"
 
 import {
 	Mode,
@@ -46,7 +53,6 @@ import {
 	Input,
 	StandardTooltip,
 } from "@src/components/ui"
-import { DeleteModeDialog } from "@src/components/modes/DeleteModeDialog"
 import { useEscapeKey } from "@src/hooks/useEscapeKey"
 
 // Get all available groups that should show in prompts view
@@ -95,30 +101,11 @@ const ModesView = () => {
 	const [showImportDialog, setShowImportDialog] = useState(false)
 	const [importLevel, setImportLevel] = useState<"global" | "project">("project")
 	const [hasRulesToExport, setHasRulesToExport] = useState<Record<string, boolean>>({})
-	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-	const [modeToDelete, setModeToDelete] = useState<{
-		slug: string
-		name: string
-		source?: string
-		rulesFolderPath?: string
-	} | null>(null)
 
 	// State for mode selection popover and search
 	const [open, setOpen] = useState(false)
 	const [searchValue, setSearchValue] = useState("")
 	const searchInputRef = useRef<HTMLInputElement>(null)
-
-	// removed unused local name state (replaced by inline rename UX)
-
-	// Inline rename state for the mode dropdown row
-	const [isRenamingMode, setIsRenamingMode] = useState(false)
-	const [renameInputValue, setRenameInputValue] = useState("")
-	const renameInputRef = useRef<any>(null)
-
-	// Optimistic rename map so search reflects new names immediately
-	const [localRenames, setLocalRenames] = useState<Record<string, string>>({})
-	// Display list that overlays optimistic names
-	const displayModes = (modes || []).map((m) => (localRenames[m.slug] ? { ...m, name: localRenames[m.slug] } : m))
 
 	// Direct update functions
 	const updateAgentPrompt = useCallback(
@@ -231,52 +218,6 @@ const ModesView = () => {
 		setSearchValue("")
 		searchInputRef.current?.focus()
 	}, [])
-
-	// Focus rename input when entering rename mode
-	useEffect(() => {
-		if (isRenamingMode) {
-			const id = setTimeout(() => renameInputRef.current?.focus(), 0)
-			return () => clearTimeout(id)
-		}
-	}, [isRenamingMode])
-
-	const handleStartRenameMode = useCallback(() => {
-		const customMode = findModeBySlug(visualMode, customModes)
-		if (customMode) {
-			setIsRenamingMode(true)
-			setRenameInputValue(customMode.name)
-		}
-	}, [visualMode, customModes, findModeBySlug])
-
-	const handleCancelRenameMode = useCallback(() => {
-		setIsRenamingMode(false)
-		setRenameInputValue("")
-	}, [])
-
-	const handleSaveRenameMode = useCallback(() => {
-		const customMode = findModeBySlug(visualMode, customModes)
-		const trimmed = renameInputValue.trim()
-		if (!customMode || !trimmed) {
-			setIsRenamingMode(false)
-			return
-		}
-		// Prevent duplicate names against other modes
-		const nameTaken = modes.some(
-			(m) => m.name.toLowerCase() === trimmed.toLowerCase() && m.slug !== customMode.slug,
-		)
-		if (nameTaken) {
-			// simple guard: do nothing if taken
-			return
-		}
-		updateCustomMode(visualMode, {
-			...customMode,
-			name: trimmed,
-			source: customMode.source || "global",
-		})
-		// Optimistically reflect rename in UI/search immediately
-		setLocalRenames((prev) => ({ ...prev, [visualMode]: trimmed }))
-		setIsRenamingMode(false)
-	}, [visualMode, customModes, renameInputValue, modes, updateCustomMode, findModeBySlug])
 
 	// Helper function to get current mode's config
 	const getCurrentMode = useCallback((): ModeConfig | undefined => {
@@ -499,14 +440,6 @@ const ModesView = () => {
 		return () => document.removeEventListener("click", handleClickOutside)
 	}, [showConfigMenu])
 
-	// Use a ref to store the current modeToDelete value
-	const modeToDeleteRef = useRef(modeToDelete)
-
-	// Update the ref whenever modeToDelete changes
-	useEffect(() => {
-		modeToDeleteRef.current = modeToDelete
-	}, [modeToDelete])
-
 	useEffect(() => {
 		const handler = (event: MessageEvent) => {
 			const message = event.data
@@ -553,17 +486,6 @@ const ModesView = () => {
 					...prev,
 					[message.slug]: message.hasContent,
 				}))
-			} else if (message.type === "deleteCustomModeCheck") {
-				// Handle the check response
-				// Use the ref to get the current modeToDelete value
-				const currentModeToDelete = modeToDeleteRef.current
-				if (message.slug && currentModeToDelete && currentModeToDelete.slug === message.slug) {
-					setModeToDelete({
-						...currentModeToDelete,
-						rulesFolderPath: message.rulesFolderPath,
-					})
-					setShowDeleteConfirm(true)
-				}
 			}
 		}
 
@@ -670,208 +592,130 @@ const ModesView = () => {
 					</div>
 
 					<div className="flex items-center gap-1 mb-3">
-						{isRenamingMode ? (
-							<>
-								<VSCodeTextField
-									ref={renameInputRef}
-									value={renameInputValue}
-									onInput={(e: unknown) => {
-										const target = e as { target: { value: string } }
-										setRenameInputValue(target.target.value)
-									}}
-									className="grow"
-									placeholder={t("prompts:createModeDialog.name.placeholder")}
-								/>
-								<StandardTooltip content={t("settings:common.save")}>
-									<Button
-										variant="ghost"
-										size="icon"
-										disabled={!renameInputValue.trim()}
-										onClick={handleSaveRenameMode}
-										data-testid="save-mode-rename-button">
-										<span className="codicon codicon-check" />
-									</Button>
-								</StandardTooltip>
-								<StandardTooltip content={t("settings:common.cancel")}>
-									<Button
-										variant="ghost"
-										size="icon"
-										onClick={handleCancelRenameMode}
-										data-testid="cancel-mode-rename-button">
-										<span className="codicon codicon-close" />
-									</Button>
-								</StandardTooltip>
-							</>
-						) : (
-							<>
-								<Popover open={open} onOpenChange={onOpenChange}>
-									<PopoverTrigger asChild>
-										<Button
-											variant="combobox"
-											role="combobox"
-											aria-expanded={open}
-											className="justify-between grow"
-											data-testid="mode-select-trigger">
-											<div className="truncate">
-												{localRenames[visualMode] ??
-													getCurrentMode()?.name ??
-													t("prompts:modes.selectMode")}
-											</div>
-											<ChevronDown className="opacity-50" />
-										</Button>
-									</PopoverTrigger>
-									<PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]">
-										<Command>
-											<div className="relative">
-												<CommandInput
-													ref={searchInputRef}
-													value={searchValue}
-													onValueChange={setSearchValue}
-													placeholder={t("prompts:modes.selectMode")}
-													className="h-9 mr-4"
-													data-testid="mode-search-input"
+						<Popover open={open} onOpenChange={onOpenChange}>
+							<PopoverTrigger asChild>
+								<Button
+									variant="combobox"
+									role="combobox"
+									aria-expanded={open}
+									className="justify-between grow"
+									data-testid="mode-select-trigger">
+									<div className="truncate">
+										{getCurrentMode()?.name ?? t("prompts:modes.selectMode")}
+									</div>
+									<ChevronDown className="opacity-50" />
+								</Button>
+							</PopoverTrigger>
+							<PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]">
+								<Command>
+									<div className="relative">
+										<CommandInput
+											ref={searchInputRef}
+											value={searchValue}
+											onValueChange={setSearchValue}
+											placeholder={t("prompts:modes.selectMode")}
+											className="h-9 mr-4"
+											data-testid="mode-search-input"
+										/>
+										{searchValue.length > 0 && (
+											<div className="absolute right-2 top-0 bottom-0 flex items-center justify-center">
+												<X
+													className="text-vscode-input-foreground opacity-50 hover:opacity-100 size-4 p-0.5 cursor-pointer"
+													onClick={onClearSearch}
 												/>
-												{searchValue.length > 0 && (
-													<div className="absolute right-2 top-0 bottom-0 flex items-center justify-center">
-														<X
-															className="text-vscode-input-foreground opacity-50 hover:opacity-100 size-4 p-0.5 cursor-pointer"
-															onClick={onClearSearch}
-														/>
-													</div>
-												)}
 											</div>
-											<CommandList>
-												<CommandEmpty>
-													{searchValue && (
-														<div className="py-2 px-1 text-sm">
-															{t("prompts:modes.noMatchFound")}
+										)}
+									</div>
+									<CommandList>
+										<CommandEmpty>
+											{searchValue && (
+												<div className="py-2 px-1 text-sm">
+													{t("prompts:modes.noMatchFound")}
+												</div>
+											)}
+										</CommandEmpty>
+										<CommandGroup>
+											{modes
+												.filter((modeConfig) =>
+													searchValue
+														? modeConfig.name
+																.toLowerCase()
+																.includes(searchValue.toLowerCase())
+														: true,
+												)
+												.map((modeConfig) => (
+													<CommandItem
+														key={modeConfig.slug}
+														value={`${modeConfig.name} ${modeConfig.slug}`}
+														onSelect={() => {
+															handleModeSwitch(modeConfig)
+															setOpen(false)
+														}}
+														data-testid={`mode-option-${modeConfig.slug}`}>
+														<div className="flex items-center justify-between w-full">
+															<span
+																style={{
+																	whiteSpace: "nowrap",
+																	overflow: "hidden",
+																	textOverflow: "ellipsis",
+																	flex: 2,
+																	minWidth: 0,
+																}}>
+																{modeConfig.name}
+															</span>
+															<span
+																className="text-foreground"
+																style={{
+																	whiteSpace: "nowrap",
+																	overflow: "hidden",
+																	textOverflow: "ellipsis",
+																	direction: "rtl",
+																	textAlign: "right",
+																	flex: 1,
+																	minWidth: 0,
+																	marginLeft: "0.5em",
+																}}>
+																{modeConfig.slug}
+															</span>
 														</div>
-													)}
-												</CommandEmpty>
-												<CommandGroup>
-													{displayModes
-														.filter((modeConfig) =>
-															searchValue
-																? modeConfig.name
-																		.toLowerCase()
-																		.includes(searchValue.toLowerCase())
-																: true,
-														)
-														.map((modeConfig) => (
-															<CommandItem
-																key={modeConfig.slug}
-																value={`${modeConfig.name} ${modeConfig.slug}`}
-																onSelect={() => {
-																	handleModeSwitch(modeConfig)
-																	setOpen(false)
-																}}
-																data-testid={`mode-option-${modeConfig.slug}`}>
-																<div className="flex items-center justify-between w-full">
-																	<span
-																		style={{
-																			whiteSpace: "nowrap",
-																			overflow: "hidden",
-																			textOverflow: "ellipsis",
-																			flex: 2,
-																			minWidth: 0,
-																		}}>
-																		{modeConfig.name}
-																	</span>
-																	<span
-																		className="text-foreground"
-																		style={{
-																			whiteSpace: "nowrap",
-																			overflow: "hidden",
-																			textOverflow: "ellipsis",
-																			direction: "rtl",
-																			textAlign: "right",
-																			flex: 1,
-																			minWidth: 0,
-																			marginLeft: "0.5em",
-																		}}>
-																		{modeConfig.slug}
-																	</span>
-																</div>
-															</CommandItem>
-														))}
-												</CommandGroup>
-											</CommandList>
-										</Command>
-									</PopoverContent>
-								</Popover>
+													</CommandItem>
+												))}
+										</CommandGroup>
+									</CommandList>
+								</Command>
+							</PopoverContent>
+						</Popover>
 
-								{/* New mode (+) moved here from the top bar */}
-								<StandardTooltip content={t("prompts:modes.createNewMode")}>
-									<Button
-										variant="ghost"
-										size="icon"
-										onClick={openCreateModeDialog}
-										data-testid="add-mode-button">
-										<span className="codicon codicon-add" />
-									</Button>
-								</StandardTooltip>
+						<StandardTooltip content={t("prompts:modes.createNewMode")}>
+							<Button
+								variant="ghost"
+								size="icon"
+								onClick={openCreateModeDialog}
+								data-testid="add-mode-button">
+								<span className="codicon codicon-add" />
+							</Button>
+						</StandardTooltip>
 
-								{/* Edit (rename) mode - only enabled for custom modes */}
-								<StandardTooltip content={t("settings:providers.renameProfile")}>
-									<Button
-										variant="ghost"
-										size="icon"
-										onClick={handleStartRenameMode}
-										data-testid="rename-mode-button"
-										disabled={!findModeBySlug(visualMode, customModes)}>
-										<span className="codicon codicon-edit" />
-									</Button>
-								</StandardTooltip>
-
-								{/* Delete mode - disabled for built-in modes */}
-								<StandardTooltip content={t("prompts:createModeDialog.deleteMode")}>
-									<Button
-										variant="ghost"
-										size="icon"
-										onClick={() => {
-											const customMode = findModeBySlug(visualMode, customModes)
-											if (customMode) {
-												setModeToDelete({
-													slug: customMode.slug,
-													name: customMode.name,
-													source: customMode.source || "global",
-												})
-												vscode.postMessage({
-													type: "deleteCustomMode",
-													slug: customMode.slug,
-													checkOnly: true,
-												})
-											}
-										}}
-										data-testid="delete-mode-button"
-										disabled={!findModeBySlug(visualMode, customModes)}>
-										<span className="codicon codicon-trash" />
-									</Button>
-								</StandardTooltip>
-
-								{/* Export mode (kept here to the right of the dropdown) */}
-								<StandardTooltip content={t("prompts:exportMode.title")}>
-									<Button
-										variant="ghost"
-										size="icon"
-										onClick={() => {
-											const currentMode = getCurrentMode()
-											if (currentMode?.slug && !isExporting) {
-												setIsExporting(true)
-												vscode.postMessage({
-													type: "exportMode",
-													slug: currentMode.slug,
-												})
-											}
-										}}
-										disabled={isExporting}
-										title={t("prompts:exportMode.title")}
-										data-testid="export-mode-toolbar-button">
-										<Upload className="h-4 w-4" />
-									</Button>
-								</StandardTooltip>
-							</>
-						)}
+						<StandardTooltip content={t("prompts:exportMode.title")}>
+							<Button
+								variant="ghost"
+								size="icon"
+								onClick={() => {
+									const currentMode = getCurrentMode()
+									if (currentMode?.slug && !isExporting) {
+										setIsExporting(true)
+										vscode.postMessage({
+											type: "exportMode",
+											slug: currentMode.slug,
+										})
+									}
+								}}
+								disabled={isExporting}
+								title={t("prompts:exportMode.title")}
+								data-testid="export-mode-toolbar-button">
+								<Upload className="h-4 w-4" />
+							</Button>
+						</StandardTooltip>
 					</div>
 
 					{/* API Configuration - Moved Here */}
@@ -1240,7 +1084,7 @@ const ModesView = () => {
 											// Open or create an empty file
 											vscode.postMessage({
 												type: "openFile",
-												text: `./.roo/rules-${currentMode.slug}/rules.md`,
+												text: `./${NJUST_AI_CONFIG_DIR}/rules-${currentMode.slug}/rules.md`,
 												values: {
 													create: true,
 													content: "",
@@ -1324,7 +1168,7 @@ const ModesView = () => {
 										onClick={() =>
 											vscode.postMessage({
 												type: "openFile",
-												text: "./.roo/rules/rules.md",
+												text: `./${NJUST_AI_CONFIG_DIR}/rules/rules.md`,
 												values: {
 													create: true,
 													content: "",
@@ -1625,22 +1469,6 @@ const ModesView = () => {
 				</div>
 			)}
 
-			{/* Delete Mode Confirmation Dialog */}
-			<DeleteModeDialog
-				open={showDeleteConfirm}
-				onOpenChange={setShowDeleteConfirm}
-				modeToDelete={modeToDelete}
-				onConfirm={() => {
-					if (modeToDelete) {
-						vscode.postMessage({
-							type: "deleteCustomMode",
-							slug: modeToDelete.slug,
-						})
-						setShowDeleteConfirm(false)
-						setModeToDelete(null)
-					}
-				}}
-			/>
 		</div>
 	)
 }

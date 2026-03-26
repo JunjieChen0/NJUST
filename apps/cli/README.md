@@ -50,7 +50,7 @@ roo upgrade
 ### Uninstalling
 
 ```bash
-rm -rf ~/.roo/cli ~/.local/bin/roo
+rm -rf ~/.njust_ai/cli ~/.local/bin/roo
 ```
 
 ### Development Installation

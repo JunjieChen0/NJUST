@@ -44,12 +44,12 @@ describe("RooIgnore Response Formatting", () => {
 		mockReadFile.mockResolvedValue("node_modules\n.git\nsecrets/**\n*.log")
 	})
 
-	describe("formatResponse.rooIgnoreError", () => {
+	describe("formatResponse.njust_aiIgnoreError", () => {
 		/**
 		 * Tests the error message format for ignored files
 		 */
 		it("should format error message for ignored files", () => {
-			const errorMessage = formatResponse.rooIgnoreError("secrets/api-keys.json")
+			const errorMessage = formatResponse.njust_aiIgnoreError("secrets/api-keys.json")
 
 			// Verify error message format (JSON)
 			const parsed = JSON.parse(errorMessage) as any
@@ -68,7 +68,7 @@ describe("RooIgnore Response Formatting", () => {
 
 			// Test each path
 			for (const testPath of paths) {
-				const errorMessage = formatResponse.rooIgnoreError(testPath)
+				const errorMessage = formatResponse.njust_aiIgnoreError(testPath)
 				const parsed = JSON.parse(errorMessage) as any
 				expect(parsed.path).toBe(testPath)
 			}

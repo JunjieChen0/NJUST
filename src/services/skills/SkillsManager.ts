@@ -12,6 +12,7 @@ import {
 	validateSkillName as validateSkillNameShared,
 	SkillNameValidationError,
 	SKILL_NAME_MAX_LENGTH,
+	NJUST_AI_CONFIG_DIR,
 } from "@njust-ai-cj/types"
 import { t } from "../../i18n"
 
@@ -37,8 +38,8 @@ export class SkillsManager {
 	 * Discover all skills from global and project directories.
 	 * Supports both generic skills (skills/) and mode-specific skills (skills-{mode}/).
 	 * Also supports symlinks:
-	 * - .roo/skills can be a symlink to a directory containing skill subdirectories
-	 * - .roo/skills/[dirname] can be a symlink to a skill directory
+	 * - .njust_ai/skills can be a symlink to a directory containing skill subdirectories
+	 * - .njust_ai/skills/[dirname] can be a symlink to a skill directory
 	 */
 	async discoverSkills(): Promise<void> {
 		this.skills.clear()
@@ -372,7 +373,7 @@ export class SkillsManager {
 			if (!provider?.cwd) {
 				throw new Error(t("skills:errors.no_workspace"))
 			}
-			baseDir = path.join(provider.cwd, ".roo")
+			baseDir = path.join(provider.cwd, NJUST_AI_CONFIG_DIR)
 		}
 
 		// Always use the generic skills directory (mode info stored in frontmatter now)
@@ -481,7 +482,7 @@ Add your skill instructions here.
 			if (!provider?.cwd) {
 				throw new Error(t("skills:errors.no_workspace"))
 			}
-			baseDir = path.join(provider.cwd, ".roo")
+			baseDir = path.join(provider.cwd, NJUST_AI_CONFIG_DIR)
 		}
 
 		// Determine source and destination directories
@@ -575,7 +576,7 @@ Add your skill instructions here.
 		const globalRooDir = getGlobalRooDirectory()
 		const globalAgentsDir = getGlobalAgentsDirectory()
 		const provider = this.providerRef.deref()
-		const projectRooDir = provider?.cwd ? path.join(provider.cwd, ".roo") : null
+		const projectRooDir = provider?.cwd ? path.join(provider.cwd, NJUST_AI_CONFIG_DIR) : null
 		const projectAgentsDir = provider?.cwd ? getProjectAgentsDirectoryForCwd(provider.cwd) : null
 
 		// Get list of modes to check for mode-specific skills
@@ -587,8 +588,8 @@ Add your skill instructions here.
 		//    (via Map.set replacement during discovery - same source+mode+name key gets replaced)
 		//
 		// Processing order (later directories override earlier ones at the same source level):
-		// - Global: .agents/skills first, then .roo/skills (so .roo wins)
-		// - Project: .agents/skills first, then .roo/skills (so .roo wins)
+		// - Global: .agents/skills first, then .njust_ai/skills (so .njust_ai wins)
+		// - Project: .agents/skills first, then .njust_ai/skills (so .njust_ai wins)
 
 		// Global .agents directories (lowest priority - shared across agents)
 		dirs.push({ dir: path.join(globalAgentsDir, "skills"), source: "global" })
@@ -604,13 +605,13 @@ Add your skill instructions here.
 			}
 		}
 
-		// Global .roo directories (Roo-specific, higher priority than .agents)
+		// Global .njust_ai directories (higher priority than .agents)
 		dirs.push({ dir: path.join(globalRooDir, "skills"), source: "global" })
 		for (const mode of modesList) {
 			dirs.push({ dir: path.join(globalRooDir, `skills-${mode}`), source: "global", mode })
 		}
 
-		// Project .roo directories (highest priority)
+		// Project .njust_ai directories (highest priority)
 		if (projectRooDir) {
 			dirs.push({ dir: path.join(projectRooDir, "skills"), source: "project" })
 			for (const mode of modesList) {
@@ -657,16 +658,16 @@ Add your skill instructions here.
 		// Watch for changes in skills directories
 		const globalRooDir = getGlobalRooDirectory()
 		const globalAgentsDir = getGlobalAgentsDirectory()
-		const projectRooDir = path.join(provider.cwd, ".roo")
+		const projectRooDir = path.join(provider.cwd, NJUST_AI_CONFIG_DIR)
 		const projectAgentsDir = getProjectAgentsDirectoryForCwd(provider.cwd)
 
-		// Watch global .roo skills directory
+		// Watch global .njust_ai skills directory
 		this.watchDirectory(path.join(globalRooDir, "skills"))
 
 		// Watch global .agents skills directory
 		this.watchDirectory(path.join(globalAgentsDir, "skills"))
 
-		// Watch project .roo skills directory
+		// Watch project .njust_ai skills directory
 		this.watchDirectory(path.join(projectRooDir, "skills"))
 
 		// Watch project .agents skills directory
@@ -675,7 +676,7 @@ Add your skill instructions here.
 		// Watch mode-specific directories for all available modes
 		const modesList = await this.getAvailableModes()
 		for (const mode of modesList) {
-			// .roo mode-specific
+			// .njust_ai mode-specific
 			this.watchDirectory(path.join(globalRooDir, `skills-${mode}`))
 			this.watchDirectory(path.join(projectRooDir, `skills-${mode}`))
 			// .agents mode-specific

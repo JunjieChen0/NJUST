@@ -60,9 +60,9 @@ suite.skip("NJUST_AI_CJ list_files Tool", function () {
 		await fs.mkdir(deepNestedDir, { recursive: true })
 
 		// Create root level files
-		await fs.writeFile(testFiles.rootFile1, "This is root file 1 content")
+		await fs.writeFile(testFiles.njust_aitFile1, "This is root file 1 content")
 		await fs.writeFile(
-			testFiles.rootFile2,
+			testFiles.njust_aitFile2,
 			`function testFunction() {
 	console.log("Hello from root file 2");
 }`,
@@ -136,7 +136,7 @@ This directory contains various files and subdirectories for testing the list_fi
 		}
 
 		// Clean up test directory structure
-		const testDirName = path.basename(path.dirname(testFiles.rootFile1))
+		const testDirName = path.basename(path.dirname(testFiles.njust_aitFile1))
 		const testDir = path.join(workspaceDir, testDirName)
 
 		try {
@@ -220,7 +220,7 @@ This directory contains various files and subdirectories for testing the list_fi
 		let taskId: string
 		try {
 			// Start task to list files in test directory
-			const testDirName = path.basename(path.dirname(testFiles.rootFile1))
+			const testDirName = path.basename(path.dirname(testFiles.njust_aitFile1))
 			taskId = await api.startNewTask({
 				configuration: {
 					mode: "code",
@@ -323,7 +323,7 @@ This directory contains various files and subdirectories for testing the list_fi
 		let taskId: string
 		try {
 			// Start task to list files recursively in test directory
-			const testDirName = path.basename(path.dirname(testFiles.rootFile1))
+			const testDirName = path.basename(path.dirname(testFiles.njust_aitFile1))
 			taskId = await api.startNewTask({
 				configuration: {
 					mode: "code",

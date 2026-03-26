@@ -29,7 +29,6 @@
 		"providers": "Fornitori",
 		"modes": "Modalità",
 		"mcp": "Server MCP",
-		"worktrees": "Worktrees",
 		"autoApprove": "Auto-approvazione",
 		"checkpoints": "Punti di controllo",
 		"notifications": "Notifiche",
@@ -242,7 +241,7 @@
 			},
 			"protected": {
 				"label": "Includi file protetti",
-				"description": "Permetti a Roo di creare e modificare file protetti (come .rooignore e file di configurazione .roo/) senza richiedere approvazione."
+				"description": "Permetti a Roo di creare e modificare file protetti (come .rooignore e file di configurazione .njust_ai/) senza richiedere approvazione."
 			}
 		},
 		"mcp": {
@@ -671,7 +670,7 @@
 		},
 		"enableSubfolderRules": {
 			"label": "Abilita regole sottocartelle",
-			"description": "Scopri e carica ricorsivamente i file .roo/rules e AGENTS.md dalle sottodirectory. Utile per i monorepo con regole per pacchetto."
+			"description": "Scopri e carica ricorsivamente i file .njust_ai/rules e AGENTS.md dalle sottodirectory. Utile per i monorepo con regole per pacchetto."
 		}
 	},
 	"terminal": {
@@ -815,9 +814,9 @@
 		},
 		"CUSTOM_TOOLS": {
 			"name": "Abilita strumenti personalizzati",
-			"description": "Quando abilitato, Roo può caricare e utilizzare strumenti TypeScript/JavaScript personalizzati dalla directory .roo/tools del tuo progetto o ~/.roo/tools per strumenti globali. Nota: questi strumenti saranno automaticamente approvati.",
+			"description": "Quando abilitato, Roo può caricare e utilizzare strumenti TypeScript/JavaScript personalizzati dalla directory .njust_ai/tools del tuo progetto o ~/.njust_ai/tools per strumenti globali. Nota: questi strumenti saranno automaticamente approvati.",
 			"toolsHeader": "Strumenti personalizzati disponibili",
-			"noTools": "Nessuno strumento personalizzato caricato. Aggiungi file .ts o .js alla directory .roo/tools del tuo progetto o ~/.roo/tools per strumenti globali.",
+			"noTools": "Nessuno strumento personalizzato caricato. Aggiungi file .ts o .js alla directory .njust_ai/tools del tuo progetto o ~/.njust_ai/tools per strumenti globali.",
 			"refreshButton": "Aggiorna",
 			"refreshing": "Aggiornamento...",
 			"refreshSuccess": "Strumenti aggiornati con successo",

@@ -29,7 +29,6 @@
 		"providers": "Providers",
 		"modes": "Modi",
 		"mcp": "MCP-servers",
-		"worktrees": "Worktrees",
 		"autoApprove": "Auto-goedkeuren",
 		"checkpoints": "Checkpoints",
 		"notifications": "Meldingen",
@@ -242,7 +241,7 @@
 			},
 			"protected": {
 				"label": "Inclusief beschermde bestanden",
-				"description": "Sta Roo toe om beschermde bestanden (zoals .rooignore en .roo/ configuratiebestanden) aan te maken en te bewerken zonder goedkeuring."
+				"description": "Sta Roo toe om beschermde bestanden (zoals .rooignore en .njust_ai/ configuratiebestanden) aan te maken en te bewerken zonder goedkeuring."
 			}
 		},
 		"mcp": {
@@ -671,7 +670,7 @@
 		},
 		"enableSubfolderRules": {
 			"label": "Submap-regels inschakelen",
-			"description": "Recursief .roo/rules en AGENTS.md-bestanden uit submappen ontdekken en laden. Handig voor monorepo's met regels per pakket."
+			"description": "Recursief .njust_ai/rules en AGENTS.md-bestanden uit submappen ontdekken en laden. Handig voor monorepo's met regels per pakket."
 		}
 	},
 	"terminal": {
@@ -815,9 +814,9 @@
 		},
 		"CUSTOM_TOOLS": {
 			"name": "Aangepaste tools inschakelen",
-			"description": "Indien ingeschakeld kan Roo aangepaste TypeScript/JavaScript-tools laden en gebruiken uit de map .roo/tools van je project of ~/.roo/tools voor globale tools. Opmerking: deze tools worden automatisch goedgekeurd.",
+			"description": "Indien ingeschakeld kan Roo aangepaste TypeScript/JavaScript-tools laden en gebruiken uit de map .njust_ai/tools van je project of ~/.njust_ai/tools voor globale tools. Opmerking: deze tools worden automatisch goedgekeurd.",
 			"toolsHeader": "Beschikbare aangepaste tools",
-			"noTools": "Geen aangepaste tools geladen. Voeg .ts- of .js-bestanden toe aan de map .roo/tools van je project of ~/.roo/tools voor globale tools.",
+			"noTools": "Geen aangepaste tools geladen. Voeg .ts- of .js-bestanden toe aan de map .njust_ai/tools van je project of ~/.njust_ai/tools voor globale tools.",
 			"refreshButton": "Vernieuwen",
 			"refreshing": "Vernieuwen...",
 			"refreshSuccess": "Tools succesvol vernieuwd",

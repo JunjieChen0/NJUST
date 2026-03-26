@@ -6,7 +6,13 @@ import * as os from "os"
 import * as yaml from "yaml"
 import stripBom from "strip-bom"
 
-import { type ModeConfig, type PromptComponent, customModesSettingsSchema, modeConfigSchema } from "@njust-ai-cj/types"
+import {
+	type ModeConfig,
+	type PromptComponent,
+	customModesSettingsSchema,
+	modeConfigSchema,
+	NJUST_AI_CONFIG_DIR,
+} from "@njust-ai-cj/types"
 
 import { fileExistsAtPath } from "../../utils/fs"
 import { getWorkspacePath } from "../../utils/path"
@@ -568,14 +574,14 @@ export class CustomModesManager {
 			if (scope === "project") {
 				const workspacePath = getWorkspacePath()
 				if (workspacePath) {
-					rulesFolderPath = path.join(workspacePath, ".roo", `rules-${slug}`)
+					rulesFolderPath = path.join(workspacePath, NJUST_AI_CONFIG_DIR, `rules-${slug}`)
 				} else {
 					return // No workspace, can't delete project rules
 				}
 			} else {
 				// Global scope - use OS home directory
 				const homeDir = os.homedir()
-				rulesFolderPath = path.join(homeDir, ".roo", `rules-${slug}`)
+				rulesFolderPath = path.join(homeDir, NJUST_AI_CONFIG_DIR, `rules-${slug}`)
 			}
 
 			// Check if the rules folder exists and delete it
@@ -614,7 +620,7 @@ export class CustomModesManager {
 	}
 
 	/**
-	 * Checks if a mode has associated rules files in the .roo/rules-{slug}/ directory
+	 * Checks if a mode has associated rules files in the .njust_ai/rules-{slug}/ directory
 	 * @param slug - The mode identifier to check
 	 * @returns True if the mode has rules files with content, false otherwise
 	 */
@@ -666,7 +672,7 @@ export class CustomModesManager {
 				if (!workspacePath) {
 					return false
 				}
-				modeRulesDir = path.join(workspacePath, ".roo", `rules-${slug}`)
+				modeRulesDir = path.join(workspacePath, NJUST_AI_CONFIG_DIR, `rules-${slug}`)
 			}
 
 			try {
@@ -769,10 +775,10 @@ export class CustomModesManager {
 				baseDir = workspacePath
 			}
 
-			// Check for .roo/rules-{slug}/ directory (or rules-{slug}/ for global)
+			// Check for .njust_ai/rules-{slug}/ directory (or rules-{slug}/ for global)
 			const modeRulesDir = isGlobalMode
 				? path.join(baseDir, `rules-${slug}`)
-				: path.join(baseDir, ".roo", `rules-${slug}`)
+				: path.join(baseDir, NJUST_AI_CONFIG_DIR, `rules-${slug}`)
 
 			let rulesFiles: RuleFile[] = []
 			try {
@@ -856,7 +862,7 @@ export class CustomModesManager {
 			rulesFolderPath = path.join(baseDir, `rules-${importMode.slug}`)
 		} else {
 			const workspacePath = getWorkspacePath()
-			baseDir = path.join(workspacePath, ".roo")
+			baseDir = path.join(workspacePath, NJUST_AI_CONFIG_DIR)
 			rulesFolderPath = path.join(baseDir, `rules-${importMode.slug}`)
 		}
 

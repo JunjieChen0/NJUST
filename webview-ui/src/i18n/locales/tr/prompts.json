@@ -49,7 +49,7 @@
 		"title": "Moda özgü özel talimatlar (isteğe bağlı)",
 		"resetToDefault": "Varsayılana sıfırla",
 		"description": "{{modeName}} modu için özel davranış yönergeleri ekleyin.",
-		"loadFromFile": "{{mode}} moduna özgü özel talimatlar, çalışma alanınızdaki <span>.roo/rules-{{slug}}/</span> klasöründen veya global <0>.roo/rules-{{slug}}/</0> klasöründen de yüklenebilir (.roorules-{{slug}} ve .clinerules-{{slug}} kullanımdan kaldırılmıştır ve yakında çalışmayı durduracaktır)."
+		"loadFromFile": "{{mode}} moduna özgü özel talimatlar, çalışma alanınızdaki <span>.njust_ai/rules-{{slug}}/</span> klasöründen veya global <0>.njust_ai/rules-{{slug}}/</0> klasöründen de yüklenebilir (.roorules-{{slug}} ve .clinerules-{{slug}} kullanımdan kaldırılmıştır ve yakında çalışmayı durduracaktır)."
 	},
 	"exportMode": {
 		"title": "Modu Dışa Aktar",
@@ -60,7 +60,7 @@
 	"globalCustomInstructions": {
 		"title": "Tüm Modlar için Özel Talimatlar",
 		"description": "Bu talimatlar tüm modlara uygulanır. Aşağıdaki moda özgü talimatlarla geliştirilebilen temel davranış seti sağlarlar.",
-		"loadFromFile": "Talimatlar, çalışma alanınızdaki <span>.roo/rules/</span> klasöründen veya global <0>.roo/rules/</0> klasöründen de yüklenebilir (.roorules ve .clinerules kullanımdan kaldırılmıştır ve yakında çalışmayı durduracaktır)."
+		"loadFromFile": "Talimatlar, çalışma alanınızdaki <span>.njust_ai/rules/</span> klasöründen veya global <0>.njust_ai/rules/</0> klasöründen de yüklenebilir (.roorules ve .clinerules kullanımdan kaldırılmıştır ve yakında çalışmayı durduracaktır)."
 	},
 	"importMode": {
 		"selectLevel": "Bu modu nereye içe aktaracağınızı seçin:",
@@ -72,7 +72,7 @@
 		},
 		"project": {
 			"label": "Proje Seviyesi",
-			"description": "Yalnızca bu çalışma alanında kullanılabilir. Dışa aktarılan mod kural dosyaları içeriyorsa, bunlar .roo/rules-{slug}/ klasöründe yeniden oluşturulur."
+			"description": "Yalnızca bu çalışma alanında kullanılabilir. Dışa aktarılan mod kural dosyaları içeriyorsa, bunlar .njust_ai/rules-{slug}/ klasöründe yeniden oluşturulur."
 		}
 	},
 	"systemPrompt": {

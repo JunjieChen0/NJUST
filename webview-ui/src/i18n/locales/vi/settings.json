@@ -29,7 +29,6 @@
 		"providers": "Nhà cung cấp",
 		"modes": "Chế độ",
 		"mcp": "Máy chủ MCP",
-		"worktrees": "Worktrees",
 		"autoApprove": "Phê duyệt",
 		"checkpoints": "Điểm kiểm tra",
 		"notifications": "Thông báo",
@@ -242,7 +241,7 @@
 			},
 			"protected": {
 				"label": "Bao gồm các tệp được bảo vệ",
-				"description": "Cho phép Roo tạo và chỉnh sửa các tệp được bảo vệ (như .rooignore và các tệp cấu hình .roo/) mà không yêu cầu phê duyệt."
+				"description": "Cho phép Roo tạo và chỉnh sửa các tệp được bảo vệ (như .rooignore và các tệp cấu hình .njust_ai/) mà không yêu cầu phê duyệt."
 			}
 		},
 		"mcp": {
@@ -671,7 +670,7 @@
 		},
 		"enableSubfolderRules": {
 			"label": "Bật quy tắc thư mục con",
-			"description": "Khám phá và tải đệ quy các tệp .roo/rules và AGENTS.md từ các thư mục con. Hữu ích cho monorepo có quy tắc theo gói."
+			"description": "Khám phá và tải đệ quy các tệp .njust_ai/rules và AGENTS.md từ các thư mục con. Hữu ích cho monorepo có quy tắc theo gói."
 		}
 	},
 	"terminal": {
@@ -815,9 +814,9 @@
 		},
 		"CUSTOM_TOOLS": {
 			"name": "Bật công cụ tùy chỉnh",
-			"description": "Khi được bật, Roo có thể tải và sử dụng các công cụ TypeScript/JavaScript tùy chỉnh từ thư mục .roo/tools của dự án hoặc ~/.roo/tools cho các công cụ toàn cục. Lưu ý: các công cụ này sẽ được tự động phê duyệt.",
+			"description": "Khi được bật, Roo có thể tải và sử dụng các công cụ TypeScript/JavaScript tùy chỉnh từ thư mục .njust_ai/tools của dự án hoặc ~/.njust_ai/tools cho các công cụ toàn cục. Lưu ý: các công cụ này sẽ được tự động phê duyệt.",
 			"toolsHeader": "Công cụ tùy chỉnh có sẵn",
-			"noTools": "Không có công cụ tùy chỉnh nào được tải. Thêm tệp .ts hoặc .js vào thư mục .roo/tools của dự án hoặc ~/.roo/tools cho các công cụ toàn cục.",
+			"noTools": "Không có công cụ tùy chỉnh nào được tải. Thêm tệp .ts hoặc .js vào thư mục .njust_ai/tools của dự án hoặc ~/.njust_ai/tools cho các công cụ toàn cục.",
 			"refreshButton": "Làm mới",
 			"refreshing": "Đang làm mới...",
 			"refreshSuccess": "Làm mới công cụ thành công",

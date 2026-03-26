@@ -45,7 +45,7 @@ const HistoryView = ({ onDone }: HistoryViewProps) => {
 	const { t } = useAppTranslation()
 
 	// Use grouped tasks hook
-	const { groups, flatTasks, toggleExpand, isSearchMode } = useGroupedTasks(tasks, searchQuery)
+	const { groups, flatTasks, toggleExpand, isSearchMode } = useGroupedTasks(tasks, searchQuery, sortOption)
 
 	const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null)
 	const [deleteSubtaskCount, setDeleteSubtaskCount] = useState<number>(0)

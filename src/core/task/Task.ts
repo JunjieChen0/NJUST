@@ -51,6 +51,8 @@ import {
 	MIN_CHECKPOINT_TIMEOUT_SECONDS,
 	MAX_MCP_TOOLS_THRESHOLD,
 	countEnabledMcpTools,
+	DEFAULT_REQUEST_DELAY_SECONDS,
+	DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT,
 } from "@njust-ai-cj/types"
 
 // api
@@ -4029,7 +4031,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			requestDelaySeconds,
 			mode,
 			autoCondenseContext = true,
-			autoCondenseContextPercent = 100,
+			autoCondenseContextPercent = DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT,
 			profileThresholds = {},
 		} = state ?? {}
 
@@ -4414,7 +4416,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private async backoffAndAnnounce(retryAttempt: number, error: any): Promise<void> {
 		try {
 			const state = await this.providerRef.deref()?.getState()
-			const baseDelay = state?.requestDelaySeconds || 5
+			const baseDelay = state?.requestDelaySeconds ?? DEFAULT_REQUEST_DELAY_SECONDS
 
 			let exponentialDelay = Math.min(
 				Math.ceil(baseDelay * Math.pow(2, retryAttempt)),

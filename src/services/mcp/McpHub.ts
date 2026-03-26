@@ -19,13 +19,14 @@ import delay from "delay"
 import deepEqual from "fast-deep-equal"
 import { z } from "zod"
 
-import type {
-	McpResource,
-	McpResourceResponse,
-	McpResourceTemplate,
-	McpServer,
-	McpTool,
-	McpToolCallResponse,
+import {
+	type McpResource,
+	type McpResourceResponse,
+	type McpResourceTemplate,
+	type McpServer,
+	type McpTool,
+	type McpToolCallResponse,
+	NJUST_AI_CONFIG_DIR,
 } from "@njust-ai-cj/types"
 
 import { t } from "../../i18n"
@@ -376,7 +377,7 @@ export class McpHub {
 		}
 
 		const workspaceFolder = this.providerRef.deref()?.cwd ?? getWorkspacePath()
-		const projectMcpPattern = new vscode.RelativePattern(workspaceFolder, ".roo/mcp.json")
+		const projectMcpPattern = new vscode.RelativePattern(workspaceFolder, `${NJUST_AI_CONFIG_DIR}/mcp.json`)
 
 		// Create a file system watcher for the project MCP file pattern
 		this.projectMcpWatcher = vscode.workspace.createFileSystemWatcher(projectMcpPattern)
@@ -593,7 +594,7 @@ export class McpHub {
 	// Get project-level MCP configuration path
 	private async getProjectMcpPath(): Promise<string | null> {
 		const workspacePath = this.providerRef.deref()?.cwd ?? getWorkspacePath()
-		const projectMcpDir = path.join(workspacePath, ".roo")
+		const projectMcpDir = path.join(workspacePath, NJUST_AI_CONFIG_DIR)
 		const projectMcpPath = path.join(projectMcpDir, "mcp.json")
 
 		try {

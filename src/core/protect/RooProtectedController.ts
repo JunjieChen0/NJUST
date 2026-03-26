@@ -17,7 +17,7 @@ export class RooProtectedController {
 		".roomodes",
 		".roorules*",
 		".clinerules*",
-		".roo/**",
+		".njust_ai/**",
 		".vscode/**",
 		"*.code-workspace",
 		".rooprotected", // For future use

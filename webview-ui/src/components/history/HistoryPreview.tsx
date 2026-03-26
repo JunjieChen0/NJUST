@@ -8,8 +8,8 @@ import { useGroupedTasks } from "./useGroupedTasks"
 import TaskGroupItem from "./TaskGroupItem"
 
 const HistoryPreview = () => {
-	const { tasks, searchQuery } = useTaskSearch()
-	const { groups, toggleExpand } = useGroupedTasks(tasks, searchQuery)
+	const { tasks, searchQuery, sortOption } = useTaskSearch()
+	const { groups, toggleExpand } = useGroupedTasks(tasks, searchQuery, sortOption)
 	const { t } = useAppTranslation()
 
 	const handleViewAllHistory = () => {

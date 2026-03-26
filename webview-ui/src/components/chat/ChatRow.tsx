@@ -49,6 +49,7 @@ import { AutoApprovedRequestLimitWarning } from "./AutoApprovedRequestLimitWarni
 import { InProgressRow, CondensationResultRow, CondensationErrorRow, TruncationResultRow } from "./context-management"
 import CodebaseSearchResultsDisplay from "./CodebaseSearchResultsDisplay"
 import { appendImages } from "@src/utils/imageUtils"
+import { convertToMentionPath } from "@src/utils/path-mentions"
 import { McpExecution } from "./McpExecution"
 import { ChatTextArea } from "./ChatTextArea"
 import { MAX_IMAGES_PER_MESSAGE } from "./ChatView"
@@ -180,26 +181,52 @@ export const ChatRowContent = ({
 }: ChatRowContentProps) => {
 	const { t, i18n } = useTranslation()
 
-	const { mcpServers, alwaysAllowMcp, currentCheckpoint, mode, apiConfiguration, clineMessages, currentTaskItem } =
-		useExtensionState()
+	const {
+		mcpServers,
+		alwaysAllowMcp,
+		currentCheckpoint,
+		mode,
+		apiConfiguration,
+		clineMessages,
+		currentTaskItem,
+		cwd = "",
+	} = useExtensionState()
 	const { info: model } = useSelectedModel(apiConfiguration)
 	const [isEditing, setIsEditing] = useState(false)
 	const [editedContent, setEditedContent] = useState("")
 	const [editMode, setEditMode] = useState<Mode>(mode || "code")
 	const [editImages, setEditImages] = useState<string[]>([])
 
-	// Handle message events for image selection during edit mode
+	// Handle file / image selection during edit mode (same flow as main chat)
 	useEffect(() => {
 		const handleMessage = (event: MessageEvent) => {
 			const msg = event.data
-			if (msg.type === "selectedImages" && msg.context === "edit" && msg.messageTs === message.ts && isEditing) {
+			if (!isEditing || msg.messageTs !== message.ts || msg.context !== "edit") {
+				return
+			}
+			if (msg.type === "selectedImages") {
 				setEditImages((prevImages) => appendImages(prevImages, msg.images, MAX_IMAGES_PER_MESSAGE))
+			}
+			if (msg.type === "selectedContextFiles") {
+				if (msg.contextFilePaths?.length) {
+					setEditedContent((current) => {
+						const mentions = msg.contextFilePaths.map((p: string) => convertToMentionPath(p, cwd)).join(" ")
+						if (!mentions) {
+							return current
+						}
+						const needsSep = current.length > 0 && !/\s$/.test(current)
+						return `${current}${needsSep ? " " : ""}${mentions} `
+					})
+				}
+				if (msg.images?.length) {
+					setEditImages((prevImages) => appendImages(prevImages, msg.images, MAX_IMAGES_PER_MESSAGE))
+				}
 			}
 		}
 
 		window.addEventListener("message", handleMessage)
 		return () => window.removeEventListener("message", handleMessage)
-	}, [isEditing, message.ts])
+	}, [isEditing, message.ts, cwd])
 
 	// Memoized callback to prevent re-renders caused by inline arrow functions.
 	const handleToggleExpand = useCallback(() => {
@@ -236,9 +263,8 @@ export const ChatRowContent = ({
 		})
 	}, [message.ts, editedContent, editImages])
 
-	// Handle image selection for editing
-	const handleSelectImages = useCallback(() => {
-		vscode.postMessage({ type: "selectImages", context: "edit", messageTs: message.ts })
+	const handleSelectContextFiles = useCallback(() => {
+		vscode.postMessage({ type: "selectContextFiles", context: "edit", messageTs: message.ts })
 	}, [message.ts])
 
 	const [cost, apiReqCancelReason, apiReqStreamingFailedMessage] = useMemo(() => {
@@ -1223,7 +1249,7 @@ export const ChatRowContent = ({
 											selectedImages={editImages}
 											setSelectedImages={setEditImages}
 											onSend={handleSaveEdit}
-											onSelectImages={handleSelectImages}
+											onSelectContextFiles={handleSelectContextFiles}
 											shouldDisableImages={!model?.supportsImages}
 											mode={editMode}
 											setMode={setEditMode}

@@ -20,7 +20,7 @@ import { languagesSchema } from "./vscode.js"
  * This delay is particularly important for Go and other languages where tools like goimports
  * need time to automatically clean up unused imports.
  */
-export const DEFAULT_WRITE_DELAY_MS = 1000
+export const DEFAULT_WRITE_DELAY_MS = 400
 
 /**
  * Terminal output preview size options for persisted command output.
@@ -53,10 +53,19 @@ export const TERMINAL_PREVIEW_BYTES: Record<TerminalOutputPreviewSize, number> =
 
 /**
  * Default terminal output preview size.
- * The "medium" (10KB) setting provides a good balance between immediate
- * visibility and context window conservation for most use cases.
+ * "small" (5KB) reduces context usage and speeds up long-running / verbose commands;
+ * users can switch to medium/large in settings when early output is critical.
  */
-export const DEFAULT_TERMINAL_OUTPUT_PREVIEW_SIZE: TerminalOutputPreviewSize = "medium"
+export const DEFAULT_TERMINAL_OUTPUT_PREVIEW_SIZE: TerminalOutputPreviewSize = "small"
+
+/** Base delay (seconds) for exponential backoff on API retry when unset in state. */
+export const DEFAULT_REQUEST_DELAY_SECONDS = 1
+
+/** When auto-condense is on, start summarizing at this % of context window (lower = earlier, faster long chats). */
+export const DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT = 70
+
+/** Default max open editor tabs injected into environment details. */
+export const DEFAULT_MAX_OPEN_TABS_CONTEXT = 10
 
 /**
  * Minimum checkpoint timeout in seconds.
@@ -215,17 +224,6 @@ export const globalSettingsSchema = z.object({
 	lastImageSavePath: z.string().optional(),
 
 	/**
-	 * Path to worktree to auto-open after switching workspaces.
-	 * Used by the worktree feature to open the NJUST_AI_CJ sidebar in a new window.
-	 */
-	worktreeAutoOpenPath: z.string().optional(),
-	/**
-	 * Whether to show the worktree selector in the home screen.
-	 * @default true
-	 */
-	showWorktreesInHomeScreen: z.boolean().optional(),
-
-	/**
 	 * List of native tool names to globally disable.
 	 * Tools in this list will be excluded from prompt generation and rejected at execution time.
 	 */
@@ -333,8 +331,8 @@ export const EVALS_SETTINGS: NJUST_AI_CJSettings = {
 	alwaysAllowWrite: true,
 	alwaysAllowWriteOutsideWorkspace: false,
 	alwaysAllowWriteProtected: false,
-	writeDelayMs: 1000,
-	requestDelaySeconds: 10,
+	writeDelayMs: 400,
+	requestDelaySeconds: 1,
 	alwaysAllowMcp: true,
 	alwaysAllowModeSwitch: true,
 	alwaysAllowSubtasks: true,
@@ -365,7 +363,7 @@ export const EVALS_SETTINGS: NJUST_AI_CJSettings = {
 	enableCheckpoints: false,
 
 	rateLimitSeconds: 0,
-	maxOpenTabsContext: 20,
+	maxOpenTabsContext: 10,
 	maxWorkspaceFiles: 200,
 	maxGitStatusFiles: 20,
 	showRooIgnoredFiles: true,

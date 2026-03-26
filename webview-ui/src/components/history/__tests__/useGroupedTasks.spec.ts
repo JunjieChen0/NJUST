@@ -114,6 +114,31 @@ describe("useGroupedTasks", () => {
 			expect(result.current.groups[2].parent.id).toBe("old-1")
 		})
 
+		it("sorts groups by parent timestamp when sort is oldest", () => {
+			const oldTask = createMockTask({
+				id: "old-1",
+				task: "Old task",
+				ts: new Date("2024-01-10T12:00:00").getTime(),
+			})
+			const middleTask = createMockTask({
+				id: "middle-1",
+				task: "Middle task",
+				ts: new Date("2024-01-15T12:00:00").getTime(),
+			})
+			const newTask = createMockTask({
+				id: "new-1",
+				task: "New task",
+				ts: new Date("2024-01-20T12:00:00").getTime(),
+			})
+
+			const { result } = renderHook(() => useGroupedTasks([oldTask, newTask, middleTask], "", "oldest"))
+
+			expect(result.current.groups).toHaveLength(3)
+			expect(result.current.groups[0].parent.id).toBe("old-1")
+			expect(result.current.groups[1].parent.id).toBe("middle-1")
+			expect(result.current.groups[2].parent.id).toBe("new-1")
+		})
+
 		it("handles empty task list", () => {
 			const { result } = renderHook(() => useGroupedTasks([], ""))
 

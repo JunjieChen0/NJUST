@@ -1,6 +1,9 @@
 import * as vscode from "vscode"
 import { Package } from "../../../shared/package"
 
+/** Default API wait time (seconds). Local providers (Ollama/LM Studio) may need a higher value in settings. */
+const DEFAULT_API_REQUEST_TIMEOUT_SEC = 300
+
 /**
  * Gets the API request timeout from VSCode configuration with validation.
  *
@@ -9,11 +12,13 @@ import { Package } from "../../../shared/package"
  */
 export function getApiRequestTimeout(): number | undefined {
 	// Get timeout with validation to ensure it's a valid non-negative number
-	const configTimeout = vscode.workspace.getConfiguration(Package.name).get<number>("apiRequestTimeout", 600)
+	const configTimeout = vscode.workspace
+		.getConfiguration(Package.name)
+		.get<number>("apiRequestTimeout", DEFAULT_API_REQUEST_TIMEOUT_SEC)
 
 	// Validate that it's actually a number and not NaN
 	if (typeof configTimeout !== "number" || isNaN(configTimeout)) {
-		return 600 * 1000 // Default to 600 seconds
+		return DEFAULT_API_REQUEST_TIMEOUT_SEC * 1000
 	}
 
 	// 0 or negative means "no timeout" - return undefined to let SDK use its default

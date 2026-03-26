@@ -2,7 +2,9 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 
-const CONFIG_DIR = path.join(os.homedir(), ".roo")
+import { NJUST_AI_CONFIG_DIR } from "@njust-ai-cj/types"
+
+const CONFIG_DIR = path.join(os.homedir(), NJUST_AI_CONFIG_DIR)
 
 export function getConfigDir(): string {
 	return CONFIG_DIR

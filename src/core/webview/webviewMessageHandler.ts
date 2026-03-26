@@ -16,6 +16,7 @@ import {
 	type WebviewMessage,
 	type EditQueuedMessagePayload,
 	NJUST_AI_CJSettings,
+	NJUST_AI_CONFIG_DIR,
 	ExperimentId,
 	checkoutDiffPayloadSchema,
 	checkoutRestorePayloadSchema,
@@ -48,6 +49,7 @@ import { Terminal } from "../../integrations/terminal/Terminal"
 import { openFile } from "../../integrations/misc/open-file"
 import { openImage, saveImage } from "../../integrations/misc/image-handler"
 import { selectImages } from "../../integrations/misc/process-images"
+import { selectContextFiles } from "../../integrations/misc/select-context-files"
 import { getTheme } from "../../integrations/theme/getTheme"
 import { searchWorkspaceFiles } from "../../services/search/file-search"
 import { fileExistsAtPath } from "../../utils/fs"
@@ -71,19 +73,6 @@ import { getCommand } from "../../utils/commands"
 const ALLOWED_VSCODE_SETTINGS = new Set(["terminal.integrated.inheritEnv"])
 
 import { setPendingTodoList } from "../tools/UpdateTodoListTool"
-import {
-	handleListWorktrees,
-	handleCreateWorktree,
-	handleDeleteWorktree,
-	handleSwitchWorktree,
-	handleGetAvailableBranches,
-	handleGetWorktreeDefaults,
-	handleGetWorktreeIncludeStatus,
-	handleCheckBranchWorktreeInclude,
-	handleCreateWorktreeInclude,
-	handleCheckoutBranch,
-} from "./worktree"
-
 export const webviewMessageHandler = async (provider: ClineProvider, message: WebviewMessage) => {
 	// Utility functions provided for concise get/update of global state via contextProxy API.
 	const getGlobalState = <K extends keyof GlobalState>(key: K) => provider.contextProxy.getValue(key)
@@ -759,6 +748,17 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				messageTs: message.messageTs,
 			})
 			break
+		case "selectContextFiles": {
+			const { mentionPaths, imageDataUrls } = await selectContextFiles()
+			await provider.postMessageToWebview({
+				type: "selectedContextFiles",
+				contextFilePaths: mentionPaths,
+				images: imageDataUrls.length > 0 ? imageDataUrls : undefined,
+				context: message.context,
+				messageTs: message.messageTs,
+			})
+			break
+		}
 		case "exportCurrentTask":
 			const currentTaskId = provider.getCurrentTask()?.taskId
 			if (currentTaskId) {
@@ -1284,7 +1284,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			}
 
 			const workspaceFolder = getCurrentCwd()
-			const rooDir = path.join(workspaceFolder, ".roo")
+			const rooDir = path.join(workspaceFolder, NJUST_AI_CONFIG_DIR)
 			const mcpPath = path.join(rooDir, "mcp.json")
 
 			try {
@@ -1924,14 +1924,14 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				if (scope === "project") {
 					const workspacePath = getWorkspacePath()
 					if (workspacePath) {
-						rulesFolderPath = path.join(workspacePath, ".roo", `rules-${message.slug}`)
+						rulesFolderPath = path.join(workspacePath, NJUST_AI_CONFIG_DIR, `rules-${message.slug}`)
 					} else {
-						rulesFolderPath = path.join(".roo", `rules-${message.slug}`)
+						rulesFolderPath = path.join(NJUST_AI_CONFIG_DIR, `rules-${message.slug}`)
 					}
 				} else {
 					// Global scope - use OS home directory
 					const homeDir = os.homedir()
-					rulesFolderPath = path.join(homeDir, ".roo", `rules-${message.slug}`)
+					rulesFolderPath = path.join(homeDir, NJUST_AI_CONFIG_DIR, `rules-${message.slug}`)
 				}
 
 				// Check if the rules folder exists
@@ -2706,7 +2706,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				// Determine the commands directory based on source
 				let commandsDir: string
 				if (source === "global") {
-					const globalConfigDir = path.join(os.homedir(), ".roo")
+					const globalConfigDir = path.join(os.homedir(), NJUST_AI_CONFIG_DIR)
 					commandsDir = path.join(globalConfigDir, "commands")
 				} else {
 					if (!vscode.workspace.workspaceFolders?.length) {
@@ -2719,7 +2719,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 						vscode.window.showErrorMessage(t("common:errors.no_workspace_for_project_command"))
 						break
 					}
-					commandsDir = path.join(workspaceRoot, ".roo", "commands")
+					commandsDir = path.join(workspaceRoot, NJUST_AI_CONFIG_DIR, "commands")
 				}
 
 				// Ensure the commands directory exists
@@ -3009,253 +3009,6 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				values: message.values,
 				log: (msg) => provider.log(msg),
 			})
-			break
-		}
-
-		/**
-		 * Git Worktree Management
-		 */
-
-		case "listWorktrees": {
-			try {
-				const { worktrees, isGitRepo, isMultiRoot, isSubfolder, gitRootPath, error } =
-					await handleListWorktrees(provider)
-
-				await provider.postMessageToWebview({
-					type: "worktreeList",
-					worktrees,
-					isGitRepo,
-					isMultiRoot,
-					isSubfolder,
-					gitRootPath,
-					error,
-				})
-			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
-
-				await provider.postMessageToWebview({
-					type: "worktreeList",
-					worktrees: [],
-					isGitRepo: false,
-					isMultiRoot: false,
-					isSubfolder: false,
-					gitRootPath: "",
-					error: errorMessage,
-				})
-			}
-
-			break
-		}
-
-		case "createWorktree": {
-			try {
-				const { success, message: text } = await handleCreateWorktree(
-					provider,
-					{
-						path: message.worktreePath!,
-						branch: message.worktreeBranch,
-						baseBranch: message.worktreeBaseBranch,
-						createNewBranch: message.worktreeCreateNewBranch,
-					},
-					(progress) => {
-						provider.postMessageToWebview({
-							type: "worktreeCopyProgress",
-							copyProgressBytesCopied: progress.bytesCopied,
-							copyProgressItemName: progress.itemName,
-						})
-					},
-				)
-
-				await provider.postMessageToWebview({ type: "worktreeResult", success, text })
-			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
-				await provider.postMessageToWebview({ type: "worktreeResult", success: false, text: errorMessage })
-			}
-
-			break
-		}
-
-		case "deleteWorktree": {
-			try {
-				const { success, message: text } = await handleDeleteWorktree(
-					provider,
-					message.worktreePath!,
-					message.worktreeForce ?? false,
-				)
-
-				await provider.postMessageToWebview({ type: "worktreeResult", success, text })
-			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
-				await provider.postMessageToWebview({ type: "worktreeResult", success: false, text: errorMessage })
-			}
-
-			break
-		}
-
-		case "switchWorktree": {
-			try {
-				const { success, message: text } = await handleSwitchWorktree(
-					provider,
-					message.worktreePath!,
-					message.worktreeNewWindow ?? true,
-				)
-
-				await provider.postMessageToWebview({ type: "worktreeResult", success, text })
-			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
-				await provider.postMessageToWebview({ type: "worktreeResult", success: false, text: errorMessage })
-			}
-
-			break
-		}
-
-		case "getAvailableBranches": {
-			try {
-				const { localBranches, remoteBranches, currentBranch } = await handleGetAvailableBranches(provider)
-
-				await provider.postMessageToWebview({
-					type: "branchList",
-					localBranches,
-					remoteBranches,
-					currentBranch,
-				})
-			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
-
-				await provider.postMessageToWebview({
-					type: "branchList",
-					localBranches: [],
-					remoteBranches: [],
-					currentBranch: "",
-					error: errorMessage,
-				})
-			}
-
-			break
-		}
-
-		case "getWorktreeDefaults": {
-			try {
-				const { suggestedBranch, suggestedPath } = await handleGetWorktreeDefaults(provider)
-				await provider.postMessageToWebview({ type: "worktreeDefaults", suggestedBranch, suggestedPath })
-			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
-
-				await provider.postMessageToWebview({
-					type: "worktreeDefaults",
-					suggestedBranch: "",
-					suggestedPath: "",
-					error: errorMessage,
-				})
-			}
-
-			break
-		}
-
-		case "getWorktreeIncludeStatus": {
-			try {
-				const worktreeIncludeStatus = await handleGetWorktreeIncludeStatus(provider)
-				await provider.postMessageToWebview({ type: "worktreeIncludeStatus", worktreeIncludeStatus })
-			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
-
-				await provider.postMessageToWebview({
-					type: "worktreeIncludeStatus",
-					worktreeIncludeStatus: {
-						exists: false,
-						hasGitignore: false,
-						gitignoreContent: undefined,
-					},
-					error: errorMessage,
-				})
-			}
-
-			break
-		}
-
-		case "checkBranchWorktreeInclude": {
-			try {
-				const branch = message.worktreeBranch
-				if (!branch) {
-					await provider.postMessageToWebview({
-						type: "branchWorktreeIncludeResult",
-						hasWorktreeInclude: false,
-						error: "No branch specified",
-					})
-					break
-				}
-				const hasWorktreeInclude = await handleCheckBranchWorktreeInclude(provider, branch)
-				await provider.postMessageToWebview({
-					type: "branchWorktreeIncludeResult",
-					branch,
-					hasWorktreeInclude,
-				})
-			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
-				await provider.postMessageToWebview({
-					type: "branchWorktreeIncludeResult",
-					hasWorktreeInclude: false,
-					error: errorMessage,
-				})
-			}
-
-			break
-		}
-
-		case "createWorktreeInclude": {
-			try {
-				const { success, message: text } = await handleCreateWorktreeInclude(
-					provider,
-					message.worktreeIncludeContent ?? "",
-				)
-
-				await provider.postMessageToWebview({ type: "worktreeResult", success, text })
-			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
-				provider.log(`Error creating worktree include: ${errorMessage}`)
-				await provider.postMessageToWebview({ type: "worktreeResult", success: false, text: errorMessage })
-			}
-
-			break
-		}
-
-		case "checkoutBranch": {
-			try {
-				const { success, message: text } = await handleCheckoutBranch(provider, message.worktreeBranch!)
-				await provider.postMessageToWebview({ type: "worktreeResult", success, text })
-			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
-				await provider.postMessageToWebview({ type: "worktreeResult", success: false, text: errorMessage })
-			}
-
-			break
-		}
-
-		case "browseForWorktreePath": {
-			try {
-				const options: vscode.OpenDialogOptions = {
-					canSelectFiles: false,
-					canSelectFolders: true,
-					canSelectMany: false,
-					openLabel: t("worktrees:selectWorktreeLocation"),
-					title: t("worktrees:selectFolderForWorktree"),
-					defaultUri: vscode.workspace.workspaceFolders?.[0]?.uri
-						? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, "..")
-						: undefined,
-				}
-
-				const result = await vscode.window.showOpenDialog(options)
-				if (result && result[0]) {
-					await provider.postMessageToWebview({
-						type: "folderSelected",
-						path: result[0].fsPath,
-					})
-				}
-			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
-				provider.log(`Error opening folder picker: ${errorMessage}`)
-			}
-
 			break
 		}
 

@@ -55,7 +55,7 @@ vitest.mock("openai", () => {
 // Mock i18n
 vitest.mock("../../../i18n", () => ({
 	t: vitest.fn((key: string) => {
-		if (key === "common:errors.roo.authenticationRequired") {
+		if (key === "common:errors.njust_ai.authenticationRequired") {
 			return "Authentication required for NJUST_AI_CJ Cloud"
 		}
 		return key

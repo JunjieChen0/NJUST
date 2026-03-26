@@ -1,4 +1,4 @@
-// Auto-generated from .roo/rules-cangjie/ markdown files.
+// Auto-generated from .njust_ai/rules-cangjie/ markdown files.
 // Inlined to prevent ENOENT errors when these files do not exist in user projects.
 
 export const CANGJIE_SYNTAX_REFERENCE =

@@ -749,7 +749,7 @@
 				},
 				"njust-ai-cj.apiRequestTimeout": {
 					"type": "number",
-					"default": 600,
+					"default": 300,
 					"minimum": 0,
 					"maximum": 3600,
 					"description": "%settings.apiRequestTimeout.description%"
