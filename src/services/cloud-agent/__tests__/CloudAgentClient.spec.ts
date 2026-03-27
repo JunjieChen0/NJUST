@@ -69,12 +69,67 @@ describe("CloudAgentClient", () => {
 		expect(callbacks.onText).toHaveBeenCalledWith("done")
 		expect(callbacks.onDone).toHaveBeenCalledWith("Task completed")
 
-		expect(result).toEqual({
+		expect(result).toMatchObject({
 			memorySummary: "done",
 			tokensIn: 11,
 			tokensOut: 22,
 			cost: 0.05,
+			workspaceOps: [],
 		})
+		expect(result.workspaceOpsParseError).toBeUndefined()
+	})
+
+	it("returns parsed workspace_ops from response", async () => {
+		const fetchMock = vi.fn()
+		globalThis.fetch = fetchMock as unknown as typeof fetch
+		fetchMock.mockResolvedValueOnce(new Response("", { status: 200 }))
+		fetchMock.mockResolvedValueOnce(
+			new Response(
+				JSON.stringify({
+					ok: true,
+					user_goal: "g",
+					memory_summary: "s",
+					logs: [],
+					workspace_ops: {
+						version: 1,
+						operations: [{ op: "write_file", path: "note.md", content: "x" }],
+					},
+				}),
+				{ status: 200 },
+			),
+		)
+
+		const client = new CloudAgentClient("http://example.com", "tok", createCallbacks())
+		await client.connect()
+		const result = await client.submitTask("s", "m")
+
+		expect(result.workspaceOps).toEqual([{ op: "write_file", path: "note.md", content: "x" }])
+		expect(result.workspaceOpsParseError).toBeUndefined()
+	})
+
+	it("returns workspaceOpsParseError when workspace_ops fails validation", async () => {
+		const fetchMock = vi.fn()
+		globalThis.fetch = fetchMock as unknown as typeof fetch
+		fetchMock.mockResolvedValueOnce(new Response("", { status: 200 }))
+		fetchMock.mockResolvedValueOnce(
+			new Response(
+				JSON.stringify({
+					ok: true,
+					user_goal: "g",
+					memory_summary: "s",
+					logs: [],
+					workspace_ops: { version: 2, operations: [] },
+				}),
+				{ status: 200 },
+			),
+		)
+
+		const client = new CloudAgentClient("http://example.com", "tok", createCallbacks())
+		await client.connect()
+		const result = await client.submitTask("s", "m")
+
+		expect(result.workspaceOps).toEqual([])
+		expect(result.workspaceOpsParseError).toBeDefined()
 	})
 
 	it("omits X-API-Key when apiKey option is unset", async () => {
@@ -87,6 +142,18 @@ describe("CloudAgentClient", () => {
 
 		const headers = new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers as HeadersInit)
 		expect(headers.has("X-API-Key")).toBe(false)
+	})
+
+	it("enriches connect() error when fetch fails with a cause (e.g. ECONNREFUSED)", async () => {
+		const fetchMock = vi.fn().mockRejectedValue(
+			Object.assign(new Error("fetch failed"), {
+				cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
+			}),
+		)
+		globalThis.fetch = fetchMock as unknown as typeof fetch
+
+		const client = new CloudAgentClient("http://example.com", "tok", createCallbacks())
+		await expect(client.connect()).rejects.toThrow(/fetch failed.*ECONNREFUSED|connect ECONNREFUSED/)
 	})
 
 	it("throws on non-OK HTTP for submitTask", async () => {

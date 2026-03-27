@@ -86,8 +86,13 @@ import { OutputInterceptor } from "../../integrations/terminal/OutputInterceptor
 // utils
 import { calculateApiCostAnthropic, calculateApiCostOpenAI } from "../../shared/cost"
 import { getWorkspacePath } from "../../utils/path"
+import {
+	applyCloudWorkspaceOps,
+	applySingleCloudWorkspaceOp,
+} from "../../services/cloud-agent/applyCloudWorkspaceOps"
+import { buildCloudWorkspaceOpToolMessage } from "../../services/cloud-agent/buildCloudWorkspaceOpToolMessage"
 import { CloudAgentClient } from "../../services/cloud-agent/CloudAgentClient"
-import type { CloudAgentCallbacks } from "../../services/cloud-agent/types"
+import type { CloudAgentCallbacks, CloudRunResult } from "../../services/cloud-agent/types"
 import { sanitizeToolUseId } from "../../utils/tool-id"
 import { getTaskDirectoryPath } from "../../utils/storage"
 
@@ -2450,7 +2455,15 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		const config = vscode.workspace.getConfiguration(Package.name)
 		const serverUrl = (config.get<string>("cloudAgent.serverUrl", "") ?? "").trim()
 		const deviceToken = config.get<string>("cloudAgent.deviceToken", "")
-		const apiKey = (config.get<string>("cloudAgent.apiKey", "") ?? "").trim()
+		let apiKey = (config.get<string>("cloudAgent.apiKey", "") ?? "").trim()
+		if (!apiKey) {
+			apiKey = (
+				vscode.workspace.getConfiguration().get<string>(`${Package.name}.cloudAgent.apiKey`) ?? ""
+			).trim()
+		}
+		if (!apiKey) {
+			apiKey = (process.env.CLOUD_AGENT_MOCK_API_KEY ?? process.env.NJUST_CLOUD_AGENT_API_KEY ?? "").trim()
+		}
 		const requestTimeoutMs = config.get<number>("cloudAgent.requestTimeoutMs", 0) ?? 0
 
 		if (!serverUrl) {
@@ -2495,9 +2508,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 		await this.say("api_req_started", JSON.stringify({ request: "Cloud Agent task submitted" }))
 
+		let runResult: CloudRunResult | undefined
 		try {
 			await client.connect()
-			const runResult = await client.submitTask(this.taskId, userMessage, this.cwd, images)
+			runResult = await client.submitTask(this.taskId, userMessage, this.cwd, images)
 			await this.say(
 				"api_req_finished",
 				JSON.stringify({
@@ -2524,6 +2538,99 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			this.currentRequestAbortController = undefined
 			await client.disconnect()
 		}
+
+		if (this.abort || !runResult) {
+			return
+		}
+
+		if (runResult.workspaceOpsParseError) {
+			await this.say(
+				"text",
+				`Cloud Agent 响应中的 workspace_ops 格式无效，已跳过本地写盘。校验信息：${runResult.workspaceOpsParseError}`,
+			)
+		}
+
+		const applyRemoteWorkspaceOps = config.get<boolean>("cloudAgent.applyRemoteWorkspaceOps", true) ?? true
+		const confirmRemoteWorkspaceOps = config.get<boolean>("cloudAgent.confirmRemoteWorkspaceOps", true) ?? true
+		const ops = runResult.workspaceOps
+
+		if (!applyRemoteWorkspaceOps && ops.length > 0) {
+			await this.say(
+				"text",
+				`Cloud Agent 返回了 ${ops.length} 条可应用的 workspace_ops，但当前设置未开启「应用远程工作区操作」，因此不会在本地创建或修改文件。请在设置中启用 ${Package.name}.cloudAgent.applyRemoteWorkspaceOps（并可保留 ${Package.name}.cloudAgent.confirmRemoteWorkspaceOps 以在聊天界面中逐项确认）。`,
+			)
+		}
+
+		if (applyRemoteWorkspaceOps && ops.length > 0) {
+			if (confirmRemoteWorkspaceOps) {
+				for (let i = 0; i < ops.length; i++) {
+					if (this.abort) {
+						break
+					}
+					const op = ops[i]
+					const accessAllowed = this.rooIgnoreController?.validateAccess(op.path)
+					if (accessAllowed === false) {
+						await this.say("rooignore_error", op.path)
+						continue
+					}
+					const isWriteProtected = this.rooProtectedController?.isWriteProtected(op.path) || false
+					const toolJson = await buildCloudWorkspaceOpToolMessage(this.cwd, op, {
+						isWriteProtected,
+					})
+
+					let response: ClineAskResponse
+					let text: string | undefined
+					let images: string[] | undefined
+					try {
+						const askResult = await this.ask("tool", toolJson, false)
+						response = askResult.response
+						text = askResult.text
+						images = askResult.images
+					} catch (err) {
+						if (err instanceof AskIgnoredError) {
+							break
+						}
+						throw err
+					}
+
+					if (response !== "yesButtonClicked") {
+						if (text) {
+							await this.say("user_feedback", text, images)
+						}
+						await this.say(
+							"text",
+							`Skipped cloud workspace op (${i + 1}/${ops.length}): ${op.path}`,
+						)
+						continue
+					}
+
+					if (text) {
+						await this.say("user_feedback", text, images)
+					}
+
+					const single = await applySingleCloudWorkspaceOp(this.cwd, op)
+					await this.say("text", single.message)
+					if (!single.ok) {
+						await this.say("error", `Remote workspace operation failed: ${single.message}`)
+						break
+					}
+				}
+			} else {
+				const applied = await applyCloudWorkspaceOps(this.cwd, ops, () => this.abort)
+				const lines = applied.results.map((r) => `${r.ok ? "OK" : "FAIL"} ${r.path}: ${r.message}`)
+				const header = applied.ok
+					? `Cloud workspace_ops applied (${applied.results.length} operation(s)).`
+					: `Cloud workspace_ops stopped at operation ${(applied.failedAtIndex ?? 0) + 1} of ${ops.length}.`
+				await this.say("text", [header, ...lines].join("\n"))
+				if (!applied.ok) {
+					await this.say(
+						"error",
+						`Remote workspace operation failed: ${applied.results.at(-1)?.message ?? "unknown"}`,
+					)
+				}
+			}
+		}
+		// When applyRemoteWorkspaceOps is false, skip applying workspace_ops (user disabled in settings).
 	}
 
 	// Task Loop

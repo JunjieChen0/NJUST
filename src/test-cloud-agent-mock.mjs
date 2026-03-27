@@ -8,7 +8,8 @@
  *
  * REST（插件实际调用）：
  *   - GET  /health     → 200 JSON { "status": "ok" }
- *   - POST /v1/run     → 请求体 { goal, session_id, workspace_path?, images? }，响应 CloudRunResponse
+ *   - POST /v1/run     → 请求体 { goal, session_id, workspace_path?, images? }，响应 CloudRunResponse（含示例 workspace_ops）
+ *     本地写盘默认在开启 njust-ai-cj.cloudAgent.applyRemoteWorkspaceOps 时生效（默认为 true）；见 AGENTS.md
  *
  * MCP Streamable HTTP（可选，其他客户端）：
  *   - POST /mcp        → MCP 会话；submit_task 工具会模拟通知与 cloudagent/executeTool（插件 REST 路径不会走这里）
@@ -246,6 +247,18 @@ async function handleV1Run(req, res) {
 		"Mock task finished. In production, logs and summary come from the cloud service. " +
 		"(MCP tool callbacks are not used by the extension REST client.)"
 
+	// Optional structured ops for extension when njust-ai-cj.cloudAgent.applyRemoteWorkspaceOps is true.
+	const workspace_ops = {
+		version: 1,
+		operations: [
+			{
+				op: "write_file",
+				path: ".cloud-agent-test.md",
+				content: `# Cloud Agent mock\n\nWritten via workspace_ops (goal: ${String(goal).slice(0, 200)})\n`,
+			},
+		],
+	}
+
 	const payload = {
 		ok: true,
 		user_goal: goal,
@@ -254,6 +267,7 @@ async function handleV1Run(req, res) {
 		tokens_in: 10,
 		tokens_out: 20,
 		cost: 0,
+		workspace_ops,
 	}
 
 	res.writeHead(200, { "Content-Type": "application/json" })

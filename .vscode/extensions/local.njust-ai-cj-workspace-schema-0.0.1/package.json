@@ -1,0 +1,33 @@
+{
+	"name": "njust-ai-cj-workspace-schema",
+	"displayName": "NJUST AI CJ workspace settings schema",
+	"version": "0.0.1",
+	"publisher": "local",
+	"description": "Declares njust-ai-cj.* workspace keys so .vscode/settings.json validates without installing the full extension in this window.",
+	"engines": {
+		"vscode": "^1.80.0"
+	},
+	"main": "./extension.js",
+	"activationEvents": ["onStartupFinished"],
+	"contributes": {
+		"configuration": {
+			"title": "NJUST AI CJ (workspace schema)",
+			"properties": {
+				"njust-ai-cj.cloudAgent.serverUrl": {
+					"type": "string",
+					"description": "Cloud Agent REST base URL."
+				},
+				"njust-ai-cj.cloudAgent.apiKey": {
+					"type": "string",
+					"description": "Optional X-API-Key for Cloud Agent."
+				},
+				"njust-ai-cj.mcpServer.enabled": {
+					"type": "boolean"
+				},
+				"njust-ai-cj.mcpServer.port": {
+					"type": "number"
+				}
+			}
+		}
+	}
+}

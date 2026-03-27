@@ -811,29 +811,39 @@
 					"default": "",
 					"description": "Path to the cjpm project manager. Leave empty to auto-detect from CANGJIE_HOME or PATH."
 				},
-			"njust-ai-cj.cloudAgent.serverUrl": {
-				"type": "string",
-				"default": "http://120.79.250.232:8765",
-				"description": "Cloud Agent REST base URL (GET /health, POST /v1/run). Override for a custom deployment or local mock (e.g. http://127.0.0.1:4000)."
-			},
-			"njust-ai-cj.cloudAgent.deviceToken": {
-				"type": "string",
-				"default": "",
-				"description": "Auto-generated device token for Cloud Agent authentication. Do not modify manually."
-			},
-			"njust-ai-cj.cloudAgent.apiKey": {
-				"type": "string",
-				"default": "",
-				"description": "Optional X-API-Key for the Cloud Agent service. Leave empty to omit the header (device-token-only deployments). Do not commit real secrets into shared settings files."
-			},
-			"njust-ai-cj.cloudAgent.requestTimeoutMs": {
-				"type": "number",
-				"default": 0,
-				"minimum": 0,
-				"maximum": 3600000,
-				"description": "Timeout in milliseconds for each Cloud Agent HTTP request (health and /v1/run). 0 means no timeout."
-			},
-			"njust-ai-cj.mcpServer.enabled": {
+				"njust-ai-cj.cloudAgent.serverUrl": {
+					"type": "string",
+					"default": "http://114.55.53.194:8080",
+					"description": "Cloud Agent REST base URL (GET /health, POST /v1/run). Override for a custom deployment or local mock (e.g. http://127.0.0.1:4000)."
+				},
+				"njust-ai-cj.cloudAgent.deviceToken": {
+					"type": "string",
+					"default": "",
+					"description": "Auto-generated device token for Cloud Agent authentication. Do not modify manually."
+				},
+				"njust-ai-cj.cloudAgent.apiKey": {
+					"type": "string",
+					"default": "@Njust123456",
+					"description": "X-API-Key for Cloud Agent (must match server CLOUD_AGENT_MOCK_API_KEY). A default is bundled for zero-configuration installs; clear or override for your own server. Keys ship inside the VSIX—do not treat as a secret for public distribution; prefer unsetting CLOUD_AGENT_MOCK_API_KEY on the server and using network controls, or rotate after releases."
+				},
+				"njust-ai-cj.cloudAgent.requestTimeoutMs": {
+					"type": "number",
+					"default": 0,
+					"minimum": 0,
+					"maximum": 3600000,
+					"description": "Timeout in milliseconds for each Cloud Agent HTTP request (health and /v1/run). 0 means no timeout."
+				},
+				"njust-ai-cj.cloudAgent.applyRemoteWorkspaceOps": {
+					"type": "boolean",
+					"default": true,
+					"description": "When true (default), apply structured workspace_ops (write_file / apply_diff) from Cloud Agent POST /v1/run responses inside the current workspace. Disable if you do not trust the cloud service; paths are restricted to the workspace."
+				},
+				"njust-ai-cj.cloudAgent.confirmRemoteWorkspaceOps": {
+					"type": "boolean",
+					"default": true,
+					"description": "When applyRemoteWorkspaceOps is enabled, show a tool-style approval UI for each operation before writing. When false, all operations run in one batch without per-step confirmation."
+				},
+				"njust-ai-cj.mcpServer.enabled": {
 				"type": "boolean",
 				"default": true,
 				"description": "Enable the built-in MCP Tools Server, allowing external agents to call internal tools (read/write files, execute commands, search, etc.) via the MCP protocol over HTTP."

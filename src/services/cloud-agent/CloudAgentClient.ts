@@ -1,4 +1,34 @@
+import { parseWorkspaceOps } from "./parseWorkspaceOps"
 import type { CloudAgentCallbacks, CloudAgentClientOptions, CloudRunResponse, CloudRunResult } from "./types"
+
+/** Undici/Node often surfaces low-level failures as `fetch failed` with details on `error.cause`. */
+function enrichFetchError(error: unknown): Error {
+	if (!(error instanceof Error)) {
+		return new Error(String(error))
+	}
+	const parts: string[] = [error.message]
+	const c = (error as Error & { cause?: unknown }).cause
+	if (c instanceof Error && c.message && !error.message.includes(c.message)) {
+		parts.push(c.message)
+	} else if (typeof c === "object" && c !== null && "code" in c) {
+		const code = (c as { code?: unknown }).code
+		if (code !== undefined) {
+			parts.push(String(code))
+		}
+	}
+		return parts.length > 1 ? new Error(parts.join(": ")) : error
+}
+
+function apiKeyHintFor401(status: number, bodySnippet: string): string {
+	if (status !== 401 || !/X-API-Key|api_?key/i.test(bodySnippet)) {
+		return ""
+	}
+	return (
+		' Hint: set VS Code "njust-ai-cj.cloudAgent.apiKey" (User settings) to match server CLOUD_AGENT_MOCK_API_KEY, ' +
+		"or set process env CLOUD_AGENT_MOCK_API_KEY / NJUST_CLOUD_AGENT_API_KEY for the extension host (e.g. Roo-Code/.env). " +
+		"Workspace .vscode/settings.json only applies when that folder is the workspace root."
+	)
+}
 
 export class CloudAgentClient {
 	private serverUrl: string
@@ -78,14 +108,22 @@ export class CloudAgentClient {
 	async connect(): Promise<void> {
 		const { signal, cleanup } = this.mergeAbortAndTimeout()
 		try {
-			const resp = await fetch(`${this.serverUrl}/health`, {
-				method: "GET",
-				...(signal ? { signal } : {}),
-				headers: this.buildHeaders(),
-			})
+			let resp: Response
+			try {
+				resp = await fetch(`${this.serverUrl}/health`, {
+					method: "GET",
+					...(signal ? { signal } : {}),
+					headers: this.buildHeaders(),
+				})
+			} catch (e) {
+				throw enrichFetchError(e)
+			}
 			if (!resp.ok) {
 				const errText = await resp.text()
-				throw new Error(`Cloud Agent health check failed: HTTP ${resp.status}: ${errText.slice(0, 300)}`)
+				const slice = errText.slice(0, 300)
+				throw new Error(
+					`Cloud Agent health check failed: HTTP ${resp.status}: ${slice}${apiKeyHintFor401(resp.status, slice)}`,
+				)
 			}
 		} finally {
 			cleanup()
@@ -110,22 +148,32 @@ export class CloudAgentClient {
 		const { signal, cleanup } = this.mergeAbortAndTimeout()
 		let resp: Response
 		try {
-			resp = await fetch(`${this.serverUrl}/v1/run`, {
-				method: "POST",
-				headers: this.buildHeaders(),
-				body: JSON.stringify(body),
-				...(signal ? { signal } : {}),
-			})
+			try {
+				resp = await fetch(`${this.serverUrl}/v1/run`, {
+					method: "POST",
+					headers: this.buildHeaders(),
+					body: JSON.stringify(body),
+					...(signal ? { signal } : {}),
+				})
+			} catch (e) {
+				throw enrichFetchError(e)
+			}
 		} finally {
 			cleanup()
 		}
 
 		if (!resp.ok) {
 			const errText = await resp.text()
-			throw new Error(`Cloud Agent error (HTTP ${resp.status}): ${errText.slice(0, 500)}`)
+			const slice = errText.slice(0, 500)
+			throw new Error(`Cloud Agent error (HTTP ${resp.status}): ${slice}${apiKeyHintFor401(resp.status, slice)}`)
 		}
 
 		const data = await this.parseJsonResponse(resp)
+
+		const { operations: workspaceOps, error: workspaceOpsError } = parseWorkspaceOps(data)
+		if (workspaceOpsError !== undefined) {
+			console.warn(`[CloudAgentClient] Invalid workspace_ops in /v1/run response: ${workspaceOpsError}`)
+		}
 
 		for (const log of data.logs || []) {
 			await this.callbacks.onText(log)
@@ -142,6 +190,8 @@ export class CloudAgentClient {
 			tokensIn: data.tokens_in ?? 0,
 			tokensOut: data.tokens_out ?? 0,
 			cost: data.cost ?? 0,
+			workspaceOps,
+			workspaceOpsParseError: workspaceOpsError,
 		}
 	}
 

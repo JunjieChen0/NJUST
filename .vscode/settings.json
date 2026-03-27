@@ -13,7 +13,6 @@
 	"vitest.disableWorkspaceWarning": true,
 	"njust-ai-cj.mcpServer.enabled": false,
 	"njust-ai-cj.mcpServer.port": 3100,
-	"njust-ai-cj.cloudAgent.serverUrl": "http://localhost:4000",
 	"terminal.integrated.env.windows": {
 		"CANGJIE_HOME": "D:\\cangjie",
 		"CANGJIE_PATH": "D:\\cangjie\\runtime\\lib\\windows_x86_64_cjnative;D:\\cangjie\\bin;D:\\cangjie\\tools\\bin;D:\\cangjie\\tools\\lib;D:\\cangjie\\debugger\\bin;C:\\Users\\Junjie\\.cjpm\\bin",
