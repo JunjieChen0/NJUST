@@ -86,7 +86,7 @@ __setMockImplementation(
 		// Add language preference if provided
 		if (options?.language) {
 			sections.push(
-				`Language Preference:\nYou should always speak and think in the "${options.language}" language.`,
+				`Language Preference:\nYou should always speak, think, and reason in the "${options.language}" language. This applies to ALL output including your internal reasoning, tool call arguments, and final responses.`,
 			)
 		}
 
