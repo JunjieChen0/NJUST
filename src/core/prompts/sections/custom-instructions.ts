@@ -495,7 +495,7 @@ export async function addCustomInstructions(
 	if (options.language) {
 		const languageName = isLanguage(options.language) ? LANGUAGES[options.language] : options.language
 		sections.push(
-			`Language Preference:\nYou should always speak and think in the "${languageName}" (${options.language}) language unless the user gives you instructions below to do otherwise.`,
+			`Language Preference:\nYou should always speak, think, and reason in the "${languageName}" (${options.language}) language unless the user gives you instructions below to do otherwise. This applies to ALL output including your internal reasoning, tool call arguments, and final responses.`,
 		)
 	}
 
