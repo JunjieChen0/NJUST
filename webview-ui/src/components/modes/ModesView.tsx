@@ -78,6 +78,7 @@ const ModesView = () => {
 		customInstructions,
 		setCustomInstructions,
 		customModes,
+		cloudAgentServerUrl: cloudAgentServerUrlFromState,
 	} = useExtensionState()
 
 	// Use a local state to track the visually active mode
@@ -101,6 +102,18 @@ const ModesView = () => {
 	const [showImportDialog, setShowImportDialog] = useState(false)
 	const [importLevel, setImportLevel] = useState<"global" | "project">("project")
 	const [hasRulesToExport, setHasRulesToExport] = useState<Record<string, boolean>>({})
+
+	const defaultCloudAgentServerUrl = "http://120.79.250.232:8765"
+	const [cloudAgentServerUrlDraft, setCloudAgentServerUrlDraft] = useState(
+		() => cloudAgentServerUrlFromState?.trim() || defaultCloudAgentServerUrl,
+	)
+
+	useEffect(() => {
+		const next = cloudAgentServerUrlFromState?.trim()
+		if (next) {
+			setCloudAgentServerUrlDraft(next)
+		}
+	}, [cloudAgentServerUrlFromState])
 
 	// State for mode selection popover and search
 	const [open, setOpen] = useState(false)
@@ -746,6 +759,32 @@ const ModesView = () => {
 							</Select>
 						</div>
 					</div>
+
+					{/* Cloud Agent Settings - Only show for cloud-agent mode */}
+					{visualMode === "cloud-agent" && (
+						<div className="mb-3">
+							<div className="font-bold mb-1">{t("prompts:cloudAgent.serverUrl.title")}</div>
+							<div className="text-sm text-vscode-descriptionForeground mb-2">
+								{t("prompts:cloudAgent.serverUrl.description")}
+							</div>
+							<VSCodeTextField
+								type="text"
+								value={cloudAgentServerUrlDraft}
+								onChange={(e) => {
+									const value = (e.target as HTMLInputElement).value
+									setCloudAgentServerUrlDraft(value)
+								}}
+								onBlur={() => {
+									vscode.postMessage({
+										type: "updateSettings",
+										updatedSettings: { cloudAgentServerUrl: cloudAgentServerUrlDraft },
+									})
+								}}
+								placeholder={t("prompts:cloudAgent.serverUrl.placeholder")}
+								className="w-full"
+							/>
+						</div>
+					)}
 				</div>
 
 				{/* Role Definition section */}

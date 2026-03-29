@@ -2177,6 +2177,7 @@ export class ClineProvider
 					return false
 				}
 			})(),
+			cloudAgentServerUrl: vscode.workspace.getConfiguration(Package.name).get<string>("cloudAgent.serverUrl", "http://120.79.250.232:8765") ?? "http://120.79.250.232:8765",
 			debug: vscode.workspace.getConfiguration(Package.name).get<boolean>("debug", false),
 		}
 	}

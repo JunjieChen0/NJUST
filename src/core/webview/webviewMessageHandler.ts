@@ -718,6 +718,11 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 						if (!value) {
 							continue
 						}
+					} else if (key === "cloudAgentServerUrl") {
+						await vscode.workspace
+							.getConfiguration(Package.name)
+							.update("cloudAgent.serverUrl", value, vscode.ConfigurationTarget.Global)
+						continue
 					}
 
 					await provider.contextProxy.setValue(key as keyof NJUST_AI_CJSettings, newValue)
