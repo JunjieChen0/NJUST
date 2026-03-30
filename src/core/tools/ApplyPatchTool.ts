@@ -6,6 +6,7 @@ import { type ClineSayTool, DEFAULT_WRITE_DELAY_MS } from "@njust-ai-cj/types"
 import { getReadablePath } from "../../utils/path"
 import { ignoreAbortError } from "../../utils/errorHandling"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
+import { allowRooIgnorePathAccess } from "../ignore/RooIgnoreController"
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { RecordSource } from "../context-tracking/FileContextTrackerTypes"
@@ -109,7 +110,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				const absolutePath = path.resolve(task.cwd, relPath)
 
 				// Check access permissions
-				const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
+				const accessAllowed = allowRooIgnorePathAccess(task.rooIgnoreController, relPath)
 				if (!accessAllowed) {
 					await task.say("rooignore_error", relPath)
 					pushToolResult(formatResponse.rooIgnoreError(relPath))
@@ -376,7 +377,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			const moveAbsolutePath = path.resolve(task.cwd, change.movePath)
 
 			// Validate destination path access permissions
-			const moveAccessAllowed = task.rooIgnoreController?.validateAccess(change.movePath)
+			const moveAccessAllowed = allowRooIgnorePathAccess(task.rooIgnoreController, change.movePath)
 			if (!moveAccessAllowed) {
 				await task.say("rooignore_error", change.movePath)
 				pushToolResult(formatResponse.rooIgnoreError(change.movePath))

@@ -106,6 +106,7 @@ export interface ExtensionMessage {
 		| "focusInput"
 		| "switchTab"
 		| "toggleAutoApprove"
+		| "resetLogin"
 	invoke?: "newChat" | "sendMessage" | "primaryButtonClick" | "secondaryButtonClick" | "setChatBoxMessage"
 	/**
 	 * Partial state updates are allowed to reduce message size (e.g. omit large fields like taskHistory).

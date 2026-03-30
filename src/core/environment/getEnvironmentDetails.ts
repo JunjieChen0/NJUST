@@ -13,6 +13,7 @@ import { listFiles } from "../../services/glob/list-files"
 import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"
 import { Terminal } from "../../integrations/terminal/Terminal"
 import { arePathsEqual } from "../../utils/path"
+import { formatHostExecuteCommandHints } from "../../utils/hostShellCommand"
 import { formatResponse } from "../prompts/responses"
 import { getGitStatus } from "../../utils/git"
 
@@ -224,6 +225,8 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 	details += `<slug>${currentMode}</slug>\n`
 	details += `<name>${modeDetails.name}</name>\n`
 	details += `<model>${modelId}</model>\n`
+
+	details += `\n\n# Host System\n${formatHostExecuteCommandHints()}\n`
 
 	if (includeFileDetails) {
 		details += `\n\n# Current Workspace Directory (${cline.cwd.toPosix()}) Files\n`

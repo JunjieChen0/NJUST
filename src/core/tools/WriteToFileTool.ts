@@ -4,6 +4,7 @@ import fs from "fs/promises"
 
 import { type ClineSayTool, DEFAULT_WRITE_DELAY_MS } from "@njust-ai-cj/types"
 
+import { allowRooIgnorePathAccess } from "../ignore/RooIgnoreController"
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { RecordSource } from "../context-tracking/FileContextTrackerTypes"
@@ -48,7 +49,7 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 			return
 		}
 
-		const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
+		const accessAllowed = allowRooIgnorePathAccess(task.rooIgnoreController, relPath)
 
 		if (!accessAllowed) {
 			await task.say("rooignore_error", relPath)
@@ -195,8 +196,9 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 	}
 
 	override async handlePartial(task: Task, block: ToolUse<"write_to_file">): Promise<void> {
-		const relPath: string | undefined = block.params.path
-		let newContent: string | undefined = block.params.content
+		const na = block.nativeArgs as { path?: string; content?: string } | undefined
+		const relPath: string | undefined = block.params.path ?? na?.path
+		let newContent: string | undefined = block.params.content ?? na?.content
 
 		// Wait for path to stabilize before showing UI (prevents truncated paths)
 		if (!this.hasPathStabilized(relPath) || newContent === undefined) {

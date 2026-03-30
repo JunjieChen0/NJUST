@@ -70,7 +70,8 @@ describe("executeCommandTool", () => {
 			recordToolUsage: vitest.fn().mockReturnValue({} as ToolUsage),
 			recordToolError: vitest.fn(),
 			providerRef: {
-				deref: vitest.fn().mockResolvedValue({
+				// Sync deref (matches WeakRef); async deref breaks `deref()?.getState()` in ExecuteCommandTool.
+				deref: vitest.fn().mockReturnValue({
 					getState: vitest.fn().mockResolvedValue({
 						terminalOutputLineLimit: 500,
 						terminalOutputCharacterLimit: 100000,
@@ -232,12 +233,12 @@ describe("executeCommandTool", () => {
 			mockToolUse.nativeArgs = { command: "cat .env" }
 			// Override the validateCommand mock to return a filename
 			const validateCommandMock = vitest.fn().mockReturnValue(".env")
-			mockCline.njust_aiIgnoreController = {
+			mockCline.rooIgnoreController = {
 				validateCommand: validateCommandMock,
 			}
 
 			const mockRooIgnoreError = "RooIgnore error"
-			;(formatResponse.njust_aiIgnoreError as any).mockReturnValue(mockRooIgnoreError)
+			;(formatResponse.rooIgnoreError as any).mockReturnValue(mockRooIgnoreError)
 
 			// Execute
 			await executeCommandTool.handle(mockCline as unknown as Task, mockToolUse, {
@@ -249,7 +250,7 @@ describe("executeCommandTool", () => {
 			// Verify
 			expect(validateCommandMock).toHaveBeenCalledWith("cat .env")
 			expect(mockCline.say).toHaveBeenCalledWith("rooignore_error", ".env")
-			expect(formatResponse.njust_aiIgnoreError).toHaveBeenCalledWith(".env")
+			expect(formatResponse.rooIgnoreError).toHaveBeenCalledWith(".env")
 			expect(mockPushToolResult).toHaveBeenCalledWith(mockRooIgnoreError)
 			expect(mockAskApproval).not.toHaveBeenCalled()
 			// executeCommandInTerminal should not be called since rooignore blocked it

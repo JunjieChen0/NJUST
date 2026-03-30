@@ -114,7 +114,7 @@ import { buildNativeToolsArrayWithRestrictions } from "./build-tools"
 import { ToolRepetitionDetector } from "../tools/ToolRepetitionDetector"
 import { restoreTodoListForTask } from "../tools/UpdateTodoListTool"
 import { FileContextTracker } from "../context-tracking/FileContextTracker"
-import { RooIgnoreController } from "../ignore/RooIgnoreController"
+import { allowRooIgnorePathAccess, RooIgnoreController } from "../ignore/RooIgnoreController"
 import { RooProtectedController } from "../protect/RooProtectedController"
 import { type AssistantMessageContent, presentAssistantMessage } from "../assistant-message"
 import { NativeToolCallParser } from "../assistant-message/NativeToolCallParser"
@@ -2605,8 +2605,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						break
 					}
 					const op = ops[i]
-					const accessAllowed = this.rooIgnoreController?.validateAccess(op.path)
-					if (accessAllowed === false) {
+					const accessAllowed = allowRooIgnorePathAccess(this.rooIgnoreController, op.path)
+					if (!accessAllowed) {
 						await this.say("rooignore_error", op.path)
 						continue
 					}
@@ -2785,8 +2785,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			if (confirmOps) {
 				for (let i = 0; i < fixOps.length && !this.abort; i++) {
 					const op = fixOps[i]
-					const accessAllowed = this.rooIgnoreController?.validateAccess(op.path)
-					if (accessAllowed === false) {
+					const accessAllowed = allowRooIgnorePathAccess(this.rooIgnoreController, op.path)
+					if (!accessAllowed) {
 						await this.say("rooignore_error", op.path)
 						continue
 					}
@@ -2998,8 +2998,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		if (confirmOps) {
 			for (let i = 0; i < ops.length && !this.abort; i++) {
 				const op = ops[i]
-				const accessAllowed = this.rooIgnoreController?.validateAccess(op.path)
-				if (accessAllowed === false) {
+				const accessAllowed = allowRooIgnorePathAccess(this.rooIgnoreController, op.path)
+				if (!accessAllowed) {
 					await this.say("rooignore_error", op.path)
 					continue
 				}

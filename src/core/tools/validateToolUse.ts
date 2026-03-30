@@ -7,6 +7,31 @@ import { EXPERIMENT_IDS } from "../../shared/experiments"
 import { TOOL_GROUPS, ALWAYS_AVAILABLE_TOOLS, TOOL_ALIASES } from "../../shared/tools"
 
 /**
+ * Merge string `params` with typed `nativeArgs` for mode validation (fileRegex, etc.).
+ * Some tool blocks only populate `nativeArgs`; validating with empty `params` can skip path checks
+ * or mis-classify edit operations in modes with `edit` group options.
+ */
+export function mergeToolParamsForValidation(block: {
+	params?: Record<string, unknown>
+	nativeArgs?: unknown
+}): Record<string, unknown> {
+	const merged: Record<string, unknown> = { ...(block.params ?? {}) }
+	const na = block.nativeArgs
+	if (na && typeof na === "object" && !Array.isArray(na)) {
+		for (const [key, value] of Object.entries(na as Record<string, unknown>)) {
+			if (merged[key] !== undefined && merged[key] !== "") {
+				continue
+			}
+			if (value === undefined || value === null) {
+				continue
+			}
+			merged[key] = typeof value === "string" ? value : JSON.stringify(value)
+		}
+	}
+	return merged
+}
+
+/**
  * Checks if a tool name is a valid, known tool.
  * Note: This does NOT check if the tool is allowed for a specific mode,
  * only that the tool actually exists.

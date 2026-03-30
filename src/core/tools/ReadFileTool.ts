@@ -15,6 +15,7 @@ import { isBinaryFile } from "isbinaryfile"
 import type { ReadFileParams, ReadFileMode, ReadFileToolParams, FileEntry, LineRange } from "@njust-ai-cj/types"
 import { isLegacyReadFileParams, type ClineSayTool } from "@njust-ai-cj/types"
 
+import { allowRooIgnorePathAccess } from "../ignore/RooIgnoreController"
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { RecordSource } from "../context-tracking/FileContextTrackerTypes"
@@ -148,7 +149,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				const relPath = fileResult.path
 
 				// RooIgnore validation
-				const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
+				const accessAllowed = allowRooIgnorePathAccess(task.rooIgnoreController, relPath)
 				if (!accessAllowed) {
 					await task.say("rooignore_error", relPath)
 					const errorMsg = formatResponse.rooIgnoreError(relPath)
@@ -690,7 +691,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			const fullPath = path.resolve(task.cwd, relPath)
 
 			// RooIgnore validation
-			const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
+			const accessAllowed = allowRooIgnorePathAccess(task.rooIgnoreController, relPath)
 			if (!accessAllowed) {
 				await task.say("rooignore_error", relPath)
 				const errorMsg = formatResponse.rooIgnoreError(relPath)

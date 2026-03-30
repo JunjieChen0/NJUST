@@ -115,7 +115,7 @@ describe("searchReplaceTool", () => {
 				}),
 			}),
 		}
-		mockCline.njust_aiIgnoreController = {
+		mockCline.rooIgnoreController = {
 			validateAccess: vi.fn().mockReturnValue(true),
 		}
 		mockCline.njust_aiProtectedController = {
@@ -173,7 +173,7 @@ describe("searchReplaceTool", () => {
 
 		mockedFileExistsAtPath.mockResolvedValue(fileExists)
 		mockedFsReadFile.mockResolvedValue(fileContent)
-		mockCline.njust_aiIgnoreController.validateAccess.mockReturnValue(accessAllowed)
+		mockCline.rooIgnoreController.validateAccess.mockReturnValue(accessAllowed)
 
 		const nativeArgs: Record<string, unknown> = {
 			file_path: testFilePath,
