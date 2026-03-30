@@ -595,7 +595,7 @@ export interface WebviewMessage {
 		codebaseIndexVercelAiGatewayApiKey?: string
 		codebaseIndexOpenRouterApiKey?: string
 	}
-	updatedSettings?: NJUST_AI_CJSettings
+	updatedSettings?: NJUST_AI_CJSettings & { cloudAgentServerUrl?: string }
 	/** Task configuration applied via `createTask()` when starting a cloud task. */
 	taskConfiguration?: NJUST_AI_CJSettings
 	action?: string

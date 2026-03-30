@@ -1589,16 +1589,18 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 					)}
 				</>
 			) : (
-				<div className="flex flex-col h-full justify-center p-6 min-h-0 overflow-y-auto gap-4 relative">
-					<div className="flex flex-col items-start gap-2 justify-center h-full min-[400px]:px-6">
+				<div className="flex flex-col h-full p-6 min-h-0 overflow-y-auto gap-4 relative">
+					<div className="flex flex-col items-start gap-2 min-[400px]:px-6 shrink-0">
 						<div className="flex flex-col gap-4 w-full">
 							<RooHero />
-							{/* Show RooTips when authenticated or when user is new */}
-							{taskHistory.length < 6 && <RooTips />}
-							{/* Everyone should see their task history if any */}
-							{taskHistory.length > 0 && <HistoryPreview />}
+							<RooTips />
 						</div>
 					</div>
+					{taskHistory.length > 0 && (
+						<div className="flex flex-col min-[400px]:px-6 min-h-0">
+							<HistoryPreview />
+						</div>
+					)}
 				</div>
 			)}
 
