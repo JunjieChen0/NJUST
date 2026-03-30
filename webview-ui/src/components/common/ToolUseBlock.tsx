@@ -1,9 +1,27 @@
+import type { CSSProperties } from "react"
+
 import { cn } from "@/lib/utils"
 
-export const ToolUseBlock = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+/** Hard cap so layout works even if Tailwind utilities are missing from the bundle. */
+const toolUseBlockLayoutStyle: CSSProperties = {
+	boxSizing: "border-box",
+	minWidth: 0,
+	maxWidth: "min(100%, 56rem)",
+	width: "100%",
+}
+
+export const ToolUseBlock = ({
+	className,
+	style,
+	...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
 	<div
-		className={cn("overflow-hidden rounded-md p-2 cursor-pointer bg-vscode-editor-background", className)}
 		{...props}
+		className={cn("overflow-hidden rounded-md p-2 cursor-pointer bg-vscode-editor-background", className)}
+		style={{
+			...toolUseBlockLayoutStyle,
+			...style,
+		}}
 	/>
 )
 

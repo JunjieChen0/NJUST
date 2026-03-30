@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, type CSSProperties } from "react"
 import { ClipboardCopy, Timer } from "lucide-react"
 
 import { Button, StandardTooltip } from "@/components/ui"
@@ -10,6 +10,13 @@ import { cn } from "@/lib/utils"
 
 const DEFAULT_FOLLOWUP_TIMEOUT_MS = 60000
 const COUNTDOWN_INTERVAL_MS = 1000
+
+/** 每条追问选项外框（等宽）；约为原 30rem 的 2/3。按钮在框内铺满；窄屏不超过列宽。 */
+const FOLLOWUP_SUGGESTION_ROW_STYLE: CSSProperties = {
+	width: "min(100%, 20rem)",
+	maxWidth: "100%",
+	boxSizing: "border-box",
+}
 
 interface FollowUpSuggestProps {
 	suggestions?: SuggestionItem[]
@@ -108,28 +115,44 @@ export const FollowUpSuggest = ({
 	}
 
 	return (
-		<div className="flex mb-2 flex-col h-full gap-2">
+		<div className="flex mb-2 flex-col h-full gap-2 min-w-0 w-full items-start">
 			{suggestions.map((suggestion, index) => {
 				const isFirstSuggestion = index === 0
 
 				return (
-					<div key={`${suggestion.answer}-${ts}`} className="w-full relative group">
+					<div
+						key={`${suggestion.answer}-${ts}`}
+						className="relative group min-w-0 p-1 rounded-xl"
+						style={FOLLOWUP_SUGGESTION_ROW_STYLE}>
 						<Button
 							variant="outline"
 							className={cn(
-								"text-left whitespace-normal break-words w-full h-auto px-3 py-2 justify-start pr-8 rounded-xl",
+								"relative text-left whitespace-normal break-words h-auto w-full min-w-0 px-3 py-2 justify-start pr-8 rounded-lg",
 								isFirstSuggestion &&
 									countdown !== null &&
 									!suggestionSelected &&
 									!isAnswered &&
 									"border-vscode-foreground/60 rounded-b-none -mb-1",
 							)}
+							style={{ boxSizing: "border-box" }}
 							onClick={(event) => handleSuggestionClick(suggestion, event)}
 							aria-label={suggestion.answer}>
 							{suggestion.answer}
+							<StandardTooltip content={t("chat:followUpSuggest.copyToInput")}>
+								<div
+									className="absolute top-1/2 right-1.5 -translate-y-1/2 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity bg-vscode-input-background px-0.5 rounded"
+									onClick={(e) => {
+										e.stopPropagation()
+										setSuggestionSelected(true)
+										onCancelAutoApproval?.()
+										onSuggestionClick?.(suggestion, { ...e, shiftKey: true })
+									}}>
+									<ClipboardCopy className="w-4" />
+								</div>
+							</StandardTooltip>
 						</Button>
 						{isFirstSuggestion && countdown !== null && !suggestionSelected && !isAnswered && (
-							<p className="rounded-b-xl border-1 border-t-0 border-vscode-foreground/60 text-vscode-descriptionForeground text-xs m-0 mt-1 px-3 pt-2 pb-2">
+							<p className="block rounded-b-xl border-1 border-t-0 border-vscode-foreground/60 text-vscode-descriptionForeground text-xs m-0 w-full box-border px-3 pt-2 pb-2">
 								<Timer className="size-3 inline-block -mt-0.5 mr-1 animate-pulse" />
 								{t("chat:followUpSuggest.timerPrefix", { seconds: countdown })}
 							</p>
@@ -140,20 +163,6 @@ export const FollowUpSuggest = ({
 								{suggestion.mode}
 							</div>
 						)}
-						<StandardTooltip content={t("chat:followUpSuggest.copyToInput")}>
-							<div
-								className="absolute cursor-pointer top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-vscode-input-background px-0.5 rounded"
-								onClick={(e) => {
-									e.stopPropagation()
-									// Cancel the auto-approve timer when edit button is clicked
-									setSuggestionSelected(true)
-									onCancelAutoApproval?.()
-									// Simulate shift-click by directly calling the handler with shiftKey=true.
-									onSuggestionClick?.(suggestion, { ...e, shiftKey: true })
-								}}>
-								<ClipboardCopy className="w-4" />
-							</div>
-						</StandardTooltip>
 					</div>
 				)
 			})}

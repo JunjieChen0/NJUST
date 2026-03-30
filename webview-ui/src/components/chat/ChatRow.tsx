@@ -623,10 +623,10 @@ export const ChatRowContent = ({
 									: t("chat:fileOperations.didRead")}
 							</span>
 						</div>
-						<div className="pl-6">
-							<ToolUseBlock>
+						<div className="pl-6 min-w-0">
+							<ToolUseBlock style={{ width: "fit-content" }}>
 								<ToolUseBlockHeader
-									className="group"
+									className="group gap-2 max-w-full"
 									onClick={() =>
 										vscode.postMessage({
 											type: "openFile",
@@ -636,13 +636,12 @@ export const ChatRowContent = ({
 									}>
 									{tool.path?.startsWith(".") && <span>.</span>}
 									<PathTooltip content={formatPathTooltip(tool.path, tool.reason)}>
-										<span className="whitespace-nowrap overflow-hidden text-ellipsis text-left mr-2 rtl">
+										<span className="min-w-0 whitespace-nowrap overflow-hidden text-ellipsis text-left rtl">
 											{formatPathTooltip(tool.path, tool.reason)}
 										</span>
 									</PathTooltip>
-									<div style={{ flexGrow: 1 }}></div>
 									<SquareArrowOutUpRight
-										className="w-4 shrink-0 codicon codicon-link-external opacity-0 group-hover:opacity-100 transition-opacity"
+										className="ml-auto w-4 shrink-0 codicon codicon-link-external opacity-0 group-hover:opacity-100 transition-opacity"
 										style={{ fontSize: 13.5, margin: "1px 0" }}
 									/>
 								</ToolUseBlockHeader>
@@ -1698,7 +1697,9 @@ export const ChatRowContent = ({
 									{title}
 								</div>
 							)}
-							<div className="flex flex-col gap-2 ml-6">
+							<div
+								className="flex flex-col gap-2 ml-6 min-w-0 w-full"
+								style={{ maxWidth: "48rem" }}>
 								<Markdown
 									markdown={message.partial === true ? message?.text : followUpData?.question}
 								/>
