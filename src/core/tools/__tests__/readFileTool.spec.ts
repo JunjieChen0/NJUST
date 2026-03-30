@@ -287,7 +287,7 @@ describe("ReadFileTool", () => {
 			await readFileTool.execute({ path: "secret.env" }, mockTask as any, callbacks)
 
 			expect(mockTask.say).toHaveBeenCalledWith("rooignore_error", "secret.env")
-			expect(formatResponse.njust_aiIgnoreError).toHaveBeenCalledWith("secret.env")
+			expect(formatResponse.rooIgnoreError).toHaveBeenCalledWith("secret.env")
 			expect(callbacks.pushToolResult).toHaveBeenCalledWith(expect.stringContaining("blocked by the .rooignore"))
 		})
 	})
@@ -543,23 +543,37 @@ describe("ReadFileTool", () => {
 			)
 		})
 
-		it("should show truncation notice when content is truncated", async () => {
+		it("should merge paginated slice reads in one tool invocation (single approval)", async () => {
 			const mockTask = createMockTask()
 			const callbacks = createMockCallbacks()
 
 			mockedFsReadFile.mockResolvedValue(Buffer.from("lots of content..."))
-			mockedReadWithSlice.mockReturnValue({
-				content: "1 | truncated content",
-				returnedLines: 100,
-				totalLines: 5000,
-				wasTruncated: true,
-				includedRanges: [[1, 100]],
+			mockedReadWithSlice.mockImplementation((_content: string, offset: number) => {
+				if (offset === 0) {
+					return {
+						content: "1 | first chunk",
+						returnedLines: 100,
+						totalLines: 5000,
+						wasTruncated: true,
+						includedRanges: [[1, 100]],
+					}
+				}
+				return {
+					content: "101 | second chunk",
+					returnedLines: 4900,
+					totalLines: 5000,
+					wasTruncated: false,
+					includedRanges: [[101, 5000]],
+				}
 			})
 
 			await readFileTool.execute({ path: "large.ts" }, mockTask as any, callbacks)
 
-			expect(callbacks.pushToolResult).toHaveBeenCalledWith(expect.stringContaining("truncated"))
-			expect(callbacks.pushToolResult).toHaveBeenCalledWith(expect.stringContaining("To read more"))
+			expect(mockedReadWithSlice).toHaveBeenCalledTimes(2)
+			const pushed = String(callbacks.pushToolResult.mock.calls[0]?.[0] ?? "")
+			expect(pushed).toContain("first chunk")
+			expect(pushed).toContain("second chunk")
+			expect(pushed).not.toContain("To read more")
 		})
 
 		it("should handle empty files", async () => {

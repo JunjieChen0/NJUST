@@ -66,12 +66,83 @@ export interface ExtractTextResult {
 	linesShown?: [number, number]
 }
 
+const PLAIN_TEXT_SLICE_MERGE_MAX_SLICES = 500
+
+/**
+ * Reads plain text by merging multiple readWithSlice chunks (one logical read).
+ * Matches ReadFileTool slice behaviour so @-mentions / uploaded file context
+ * does not stop at the first limit lines and force repeated read_file approvals.
+ */
+export function readPlainTextContentWithFullSliceMerge(
+	rawContent: string,
+	limit: number = DEFAULT_LINE_LIMIT,
+): ExtractTextResult {
+	if (rawContent === "") {
+		return {
+			content: "",
+			totalLines: 0,
+			returnedLines: 0,
+			wasTruncated: false,
+		}
+	}
+
+	const segments: string[] = []
+	let offset0 = 0
+	let totalLines = 0
+	let lastRange: [number, number] | undefined
+
+	for (let i = 0; i < PLAIN_TEXT_SLICE_MERGE_MAX_SLICES; i++) {
+		const result = readWithSlice(rawContent, offset0, limit)
+
+		if (result.content.startsWith("Error:")) {
+			return {
+				content: result.content,
+				totalLines: result.totalLines,
+				returnedLines: result.returnedLines,
+				wasTruncated: false,
+			}
+		}
+
+		if (i === 0) {
+			totalLines = result.totalLines
+		}
+
+		segments.push(result.content)
+		if (result.includedRanges.length > 0) {
+			lastRange = result.includedRanges[0]
+		}
+
+		if (!result.wasTruncated) {
+			const content = segments.length === 1 ? segments[0]! : segments.join("\n\n")
+			return {
+				content,
+				totalLines,
+				returnedLines: totalLines,
+				wasTruncated: false,
+				linesShown: totalLines > 0 ? ([1, totalLines] as [number, number]) : undefined,
+			}
+		}
+
+		offset0 += result.returnedLines
+	}
+
+	const tail = `\n\nIMPORTANT: File still truncated after reading ${PLAIN_TEXT_SLICE_MERGE_MAX_SLICES * limit} lines. Use read_file with offset=${(lastRange?.[1] ?? offset0) + 1} and limit=${limit} to continue.`
+
+	return {
+		content: segments.join("\n\n") + tail,
+		totalLines,
+		returnedLines: offset0,
+		wasTruncated: true,
+		linesShown: lastRange,
+	}
+}
+
 /**
  * Extracts text content from a file with truncation support.
  * Returns structured result with metadata about truncation.
  *
  * @param filePath - Path to the file to extract text from
- * @param limit - Maximum lines to return (default: 2000)
+ * @param limit - Maximum lines per internal slice when merging plain text (default: 2000)
  * @returns Promise resolving to extracted text with metadata
  * @throws {Error} If file not found or unsupported binary format
  */
@@ -106,15 +177,7 @@ export async function extractTextFromFileWithMetadata(
 
 	if (!isBinary) {
 		const rawContent = await fs.readFile(filePath, "utf8")
-		const result = readWithSlice(rawContent, 0, limit)
-
-		return {
-			content: result.content,
-			totalLines: result.totalLines,
-			returnedLines: result.returnedLines,
-			wasTruncated: result.wasTruncated,
-			linesShown: result.includedRanges.length > 0 ? result.includedRanges[0] : undefined,
-		}
+		return readPlainTextContentWithFullSliceMerge(rawContent, limit)
 	} else {
 		throw new Error(`Cannot read text for file type: ${fileExtension}`)
 	}
@@ -122,7 +185,7 @@ export async function extractTextFromFileWithMetadata(
 
 /**
  * Extracts text content from a file, with support for various formats including PDF, DOCX, XLSX, and plain text.
- * Now uses truncation to limit large files to DEFAULT_LINE_LIMIT lines.
+ * Plain text files are merged slice-by-slice up to a line cap (same strategy as read_file).
  *
  * @param filePath - Path to the file to extract text from
  * @returns Promise resolving to the extracted text content with line numbers

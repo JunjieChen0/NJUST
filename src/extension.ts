@@ -25,6 +25,7 @@ import { createOutputChannelLogger } from "./utils/outputChannelLogger"
 import { initializeNetworkProxy } from "./utils/networkProxy"
 
 import { Package } from "./shared/package"
+import { formatLanguage } from "./shared/language"
 import { ContextProxy } from "./core/config/ContextProxy"
 import { ClineProvider } from "./core/webview/ClineProvider"
 import { DIFF_VIEW_URI_SCHEME } from "./integrations/editor/DiffViewProvider"
@@ -102,8 +103,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Migrate old settings to new
 	await migrateSettings(context, outputChannel)
 
-	// Initialize i18n for internationalization support.
-	initializeI18n(context.globalState.get("language") ?? "en")
+	// Initialize i18n for internationalization support (follow VS Code UI language until user sets language in extension state).
+	initializeI18n(context.globalState.get("language") ?? formatLanguage(vscode.env.language))
 
 	// Initialize terminal shell execution handlers.
 	TerminalRegistry.initialize()

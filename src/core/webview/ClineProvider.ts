@@ -52,6 +52,7 @@ import { TelemetryService } from "@njust-ai-cj/telemetry"
 import { aggregateTaskCostsRecursive, type AggregatedCosts } from "./aggregateTaskCosts"
 
 import { Package } from "../../shared/package"
+import { formatLanguage } from "../../shared/language"
 import { findLast } from "../../shared/array"
 import { supportPrompt } from "../../shared/support-prompt"
 import { GlobalFileNames } from "../../shared/globalFileNames"
@@ -2121,7 +2122,7 @@ export class ClineProvider
 			disabledTools,
 			showRooIgnoredFiles: showRooIgnoredFiles ?? false,
 			enableSubfolderRules: enableSubfolderRules ?? false,
-			language: language ?? "en",
+			language: language ?? formatLanguage(vscode.env.language),
 			fontFamily: fontFamily ?? "serif",
 			renderContext: this.renderContext,
 			maxImageFileSize: maxImageFileSize ?? 5,
@@ -2267,7 +2268,8 @@ export class ClineProvider
 			terminalZshP10k: stateValues.terminalZshP10k ?? false,
 			terminalZdotdir: stateValues.terminalZdotdir ?? false,
 			mode: stateValues.mode ?? defaultModeSlug,
-			language: stateValues.language ?? "en",
+			// When the user has not chosen a language in settings, follow VS Code's display language (typically matches OS after install).
+			language: stateValues.language ?? formatLanguage(vscode.env.language),
 			fontFamily: stateValues.fontFamily ?? "serif",
 			mcpEnabled: stateValues.mcpEnabled ?? true,
 			mcpServers: this.mcpHub?.getAllServers() ?? [],

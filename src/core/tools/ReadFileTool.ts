@@ -266,6 +266,45 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 	}
 
 	/**
+	 * Slice mode: read the full requested range in one tool invocation (single user approval).
+	 * Previously only the first `limit` lines were returned and the model had to call read_file
+	 * again, which triggered approval each time.
+	 */
+	private readFullFileInSliceMode(content: string, entry: InternalFileEntry): string {
+		if (content === "") {
+			return "Note: File is empty"
+		}
+
+		const offset1 = entry.offset ?? 1
+		let offset0 = Math.max(0, offset1 - 1)
+		const limit = entry.limit ?? DEFAULT_LINE_LIMIT
+		/** Safety cap: at most 500 chunks × limit lines (e.g. 1M lines at default limit). */
+		const MAX_SLICES = 500
+		const segments: string[] = []
+
+		for (let i = 0; i < MAX_SLICES; i++) {
+			const result = readWithSlice(content, offset0, limit)
+
+			if (result.content.startsWith("Error:")) {
+				return result.content
+			}
+
+			segments.push(result.content)
+
+			if (!result.wasTruncated) {
+				if (segments.length === 1) {
+					return segments[0]!
+				}
+				return segments.join("\n\n")
+			}
+
+			offset0 += result.returnedLines
+		}
+
+		return `${segments.join("\n\n")}\n\nIMPORTANT: File still truncated after reading ${MAX_SLICES * limit} lines. Use read_file with offset=${offset0 + 1} and limit=${limit} to continue.`
+	}
+
+	/**
 	 * Process a text file according to the requested mode.
 	 */
 	private processTextFile(content: string, entry: InternalFileEntry): string {
@@ -304,31 +343,8 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			return output
 		}
 
-		// Slice mode (default): simple offset/limit reading
-		// NOTE: read_file offset is 1-based externally; convert to 0-based for readWithSlice.
-		const offset1 = entry.offset ?? 1
-		const offset0 = Math.max(0, offset1 - 1)
-		const limit = entry.limit ?? DEFAULT_LINE_LIMIT
-
-		const result = readWithSlice(content, offset0, limit)
-
-		let output = result.content
-
-		if (result.wasTruncated) {
-			const startLine = offset1
-			const endLine = offset1 + result.returnedLines - 1
-			const nextOffset = endLine + 1
-			// Put truncation warning at TOP (before content) to match @ mention format
-			output = `IMPORTANT: File content truncated.
-	Status: Showing lines ${startLine}-${endLine} of ${result.totalLines} total lines.
-	To read more: Use the read_file tool with offset=${nextOffset} and limit=${limit}.
-	
-	${result.content}`
-		} else if (result.returnedLines === 0) {
-			output = "Note: File is empty"
-		}
-
-		return output
+		// Slice mode (default): read through end of file in one approval (chunked internally).
+		return this.readFullFileInSliceMode(content, entry)
 	}
 
 	/**
@@ -788,12 +804,12 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 					}
 					content = selectedLines.join("\n")
 				} else {
-					// Read with default limits using slice mode
-					const result = readWithSlice(rawContent, 0, DEFAULT_LINE_LIMIT)
-					content = result.content
-					if (result.wasTruncated) {
-						content += `\n\n[File truncated: showing ${result.returnedLines} of ${result.totalLines} total lines]`
-					}
+					// Full file in one approval (same chunking as executeNew slice mode)
+					content = this.readFullFileInSliceMode(rawContent, {
+						path: relPath,
+						offset: 1,
+						limit: DEFAULT_LINE_LIMIT,
+					})
 				}
 
 				results.push(`File: ${relPath}\n${content}`)
