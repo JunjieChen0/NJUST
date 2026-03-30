@@ -24,6 +24,7 @@ import { getAllModes } from "@roo/modes"
 import { ProfileValidator } from "@roo/ProfileValidator"
 import { getLatestTodo } from "@roo/todo"
 
+import { getExtensionImageUrl } from "@src/utils/extensionImageUrl"
 import { vscode } from "@src/utils/vscode"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { useExtensionState } from "@src/context/ExtensionStateContext"
@@ -214,6 +215,11 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 	const [playNotification] = useSound(`${audioBaseUri}/notification.wav`, { volume, soundEnabled, interrupt: true })
 	const [playCelebration] = useSound(`${audioBaseUri}/celebration.wav`, { volume, soundEnabled, interrupt: true })
 	const [playProgressLoop] = useSound(`${audioBaseUri}/progress_loop.wav`, { volume, soundEnabled, interrupt: true })
+
+	const welcomeLavenderBgStyle = useMemo(() => {
+		const u = getExtensionImageUrl("lavender-bg.png")
+		return u ? ({ "--welcome-lavender-bg": `url("${u}")` } as React.CSSProperties) : undefined
+	}, [])
 
 	const lastPlayedRef = useRef<Record<string, number>>({})
 
@@ -1589,7 +1595,9 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 					)}
 				</>
 			) : (
-				<div className="flex flex-col h-full p-6 min-h-0 overflow-y-auto gap-4 relative">
+				<div
+					className="welcome-lavender-backdrop flex flex-col h-full p-6 min-h-0 overflow-y-auto gap-4 relative"
+					style={welcomeLavenderBgStyle}>
 					<div className="flex flex-col items-start gap-2 min-[400px]:px-6 shrink-0">
 						<div className="flex flex-col gap-4 w-full">
 							<RooHero />

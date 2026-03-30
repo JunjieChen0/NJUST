@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { CSSProperties } from "react"
 import { VSCodeRadio, VSCodeRadioGroup } from "@vscode/webview-ui-toolkit/react"
 
 import type { ProviderSettings } from "@njust-ai-cj/types"
@@ -15,10 +16,15 @@ import { Tab, TabContent } from "../common/Tab"
 import RooHero from "./RooHero"
 import { Trans } from "react-i18next"
 import { Brain } from "lucide-react"
+import { getExtensionImageUrl } from "@src/utils/extensionImageUrl"
 
 type ProviderOption = "custom"
 
 const WelcomeViewProvider = () => {
+	const welcomeLavenderBgStyle = useMemo(() => {
+		const u = getExtensionImageUrl("lavender-bg.png")
+		return u ? ({ "--welcome-lavender-bg": `url("${u}")` } as CSSProperties) : undefined
+	}, [])
 	const {
 		apiConfiguration,
 		currentApiConfigName,
@@ -76,7 +82,9 @@ const WelcomeViewProvider = () => {
 	if (selectedProvider === null) {
 		return (
 			<Tab>
-				<TabContent className="relative flex flex-col gap-4 p-6 justify-center">
+				<TabContent
+					className="welcome-lavender-backdrop flex flex-col gap-4 p-6 justify-center relative"
+					style={welcomeLavenderBgStyle}>
 					<RooHero />
 					<h2 className="mt-0 mb-0 text-xl">{t("welcome:landing.greeting")}</h2>
 
@@ -121,7 +129,9 @@ const WelcomeViewProvider = () => {
 
 	return (
 		<Tab>
-			<TabContent className="flex flex-col gap-4 p-6 justify-center">
+			<TabContent
+				className="welcome-lavender-backdrop flex flex-col gap-4 p-6 justify-center relative"
+				style={welcomeLavenderBgStyle}>
 				<Brain className="size-8" strokeWidth={1.5} />
 				<h2 className="mt-0 mb-0 text-xl">{t("welcome:providerSignup.heading")}</h2>
 

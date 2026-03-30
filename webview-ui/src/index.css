@@ -240,6 +240,79 @@
 	.animate-smooth-bounce {
 		animation: smooth-bounce 1s ease-in-out infinite;
 	}
+
+	/**
+	 * Welcome / empty-chat: full-area watercolor lavender background.
+	 * Set --welcome-lavender-bg from React to url("...") (extension assets; CSP-safe).
+	 * Gradient layer is painted above the photo (first list item = on top) for a soft, readable veil.
+	 */
+	.welcome-lavender-backdrop {
+		position: relative;
+		isolation: isolate;
+	}
+
+	.welcome-lavender-backdrop > * {
+		position: relative;
+		z-index: 1;
+	}
+
+	.welcome-lavender-backdrop::before {
+		content: "";
+		position: absolute;
+		inset: 0;
+		z-index: 0;
+		pointer-events: none;
+		/* Photo: fixed pixel size so sidebar / panel resize does not scale the art */
+		--welcome-lavender-art-width: 267px;
+		background-image:
+			linear-gradient(
+				160deg,
+				rgba(255, 255, 255, 0.86) 0%,
+				rgba(252, 250, 254, 0.72) 35%,
+				rgba(250, 247, 252, 0.60) 68%,
+				rgba(248, 245, 252, 0.50) 100%
+			),
+			radial-gradient(
+				ellipse 70% 55% at 100% 100%,
+				rgba(255, 255, 255, 0.48) 0%,
+				transparent 72%
+			),
+			var(--welcome-lavender-bg, none);
+		background-size:
+			cover,
+			cover,
+			var(--welcome-lavender-art-width) auto;
+		background-position:
+			center,
+			center,
+			right bottom;
+		background-repeat: no-repeat, no-repeat, no-repeat;
+	}
+
+	body.vscode-dark .welcome-lavender-backdrop::before {
+		background-image:
+			linear-gradient(
+				160deg,
+				color-mix(in srgb, var(--vscode-editor-background) 90%, transparent) 0%,
+				color-mix(in srgb, var(--vscode-editor-background) 76%, transparent) 100%
+			),
+			radial-gradient(
+				ellipse 70% 55% at 100% 100%,
+				color-mix(in srgb, var(--vscode-editor-background) 55%, transparent) 0%,
+				transparent 72%
+			),
+			var(--welcome-lavender-bg, none);
+	}
+
+	/* Base tint behind the photo layer */
+	body.vscode-light .welcome-lavender-backdrop,
+	body.vscode-high-contrast-light .welcome-lavender-backdrop {
+		background-color: #f6f3fa;
+	}
+
+	body.vscode-dark .welcome-lavender-backdrop {
+		background-color: color-mix(in srgb, var(--vscode-editor-background) 94%, rgb(150 125 175) 6%);
+	}
 }
 
 /* Form Element Focus States */
