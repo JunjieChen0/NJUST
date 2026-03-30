@@ -308,6 +308,7 @@ export type ExtensionState = Pick<
 	mdmCompliant?: boolean
 	taskSyncEnabled: boolean
 	openAiCodexIsAuthenticated?: boolean
+	cloudAgentServerUrl?: string
 	debug?: boolean
 
 	/**

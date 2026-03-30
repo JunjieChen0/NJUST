@@ -6,7 +6,7 @@
 	},
 	"scripts": {
 		"preinstall": "node scripts/bootstrap.mjs",
-		"prepare": "husky",
+		"prepare": "",
 		"install": "node scripts/bootstrap.mjs",
 		"install:all": "node scripts/bootstrap.mjs",
 		"lint": "turbo lint --log-order grouped --output-logs new-only",
@@ -38,7 +38,6 @@
 		"eslint": "^9.27.0",
 		"glob": "^11.1.0",
 		"knip": "^5.44.4",
-		"lint-staged": "^16.0.0",
 		"mkdirp": "^3.0.1",
 		"only-allow": "^1.2.1",
 		"ovsx": "0.10.4",
@@ -47,11 +46,6 @@
 		"tsx": "^4.19.3",
 		"turbo": "^2.5.6",
 		"typescript": "5.8.3"
-	},
-	"lint-staged": {
-		"*.{js,jsx,ts,tsx,json,css,md}": [
-			"prettier --write"
-		]
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [

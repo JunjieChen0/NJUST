@@ -16,6 +16,13 @@
 		"title": "API配置",
 		"select": "选择要用于此模式的API配置"
 	},
+	"cloudAgent": {
+		"serverUrl": {
+			"title": "服务器地址",
+			"description": "输入Cloud Agent服务器的REST地址",
+			"placeholder": "http://120.79.250.232:8765"
+		}
+	},
 	"tools": {
 		"title": "可用功能",
 		"builtInModesText": "内置模式的可用功能不能被修改",

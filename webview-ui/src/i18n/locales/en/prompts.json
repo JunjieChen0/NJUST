@@ -16,6 +16,13 @@
 		"title": "API Configuration",
 		"select": "Select which API configuration to use for this mode"
 	},
+	"cloudAgent": {
+		"serverUrl": {
+			"title": "Server Address",
+			"description": "Enter the Cloud Agent server REST URL",
+			"placeholder": "http://120.79.250.232:8765"
+		}
+	},
 	"tools": {
 		"title": "Available Tools",
 		"builtInModesText": "Tools for built-in modes cannot be modified",
