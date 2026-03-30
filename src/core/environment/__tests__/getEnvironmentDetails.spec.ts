@@ -146,6 +146,8 @@ describe("getEnvironmentDetails", () => {
 		expect(result).toContain("<environment_details>")
 		expect(result).toContain("</environment_details>")
 		// Visible Files and Open Tabs headers only appear when there's content
+		expect(result).toContain("# Host System")
+		expect(result).toContain("Tailor **compile and run** commands")
 		expect(result).toContain("# Current Time")
 		expect(result).not.toContain("# Git Status") // Git status is disabled by default (maxGitStatusFiles = 0)
 		expect(result).toContain("# Current Cost")
@@ -174,7 +176,7 @@ describe("getEnvironmentDetails", () => {
 			mockCwd,
 			["file1.ts", "file2.ts"],
 			false,
-			mockCline.njust_aiIgnoreController,
+			mockCline.rooIgnoreController,
 			false,
 		)
 	})

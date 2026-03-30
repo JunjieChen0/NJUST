@@ -5,6 +5,7 @@ import process from "process"
 import type { RooTerminal } from "./types"
 import { BaseTerminal } from "./BaseTerminal"
 import { BaseTerminalProcess } from "./BaseTerminalProcess"
+import { normalizeDotSlashCommandForWindowsShell } from "../../utils/hostShellCommand"
 
 export class ExecaTerminalProcess extends BaseTerminalProcess {
 	private terminalRef: WeakRef<RooTerminal>
@@ -34,13 +35,15 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 	}
 
 	public override async run(command: string) {
-		this.command = command
+		const shellPath = BaseTerminal.getExecaShellPath()
+		const normalizedCommand = normalizeDotSlashCommandForWindowsShell(command, shellPath)
+		this.command = normalizedCommand
 
 		try {
 			this.isHot = true
 
 			this.subprocess = execa({
-				shell: BaseTerminal.getExecaShellPath() || true,
+				shell: shellPath || true,
 				cwd: this.terminal.getCurrentWorkingDirectory(),
 				all: true,
 				// Ignore stdin to ensure non-interactive mode and prevent hanging
@@ -51,7 +54,7 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 					LANG: "en_US.UTF-8",
 					LC_ALL: "en_US.UTF-8",
 				},
-			})`${command}`
+			})`${normalizedCommand}`
 
 			this.pid = this.subprocess.pid
 

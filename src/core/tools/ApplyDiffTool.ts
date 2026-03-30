@@ -6,6 +6,7 @@ import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import { getReadablePath } from "../../utils/path"
 import { ignoreAbortError } from "../../utils/errorHandling"
+import { allowRooIgnorePathAccess } from "../ignore/RooIgnoreController"
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { fileExistsAtPath } from "../../utils/fs"
@@ -48,7 +49,7 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 				return
 			}
 
-			const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
+			const accessAllowed = allowRooIgnorePathAccess(task.rooIgnoreController, relPath)
 
 			if (!accessAllowed) {
 				await task.say("rooignore_error", relPath)

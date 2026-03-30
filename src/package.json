@@ -3,7 +3,7 @@
 	"displayName": "NJUST_AI_CJ",
 	"description": "AI-powered coding assistant for NJUST",
 	"publisher": "JunjieChen-YuyaoJiang",
-	"version": "2026.3.29",
+	"version": "2026.3.30",
 	"icon": "assets/icons/icon.png",
 	"galleryBanner": {
 		"color": "#617A91",
@@ -851,7 +851,7 @@
 				"njust-ai-cj.cloudAgent.compileLoop.enabled": {
 					"type": "boolean",
 					"default": true,
-					"description": "After Cloud Agent writes code via workspace_ops, call POST /v1/compile on the server to compile. If compilation fails, send errors back to the agent for automatic correction and loop until success or maxRetries."
+					"description": "After Cloud Agent writes code via workspace_ops, call POST /v1/compile on the server to compile. If compilation fails, send errors back to the agent for automatic correction and loop until success or maxRetries. Applies to both legacy (/v1/run) and default deferred (/v1/deferred/start) paths."
 				},
 				"njust-ai-cj.cloudAgent.compileLoop.maxRetries": {
 					"type": "number",

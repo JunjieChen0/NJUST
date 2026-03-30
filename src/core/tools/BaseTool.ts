@@ -1,5 +1,6 @@
 import type { ToolName } from "@njust-ai-cj/types"
 
+import { AskIgnoredError } from "../task/AskIgnoredError"
 import { Task } from "../task/Task"
 import type { ToolUse, HandleError, PushToolResult, AskApproval, NativeToolArgs } from "../../shared/tools"
 
@@ -116,6 +117,9 @@ export abstract class BaseTool<TName extends ToolName> {
 			try {
 				await this.handlePartial(task, block)
 			} catch (error) {
+				if (error instanceof AskIgnoredError) {
+					return
+				}
 				console.error(`Error in handlePartial:`, error)
 				await callbacks.handleError(
 					`handling partial ${this.name}`,

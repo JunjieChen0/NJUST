@@ -19,6 +19,10 @@ const HistoryPreview = () => {
 	// Show up to 4 groups (parent + subtasks count as 1 block)
 	const displayGroups = groups.slice(0, 4)
 
+	if (displayGroups.length === 0) {
+		return null
+	}
+
 	return (
 		<div className="flex flex-col gap-1">
 			<div className="flex flex-wrap items-center justify-between mt-4 mb-2">

@@ -117,7 +117,7 @@ describe("editFileTool", () => {
 				}),
 			}),
 		}
-		mockTask.njust_aiIgnoreController = {
+		mockTask.rooIgnoreController = {
 			validateAccess: vi.fn().mockReturnValue(true),
 		}
 		mockTask.njust_aiProtectedController = {
@@ -175,7 +175,7 @@ describe("editFileTool", () => {
 
 		mockedFileExistsAtPath.mockResolvedValue(fileExists)
 		mockedFsReadFile.mockResolvedValue(fileContent)
-		mockTask.njust_aiIgnoreController.validateAccess.mockReturnValue(accessAllowed)
+		mockTask.rooIgnoreController.validateAccess.mockReturnValue(accessAllowed)
 
 		const nativeArgs: Record<string, unknown> = {
 			file_path: testFilePath,
@@ -269,7 +269,7 @@ describe("editFileTool", () => {
 
 				mockedFileExistsAtPath.mockResolvedValue(fileExists)
 				mockedFsReadFile.mockResolvedValue(fileContent)
-				mockTask.njust_aiIgnoreController.validateAccess.mockReturnValue(true)
+				mockTask.rooIgnoreController.validateAccess.mockReturnValue(true)
 
 				const toolUse: ToolUse = {
 					type: "tool_use",

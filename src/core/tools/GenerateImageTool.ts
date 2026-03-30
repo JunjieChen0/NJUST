@@ -7,6 +7,7 @@ import {
 	IMAGE_GENERATION_MODELS,
 	getImageGenerationProvider,
 } from "@njust-ai-cj/types"
+import { allowRooIgnorePathAccess } from "../ignore/RooIgnoreController"
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { fileExistsAtPath } from "../../utils/fs"
@@ -56,7 +57,7 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 			return
 		}
 
-		const accessAllowed = task.rooIgnoreController?.validateAccess(relPath)
+		const accessAllowed = allowRooIgnorePathAccess(task.rooIgnoreController, relPath)
 		if (!accessAllowed) {
 			await task.say("rooignore_error", relPath)
 			pushToolResult(formatResponse.rooIgnoreError(relPath))
@@ -77,7 +78,7 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 				return
 			}
 
-			const inputImageAccessAllowed = task.rooIgnoreController?.validateAccess(inputImagePath)
+			const inputImageAccessAllowed = allowRooIgnorePathAccess(task.rooIgnoreController, inputImagePath)
 			if (!inputImageAccessAllowed) {
 				await task.say("rooignore_error", inputImagePath)
 				pushToolResult(formatResponse.rooIgnoreError(inputImagePath))

@@ -22,6 +22,7 @@ vitest.mock("ps-tree", () => ({
 }))
 
 import { execa } from "execa"
+import { normalizeDotSlashCommandForWindowsShell } from "../../../utils/hostShellCommand"
 import { ExecaTerminalProcess } from "../ExecaTerminalProcess"
 import { BaseTerminal } from "../BaseTerminal"
 import type { RooTerminal } from "../types"
@@ -114,6 +115,33 @@ describe("ExecaTerminalProcess", () => {
 					shell: true,
 				}),
 			)
+		})
+	})
+
+	describe("normalizeDotSlashCommandForWindowsShell", () => {
+		const originalPlatform = process.platform
+
+		afterEach(() => {
+			Object.defineProperty(process, "platform", { value: originalPlatform })
+		})
+
+		it("rewrites ./ to .\\ on win32 for cmd-style shells", () => {
+			Object.defineProperty(process, "platform", { value: "win32" })
+			expect(normalizeDotSlashCommandForWindowsShell("./bubble_sort", undefined)).toBe(".\\bubble_sort")
+			expect(normalizeDotSlashCommandForWindowsShell("echo ok && ./a", undefined)).toBe("echo ok && .\\a")
+		})
+
+		it("does not rewrite on non-Windows", () => {
+			Object.defineProperty(process, "platform", { value: "linux" })
+			expect(normalizeDotSlashCommandForWindowsShell("./bubble_sort", undefined)).toBe("./bubble_sort")
+		})
+
+		it("does not rewrite when shell is bash (Git Bash / WSL path)", () => {
+			Object.defineProperty(process, "platform", { value: "win32" })
+			expect(normalizeDotSlashCommandForWindowsShell("./bubble_sort", "C:\\Program Files\\Git\\bin\\bash.exe")).toBe(
+				"./bubble_sort",
+			)
+			expect(normalizeDotSlashCommandForWindowsShell("./a", "C:\\Windows\\System32\\wsl.exe")).toBe("./a")
 		})
 	})
 

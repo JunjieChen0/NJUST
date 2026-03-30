@@ -2,6 +2,8 @@ import type OpenAI from "openai"
 
 const EXECUTE_COMMAND_DESCRIPTION = `Request to execute a CLI command on the system. Use this when you need to perform system operations or run specific commands to accomplish any step in the user's task. You must tailor your command to the user's system and provide a clear explanation of what the command does. For command chaining, use the appropriate chaining syntax for the user's shell. Prefer to execute complex CLI commands over creating executable scripts, as they are more flexible and easier to run. Prefer relative commands and paths that avoid location sensitivity for terminal consistency.
 
+Before proposing compile/build/run commands (e.g. gcc/clang, running a freshly built binary), read the **# Host System** section inside \`<environment_details>\` in the latest user message: it states the detected OS and platform-specific patterns (Windows vs macOS vs Linux) so you choose commands that actually work on this machine.
+
 IMPORTANT: Do NOT use this tool to make HTTP requests (curl, wget, httpie, Invoke-WebRequest, fetch, etc.) for retrieving web content or API data. If you need internet information, use the web_search tool instead. Network requests via execute_command will fail.
 
 Parameters:

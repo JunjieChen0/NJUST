@@ -1,3 +1,5 @@
+import { DEFAULT_WRITE_DELAY_MS } from "@njust-ai-cj/types"
+
 import { DiffViewProvider, DIFF_VIEW_URI_SCHEME, DIFF_VIEW_LABEL_CHANGES } from "../DiffViewProvider"
 import * as vscode from "vscode"
 import * as path from "path"
@@ -497,8 +499,8 @@ describe("DiffViewProvider", () => {
 
 			const result = await diffViewProvider.saveChanges()
 
-			// Verify default behavior (enabled=true, delay=2000ms)
-			expect(mockDelay).toHaveBeenCalledWith(1000)
+			// Verify default behavior (enabled=true, default write delay)
+			expect(mockDelay).toHaveBeenCalledWith(DEFAULT_WRITE_DELAY_MS)
 			expect(vscode.languages.getDiagnostics).toHaveBeenCalled()
 			expect(result.newProblemsMessage).toBe("")
 		})

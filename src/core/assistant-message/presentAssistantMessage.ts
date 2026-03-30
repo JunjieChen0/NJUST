@@ -35,7 +35,7 @@ import { skillTool } from "../tools/SkillTool"
 import { generateImageTool } from "../tools/GenerateImageTool"
 import { webSearchTool } from "../tools/WebSearchTool"
 import { applyDiffTool as applyDiffToolClass } from "../tools/ApplyDiffTool"
-import { isValidToolName, validateToolUse } from "../tools/validateToolUse"
+import { isValidToolName, mergeToolParamsForValidation, validateToolUse } from "../tools/validateToolUse"
 import { codebaseSearchTool } from "../tools/CodebaseSearchTool"
 
 import { formatResponse } from "../prompts/responses"
@@ -334,8 +334,11 @@ export async function presentAssistantMessage(cline: Task) {
 							return readFileTool.getReadFileToolDescription(block.name, block.nativeArgs)
 						}
 						return readFileTool.getReadFileToolDescription(block.name, block.params)
-					case "write_to_file":
-						return `[${block.name} for '${block.params.path}']`
+					case "write_to_file": {
+						const na = block.nativeArgs as { path?: string } | undefined
+						const p = block.params?.path ?? na?.path ?? ""
+						return `[${block.name} for '${p}']`
+					}
 					case "apply_diff":
 						// Native-only: tool args are structured (no XML payloads).
 						return block.params?.path ? `[${block.name} for '${block.params.path}']` : `[${block.name}]`
@@ -596,7 +599,7 @@ export async function presentAssistantMessage(cline: Task) {
 						mode ?? defaultModeSlug,
 						customModes ?? [],
 						toolRequirements,
-						block.params,
+						mergeToolParamsForValidation(block),
 						stateExperiments,
 						includedTools,
 					)

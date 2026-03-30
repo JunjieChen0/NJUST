@@ -211,3 +211,11 @@ export class RooIgnoreController {
 		return `# .rooignore\n\n(The following is provided by a root-level .rooignore file where the user has specified files and directories that should not be accessed. When using list_files, you'll notice a ${LOCK_TEXT_SYMBOL} next to files that are blocked. Attempting to access the file's contents e.g. through read_file will result in an error.)\n\n${this.rooIgnoreContent}\n.rooignore`
 	}
 }
+
+/**
+ * When no controller is attached (e.g. test doubles or edge lifecycle), treat paths as allowed
+ * so optional chaining does not become a false "blocked by .rooignore" (undefined is falsy).
+ */
+export function allowRooIgnorePathAccess(controller: RooIgnoreController | undefined, filePath: string): boolean {
+	return !controller || controller.validateAccess(filePath)
+}

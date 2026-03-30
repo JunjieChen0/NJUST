@@ -21,6 +21,8 @@ import { Package } from "../../shared/package"
 import { t } from "../../i18n"
 import { ignoreAbortError } from "../../utils/errorHandling"
 import { getTaskDirectoryPath } from "../../utils/storage"
+import { normalizeDotSlashCommandForWindowsShell } from "../../utils/hostShellCommand"
+import { BaseTerminal } from "../../integrations/terminal/BaseTerminal"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
 class ShellIntegrationError extends Error {}
@@ -204,6 +206,11 @@ export async function executeCommandInTerminal(
 		return [false, `Working directory '${workingDir}' does not exist.`]
 	}
 
+	const resolvedCommand = normalizeDotSlashCommandForWindowsShell(
+		command.trim(),
+		BaseTerminal.getExecaShellPath(),
+	)
+
 	let message: { text?: string; images?: string[] } | undefined
 	let runInBackground = false
 	let completed = false
@@ -231,7 +238,7 @@ export async function executeCommandInTerminal(
 		interceptor = new OutputInterceptor({
 			executionId,
 			taskId: task.taskId,
-			command,
+			command: resolvedCommand,
 			storageDir,
 			previewSize: terminalOutputPreviewSize,
 		})
@@ -363,7 +370,7 @@ export async function executeCommandInTerminal(
 			}
 		},
 		onShellExecutionStarted: (pid: number | undefined) => {
-			const status: CommandExecutionStatus = { executionId, status: "started", pid, command }
+			const status: CommandExecutionStatus = { executionId, status: "started", pid, command: resolvedCommand }
 			provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
 		},
 		onShellExecutionComplete: (details: ExitCodeDetails) => {
@@ -391,7 +398,7 @@ export async function executeCommandInTerminal(
 		workingDir = terminal.getCurrentWorkingDirectory()
 	}
 
-	const process = terminal.runCommand(command, callbacks)
+	const process = terminal.runCommand(resolvedCommand, callbacks)
 	task.terminalProcess = process
 
 	// Dual-timeout logic:

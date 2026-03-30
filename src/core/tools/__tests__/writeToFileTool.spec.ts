@@ -74,16 +74,20 @@ vi.mock("vscode", () => ({
 	},
 }))
 
-vi.mock("../../ignore/RooIgnoreController", () => ({
-	RooIgnoreController: class {
-		initialize() {
-			return Promise.resolve()
-		}
-		validateAccess() {
-			return true
-		}
-	},
-}))
+vi.mock("../../ignore/RooIgnoreController", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../../ignore/RooIgnoreController")>()
+	return {
+		...actual,
+		RooIgnoreController: class {
+			initialize() {
+				return Promise.resolve()
+			}
+			validateAccess() {
+				return true
+			}
+		},
+	}
+})
 
 describe("writeToFileTool", () => {
 	// Test data
@@ -132,7 +136,7 @@ describe("writeToFileTool", () => {
 				}),
 			}),
 		}
-		mockCline.njust_aiIgnoreController = {
+		mockCline.rooIgnoreController = {
 			validateAccess: vi.fn().mockReturnValue(true),
 		}
 		mockCline.diffViewProvider = {
@@ -204,7 +208,7 @@ describe("writeToFileTool", () => {
 		const accessAllowed = options.accessAllowed ?? true
 
 		mockedFileExistsAtPath.mockResolvedValue(fileExists)
-		mockCline.njust_aiIgnoreController.validateAccess.mockReturnValue(accessAllowed)
+		mockCline.rooIgnoreController.validateAccess.mockReturnValue(accessAllowed)
 
 		// Create a tool use object
 		const toolUse: ToolUse = {
@@ -239,7 +243,7 @@ describe("writeToFileTool", () => {
 		it("validates and allows access when rooIgnoreController permits", async () => {
 			await executeWriteFileTool({}, { accessAllowed: true })
 
-			expect(mockCline.njust_aiIgnoreController.validateAccess).toHaveBeenCalledWith(testFilePath)
+			expect(mockCline.rooIgnoreController.validateAccess).toHaveBeenCalledWith(testFilePath)
 			expect(mockCline.diffViewProvider.open).toHaveBeenCalledWith(testFilePath)
 		})
 	})

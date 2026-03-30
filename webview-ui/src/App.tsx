@@ -18,6 +18,7 @@ import ErrorBoundary from "./components/ErrorBoundary"
 import { useAddNonInteractiveClickListener } from "./components/ui/hooks/useNonInteractiveClick"
 import { TooltipProvider } from "./components/ui/tooltip"
 import { STANDARD_TOOLTIP_DELAY } from "./components/ui/standard-tooltip"
+import LoginView from "./components/login/LoginView"
 
 type Tab = "settings" | "history" | "chat"
 
@@ -268,18 +269,62 @@ const App = () => {
 
 const queryClient = new QueryClient()
 
-const AppWithProviders = () => (
-	<ErrorBoundary>
-		<ExtensionStateContextProvider>
-			<TranslationProvider>
-				<QueryClientProvider client={queryClient}>
-					<TooltipProvider delayDuration={STANDARD_TOOLTIP_DELAY}>
-						<App />
-					</TooltipProvider>
-				</QueryClientProvider>
-			</TranslationProvider>
-		</ExtensionStateContextProvider>
-	</ErrorBoundary>
-)
+const LOGIN_STATE_KEY = "njust_login_authenticated"
 
-export default AppWithProviders
+function getPersistedLoginState(): boolean {
+	try {
+		const state = vscode.getState() as Record<string, unknown> | undefined
+		return state?.[LOGIN_STATE_KEY] === true
+	} catch {
+		return false
+	}
+}
+
+function setPersistedLoginState(value: boolean) {
+	try {
+		const prev = (vscode.getState() as Record<string, unknown> | undefined) ?? {}
+		vscode.setState({ ...prev, [LOGIN_STATE_KEY]: value })
+	} catch {
+		// ignore
+	}
+}
+
+const AppWithLoginGate = () => {
+	const [isAuthenticated, setIsAuthenticated] = useState(getPersistedLoginState)
+
+	const handleLoginSuccess = useCallback(() => {
+		setPersistedLoginState(true)
+		setIsAuthenticated(true)
+	}, [])
+
+	useEffect(() => {
+		const handleMessage = (e: MessageEvent) => {
+			if (e.data?.type === "action" && e.data?.action === "resetLogin") {
+				setPersistedLoginState(false)
+				setIsAuthenticated(false)
+			}
+		}
+		window.addEventListener("message", handleMessage)
+		return () => window.removeEventListener("message", handleMessage)
+	}, [])
+
+	if (!isAuthenticated) {
+		return <LoginView onLoginSuccess={handleLoginSuccess} />
+	}
+
+	return (
+		<ErrorBoundary>
+			<ExtensionStateContextProvider>
+				<TranslationProvider>
+					<QueryClientProvider client={queryClient}>
+						<TooltipProvider delayDuration={STANDARD_TOOLTIP_DELAY}>
+							<App />
+						</TooltipProvider>
+					</QueryClientProvider>
+				</TranslationProvider>
+			</ExtensionStateContextProvider>
+		</ErrorBoundary>
+	)
+}
+
+export default AppWithLoginGate

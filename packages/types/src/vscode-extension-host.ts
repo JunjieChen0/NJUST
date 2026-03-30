@@ -106,6 +106,7 @@ export interface ExtensionMessage {
 		| "focusInput"
 		| "switchTab"
 		| "toggleAutoApprove"
+		| "resetLogin"
 	invoke?: "newChat" | "sendMessage" | "primaryButtonClick" | "secondaryButtonClick" | "setChatBoxMessage"
 	/**
 	 * Partial state updates are allowed to reduce message size (e.g. omit large fields like taskHistory).
@@ -595,7 +596,7 @@ export interface WebviewMessage {
 		codebaseIndexVercelAiGatewayApiKey?: string
 		codebaseIndexOpenRouterApiKey?: string
 	}
-	updatedSettings?: NJUST_AI_CJSettings
+	updatedSettings?: NJUST_AI_CJSettings & { cloudAgentServerUrl?: string }
 	/** Task configuration applied via `createTask()` when starting a cloud task. */
 	taskConfiguration?: NJUST_AI_CJSettings
 	action?: string
