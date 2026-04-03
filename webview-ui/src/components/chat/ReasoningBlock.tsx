@@ -16,7 +16,8 @@ interface ReasoningBlockProps {
 
 export const ReasoningBlock = ({ content, isStreaming, isLast }: ReasoningBlockProps) => {
 	const { t } = useTranslation()
-	const { reasoningBlockCollapsed } = useExtensionState()
+	const { reasoningBlockCollapsed, mode } = useExtensionState()
+	const isCloudAgentUi = mode === "cloud-agent"
 
 	const [isCollapsed, setIsCollapsed] = useState(reasoningBlockCollapsed)
 
@@ -45,21 +46,33 @@ export const ReasoningBlock = ({ content, isStreaming, isLast }: ReasoningBlockP
 	}
 
 	return (
-		<div className="group">
+		<div className={cn(isCloudAgentUi ? "ca-reasoning-card" : "group chat-reasoning-card")}>
 			<div
-				className="flex items-center justify-between mb-2.5 pr-2 cursor-pointer select-none"
+				className={cn(
+					isCloudAgentUi
+						? "ca-reasoning-header"
+						: "chat-reasoning-card__header flex items-center justify-between cursor-pointer select-none",
+				)}
 				onClick={handleToggle}>
 				<div className="flex items-center gap-2">
-					<Lightbulb className="w-4" />
-					<span className="font-bold text-vscode-foreground">{t("chat:reasoning.thinking")}</span>
+					<Lightbulb className="w-4 text-vscode-textLink-foreground" />
+					<span
+						className={cn(
+							isCloudAgentUi ? "ca-reasoning-title" : "chat-assistant-card__header-label",
+						)}>
+						{t("chat:reasoning.thinking")}
+					</span>
 					{elapsed > 0 && (
-						<span className="text-sm text-vscode-descriptionForeground mt-0.5">{secondsLabel}</span>
+						<span className="text-xs text-vscode-descriptionForeground mt-0.5 tabular-nums">
+							{secondsLabel}
+						</span>
 					)}
 				</div>
 				<div className="flex items-center gap-2">
 					<ChevronUp
 						className={cn(
-							"w-4 transition-all opacity-0 group-hover:opacity-100",
+							"w-4 transition-all text-vscode-descriptionForeground",
+							isCloudAgentUi ? "opacity-70" : "opacity-0 group-hover:opacity-100",
 							isCollapsed && "-rotate-180",
 						)}
 					/>
@@ -68,7 +81,9 @@ export const ReasoningBlock = ({ content, isStreaming, isLast }: ReasoningBlockP
 			{(content?.trim()?.length ?? 0) > 0 && !isCollapsed && (
 				<div
 					ref={contentRef}
-					className="border-l border-vscode-descriptionForeground/20 ml-2 pl-4 pb-1 text-vscode-descriptionForeground break-words">
+					className={cn(
+						isCloudAgentUi ? "ca-reasoning-body" : "chat-reasoning-card__body break-words",
+					)}>
 					<MarkdownBlock markdown={content} />
 				</div>
 			)}

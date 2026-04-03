@@ -846,12 +846,12 @@
 				"njust-ai-cj.cloudAgent.deferredProtocol": {
 					"type": "boolean",
 					"default": true,
-					"description": "Use the deferred execution protocol (POST /v1/deferred/start → local tool execution → POST /v1/deferred/resume → loop until done). When false, falls back to single-shot POST /v1/run. The deferred protocol allows the server to request local tool calls (read_file, write_file, execute_command, etc.) and iterate until the task completes."
+					"description": "Use the deferred execution protocol (POST /v1/run/deferred/start → local tool execution → POST /v1/run/deferred/resume → loop until done). When false, falls back to single-shot POST /v1/run. The deferred protocol allows the server to request local tool calls (read_file, write_file, execute_command, etc.) and iterate until the task completes."
 				},
 				"njust-ai-cj.cloudAgent.compileLoop.enabled": {
 					"type": "boolean",
 					"default": true,
-					"description": "After Cloud Agent writes code via workspace_ops, call POST /v1/compile on the server to compile. If compilation fails, send errors back to the agent for automatic correction and loop until success or maxRetries. Applies to both legacy (/v1/run) and default deferred (/v1/deferred/start) paths."
+					"description": "After Cloud Agent writes code via workspace_ops, call POST /v1/run/compile on the server to compile. If compilation fails, send errors back to the agent for automatic correction and loop until success or maxRetries. Applies to both legacy (/v1/run) and default deferred (/v1/run/deferred/start) paths."
 				},
 				"njust-ai-cj.cloudAgent.compileLoop.maxRetries": {
 					"type": "number",

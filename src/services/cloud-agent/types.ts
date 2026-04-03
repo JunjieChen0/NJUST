@@ -60,7 +60,7 @@ export interface CloudCompileResult {
 }
 
 // ---------------------------------------------------------------------------
-// Deferred execution protocol (POST /v1/deferred/start, /v1/deferred/resume)
+// Deferred execution protocol (POST /v1/run/deferred/start, /v1/run/deferred/resume)
 // ---------------------------------------------------------------------------
 
 /** A single tool call the server wants the extension to execute locally. */
@@ -81,8 +81,10 @@ export interface DeferredToolResult {
 export interface DeferredResponse {
 	run_id: string
 	status: "pending" | "done"
-	/** Tool calls the extension must execute locally before resuming. */
-	tool_calls?: DeferredToolCall[]
+	/** Tool calls the extension must execute locally before resuming (server uses pending_tools). */
+	pending_tools?: DeferredToolCall[]
+	/** Some servers send OpenAI-style `tool_calls` instead of `pending_tools`; client normalizes to `pending_tools`. */
+	tool_calls?: unknown[]
 	/** Structured workspace mutations (same schema as /v1/run). */
 	workspace_ops?: WorkspaceOpsEnvelope
 	/** Incremental text to display in chat. */

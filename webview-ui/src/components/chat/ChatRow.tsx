@@ -72,10 +72,19 @@ import {
 	Split,
 	ArrowRight,
 	Check,
+	CheckCircle2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PathTooltip } from "../ui/PathTooltip"
 import { OpenMarkdownPreviewButton } from "./OpenMarkdownPreviewButton"
+import {
+	CloudAgentAssistantMessage,
+	CloudAgentDeferredToolCard,
+	getCloudAgentAssistantRunSlot,
+	isCloudAgentAssistantTextMessage,
+	parseDeferredExecutingTool,
+	parseDeferredToolError,
+} from "./cloud-agent/CloudAgentChatBlocks"
 
 // Helper function to get previous todos before a specific message
 function getPreviousTodos(messages: ClineMessage[], currentMessageTs: number): any[] {
@@ -133,12 +142,48 @@ interface ChatRowContentProps extends Omit<ChatRowProps, "onHeightChange"> {}
 const ChatRow = memo(
 	(props: ChatRowProps) => {
 		const { isLast, onHeightChange, message } = props
+		const { mode, clineMessages } = useExtensionState()
+		const isCloudAgentThread = mode === "cloud-agent"
+		const msgIdx = clineMessages.findIndex((m) => m.ts === message.ts)
+		const prevMsgForShell = msgIdx > 0 ? clineMessages[msgIdx - 1] : undefined
+		const nextMsgForShell =
+			msgIdx >= 0 && msgIdx < clineMessages.length - 1 ? clineMessages[msgIdx + 1] : undefined
+		const isTightCloudTop =
+			isCloudAgentThread &&
+			((message.type === "say" &&
+				message.say === "text" &&
+				isCloudAgentAssistantTextMessage(message) &&
+				isCloudAgentAssistantTextMessage(prevMsgForShell)) ||
+				(message.type === "say" &&
+					message.say === "completion_result" &&
+					isCloudAgentAssistantTextMessage(prevMsgForShell)))
+		/** No bottom padding so the next cloud row visually connects (one merged card). */
+		const isTightCloudBottom =
+			isCloudAgentThread &&
+			message.type === "say" &&
+			message.say === "text" &&
+			isCloudAgentAssistantTextMessage(message) &&
+			nextMsgForShell &&
+			((nextMsgForShell.type === "say" &&
+				nextMsgForShell.say === "text" &&
+				isCloudAgentAssistantTextMessage(nextMsgForShell)) ||
+				(nextMsgForShell.type === "say" && nextMsgForShell.say === "completion_result"))
 		// Store the previous height to compare with the current height
 		// This allows us to detect changes without causing re-renders
 		const prevHeightRef = useRef(0)
 
 		const [chatrow, { height }] = useSize(
-			<div className="px-[15px] py-[10px] pr-[6px]">
+			<div
+				className={cn(
+					isCloudAgentThread
+						? cn(
+								"px-4",
+								isTightCloudTop ? "pt-0" : "pt-2",
+								isTightCloudBottom ? "pb-0" : "pb-2",
+							)
+						: "px-[15px] py-[10px] pr-[6px]",
+					!isCloudAgentThread && "chat-row-shell",
+				)}>
 				<ChatRowContent {...props} />
 			</div>,
 		)
@@ -191,11 +236,17 @@ export const ChatRowContent = ({
 		currentTaskItem,
 		cwd = "",
 	} = useExtensionState()
+	const isCloudAgentUi = mode === "cloud-agent"
 	const { info: model } = useSelectedModel(apiConfiguration)
 	const [isEditing, setIsEditing] = useState(false)
 	const [editedContent, setEditedContent] = useState("")
 	const [editMode, setEditMode] = useState<Mode>(mode || "code")
 	const [editImages, setEditImages] = useState<string[]>([])
+
+	const cloudAgentTextMessages = useMemo(
+		() => clineMessages.filter((m) => isCloudAgentAssistantTextMessage(m)),
+		[clineMessages],
+	)
 
 	// Handle file / image selection during edit mode (same flow as main chat)
 	useEffect(() => {
@@ -1080,8 +1131,45 @@ export const ChatRowContent = ({
 					const isApiRequestInProgress =
 						apiReqCancelReason === undefined && apiRequestFailedMessage === undefined && cost === undefined
 
+					const errorBlock =
+						(((cost === null || cost === undefined) && apiRequestFailedMessage) ||
+							apiReqStreamingFailedMessage) && (
+							<ErrorRow
+								type="api_failure"
+								message={apiRequestFailedMessage || apiReqStreamingFailedMessage || ""}
+								docsURL={
+									apiRequestFailedMessage?.toLowerCase().includes("powershell")
+										? "https://github.com/cline/cline/wiki/TroubleShooting-%E2%80%90-%22PowerShell-is-not-recognized-as-an-internal-or-external-command%22"
+										: undefined
+								}
+								errorDetails={apiReqStreamingFailedMessage}
+							/>
+						)
+
+					if (isCloudAgentUi) {
+						return (
+							<div className="mt-0 mb-1 flex flex-col items-center gap-0">
+								<div className="ca-api-chip w-full max-w-full">
+									<div
+										className={`ca-api-chip__inner group text-sm transition-opacity flex-wrap justify-center max-w-full ${
+											isApiRequestInProgress ? "opacity-100" : "opacity-40 hover:opacity-100"
+										}`}>
+										{icon}
+										{title}
+										{cost !== null && cost !== undefined && cost > 0 ? (
+											<span className="text-xs font-mono tabular-nums text-vscode-descriptionForeground border border-vscode-widget-border/50 px-1.5 py-0.5 rounded-md">
+												${Number(cost).toFixed(4)}
+											</span>
+										) : null}
+									</div>
+								</div>
+								{errorBlock}
+							</div>
+						)
+					}
+
 					return (
-						<>
+						<div className="chat-api-status-row">
 							<div
 								className={`group text-sm transition-opacity ${
 									isApiRequestInProgress ? "opacity-100" : "opacity-40 hover:opacity-100"
@@ -1100,25 +1188,13 @@ export const ChatRowContent = ({
 									{title}
 								</div>
 								<div
-									className="text-xs text-vscode-dropdown-foreground border-vscode-dropdown-border/50 border px-1.5 py-0.5 rounded-lg"
+									className="text-xs text-vscode-dropdown-foreground border-vscode-dropdown-border/50 border px-1.5 py-0.5 rounded-lg font-mono tabular-nums"
 									style={{ opacity: cost !== null && cost !== undefined && cost > 0 ? 1 : 0 }}>
 									${Number(cost || 0)?.toFixed(4)}
 								</div>
 							</div>
-							{(((cost === null || cost === undefined) && apiRequestFailedMessage) ||
-								apiReqStreamingFailedMessage) && (
-								<ErrorRow
-									type="api_failure"
-									message={apiRequestFailedMessage || apiReqStreamingFailedMessage || ""}
-									docsURL={
-										apiRequestFailedMessage?.toLowerCase().includes("powershell")
-											? "https://github.com/cline/cline/wiki/TroubleShooting-%E2%80%90-%22PowerShell-is-not-recognized-as-an-internal-or-external-command%22"
-											: undefined
-									}
-									errorDetails={apiReqStreamingFailedMessage}
-								/>
-							)}
-						</>
+							{errorBlock}
+						</div>
 					)
 				case "api_req_retry_delayed":
 					let body = t(`chat:apiRequest.failed`)
@@ -1186,24 +1262,74 @@ export const ChatRowContent = ({
 					})()
 
 					return isWaiting && waitSeconds !== undefined ? (
-						<div
-							className={`group text-sm transition-opacity opacity-100`}
-							style={{
-								...headerStyle,
-								marginBottom: 0,
-								justifyContent: "space-between",
-							}}>
-							<div style={{ display: "flex", alignItems: "center", gap: "10px", flexGrow: 1 }}>
-								<ProgressIndicator />
-								<span style={{ color: normalColor }}>{t("chat:apiRequest.rateLimitWait")}</span>
+						isCloudAgentUi ? (
+							<div className="mt-0 mb-1 flex justify-center">
+								<div className="ca-api-chip__inner text-sm">
+									<ProgressIndicator />
+									<span style={{ color: normalColor }}>{t("chat:apiRequest.rateLimitWait")}</span>
+									<span className="text-xs text-vscode-descriptionForeground tabular-nums">
+										{waitSeconds}s
+									</span>
+								</div>
 							</div>
-							<span className="text-xs font-light text-vscode-descriptionForeground">{waitSeconds}s</span>
-						</div>
+						) : (
+							<div className="chat-api-status-row">
+								<div
+									className={`group text-sm transition-opacity opacity-100`}
+									style={{
+										...headerStyle,
+										marginBottom: 0,
+										justifyContent: "space-between",
+									}}>
+									<div style={{ display: "flex", alignItems: "center", gap: "10px", flexGrow: 1 }}>
+										<ProgressIndicator />
+										<span style={{ color: normalColor }}>{t("chat:apiRequest.rateLimitWait")}</span>
+									</div>
+									<span className="text-xs font-light text-vscode-descriptionForeground tabular-nums">
+										{waitSeconds}s
+									</span>
+								</div>
+							</div>
+						)
 					) : null
 				}
 				case "api_req_finished":
 					return null // we should never see this message type
-				case "text":
+				case "text": {
+					const deferredTool = parseDeferredExecutingTool(message.text)
+					const deferredErr = deferredTool ? null : parseDeferredToolError(message.text)
+
+					if (isCloudAgentUi && deferredTool) {
+						return (
+							<CloudAgentDeferredToolCard tool={deferredTool.tool} callId={deferredTool.callId} />
+						)
+					}
+					if (isCloudAgentUi && deferredErr) {
+						return (
+							<CloudAgentDeferredToolCard
+								variant="error"
+								tool={deferredErr.tool}
+								errorBody={deferredErr.message}
+							/>
+						)
+					}
+					if (isCloudAgentUi) {
+						const msgIdx = clineMessages.findIndex((m) => m.ts === message.ts)
+						const prevMsg = msgIdx > 0 ? clineMessages[msgIdx - 1] : undefined
+						const caShowRunHeader = !isCloudAgentAssistantTextMessage(prevMsg)
+						const runSlot = getCloudAgentAssistantRunSlot(clineMessages, message.ts)
+						return (
+							<CloudAgentAssistantMessage
+								markdown={message.text}
+								partial={message.partial}
+								images={message.images}
+								showRunHeader={caShowRunHeader}
+								totalSteps={cloudAgentTextMessages.length}
+								runSlot={runSlot}
+							/>
+						)
+					}
+
 					return (
 						<div className="group">
 							<div style={headerStyle}>
@@ -1224,16 +1350,30 @@ export const ChatRowContent = ({
 							</div>
 						</div>
 					)
+				}
 				case "user_feedback":
 					return (
-						<div className="group">
-							<div style={headerStyle}>
-								<User className="w-4 shrink-0" aria-label="User icon" />
-								<span style={{ fontWeight: "bold" }}>{t("chat:feedback.youSaid")}</span>
+						<div className={cn("group", isCloudAgentUi ? "ca-user-card" : undefined)}>
+							<div
+								className={cn(
+									isCloudAgentUi ? "ca-user-header" : undefined,
+									!isCloudAgentUi && "flex items-center gap-2",
+								)}
+								style={!isCloudAgentUi ? headerStyle : undefined}>
+								<User
+									className="w-4 shrink-0"
+									style={isCloudAgentUi ? { color: "var(--ca-blue)" } : undefined}
+									aria-label="User icon"
+								/>
+								<span
+									className={cn(isCloudAgentUi ? "ca-user-title" : undefined)}
+									style={!isCloudAgentUi ? { fontWeight: "bold" } : undefined}>
+									{t("chat:feedback.youSaid")}
+								</span>
 							</div>
 							<div
 								className={cn(
-									"ml-6 border rounded-sm overflow-hidden whitespace-pre-wrap",
+									isCloudAgentUi ? "pb-2" : "border rounded-md overflow-hidden",
 									isEditing
 										? "bg-vscode-editor-background text-vscode-editor-foreground"
 										: "cursor-text p-1 bg-vscode-editor-foreground/70 text-vscode-editor-background",
@@ -1343,8 +1483,31 @@ export const ChatRowContent = ({
 					return (
 						<ErrorRow type="error" message={message.text || t("chat:error")} errorDetails={message.text} />
 					)
-				case "completion_result":
-					return (
+				case "completion_result": {
+					const crIdx = clineMessages.findIndex((m) => m.ts === message.ts)
+					const crPrev = crIdx > 0 ? clineMessages[crIdx - 1] : undefined
+					const completionAttached = isCloudAgentAssistantTextMessage(crPrev)
+					return isCloudAgentUi ? (
+						<div
+							className={cn(
+								"ca-final-output",
+								completionAttached && "ca-final-output--run-completion",
+							)}>
+							<div className="ca-final-output-done">
+								<div className="ca-final-output-done__mark" aria-hidden>
+									<CheckCircle2 className="ca-final-output-done__check" strokeWidth={2} />
+								</div>
+								<span className="ca-final-output-done__label">{t("chat:taskCompleted")}</span>
+								<div className="flex-grow min-w-0" />
+								<OpenMarkdownPreviewButton markdown={message.text} />
+							</div>
+							{message.text?.trim() ? (
+								<div className="ca-final-output-done__body">
+									<Markdown markdown={message.text} />
+								</div>
+							) : null}
+						</div>
+					) : (
 						<div className="group">
 							<div style={headerStyle}>
 								{icon}
@@ -1357,6 +1520,7 @@ export const ChatRowContent = ({
 							</div>
 						</div>
 					)
+				}
 				case "shell_integration_warning":
 					return <CommandExecutionError />
 				case "checkpoint_saved":

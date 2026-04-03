@@ -2832,8 +2832,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// ---------------------------------------------------------------------------
 	// Deferred Cloud Agent loop
-	// POST /v1/deferred/start → execute tool_calls / workspace_ops locally
-	// → POST /v1/deferred/resume → repeat until status == "done"
+	// POST /v1/run/deferred/start → execute pending_tools / workspace_ops locally
+	// → POST /v1/run/deferred/resume → repeat until status == "done"
 	// ---------------------------------------------------------------------------
 
 	private async runDeferredCloudAgentLoop(
@@ -2911,10 +2911,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			)
 		}
 
-			// Execute tool_calls locally
+			// Execute pending_tools locally
 			const toolResults: DeferredToolResult[] = []
-			const toolCalls = deferredResp.tool_calls ?? []
-			for (const call of toolCalls) {
+			const pendingTools = deferredResp.pending_tools ?? []
+			for (const call of pendingTools) {
 				if (this.abort) break
 				await this.say("text", `[Deferred] executing tool: ${call.tool} (${call.call_id})`)
 				const result = await executeDeferredToolCall(this.cwd, call)
@@ -2925,6 +2925,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			}
 
 			if (this.abort) break
+
+			if (pendingTools.length > 0 && toolResults.length !== pendingTools.length) {
+				const msg = `Cloud Agent deferred/resume 无法继续：本轮 pending_tools 为 ${pendingTools.length} 条，本地仅生成 ${toolResults.length} 条 tool_results（请重试任务或更新插件）。`
+				await this.say("error", msg)
+				await this.ask("api_req_failed", msg)
+				return
+			}
 
 			// Resume
 			await this.say("api_req_started", JSON.stringify({ request: `Cloud Agent deferred/resume (iteration ${iteration})` }))

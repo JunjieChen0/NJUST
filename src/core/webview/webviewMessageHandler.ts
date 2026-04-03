@@ -636,7 +636,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					let newValue = value
 
 					if (key === "language") {
-						newValue = value ?? "en"
+						newValue = value ?? "zh-CN"
 						changeLanguage(newValue as Language)
 					} else if (key === "allowedCommands") {
 						const commands = value ?? []
@@ -738,6 +738,36 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				provider.getCurrentTask()?.handleTerminalOperation(message.terminalOperation)
 			}
 			break
+
+		case "updateCloudAgentSettings": {
+			// Handle Cloud Agent settings from the dedicated Cloud Agent settings panel.
+			// These settings are stored directly in VS Code configuration, not via ContextProxy.
+			const config = vscode.workspace.getConfiguration(Package.name)
+			const { serverUrl, deferredProtocol, applyRemoteWorkspaceOps, confirmRemoteWorkspaceOps, compileLoopEnabled, compileLoopMaxRetries } =
+				message as { serverUrl?: string; deferredProtocol?: boolean; applyRemoteWorkspaceOps?: boolean; confirmRemoteWorkspaceOps?: boolean; compileLoopEnabled?: boolean; compileLoopMaxRetries?: number }
+
+			if (serverUrl !== undefined) {
+				await config.update("cloudAgent.serverUrl", serverUrl, vscode.ConfigurationTarget.Global)
+			}
+			if (deferredProtocol !== undefined) {
+				await config.update("cloudAgent.deferredProtocol", deferredProtocol, vscode.ConfigurationTarget.Global)
+			}
+			if (applyRemoteWorkspaceOps !== undefined) {
+				await config.update("cloudAgent.applyRemoteWorkspaceOps", applyRemoteWorkspaceOps, vscode.ConfigurationTarget.Global)
+			}
+			if (confirmRemoteWorkspaceOps !== undefined) {
+				await config.update("cloudAgent.confirmRemoteWorkspaceOps", confirmRemoteWorkspaceOps, vscode.ConfigurationTarget.Global)
+			}
+			if (compileLoopEnabled !== undefined) {
+				await config.update("cloudAgent.compileLoop.enabled", compileLoopEnabled, vscode.ConfigurationTarget.Global)
+			}
+			if (compileLoopMaxRetries !== undefined) {
+				await config.update("cloudAgent.compileLoop.maxRetries", compileLoopMaxRetries, vscode.ConfigurationTarget.Global)
+			}
+			await provider.postStateToWebview()
+			break
+		}
+
 		case "clearTask":
 			// Clear task resets the current session. Delegation flows are
 			// handled via metadata; parent resumption occurs through
