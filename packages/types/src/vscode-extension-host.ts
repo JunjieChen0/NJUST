@@ -362,6 +362,7 @@ export interface WebviewMessage {
 		| "newTask"
 		| "askResponse"
 		| "terminalOperation"
+		| "updateCloudAgentSettings"
 		| "clearTask"
 		| "didShowAnnouncement"
 		| "selectImages"
@@ -609,6 +610,13 @@ export interface WebviewMessage {
 	audioMimeType?: string
 	/** Correlate `transcriptionResult` / `transcriptionError` with the webview request */
 	transcriptionRequestId?: string
+	/** Cloud Agent settings from dedicated settings panel */
+	serverUrl?: string
+	deferredProtocol?: boolean
+	applyRemoteWorkspaceOps?: boolean
+	confirmRemoteWorkspaceOps?: boolean
+	compileLoopEnabled?: boolean
+	compileLoopMaxRetries?: number
 }
 
 export interface RequestOpenAiCodexRateLimitsMessage {

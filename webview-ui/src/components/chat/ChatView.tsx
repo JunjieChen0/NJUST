@@ -24,6 +24,7 @@ import { getAllModes } from "@roo/modes"
 import { ProfileValidator } from "@roo/ProfileValidator"
 import { getLatestTodo } from "@roo/todo"
 
+import { cn } from "@/lib/utils"
 import { vscode } from "@src/utils/vscode"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { useExtensionState } from "@src/context/ExtensionStateContext"
@@ -432,13 +433,25 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 						case "command_output":
 						case "mcp_server_request_started":
 						case "mcp_server_response":
-						case "completion_result":
 							break
+						case "completion_result": {
+							/* e.g. Cloud Agent uses say("completion_result") — mirror ask completion_result buttons */
+							const isPartial = lastMessage.partial === true
+							if (!isPartial && messageQueue.length === 0) {
+								playSound("celebration")
+							}
+							setSendingDisabled(isPartial)
+							setClineAsk("completion_result")
+							setEnableButtons(!isPartial)
+							setPrimaryButtonText(t("chat:startNewTask.title"))
+							setSecondaryButtonText(undefined)
+							break
+						}
 					}
 					break
 			}
 		}
-	}, [lastMessage, secondLastMessage])
+	}, [lastMessage, secondLastMessage, messageQueue, t, playSound])
 
 	// Update button text when messages change (e.g., completion_result is added) for subtasks in resume_task state
 	useEffect(() => {
@@ -1610,7 +1623,10 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 						<Virtuoso
 							ref={virtuosoRef}
 							key={task.ts}
-							className="scrollable grow overflow-y-scroll mb-1"
+							className={cn(
+								"scrollable grow overflow-y-scroll mb-1",
+								mode === "cloud-agent" && "cloud-agent-chat-thread",
+							)}
 							increaseViewportBy={{ top: 3_000, bottom: 1000 }}
 							data={groupedMessages}
 							itemContent={itemContent}

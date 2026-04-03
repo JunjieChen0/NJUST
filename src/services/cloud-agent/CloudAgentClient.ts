@@ -1,3 +1,4 @@
+import { normalizeDeferredResponse } from "./normalizeDeferredResponse"
 import { parseWorkspaceOps } from "./parseWorkspaceOps"
 import type {
 	CloudAgentCallbacks,
@@ -205,7 +206,7 @@ export class CloudAgentClient {
 	}
 
 	/**
-	 * Call POST /v1/compile to run cjc/cjpm build on the server side.
+	 * Call POST /v1/run/compile to run cjc/cjpm build on the server side.
 	 * Returns structured compile output (success flag + stdout/stderr).
 	 */
 	async compile(sessionId: string, workspacePath?: string): Promise<CloudCompileResult> {
@@ -218,7 +219,7 @@ export class CloudAgentClient {
 		let resp: Response
 		try {
 			try {
-				resp = await fetch(`${this.serverUrl}/v1/compile`, {
+				resp = await fetch(`${this.serverUrl}/v1/run/compile`, {
 					method: "POST",
 					headers: this.buildHeaders(),
 					body: JSON.stringify(body),
@@ -286,12 +287,19 @@ export class CloudAgentClient {
 		}
 
 		const text = await resp.text()
+		let parsed: unknown
 		try {
-			return JSON.parse(text) as DeferredResponse
+			parsed = JSON.parse(text)
 		} catch {
 			throw new Error(
 				`Cloud Agent: deferred response is not valid JSON (HTTP ${resp.status}): ${text.slice(0, 400)}${text.length > 400 ? "…" : ""}`,
 			)
+		}
+		try {
+			return normalizeDeferredResponse(parsed)
+		} catch (e) {
+			const hint = e instanceof Error ? e.message : String(e)
+			throw new Error(`Cloud Agent: invalid deferred response payload (HTTP ${resp.status}): ${hint}`)
 		}
 	}
 
@@ -309,7 +317,7 @@ export class CloudAgentClient {
 		if (images && images.length > 0) {
 			body.images = images
 		}
-		return this.fetchDeferred("/v1/deferred/start", body)
+		return this.fetchDeferred("/v1/run/deferred/start", body)
 	}
 
 	async deferredResume(
@@ -317,7 +325,7 @@ export class CloudAgentClient {
 		sessionId: string,
 		toolResults: DeferredToolResult[],
 	): Promise<DeferredResponse> {
-		return this.fetchDeferred("/v1/deferred/resume", {
+		return this.fetchDeferred("/v1/run/deferred/resume", {
 			run_id: runId,
 			session_id: sessionId,
 			tool_results: toolResults,
