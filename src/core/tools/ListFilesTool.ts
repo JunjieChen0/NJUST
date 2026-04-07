@@ -8,6 +8,7 @@ import { listFiles } from "../../services/glob/list-files"
 import { getReadablePath } from "../../utils/path"
 import { ignoreAbortError } from "../../utils/errorHandling"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
+import { isPathUnderBundledCangjieCorpus, isPathPotentiallyUnderCangjieCorpus } from "../../utils/bundledCangjieCorpus"
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
@@ -36,7 +37,7 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 			task.consecutiveMistakeCount = 0
 
 			const absolutePath = path.resolve(task.cwd, relDirPath)
-			const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)
+			const extensionPath = task.providerRef.deref()?.context.extensionPath
 
 			const [files, didHitLimit] = await listFiles(absolutePath, recursive || false, 200)
 			const { showRooIgnoredFiles = false } = (await task.providerRef.deref()?.getState()) ?? {}
@@ -49,6 +50,13 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 				showRooIgnoredFiles,
 				task.rooProtectedController,
 			)
+
+			if (isPathUnderBundledCangjieCorpus(absolutePath, extensionPath)) {
+				pushToolResult(result)
+				return
+			}
+
+			const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)
 
 			const sharedMessageProps: ClineSayTool = {
 				tool: !recursive ? "listFilesTopLevel" : "listFilesRecursive",
@@ -75,6 +83,12 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 		const recursive = recursiveRaw?.toLowerCase() === "true"
 
 		const absolutePath = relDirPath ? path.resolve(task.cwd, relDirPath) : task.cwd
+		const extensionPath = task.providerRef.deref()?.context.extensionPath
+
+		if (isPathPotentiallyUnderCangjieCorpus(absolutePath, extensionPath, relDirPath)) {
+			return
+		}
+
 		const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)
 
 		const sharedMessageProps: ClineSayTool = {

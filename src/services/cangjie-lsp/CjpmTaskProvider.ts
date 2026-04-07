@@ -38,8 +38,11 @@ export class CjpmTaskProvider implements vscode.TaskProvider, vscode.Disposable 
 	}
 
 	private onCjpmTomlChanged(): void {
-		// Force VS Code to re-query tasks
-		vscode.commands.executeCommand("workbench.action.tasks.refreshTasks")
+		// `workbench.action.tasks.refreshTasks` is missing in some VS Code / Cursor builds and
+		// rejects with "command not found". Use the public Tasks API to re-query providers instead.
+		void vscode.tasks.fetchTasks({ type: CJPM_TASK_TYPE }).then(undefined, () => {
+			// ignore — workspace may have no folders yet
+		})
 	}
 
 	async provideTasks(): Promise<vscode.Task[]> {

@@ -38,6 +38,8 @@ export async function getSkillsSection(
 		})
 		.join("\n")
 
+	const cangjieTieBreakNote = ""
+
 	return `====
 
 AVAILABLE SKILLS
@@ -58,9 +60,10 @@ Step 1: Skill Evaluation
 Step 2: Branching Decision
 
 <if_skill_applies>
-- Select EXACTLY ONE skill.
-- Prefer the most specific skill when multiple skills match.
-- Use the skill tool to load the skill by name.
+- Select EXACTLY ONE skill per turn.
+- Disambiguation: when multiple skills match, pick the one whose <description> most precisely covers the user's primary intent. If the mode's customInstructions contain a skill routing table, follow it.
+- Cross-turn loading: if the request spans two skills, load the highest-priority one now and note the secondary skill for a follow-up turn.
+- Use the skill tool to load the selected skill by name.
 - Load the skill's instructions fully into context BEFORE continuing.
 - Follow the skill instructions precisely.
 - Do NOT respond outside the skill-defined flow.
@@ -91,7 +94,7 @@ CONSTRAINTS:
 
 <context_notes>
 - The skill list is already filtered for the current mode: "${currentMode}".
-- Mode-specific skills may come from skills-${currentMode}/ with project-level overrides taking precedence over global skills.
+- Mode-specific skills may come from skills-${currentMode}/ with project-level overrides taking precedence over global skills.${cangjieTieBreakNote}
 </context_notes>
 
 <internal_verification>

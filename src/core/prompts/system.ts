@@ -80,7 +80,7 @@ async function generatePrompt(
 		getSkillsSection(skillsManager, mode as string),
 	])
 
-	const cangjieContextSection = getCangjieContextSection(cwd, mode as string)
+	const cangjieContextSection = await getCangjieContextSection(cwd, mode as string, context.extensionPath)
 	const multiFileContextSection = cangjieContextSection ? "" : getMultiFileContextSection(cwd)
 
 	// Tools catalog is not included in the system prompt.

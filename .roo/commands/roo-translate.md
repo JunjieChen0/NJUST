@@ -14,7 +14,7 @@ Perform translation and localization tasks for the NJUST_AI_CJ extension. This c
    - If a string key is provided, locate and translate that specific string
    - If a file path is provided, work with that translation file
 
-2. **Supported languages:** ca, de, en, es, fr, hi, id, it, ja, ko, nl, pl, pt-BR, ru, tr, vi, zh-CN, zh-TW
+2. **Supported languages:** en, zh-CN, zh-TW
 
 3. **Translation locations:**
    - Core Extension: `src/i18n/locales/`

@@ -13,7 +13,6 @@ import ApiOptions from "../settings/ApiOptions"
 import { Tab, TabContent } from "../common/Tab"
 
 import RooHero from "./RooHero"
-import { Trans } from "react-i18next"
 import { Brain } from "lucide-react"
 
 type ProviderOption = "custom"
@@ -82,7 +81,7 @@ const WelcomeViewProvider = () => {
 
 					<div className="space-y-3 leading-normal">
 						<p className="text-base text-vscode-foreground">
-							<Trans i18nKey="welcome:landing.introduction" />
+							{t("welcome:landing.introduction")}
 						</p>
 
 						<div className="flex flex-col gap-2 text-sm text-vscode-descriptionForeground">

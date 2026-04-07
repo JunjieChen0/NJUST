@@ -8,7 +8,7 @@
 		},
 		"vsix": {
 			"dependsOn": ["bundle"],
-			"inputs": ["dist/**"],
+			"inputs": ["dist/**", "bundled-skills/**", "bundled-cangjie-corpus/**", "package.json", ".vscodeignore"],
 			"outputs": ["../bin/**"]
 		},
 		"watch:bundle": {

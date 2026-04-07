@@ -249,6 +249,7 @@ cjpm run -g                           # Debug 模式运行
 
 ### 5.1 编写测试
 
+- **Cangjie Dev 模式（助手行为）**：用户未明确要求（如「写单测」「加测试」）时，**不要**主动新建或追加 `*_test.cj`、测试类及用例；日常改动以 `cjpm build` 验证为主。
 - 测试文件命名：`xxx_test.cj`
 - 使用 `@Test` 注解标记测试用例
 - 使用 `@BeforeAll`/`@AfterAll`/`@BeforeEach`/`@AfterEach` 管理生命周期

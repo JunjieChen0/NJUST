@@ -573,9 +573,18 @@ Add your skill instructions here.
 		}>
 	> {
 		const dirs: Array<{ dir: string; source: "global" | "project"; mode?: string }> = []
+		const provider = this.providerRef.deref()
+		const extensionPath = provider?.context?.extensionPath
+		if (extensionPath) {
+			// Built-in Cangjie Dev skills (lowest priority: user/project skills override these)
+			dirs.push({
+				dir: path.join(extensionPath, "bundled-skills", "skills-cangjie"),
+				source: "global",
+				mode: "cangjie",
+			})
+		}
 		const globalRooDir = getGlobalRooDirectory()
 		const globalAgentsDir = getGlobalAgentsDirectory()
-		const provider = this.providerRef.deref()
 		const projectRooDir = provider?.cwd ? path.join(provider.cwd, NJUST_AI_CONFIG_DIR) : null
 		const projectAgentsDir = provider?.cwd ? getProjectAgentsDirectoryForCwd(provider.cwd) : null
 

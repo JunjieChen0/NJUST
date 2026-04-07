@@ -27,10 +27,7 @@ function toRecognitionLang(uiLanguage: string | undefined): string {
 	if (lower === "zh-tw") {
 		return "zh-TW"
 	}
-	if (lower === "pt-br") {
-		return "pt-BR"
-	}
-	return normalized
+	return "en-US"
 }
 
 function toWhisperLanguageHint(uiLanguage: string | undefined): string | undefined {

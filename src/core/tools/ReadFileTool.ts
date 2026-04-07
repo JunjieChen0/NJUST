@@ -21,6 +21,7 @@ import { formatResponse } from "../prompts/responses"
 import { RecordSource } from "../context-tracking/FileContextTrackerTypes"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { ignoreAbortError } from "../../utils/errorHandling"
+import { isPathUnderBundledCangjieCorpus, isPathPotentiallyUnderCangjieCorpus } from "../../utils/bundledCangjieCorpus"
 import { getReadablePath } from "../../utils/path"
 import { extractTextFromFile, addLineNumbers, getSupportedBinaryFormats } from "../../integrations/misc/extract-text"
 import { readWithIndentation, readWithSlice } from "../../integrations/misc/indentation-reader"
@@ -449,9 +450,24 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 	): Promise<void> {
 		if (filesToApprove.length === 0) return
 
-		if (filesToApprove.length > 1) {
+		const extensionPath = task.providerRef.deref()?.context.extensionPath
+
+		// Auto-approve bundled CangjieCorpus files silently
+		const remaining: FileResult[] = []
+		for (const fr of filesToApprove) {
+			const fullPath = path.resolve(task.cwd, fr.path)
+			if (isPathUnderBundledCangjieCorpus(fullPath, extensionPath)) {
+				updateFileResult(fr.path, { status: "approved" })
+			} else {
+				remaining.push(fr)
+			}
+		}
+
+		if (remaining.length === 0) return
+
+		if (remaining.length > 1) {
 			// Batch approval
-			const batchFiles = filesToApprove.map((fileResult) => {
+			const batchFiles = remaining.map((fileResult) => {
 				const relPath = fileResult.path
 				const fullPath = path.resolve(task.cwd, relPath)
 				const isOutsideWorkspace = isPathOutsideWorkspace(fullPath)
@@ -468,13 +484,13 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 
 			if (response === "yesButtonClicked") {
 				if (text) await task.say("user_feedback", text, images)
-				filesToApprove.forEach((fr) => {
+				remaining.forEach((fr) => {
 					updateFileResult(fr.path, { status: "approved", feedbackText: text, feedbackImages: images })
 				})
 			} else if (response === "noButtonClicked") {
 				if (text) await task.say("user_feedback", text, images)
 				task.didRejectTool = true
-				filesToApprove.forEach((fr) => {
+				remaining.forEach((fr) => {
 					updateFileResult(fr.path, {
 						status: "denied",
 						nativeContent: `File: ${fr.path}\nStatus: Denied by user`,
@@ -489,7 +505,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 					let hasAnyDenial = false
 
 					batchFiles.forEach((batchFile, index) => {
-						const fileResult = filesToApprove[index]
+						const fileResult = remaining[index]
 						const approved = individualPermissions[batchFile.key] === true
 
 						if (approved) {
@@ -506,7 +522,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 					if (hasAnyDenial) task.didRejectTool = true
 				} catch {
 					task.didRejectTool = true
-					filesToApprove.forEach((fr) => {
+					remaining.forEach((fr) => {
 						updateFileResult(fr.path, {
 							status: "denied",
 							nativeContent: `File: ${fr.path}\nStatus: Denied by user`,
@@ -516,9 +532,10 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			}
 		} else {
 			// Single file approval
-			const fileResult = filesToApprove[0]
+			const fileResult = remaining[0]
 			const relPath = fileResult.path
 			const fullPath = path.resolve(task.cwd, relPath)
+
 			const isOutsideWorkspace = isPathOutsideWorkspace(fullPath)
 			const lineSnippet = this.getLineSnippet(fileResult.entry!)
 
@@ -666,6 +683,12 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 		}
 
 		const fullPath = filePath ? path.resolve(task.cwd, filePath) : ""
+		const extensionPath = task.providerRef.deref()?.context.extensionPath
+
+		if (filePath && isPathPotentiallyUnderCangjieCorpus(fullPath, extensionPath, filePath)) {
+			return
+		}
+
 		const sharedMessageProps: ClineSayTool = {
 			tool: "readFile",
 			path: getReadablePath(task.cwd, filePath),

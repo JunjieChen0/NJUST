@@ -13,7 +13,7 @@ import { experimentsSchema } from "./experiment.js"
 import { modeConfigSchema } from "./mode.js"
 import { customModePromptsSchema, customSupportPromptsSchema } from "./mode.js"
 import { toolNamesSchema } from "./tool.js"
-import { languagesSchema } from "./vscode.js"
+import { languages, languagesSchema } from "./vscode.js"
 
 /**
  * Default delay in milliseconds after writes to allow diagnostics to detect potential problems.
@@ -194,7 +194,15 @@ export const globalSettingsSchema = z.object({
 	codebaseIndexModels: codebaseIndexModelsSchema.optional(),
 	codebaseIndexConfig: codebaseIndexConfigSchema.optional(),
 
-	language: languagesSchema.optional(),
+	language: z.preprocess((val) => {
+		if (val === undefined || val === null) {
+			return undefined
+		}
+		if (typeof val !== "string") {
+			return "en"
+		}
+		return (languages as readonly string[]).includes(val) ? val : "en"
+	}, languagesSchema.optional()),
 	fontFamily: z.enum(["serif", "sans-serif", "default"]).optional(),
 
 	mcpEnabled: z.boolean().optional(),

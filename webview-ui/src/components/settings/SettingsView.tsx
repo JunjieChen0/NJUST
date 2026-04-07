@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 
 import {
+	type Language,
 	type ProviderSettings,
 	type ExperimentId,
 	DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
@@ -921,7 +922,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 						{/* Appearance Section */}
 						{renderTab === "appearance" && (
 							<AppearanceSettings
-								language={language || "en"}
+								language={(language ?? "en") as Language}
 								fontFamily={fontFamily || "serif"}
 								setCachedStateField={setCachedStateField}
 							/>

@@ -531,7 +531,8 @@ export async function executeCommandInTerminal(
 		let formattedResult = `Command executed in terminal within working directory '${currentWorkingDir}'. ${exitStatus}\nOutput:\n${result}`
 
 		if (exitDetails?.exitCode !== undefined && exitDetails.exitCode !== 0) {
-			const cangjieHints = enhanceCjcErrorOutput(result, task.cwd)
+			const extensionPath = task.providerRef.deref()?.context.extensionPath
+			const cangjieHints = enhanceCjcErrorOutput(result, task.cwd, extensionPath)
 			if (cangjieHints) {
 				formattedResult += cangjieHints
 			}

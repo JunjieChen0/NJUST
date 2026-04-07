@@ -2,8 +2,24 @@ import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
 import { NJUST_AI_CONFIG_DIR } from "@njust-ai-cj/types"
-import { parseCangjieDefinitions, type CangjieDef } from "../../../services/tree-sitter/cangjieParser"
+import {
+	parseCangjieDefinitions,
+	computeCangjieSignature,
+	extractTypeMemberSummaries,
+	type CangjieDef,
+} from "../../../services/tree-sitter/cangjieParser"
 import { CangjieSymbolIndex, type SymbolEntry } from "../../../services/cangjie-lsp/CangjieSymbolIndex"
+import { getBundledCangjieCorpusPath } from "../../../utils/bundledCangjieCorpus"
+
+const LEARNED_FIXES_FILE = "learned-fixes.json"
+const LEARNED_FIXES_MAX_SECTION_CHARS = 4000
+
+interface LearnedFixPattern {
+	errorPattern: string
+	fix: string
+	projectSpecific?: boolean
+	occurrences?: number
+}
 
 const IMPORT_REGEX = /^\s*import\s+([\w.]+)\.\*?\s*$/gm
 const FROM_IMPORT_REGEX = /^\s*from\s+([\w.]+)\s+import\s+/gm
@@ -16,29 +32,29 @@ interface DocMapping {
 }
 
 const STDLIB_DOC_MAP: DocMapping[] = [
-	{ prefix: "std.collection", docPaths: ["std/collection/", "kernel/source_zh_cn/collections/"], summary: "ArrayList, HashMap, HashSet 等集合类型" },
-	{ prefix: "std.io", docPaths: ["std/io/", "kernel/source_zh_cn/Basic_IO/"], summary: "流式 IO、文件读写" },
-	{ prefix: "std.fs", docPaths: ["std/fs/"], summary: "文件系统操作" },
-	{ prefix: "std.net", docPaths: ["std/net/", "kernel/source_zh_cn/Net/"], summary: "HTTP/Socket/WebSocket 网络编程" },
-	{ prefix: "std.sync", docPaths: ["std/sync/", "kernel/source_zh_cn/concurrency/"], summary: "Mutex、AtomicInt 等并发同步原语" },
-	{ prefix: "std.time", docPaths: ["std/time/"], summary: "日期时间处理" },
-	{ prefix: "std.math", docPaths: ["std/math/"], summary: "数学运算" },
-	{ prefix: "std.regex", docPaths: ["std/regex/"], summary: "正则表达式" },
-	{ prefix: "std.console", docPaths: ["std/console/"], summary: "控制台输入输出" },
-	{ prefix: "std.convert", docPaths: ["std/convert/"], summary: "类型转换" },
-	{ prefix: "std.unittest", docPaths: ["std/unittest/"], summary: "单元测试框架 (@Test, @TestCase, @Assert)" },
-	{ prefix: "std.random", docPaths: ["std/random/"], summary: "随机数生成" },
-	{ prefix: "std.process", docPaths: ["std/process/"], summary: "进程管理" },
-	{ prefix: "std.env", docPaths: ["std/env/"], summary: "环境变量" },
-	{ prefix: "std.reflect", docPaths: ["std/reflect/", "kernel/source_zh_cn/reflect_and_annotation/"], summary: "反射与注解" },
-	{ prefix: "std.sort", docPaths: ["std/sort/"], summary: "排序算法" },
-	{ prefix: "std.binary", docPaths: ["std/binary/"], summary: "二进制数据处理" },
-	{ prefix: "std.ast", docPaths: ["std/ast/"], summary: "AST 操作（宏编程）" },
-	{ prefix: "std.crypto", docPaths: ["std/crypto/"], summary: "加密与哈希" },
-	{ prefix: "std.database", docPaths: ["std/database/"], summary: "数据库 SQL 接口" },
-	{ prefix: "std.core", docPaths: ["std/core/"], summary: "核心类型与函数（自动导入）" },
-	{ prefix: "std.deriving", docPaths: ["std/deriving/"], summary: "自动派生宏" },
-	{ prefix: "std.overflow", docPaths: ["std/overflow/"], summary: "溢出安全运算" },
+	{ prefix: "std.collection", docPaths: ["libs/std/collection/", "manual/source_zh_cn/collections/"], summary: "ArrayList, HashMap, HashSet 等集合类型" },
+	{ prefix: "std.io", docPaths: ["libs/std/io/", "manual/source_zh_cn/Basic_IO/"], summary: "流式 IO、文件读写" },
+	{ prefix: "std.fs", docPaths: ["libs/std/fs/"], summary: "文件系统操作" },
+	{ prefix: "std.net", docPaths: ["libs/std/net/", "manual/source_zh_cn/Net/"], summary: "HTTP/Socket/WebSocket 网络编程" },
+	{ prefix: "std.sync", docPaths: ["libs/std/sync/", "manual/source_zh_cn/concurrency/"], summary: "Mutex、AtomicInt 等并发同步原语" },
+	{ prefix: "std.time", docPaths: ["libs/std/time/"], summary: "日期时间处理" },
+	{ prefix: "std.math", docPaths: ["libs/std/math/"], summary: "数学运算" },
+	{ prefix: "std.regex", docPaths: ["libs/std/regex/"], summary: "正则表达式" },
+	{ prefix: "std.console", docPaths: ["libs/std/console/"], summary: "控制台输入输出" },
+	{ prefix: "std.convert", docPaths: ["libs/std/convert/"], summary: "类型转换" },
+	{ prefix: "std.unittest", docPaths: ["libs/std/unittest/"], summary: "单元测试框架 (@Test, @TestCase, @Assert)" },
+	{ prefix: "std.random", docPaths: ["libs/std/random/"], summary: "随机数生成" },
+	{ prefix: "std.process", docPaths: ["libs/std/process/"], summary: "进程管理" },
+	{ prefix: "std.env", docPaths: ["libs/std/env/"], summary: "环境变量" },
+	{ prefix: "std.reflect", docPaths: ["libs/std/reflect/", "manual/source_zh_cn/reflect_and_annotation/"], summary: "反射与注解" },
+	{ prefix: "std.sort", docPaths: ["libs/std/sort/"], summary: "排序算法" },
+	{ prefix: "std.binary", docPaths: ["libs/std/binary/"], summary: "二进制数据处理" },
+	{ prefix: "std.ast", docPaths: ["libs/std/ast/"], summary: "AST 操作（宏编程）" },
+	{ prefix: "std.crypto", docPaths: ["libs/std/crypto/"], summary: "加密与哈希" },
+	{ prefix: "std.database", docPaths: ["libs/std/database/"], summary: "数据库 SQL 接口" },
+	{ prefix: "std.core", docPaths: ["libs/std/core/"], summary: "核心类型与函数（自动导入）" },
+	{ prefix: "std.deriving", docPaths: ["libs/std/deriving/"], summary: "自动派生宏" },
+	{ prefix: "std.overflow", docPaths: ["libs/std/overflow/"], summary: "溢出安全运算" },
 ]
 
 interface CjcErrorPattern {
@@ -52,154 +68,193 @@ const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 	{
 		pattern: /(?:undeclared|cannot find|not found|未找到符号|unresolved)/i,
 		category: "未找到符号",
-		docPaths: ["kernel/source_zh_cn/package/import.md"],
+		docPaths: ["manual/source_zh_cn/package/import.md"],
 		suggestion: "检查 import 语句是否正确，确认 cjpm.toml 中是否声明了依赖包",
 	},
 	{
 		pattern: /(?:type mismatch|incompatible types|类型不匹配)/i,
 		category: "类型不匹配",
-		docPaths: ["kernel/source_zh_cn/class_and_interface/typecast.md", "kernel/source_zh_cn/class_and_interface/subtype.md"],
+		docPaths: ["manual/source_zh_cn/class_and_interface/typecast.md", "manual/source_zh_cn/class_and_interface/subtype.md"],
 		suggestion: "检查赋值和参数的类型是否一致，必要时使用类型转换或泛型约束",
 	},
 	{
 		pattern: /(?:cyclic dependency|循环依赖)/i,
 		category: "循环依赖",
-		docPaths: ["kernel/source_zh_cn/package/package_overview.md"],
+		docPaths: ["manual/source_zh_cn/package/package_overview.md"],
 		suggestion: "使用 `cjpm check` 查看依赖关系图，将共享类型抽取到独立包中打破循环",
 	},
 	{
 		pattern: /(?:immutable|cannot assign|let.*reassign|不可变)/i,
 		category: "不可变变量赋值",
-		docPaths: ["kernel/source_zh_cn/basic_programming_concepts/expression.md"],
+		docPaths: ["manual/source_zh_cn/basic_programming_concepts/expression.md"],
 		suggestion: "将 `let` 改为 `var` 声明，或重新设计为不可变模式",
 	},
 	{
 		pattern: /(?:mut function|mut.*let|let.*mut)/i,
 		category: "mut 函数限制",
-		docPaths: ["kernel/source_zh_cn/struct/mut.md"],
+		docPaths: ["manual/source_zh_cn/struct/mut.md"],
 		suggestion: "let 绑定的 struct 变量不能调用 mut 函数，改用 var 声明",
 	},
 	{
 		pattern: /(?:recursive struct|recursive value type|递归结构体)/i,
 		category: "递归结构体",
-		docPaths: ["kernel/source_zh_cn/struct/define_struct.md", "kernel/source_zh_cn/class_and_interface/class.md"],
+		docPaths: ["manual/source_zh_cn/struct/define_struct.md", "manual/source_zh_cn/class_and_interface/class.md"],
 		suggestion: "struct 是值类型不能自引用，改用 class（引用类型）或 Option 包装",
 	},
 	{
 		pattern: /(?:overflow|arithmetic.*overflow)/i,
 		category: "算术溢出",
-		docPaths: ["kernel/source_zh_cn/error_handle/common_runtime_exceptions.md"],
+		docPaths: ["manual/source_zh_cn/error_handle/common_runtime_exceptions.md"],
 		suggestion: "使用 std.overflow 包中的溢出安全运算，或检查边界条件",
 	},
 	{
 		pattern: /(?:NoneValueException|unwrap.*None|getOrThrow)/i,
 		category: "空值异常",
-		docPaths: ["kernel/source_zh_cn/error_handle/use_option.md", "kernel/source_zh_cn/enum_and_pattern_match/option_type.md"],
+		docPaths: ["manual/source_zh_cn/error_handle/use_option.md", "manual/source_zh_cn/enum_and_pattern_match/option_type.md"],
 		suggestion: "使用 `??` 合并运算符提供默认值，或用 match/if-let 安全解包 Option",
 	},
 	{
 		pattern: /(?:not implement|missing implementation|未实现接口)/i,
 		category: "接口未实现",
-		docPaths: ["kernel/source_zh_cn/class_and_interface/interface.md"],
+		docPaths: ["manual/source_zh_cn/class_and_interface/interface.md"],
 		suggestion: "检查类是否完整实现了所有接口方法，注意方法签名必须完全匹配",
 	},
 	{
 		pattern: /(?:access.*denied|private|protected|not accessible|访问权限)/i,
 		category: "访问权限错误",
-		docPaths: ["kernel/source_zh_cn/package/toplevel_access.md", "kernel/source_zh_cn/extension/access_rules.md"],
+		docPaths: ["manual/source_zh_cn/package/toplevel_access.md", "manual/source_zh_cn/extension/access_rules.md"],
 		suggestion: "检查成员的访问修饰符（public/protected/private/internal），跨包访问需要 public",
 	},
 	{
 		pattern: /(?:missing return|no return|缺少返回|return expected)/i,
 		category: "缺少 return 语句",
-		docPaths: ["kernel/source_zh_cn/function/define_functions.md"],
+		docPaths: ["manual/source_zh_cn/function/define_functions.md"],
 		suggestion: "非 Unit 返回类型的函数所有分支必须有 return 语句，或将最后一个表达式作为返回值",
 	},
 	{
 		pattern: /(?:wrong number.*argument|too (?:many|few) argument|参数数量|arity)/i,
 		category: "函数参数数量错误",
-		docPaths: ["kernel/source_zh_cn/function/call_functions.md"],
+		docPaths: ["manual/source_zh_cn/function/call_functions.md"],
 		suggestion: "检查函数调用的参数数量是否与声明匹配，注意命名参数需要用 `name:` 语法",
 	},
 	{
 		pattern: /(?:missing import|import.*not found|未导入)/i,
 		category: "缺少 import",
-		docPaths: ["kernel/source_zh_cn/package/import.md"],
+		docPaths: ["manual/source_zh_cn/package/import.md"],
 		suggestion: "添加缺失的 import 语句，如 `import std.collection.*` 或 `import std.io.*`",
 	},
 	{
 		pattern: /(?:non-exhaustive|not exhaustive|未穷尽|incomplete match)/i,
 		category: "match 不穷尽",
-		docPaths: ["kernel/source_zh_cn/enum_and_pattern_match/match.md"],
+		docPaths: ["manual/source_zh_cn/enum_and_pattern_match/match.md"],
 		suggestion: "match 表达式必须覆盖所有可能的值，添加缺失的 case 分支或使用 `case _ =>` 通配",
 	},
 	{
 		pattern: /(?:constraint.*not satisfied|does not conform|泛型约束|type parameter.*bound)/i,
 		category: "泛型约束不满足",
-		docPaths: ["kernel/source_zh_cn/generic/generic_constraint.md"],
+		docPaths: ["manual/source_zh_cn/generic/generic_constraint.md"],
 		suggestion: "检查类型参数是否满足 where 子句中的约束（如 `<: Comparable<T>`），必要时添加约束或换用其他类型",
 	},
 	{
 		pattern: /(?:constructor.*argument|init.*parameter|构造.*参数)/i,
 		category: "构造函数参数错误",
-		docPaths: ["kernel/source_zh_cn/class_and_interface/class.md", "kernel/source_zh_cn/struct/create_instance.md"],
+		docPaths: ["manual/source_zh_cn/class_and_interface/class.md", "manual/source_zh_cn/struct/create_instance.md"],
 		suggestion: "检查构造函数 init 的参数列表与调用处是否匹配",
 	},
 	{
 		pattern: /(?:duplicate.*definition|redefinition|already defined|重复定义)/i,
 		category: "重复定义",
-		docPaths: ["kernel/source_zh_cn/basic_programming_concepts/identifier.md"],
+		docPaths: ["manual/source_zh_cn/basic_programming_concepts/identifier.md"],
 		suggestion: "同一作用域内不能有同名定义，检查是否重复声明了变量、函数或类型",
 	},
 	{
 		pattern: /(?:main.*signature|main.*return|main.*Int64)/i,
 		category: "main 函数签名错误",
-		docPaths: ["kernel/source_zh_cn/basic_programming_concepts/program_structure.md"],
+		docPaths: ["manual/source_zh_cn/basic_programming_concepts/program_structure.md"],
 		suggestion: "main 函数签名必须为 `main(): Int64`，必须返回 Int64 类型",
 	},
 	{
 		pattern: /(?:Resource.*interface|isClosed|close.*not.*implement)/i,
 		category: "Resource 接口未实现",
-		docPaths: ["kernel/source_zh_cn/error_handle/handle.md"],
+		docPaths: ["manual/source_zh_cn/error_handle/handle.md"],
 		suggestion: "try-with-resources 中的对象必须实现 Resource 接口（isClosed() 和 close() 方法）",
 	},
 	{
 		pattern: /(?:override.*missing|must.*override|需要.*override|override.*required)/i,
 		category: "缺少 override 修饰符",
-		docPaths: ["kernel/source_zh_cn/class_and_interface/class.md"],
+		docPaths: ["manual/source_zh_cn/class_and_interface/class.md"],
 		suggestion: "重写父类方法必须使用 `override` 关键字，重定义使用 `redef`",
 	},
 	{
 		pattern: /(?:index.*out.*bound|IndexOutOfBounds|数组越界|下标越界)/i,
 		category: "索引越界",
-		docPaths: ["kernel/source_zh_cn/error_handle/common_runtime_exceptions.md"],
+		docPaths: ["manual/source_zh_cn/error_handle/common_runtime_exceptions.md"],
 		suggestion: "访问数组/字符串前检查索引范围，使用 `.size` 获取长度",
 	},
 	{
 		pattern: /(?:capture.*mutable|spawn.*var|并发.*可变)/i,
 		category: "spawn 捕获可变引用",
-		docPaths: ["kernel/source_zh_cn/concurrency/create_thread.md"],
+		docPaths: ["manual/source_zh_cn/concurrency/create_thread.md"],
 		suggestion: "spawn 块内不能直接捕获可变引用，使用 Mutex/Atomic 保护共享状态",
 	},
 	{
 		pattern: /(?:where.*clause|where.*syntax|where.*error)/i,
 		category: "where 子句语法错误",
-		docPaths: ["kernel/source_zh_cn/generic/generic_constraint.md"],
+		docPaths: ["manual/source_zh_cn/generic/generic_constraint.md"],
 		suggestion: "where 子句语法: `where T <: Interface`，多约束用 `&` 连接: `where T <: A & B`",
 	},
 	{
 		pattern: /(?:prop.*getter|prop.*setter|属性.*语法)/i,
 		category: "prop 语法错误",
-		docPaths: ["kernel/source_zh_cn/class_and_interface/prop.md"],
+		docPaths: ["manual/source_zh_cn/class_and_interface/prop.md"],
 		suggestion: "属性语法: `prop name: Type { get() { ... } set(v) { ... } }`，只读属性可省略 set",
 	},
 	{
 		pattern: /(?:expected.*semicolon|expected.*bracket|expected.*paren|语法错误|syntax error|unexpected token)/i,
 		category: "语法解析错误",
-		docPaths: ["kernel/source_zh_cn/basic_programming_concepts/expression.md"],
+		docPaths: ["manual/source_zh_cn/basic_programming_concepts/expression.md"],
 		suggestion: "检查括号/花括号是否匹配，语句是否完整。注意仓颉不使用分号结尾（除非同一行多条语句）",
 	},
 ]
+
+/**
+ * When the Cangjie LSP exposes stable `Diagnostic.code` values, map them here for
+ * higher-precision matching than message regex alone. Unknown codes fall back to
+ * matching `diagnostic.message` against `CJC_ERROR_PATTERNS`.
+ */
+const CJC_DIAGNOSTIC_CODE_TO_PATTERN: ReadonlyMap<string, CjcErrorPattern> = new Map([
+	// Example: ["CJ0001", CJC_ERROR_PATTERNS[0]] — add when compiler codes are documented
+])
+
+function normalizeDiagnosticCode(diag: vscode.Diagnostic): string | undefined {
+	const c = diag.code
+	if (c === undefined || c === null) return undefined
+	if (typeof c === "string" || typeof c === "number") return String(c)
+	if (typeof c === "object" && c !== null && "value" in c) {
+		return String((c as { value: string | number }).value)
+	}
+	return undefined
+}
+
+function resolveCjcPatternForDiagnostic(diag: vscode.Diagnostic): CjcErrorPattern | null {
+	const code = normalizeDiagnosticCode(diag)
+	if (code) {
+		const byCode = CJC_DIAGNOSTIC_CODE_TO_PATTERN.get(code)
+		if (byCode) return byCode
+	}
+	for (const pattern of CJC_ERROR_PATTERNS) {
+		if (pattern.pattern.test(diag.message)) {
+			return pattern
+		}
+	}
+	return null
+}
+
+function getErrorFixDirectiveForDiagnostic(diag: vscode.Diagnostic): string {
+	const resolved = resolveCjcPatternForDiagnostic(diag)
+	if (resolved) return resolved.suggestion
+	return getErrorFixDirective(diag.message)
+}
 
 // SYNTAX_PITFALLS and CODE_REVIEW_CHECKLIST have been removed to avoid
 // duplication with the inlined CANGJIE_SYNTAX_REFERENCE and CANGJIE_CODING_RULES
@@ -441,6 +496,23 @@ function resolveImportToDirectory(
 	return null
 }
 
+const TYPE_OUTLINE_MAX_LINES = 40
+const TYPE_OUTLINE_MAX_CHARS = 1200
+const MAX_TYPE_OUTLINES_PER_IMPORT_BLOCK = 4
+const TYPE_MEMBER_DISPLAY_MAX = 8
+
+function extractTypeOutlineFromLines(lines: string[], sym: SymbolEntry): string | null {
+	if (!["class", "struct", "interface"].includes(sym.kind)) return null
+	const from = sym.startLine
+	const to = Math.min(sym.endLine, sym.startLine + TYPE_OUTLINE_MAX_LINES - 1)
+	let slice = lines.slice(from, to + 1).join("\n")
+	slice = slice.replace(/[ \t]+\n/g, "\n").trim()
+	if (slice.length > TYPE_OUTLINE_MAX_CHARS) {
+		return `${slice.slice(0, TYPE_OUTLINE_MAX_CHARS)}…`
+	}
+	return slice
+}
+
 function formatSymbolEntries(symbols: SymbolEntry[], cwd: string): string[] {
 	const lines: string[] = []
 	const grouped = new Map<string, SymbolEntry[]>()
@@ -451,10 +523,46 @@ function formatSymbolEntries(symbols: SymbolEntry[], cwd: string): string[] {
 		grouped.get(relFile)!.push(sym)
 	}
 
+	let outlineBudget = MAX_TYPE_OUTLINES_PER_IMPORT_BLOCK
+
 	for (const [file, syms] of grouped) {
 		for (const sym of syms) {
 			const sig = sym.signature ? `: \`${sym.signature}\`` : ""
 			lines.push(`- ${sym.kind} **${sym.name}**${sig} _(${file}:${sym.startLine + 1})_`)
+			if (outlineBudget <= 0 || !["class", "struct", "interface"].includes(sym.kind)) {
+				continue
+			}
+			try {
+				const fileLines = fs.readFileSync(sym.filePath, "utf-8").split("\n")
+				const { members, totalMatchingLines } = extractTypeMemberSummaries(
+					fileLines,
+					sym.startLine,
+					sym.endLine,
+					TYPE_MEMBER_DISPLAY_MAX + 4,
+				)
+				if (members.length > 0) {
+					outlineBudget--
+					const display = members.slice(0, TYPE_MEMBER_DISPLAY_MAX)
+					const omitted =
+						totalMatchingLines > display.length
+							? `（共约 ${totalMatchingLines} 个成员样例行，以下 ${display.length} 条）`
+							: ""
+					const body = display.map((l) => `      ${l}`).join("\n")
+					lines.push(`    - 成员概要${omitted}:\n${body}`)
+				} else {
+					const outline = extractTypeOutlineFromLines(fileLines, sym)
+					if (outline) {
+						outlineBudget--
+						const indented = outline
+							.split("\n")
+							.map((l) => `      ${l}`)
+							.join("\n")
+						lines.push(`    - 类型头/成员草稿:\n${indented}`)
+					}
+				}
+			} catch {
+				/* skip */
+			}
 		}
 	}
 
@@ -598,33 +706,91 @@ function collectCangjieDiagnostics(): vscode.Diagnostic[] {
 /**
  * Map diagnostic messages to error patterns and documentation.
  */
-function mapDiagnosticsToDocContext(diagnostics: vscode.Diagnostic[]): string[] {
+function mapDiagnosticsToDocContext(diagnostics: vscode.Diagnostic[], docsBase: string): string[] {
 	const matchedCategories = new Set<string>()
 	const sections: string[] = []
 
 	for (const diag of diagnostics) {
-		const msg = diag.message
-		for (const pattern of CJC_ERROR_PATTERNS) {
-			if (pattern.pattern.test(msg) && !matchedCategories.has(pattern.category)) {
-				matchedCategories.add(pattern.category)
-				const docPathsStr = pattern.docPaths
-					.map((p) => `${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/${p}`)
-					.join(", ")
-				sections.push(
-					`- **${pattern.category}**: ${pattern.suggestion}\n  参考文档: ${docPathsStr}`,
-				)
-			}
+		const pattern = resolveCjcPatternForDiagnostic(diag)
+		if (pattern && !matchedCategories.has(pattern.category)) {
+			matchedCategories.add(pattern.category)
+			const docPathsStr = pattern.docPaths
+				.map((p) => path.join(docsBase, p).replace(/\\/g, "/"))
+				.join(", ")
+			const codeStr = normalizeDiagnosticCode(diag)
+			const codeNote = codeStr ? ` (code: ${codeStr})` : ""
+			sections.push(
+				`- **${pattern.category}**${codeNote}: ${pattern.suggestion}\n  参考文档: ${docPathsStr}`,
+			)
 		}
 	}
 
 	return sections
 }
 
+export function resolveBundledCangjieCorpusPath(extensionPath: string | undefined): string | null {
+	return getBundledCangjieCorpusPath(extensionPath)
+}
+
 /**
- * Resolve the .njust_ai/skills/cangjie-full-docs base path relative to the workspace.
+ * Resolve the Cangjie documentation / corpus root.
+ * **Only** the extension-bundled tree (`bundled-cangjie-corpus/CangjieCorpus-1.0.0`). No workspace or `.njust_ai` fallbacks.
  */
-function resolveDocsBasePath(cwd: string): string {
-	return path.join(cwd, NJUST_AI_CONFIG_DIR, "skills", "cangjie-full-docs")
+export function resolveCangjieDocsBasePath(extensionPath?: string): string | null {
+	return resolveBundledCangjieCorpusPath(extensionPath)
+}
+
+const STYLE_FEW_SHOT_MAX_CHARS = 2200
+const STYLE_SNIPPET_LINES = 16
+
+function buildCangjieStyleFewShotSection(cwd: string): string | null {
+	const idx = CangjieSymbolIndex.getInstance()
+	if (!idx || idx.symbolCount === 0) return null
+
+	const header =
+		"## 工作区代码风格样本（few-shot）\n\n从符号索引中选取的代表性片段，新建代码时请保持相近风格与命名习惯：\n\n"
+	let used = header.length
+	const picked: string[] = []
+	const kinds = new Set(["func", "class", "struct"])
+
+	const scored: Array<{ score: number; rel: string; block: string }> = []
+	for (const sym of idx.getAllSymbols()) {
+		if (!kinds.has(sym.kind)) continue
+		const sigLen = sym.signature.length
+		const span = sym.endLine - sym.startLine + 1
+		const score = sigLen + span * 8
+		try {
+			const content = fs.readFileSync(sym.filePath, "utf-8")
+			const lines = content.split("\n")
+			const from = sym.startLine
+			const to = Math.min(sym.endLine, sym.startLine + STYLE_SNIPPET_LINES - 1)
+			const slice = lines.slice(from, to + 1).join("\n")
+			if (slice.trim().length < 24) continue
+			const rel = path.relative(cwd, sym.filePath).replace(/\\/g, "/")
+			const block =
+				"```cangjie\n" +
+				`// ${sym.kind} ${sym.name} (${rel}:${from + 1})\n` +
+				slice +
+				"\n```"
+			scored.push({ score, rel, block })
+		} catch {
+			/* skip */
+		}
+	}
+
+	scored.sort((a, b) => b.score - a.score)
+	const seenRel = new Set<string>()
+	for (const s of scored) {
+		if (picked.length >= 3) break
+		if (seenRel.has(s.rel)) continue
+		seenRel.add(s.rel)
+		if (used + s.block.length + 2 > STYLE_FEW_SHOT_MAX_CHARS) break
+		picked.push(s.block)
+		used += s.block.length + 2
+	}
+
+	if (picked.length === 0) return null
+	return `${header}${picked.join("\n\n")}`
 }
 
 // ---------------------------------------------------------------------------
@@ -975,14 +1141,277 @@ function buildDependencyContext(info: CjpmProjectInfo, cwd: string): string | nu
 }
 
 /**
+ * Load project-specific error→fix hints from .njust_ai/learned-fixes.json (manual curation).
+ */
+function loadLearnedFixesSection(cwd: string): string | null {
+	const fp = path.join(cwd, NJUST_AI_CONFIG_DIR, LEARNED_FIXES_FILE)
+	if (!fs.existsSync(fp)) return null
+
+	try {
+		const raw = fs.readFileSync(fp, "utf-8")
+		const data = JSON.parse(raw) as { patterns?: unknown }
+		if (!data || !Array.isArray(data.patterns)) return null
+
+		const header = `## 本项目常见修复提示（${NJUST_AI_CONFIG_DIR}/${LEARNED_FIXES_FILE}）\n\n`
+		const lines: string[] = []
+		let used = header.length
+
+		for (const entry of data.patterns) {
+			if (!entry || typeof entry !== "object") continue
+			const p = entry as LearnedFixPattern
+			if (typeof p.errorPattern !== "string" || typeof p.fix !== "string") continue
+
+			const epDisplay = p.errorPattern.replace(/`/g, "'").slice(0, 200)
+			const fixDisplay = p.fix.replace(/`/g, "'").slice(0, 500)
+			const occ =
+				typeof p.occurrences === "number" && p.occurrences > 0 ? `（约 ${p.occurrences} 次）` : ""
+			const line = `- 匹配 \`${epDisplay}\`：${fixDisplay}${occ}`
+			if (used + line.length + 1 > LEARNED_FIXES_MAX_SECTION_CHARS) {
+				lines.push(
+					`\n…（其余条目已省略以保持上下文长度；可打开 ${NJUST_AI_CONFIG_DIR}/${LEARNED_FIXES_FILE} 查看全部）`,
+				)
+				break
+			}
+			lines.push(line)
+			used += line.length + 1
+		}
+
+		if (lines.length === 0) return null
+		return `${header}${lines.join("\n")}`
+	} catch {
+		return null
+	}
+}
+
+const LEARNED_FIXES_MAX_PATTERNS = 80
+
+/**
+ * Auto-record a resolved error→fix pattern to the learned-fixes JSON.
+ * Called by the compile-fix loop when an error is successfully resolved.
+ * Deduplicates by errorPattern (bumps occurrences), caps at LEARNED_FIXES_MAX_PATTERNS.
+ */
+export function recordLearnedFix(
+	cwd: string,
+	errorPattern: string,
+	fix: string,
+	projectSpecific = true,
+): void {
+	const dir = path.join(cwd, NJUST_AI_CONFIG_DIR)
+	const fp = path.join(dir, LEARNED_FIXES_FILE)
+
+	let data: { patterns: LearnedFixPattern[] } = { patterns: [] }
+
+	try {
+		if (fs.existsSync(fp)) {
+			const raw = fs.readFileSync(fp, "utf-8")
+			const parsed = JSON.parse(raw)
+			if (parsed && Array.isArray(parsed.patterns)) {
+				data = parsed
+			}
+		}
+	} catch {
+		// Start fresh if parse fails
+	}
+
+	// Normalize for dedup
+	const normalizedPattern = errorPattern.trim().toLowerCase().slice(0, 300)
+
+	// Check for existing match (dedup by error pattern similarity)
+	const existing = data.patterns.find((p) => {
+		const existingNorm = p.errorPattern.trim().toLowerCase().slice(0, 300)
+		return existingNorm === normalizedPattern || existingNorm.includes(normalizedPattern) || normalizedPattern.includes(existingNorm)
+	})
+
+	if (existing) {
+		existing.occurrences = (existing.occurrences || 1) + 1
+		// Update fix if the new one is more detailed
+		if (fix.length > existing.fix.length) {
+			existing.fix = fix.slice(0, 1000)
+		}
+	} else {
+		if (data.patterns.length >= LEARNED_FIXES_MAX_PATTERNS) {
+			// Evict least-seen entry
+			data.patterns.sort((a, b) => (a.occurrences || 0) - (b.occurrences || 0))
+			data.patterns.shift()
+		}
+		data.patterns.push({
+			errorPattern: errorPattern.slice(0, 500),
+			fix: fix.slice(0, 1000),
+			projectSpecific,
+			occurrences: 1,
+		})
+	}
+
+	try {
+		if (!fs.existsSync(dir)) {
+			fs.mkdirSync(dir, { recursive: true })
+		}
+		fs.writeFileSync(fp, JSON.stringify(data, null, 2), "utf-8")
+	} catch {
+		// Non-critical: ignore write failures
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cjpm tree integration (Phase 2.3) — precise dependency tree
+// ---------------------------------------------------------------------------
+
+/**
+ * Run `cjpm tree` via CangjieCompileGuard and return formatted context section.
+ * Uses lazy require to avoid circular dependency.
+ * Returns null if cjpm is unavailable or no tree output.
+ */
+async function getCjpmTreeSection(cwd: string): Promise<string | null> {
+	try {
+		// Lazy import — CangjieCompileGuard is initialized after context builder
+		const { CangjieCompileGuard } = require("../../../services/cangjie-lsp/CangjieCompileGuard") as typeof import("../../../services/cangjie-lsp/CangjieCompileGuard")
+		// Use a lightweight singleton guard just for tree queries
+		const guard = new CangjieCompileGuard({ appendLine: () => {} } as unknown as import("vscode").OutputChannel)
+		const summary = await guard.getCjpmTreeSummary(cwd)
+		guard.dispose()
+		return summary || null
+	} catch {
+		return null
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic coding rules injection (context-aware)
+// ---------------------------------------------------------------------------
+
+const CODING_RULES_MAX_CHARS = 3000
+
+/**
+ * Selectively inject coding rules based on the current editing context.
+ * Instead of blindly inlining the full CANGJIE_CODING_RULES (~870 lines)
+ * into every prompt, we inject only the relevant sections based on:
+ *   - What files are currently open (test file → test templates)
+ *   - What imports are present (std.sync → concurrency rules)
+ *   - Whether there are compilation errors (→ error table)
+ *   - Whether it's a workspace project (→ workspace workflow)
+ */
+function buildContextualCodingRules(
+	imports: string[],
+	projectInfo: CjpmProjectInfo | null,
+): string | null {
+	const parts: string[] = []
+	let budget = CODING_RULES_MAX_CHARS
+
+	const hasActiveCangjieFile = vscode.window.visibleTextEditors.some(
+		(e) => e.document.languageId === "cangjie" || e.document.fileName.endsWith(".cj"),
+	)
+
+	if (!hasActiveCangjieFile && !projectInfo) return null
+
+	// Detect what's relevant for context-aware injection
+	const hasTestFile = vscode.window.visibleTextEditors.some(
+		(e) => e.document.fileName.endsWith("_test.cj"),
+	)
+	const hasMainFile = vscode.window.visibleTextEditors.some(
+		(e) => e.document.fileName.endsWith("main.cj"),
+	)
+	const hasSyncImport = imports.some((i) => i.startsWith("std.sync"))
+	const hasErrors = collectCangjieDiagnostics().some(
+		(d) => d.severity === vscode.DiagnosticSeverity.Error,
+	)
+	const isWorkspace = projectInfo?.isWorkspace ?? false
+
+	// Always inject the core project templates (compact)
+	const coreTemplates =
+		"## 仓颉代码模板\n\n" +
+		"### 可执行项目入口\n```cangjie\npackage my_app\nimport std.console.*\nmain(): Int64 {\n    println(\"Hello, Cangjie!\")\n    return 0\n}\n```\n"
+
+	if (budget >= coreTemplates.length) {
+		parts.push(coreTemplates)
+		budget -= coreTemplates.length
+	}
+
+	// Test templates when editing test files
+	if (hasTestFile) {
+		const testTemplate =
+			"### 测试文件模板\n```cangjie\npackage my_app\nimport std.unittest.*\nimport std.unittest.testmacro.*\n@Test\nclass MyTest {\n    @TestCase\n    func testBasic() {\n        @Assert(1 + 1 == 2)\n    }\n}\n```\n"
+		if (budget >= testTemplate.length) {
+			parts.push(testTemplate)
+			budget -= testTemplate.length
+		}
+	}
+
+	// Error handling patterns when there are active errors
+	if (hasErrors) {
+		const errorTable =
+			"### 常见编译错误速查\n" +
+			"| 错误类型 | 解决方案 |\n" +
+			"|----------|----------|\n" +
+			"| 未找到符号 | 检查 import 语句和 cjpm.toml 依赖 |\n" +
+			"| 类型不匹配 | 检查类型声明和转换 |\n" +
+			"| let 变量赋值 | 改用 `var` 声明 |\n" +
+			"| mut 函数限制 | let 变量调用 mut 函数 → 改用 `var` |\n" +
+			"| 递归结构体 | struct 不能自引用 → 改用 class 或 Option |\n" +
+			"| match 不穷尽 | 补全 case 或添加 `case _ =>` |\n" +
+			"| 参数数量错误 | 检查命名参数需用 `name:` 语法 |\n"
+		if (budget >= errorTable.length) {
+			parts.push(errorTable)
+			budget -= errorTable.length
+		}
+	}
+
+	// Anti-patterns for let/var/mut when editing struct code
+	if (hasActiveCangjieFile) {
+		const antiPatterns =
+			"### 常见反例\n" +
+			"- ❌ `let c = Counter(); c.inc()` — let 绑定的 struct 不能调用 mut 方法 → ✅ `var c = Counter()`\n" +
+			"- ❌ `struct Node { let next: Node }` — struct 不能自引用 → ✅ `class Node { let next: ?Node = None }`\n" +
+			"- ❌ Option 直接 unwrap → ✅ 用 `??` 默认值或 match/if-let 安全解包\n"
+		if (budget >= antiPatterns.length) {
+			parts.push(antiPatterns)
+			budget -= antiPatterns.length
+		}
+	}
+
+	// Concurrency rules when using std.sync
+	if (hasSyncImport) {
+		const concurrencyRules =
+			"### 并发注意事项\n" +
+			"- spawn 块内不能直接捕获 `var` 变量\n" +
+			"- 共享可变状态必须使用 Mutex/AtomicInt 保护\n" +
+			"- 使用 `synchronized` 块或 `mutex.lock()/unlock()` 确保互斥\n"
+		if (budget >= concurrencyRules.length) {
+			parts.push(concurrencyRules)
+			budget -= concurrencyRules.length
+		}
+	}
+
+	// Workspace workflow when it's a multi-module project
+	if (isWorkspace) {
+		const wsWorkflow =
+			"### Workspace 项目规则\n" +
+			"- `[workspace]` 和 `[package]` 不能在同一 cjpm.toml\n" +
+			"- 模块间依赖: `{ path = \"../module_name\" }` 写在子模块的 `[dependencies]`\n" +
+			"- `cjpm run --name <模块>` 运行指定模块\n" +
+			"- 每个模块需独立的 cjpm.toml 和 src/ 目录\n"
+		if (budget >= wsWorkflow.length) {
+			parts.push(wsWorkflow)
+			budget -= wsWorkflow.length
+		}
+	}
+
+	if (parts.length === 0) return null
+	return parts.join("\n")
+}
+
+/**
  * Generate the Cangjie context section for the system prompt.
  * Only included when mode is "cangjie".
  */
-export function getCangjieContextSection(cwd: string, mode: string): string {
+export async function getCangjieContextSection(
+	cwd: string,
+	mode: string,
+	extensionPath?: string,
+): Promise<string> {
 	if (mode !== "cangjie") return ""
 
-	const docsBase = resolveDocsBasePath(cwd)
-	const docsExist = fs.existsSync(docsBase)
+	const docsBase = resolveCangjieDocsBasePath(extensionPath)
+	const docsExist = docsBase != null && fs.existsSync(docsBase)
 
 	const sections: string[] = []
 
@@ -1021,7 +1450,14 @@ export function getCangjieContextSection(cwd: string, mode: string): string {
 	if (projectInfo) {
 		const depCtx = buildDependencyContext(projectInfo, cwd)
 		if (depCtx) sections.push(depCtx)
+
+		// 0c2. cjpm tree — precise dependency tree via build tool (Phase 2.3)
+		const treeSection = await getCjpmTreeSection(cwd)
+		if (treeSection) sections.push(treeSection)
 	}
+
+	// Collect imports from visible editors (needed for multiple downstream sections)
+	const imports = collectActiveCangjieImports()
 
 	// Symbol scanning, import analysis, and doc mapping are only performed
 	// when a cjpm.toml project exists, to keep context lightweight otherwise.
@@ -1032,8 +1468,6 @@ export function getCangjieContextSection(cwd: string, mode: string): string {
 			sections.push(symbolSection)
 		}
 
-		// 0e. Cross-file symbol resolution via import analysis
-		const imports = collectActiveCangjieImports()
 
 		const importedSymbolsSection = resolveImportedSymbols(imports, cwd, projectInfo)
 		if (importedSymbolsSection) {
@@ -1046,30 +1480,40 @@ export function getCangjieContextSection(cwd: string, mode: string): string {
 			if (wsSymbols) sections.push(wsSymbols)
 		}
 
+		const styleFew = buildCangjieStyleFewShotSection(cwd)
+		if (styleFew) {
+			sections.push(styleFew)
+		}
+
 		// 1. Import-based documentation context
-		if (imports.length > 0 && docsExist) {
+		if (imports.length > 0 && docsBase && docsExist) {
 			const docMappings = mapImportsToDocPaths(imports)
 			if (docMappings.length > 0) {
 				const importContext = docMappings
 					.map((m) => {
-						const paths = m.docPaths
-							.map((p) => `${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/${p}`)
-							.join(", ")
-						return `- \`${m.prefix}\`: ${m.summary} → ${paths}`
+						const paths = m.docPaths.join(", ")
+						return `- \`${m.prefix}\`: ${m.summary} (请视需检索: ${paths})`
 					})
 					.join("\n")
 
+				const corpusRoot = docsBase.replace(/\\/g, "/")
 				sections.push(
-					`## 当前代码使用的标准库模块\n\n以下模块在当前编辑的 .cj 文件中被引用，对应文档路径可用于查阅 API 详情：\n\n${importContext}`,
+					`## 当前代码涉及的重要模块映射\n\n语料库根目录（read_file / search_files 使用绝对路径时以此为前缀）: \`${corpusRoot}\`\n\n当前代码中已引入以下高级模块。若后续编写代码缺乏十足把握，强烈建议立刻使用 \`search_files\`（regex 搜索）检索这些官方库的示例以避免幻觉：\n\n${importContext}`,
 				)
 			}
 		}
 	}
 
+	// 1b. Dynamic coding rules injection (context-aware)
+	const codingRulesSection = buildContextualCodingRules(imports, projectInfo)
+	if (codingRulesSection) {
+		sections.push(codingRulesSection)
+	}
+
 	// 2. Error/diagnostic context
 	const diagnostics = collectCangjieDiagnostics()
-	if (diagnostics.length > 0) {
-		const errorSections = mapDiagnosticsToDocContext(diagnostics)
+	if (diagnostics.length > 0 && docsBase) {
+		const errorSections = mapDiagnosticsToDocContext(diagnostics, docsBase)
 		if (errorSections.length > 0) {
 			sections.push(
 				`## 当前诊断错误与修复建议\n\n检测到以下编译/检查错误，建议参考对应文档修复：\n\n${errorSections.join("\n")}`,
@@ -1077,23 +1521,34 @@ export function getCangjieContextSection(cwd: string, mode: string): string {
 		}
 	}
 
-	// 3. Documentation index references
-	if (docsExist) {
+	// 3. Agentic Retrieval Directive (Mandatory)
+	if (docsBase && docsExist) {
+		const corpusRootPosix = docsBase.replace(/\\/g, "/")
 		sections.push(
-			`## 仓颉文档检索指引\n\n` +
-			`项目中包含完整的仓颉语言文档（${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/），按以下索引查阅：\n` +
-			`- 语言特性索引: ${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/kernel/index.md\n` +
-			`- 标准库索引: ${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/std.md\n` +
-			`- 扩展标准库索引: ${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/stdx.md\n` +
-			`- 工具链索引: ${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/tools/index.md\n\n` +
-			`遇到不确定的 API 或语法时，优先通过索引文件定位并读取对应文档，确保给出准确信息。`,
+			`## 仓颉主动式文档检索法则 (Agentic Retrieval - 强制！)\n\n` +
+			`仓颉语料库根目录**绝对路径**：\`${corpusRootPosix}\`（**仅**随扩展安装的内置副本；常在当前工作区之外）。\n` +
+			`**路径约定**：使用 \`read_file\` / \`search_files\`（即 grep 式检索工具）时，\`path\` 必须为该绝对路径，或其下的子目录/文件绝对路径；不要假设语料位于工作区相对路径下。\n` +
+			`作为辅助程序，你必须视该目录为权威参考并遵守：\n` +
+			`1. **动笔前预搜索**：在调用标准库(std)、鸿蒙库(ohos)中任何你未曾高频使用的方法前，必须调用 \`search_files\`，\`path\` 设为上述根目录（或 \`manual/source_zh_cn\`、\`libs\` 等子目录的绝对路径），搜索真实 API 签名以及代码段。\n` +
+			`2. **深潜式阅读**：不要只看检索到的一行标题，发现可能的匹配文件后，使用 \`read_file\`（view_file）以绝对路径精确读完相关示例代码块，再动手写代码。\n` +
+			`3. **报错自恰修复**：当遭遇 CangjieCompileGuard 或编译报错时，必须针对错误类型使用 \`search_files\` 在 \`${corpusRootPosix}/manual/source_zh_cn/\` 或 \`${corpusRootPosix}/libs/\` 下搜寻官方指引，再修代码。\n\n` +
+			`**效率原则**：为减少迭代返工，在生成实现代码前必须完成上述检索+阅读流程，禁止凭记忆编写不确定的 API 调用。\n\n` +
+			`核心速查:\n` +
+			`- 语法指南: \`${corpusRootPosix}/manual/source_zh_cn/\`\n` +
+			`- 标准类库: \`${corpusRootPosix}/libs/std/\``
 		)
 	}
 
-	// 4. Structured editing context (cursor position, enclosing symbol, nearby code)
-	const editingCtx = buildStructuredEditingContext()
+	// 4. Structured editing context (cursor position, enclosing symbol, nearby code, LSP hover)
+	const editingCtx = await buildStructuredEditingContext()
 	if (editingCtx) {
 		sections.push(editingCtx)
+	}
+
+	// 5. Project-curated learned fixes (optional JSON in .njust_ai/)
+	const learnedFixes = loadLearnedFixesSection(cwd)
+	if (learnedFixes) {
+		sections.push(learnedFixes)
 	}
 
 	if (sections.length === 0) return ""
@@ -1110,12 +1565,15 @@ ${sections.join("\n\n")}
  * Extract file:line:col references from cjc error output and read surrounding
  * source lines to provide richer context for AI-assisted fixes.
  */
+const ERROR_CONTEXT_RADIUS = 8
+const ERROR_CONTEXT_MAX_LOCATIONS = 8
+
 function extractErrorSourceContext(errorOutput: string, cwd: string): string[] {
 	const locationRe = /==>\s+(.+?):(\d+):(\d+):/g
 	const contextLines: string[] = []
 	const seen = new Set<string>()
-	const CONTEXT_RADIUS = 3
 	let match: RegExpExecArray | null
+	const symbolIndex = CangjieSymbolIndex.getInstance()
 
 	while ((match = locationRe.exec(errorOutput)) !== null) {
 		const [, filePart, lineStr] = match
@@ -1129,8 +1587,8 @@ function extractErrorSourceContext(errorOutput: string, cwd: string): string[] {
 			if (!fs.existsSync(filePath)) continue
 			const content = fs.readFileSync(filePath, "utf-8")
 			const lines = content.split("\n")
-			const start = Math.max(0, lineNum - CONTEXT_RADIUS)
-			const end = Math.min(lines.length, lineNum + CONTEXT_RADIUS + 1)
+			const start = Math.max(0, lineNum - ERROR_CONTEXT_RADIUS)
+			const end = Math.min(lines.length, lineNum + ERROR_CONTEXT_RADIUS + 1)
 
 			const snippet = lines
 				.slice(start, end)
@@ -1142,12 +1600,25 @@ function extractErrorSourceContext(errorOutput: string, cwd: string): string[] {
 				.join("\n")
 
 			const relPath = path.relative(cwd, filePath).replace(/\\/g, "/")
-			contextLines.push(`文件: ${relPath} (第 ${lineNum + 1} 行)\n${snippet}`)
+			let block = `文件: ${relPath} (第 ${lineNum + 1} 行)\n${snippet}`
+
+			if (symbolIndex && filePath.endsWith(".cj")) {
+				const enclosing = symbolIndex.findEnclosingSymbol(filePath, lineNum)
+				if (enclosing?.signature) {
+					block += `\n  所在符号: ${enclosing.kind} ${enclosing.name}\n  签名: ${enclosing.signature}`
+				}
+			}
+
+			contextLines.push(block)
 		} catch {
 			// Skip unreadable files
 		}
 
-		if (contextLines.length >= 3) break
+		if (contextLines.length >= ERROR_CONTEXT_MAX_LOCATIONS) break
+	}
+
+	if (contextLines.length >= ERROR_CONTEXT_MAX_LOCATIONS) {
+		contextLines.push("（已达单段上下文展示上限；其余错误位置请查看完整编译输出。）")
 	}
 
 	return contextLines
@@ -1157,9 +1628,9 @@ function extractErrorSourceContext(errorOutput: string, cwd: string): string[] {
  * Enhance a cjc/cjlint error message with documentation references and fix suggestions.
  * Called when terminal output contains compilation errors.
  */
-export function enhanceCjcErrorOutput(errorOutput: string, cwd: string): string {
-	const docsBase = resolveDocsBasePath(cwd)
-	const docsExist = fs.existsSync(docsBase)
+export function enhanceCjcErrorOutput(errorOutput: string, cwd: string, extensionPath?: string): string {
+	const docsBase = resolveCangjieDocsBasePath(extensionPath)
+	const docsExist = docsBase != null && fs.existsSync(docsBase)
 
 	const matchedSuggestions: string[] = []
 	const seen = new Set<string>()
@@ -1167,9 +1638,8 @@ export function enhanceCjcErrorOutput(errorOutput: string, cwd: string): string 
 	for (const pattern of CJC_ERROR_PATTERNS) {
 		if (pattern.pattern.test(errorOutput) && !seen.has(pattern.category)) {
 			seen.add(pattern.category)
-			const docPaths = docsExist
-				? pattern.docPaths.map((p) => `${NJUST_AI_CONFIG_DIR}/skills/cangjie-full-docs/${p}`).join(", ")
-				: ""
+			const docPaths =
+				docsBase && docsExist ? pattern.docPaths.map((p) => path.join(docsBase, p).replace(/\\/g, "/")).join(", ") : ""
 			const ref = docPaths ? ` (参考: ${docPaths})` : ""
 			const directive = getErrorFixDirective(errorOutput)
 			matchedSuggestions.push(`[${pattern.category}] ${pattern.suggestion}${ref}\n  AI 修复指令: ${directive}`)
@@ -1226,29 +1696,74 @@ const ERROR_FIX_DIRECTIVES: ErrorFixDirective[] = [
 export function getErrorFixDirective(errorMessage: string): string {
 	for (const { pattern, directive } of ERROR_FIX_DIRECTIVES) {
 		if (pattern.test(errorMessage)) {
-			return directive
+			return `${directive} （切记：遇到模糊报错，务必要对其类型或发生错误的用法使用 grep_search 检索 manual/ 与 libs/ 内容查阅修正方案体系！）`
 		}
 	}
-	return "分析错误原因并给出最小化修复方案"
+	return "深入报错根源，如果是没见过的编译错误，必须立刻调出 grep_search 前往 CangjieCorpus 语料库寻找相关错误的规范修复手段或 API 改动机制！然后再修代码！"
 }
 
 // ---------------------------------------------------------------------------
 // Structured AI editing context
 // ---------------------------------------------------------------------------
 
+const HOVER_PROVIDER_TIMEOUT_MS = 800
+const HOVER_TEXT_MAX_CHARS = 4000
+
+function hoversToPlainText(hovers: vscode.Hover[]): string {
+	const chunks: string[] = []
+	for (const h of hovers) {
+		for (const c of h.contents) {
+			if (typeof c === "string") {
+				chunks.push(c)
+			} else {
+				chunks.push((c as vscode.MarkdownString).value)
+			}
+		}
+	}
+	return chunks.join("\n\n").replace(/\r\n/g, "\n").trim()
+}
+
+/**
+ * Best-effort LSP hover at cursor via VS Code command API (no direct LanguageClient).
+ */
+async function fetchHoverAtPosition(
+	document: vscode.TextDocument,
+	position: vscode.Position,
+): Promise<string | null> {
+	try {
+		const task = vscode.commands.executeCommand(
+			"vscode.executeHoverProvider",
+			document.uri,
+			position,
+		) as Thenable<vscode.Hover[] | undefined>
+
+		const hovers = await Promise.race([
+			task,
+			new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), HOVER_PROVIDER_TIMEOUT_MS)),
+		])
+		if (!hovers?.length) return null
+		const text = hoversToPlainText(hovers)
+		if (!text) return null
+		return text.length > HOVER_TEXT_MAX_CHARS ? `${text.slice(0, HOVER_TEXT_MAX_CHARS)}…` : text
+	} catch {
+		return null
+	}
+}
+
 /**
  * Build a structured editing context for the AI when the user is actively
  * editing a Cangjie file. Includes file info, current function, imports,
- * and recent diagnostics.
+ * LSP hover at cursor, nearby code, and recent diagnostics.
  */
-export function buildStructuredEditingContext(): string | null {
+export async function buildStructuredEditingContext(): Promise<string | null> {
 	const editor = vscode.window.activeTextEditor
 	if (!editor || (editor.document.languageId !== "cangjie" && !editor.document.fileName.endsWith(".cj"))) {
 		return null
 	}
 
 	const doc = editor.document
-	const cursorLine = editor.selection.active.line
+	const position = editor.selection.active
+	const cursorLine = position.line
 	const content = doc.getText()
 	const defs = parseCangjieDefinitions(content)
 
@@ -1271,9 +1786,15 @@ export function buildStructuredEditingContext(): string | null {
 
 	if (enclosing.length > 0) {
 		const innermost = enclosing[0]
-		const sigLine = doc.lineAt(innermost.startLine).text.trim()
+		const lines = content.split("\n")
+		const sig = computeCangjieSignature(lines, innermost)
 		parts.push(`正在编辑: ${innermost.kind} ${innermost.name} (第 ${innermost.startLine + 1} 行)`)
-		parts.push(`签名: ${sigLine}`)
+		parts.push(`签名: ${sig}`)
+	}
+
+	const hover = await fetchHoverAtPosition(doc, position)
+	if (hover) {
+		parts.push(`光标处 LSP 提示:\n${hover}`)
 	}
 
 	// Nearby code (±5 lines around cursor)
@@ -1291,7 +1812,7 @@ export function buildStructuredEditingContext(): string | null {
 	const errors = diags.filter((d) => d.severity === vscode.DiagnosticSeverity.Error)
 	if (errors.length > 0) {
 		const errorSummary = errors.slice(0, 5).map((d) => {
-			const directive = getErrorFixDirective(d.message)
+			const directive = getErrorFixDirectiveForDiagnostic(d)
 			return `  - 第 ${d.range.start.line + 1} 行: ${d.message}\n    建议: ${directive}`
 		}).join("\n")
 		parts.push(`当前文件错误:\n${errorSummary}`)

@@ -38,7 +38,7 @@
 		"prompts": "提示詞",
 		"ui": "UI",
 		"experimental": "實驗性",
-		"appearance": "語言",
+		"appearance": "外觀",
 		"about": "關於 NJUST_AI_CJ",
 		"skills": "Skills"
 	},
@@ -956,6 +956,19 @@
 			"input": "輸入",
 			"output": "輸出",
 			"cacheReads": "快取讀取"
+		}
+	},
+	"appearance": {
+		"language": {
+			"label": "介面語言",
+			"description": "選擇擴充功能介面的顯示語言"
+		},
+		"fontFamily": {
+			"label": "字型",
+			"description": "選擇介面字型風格",
+			"serif": "襯線體（明體風格）",
+			"sans-serif": "無襯線體（黑體風格）",
+			"default": "系統預設"
 		}
 	},
 	"skills": {

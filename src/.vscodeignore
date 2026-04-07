@@ -41,5 +41,13 @@
 # Include code snippets
 !snippets/**
 
+# Built-in Cangjie Dev skills (SKILL.md) — directory + contents (parent must be un-ignored for vsce/gitignore rules)
+!bundled-skills/
+!bundled-skills/**
+
+# Bundled Cangjie corpus (populated by sync:bundled-cangjie-corpus before vsce package)
+!bundled-cangjie-corpus/
+!bundled-cangjie-corpus/**
+
 # Include .env file for telemetry
 !.env

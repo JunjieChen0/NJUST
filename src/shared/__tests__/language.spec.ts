@@ -4,13 +4,17 @@ import { formatLanguage } from "../language"
 
 describe("formatLanguage", () => {
 	it("should uppercase region code in locale string", () => {
-		expect(formatLanguage("pt-br")).toBe("pt-BR")
 		expect(formatLanguage("zh-cn")).toBe("zh-CN")
+		expect(formatLanguage("zh-tw")).toBe("zh-TW")
 	})
 
 	it("should return original string if no region code present", () => {
 		expect(formatLanguage("en")).toBe("en")
-		expect(formatLanguage("fr")).toBe("fr")
+	})
+
+	it("should fall back to English for unsupported UI locales", () => {
+		expect(formatLanguage("de")).toBe("en")
+		expect(formatLanguage("fr")).toBe("en")
 	})
 
 	it("should handle empty or undefined input", () => {

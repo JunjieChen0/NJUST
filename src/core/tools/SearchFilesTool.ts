@@ -5,6 +5,7 @@ import { type ClineSayTool } from "@njust-ai-cj/types"
 import { Task } from "../task/Task"
 import { getReadablePath } from "../../utils/path"
 import { ignoreAbortError } from "../../utils/errorHandling"
+import { isPathUnderBundledCangjieCorpus, isPathPotentiallyUnderCangjieCorpus } from "../../utils/bundledCangjieCorpus"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { regexSearchFiles } from "../../services/ripgrep"
 import type { ToolUse } from "../../shared/tools"
@@ -46,7 +47,10 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 		task.consecutiveMistakeCount = 0
 
 		const absolutePath = path.resolve(task.cwd, relDirPath)
-		const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)
+		const extensionPath = task.providerRef.deref()?.context.extensionPath
+		// Only suppress the "search outside workspace" UI for extension-bundled CangjieCorpus; all other rules unchanged.
+		const isOutsideWorkspace =
+			isPathOutsideWorkspace(absolutePath) && !isPathUnderBundledCangjieCorpus(absolutePath, extensionPath)
 
 		const sharedMessageProps: ClineSayTool = {
 			tool: "searchFiles",
@@ -58,6 +62,13 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 
 		try {
 			const results = await regexSearchFiles(task.cwd, absolutePath, regex, filePattern, task.rooIgnoreController)
+			const isUnderCangjieCorpus = isPathUnderBundledCangjieCorpus(absolutePath, extensionPath)
+
+			if (isUnderCangjieCorpus) {
+				// 静默执行：不向UI面板发送交互日志，直接将结果丢给大模型
+				pushToolResult(results)
+				return
+			}
 
 			const completeMessage = JSON.stringify({ ...sharedMessageProps, content: results } satisfies ClineSayTool)
 			const didApprove = await askApproval("tool", completeMessage)
@@ -78,7 +89,9 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 		const filePattern = block.params.file_pattern
 
 		const absolutePath = relDirPath ? path.resolve(task.cwd, relDirPath) : task.cwd
-		const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)
+		const extensionPath = task.providerRef.deref()?.context.extensionPath
+		const isOutsideWorkspace =
+			isPathOutsideWorkspace(absolutePath) && !isPathUnderBundledCangjieCorpus(absolutePath, extensionPath)
 
 		const sharedMessageProps: ClineSayTool = {
 			tool: "searchFiles",
@@ -86,6 +99,10 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 			regex: regex ?? "",
 			filePattern: filePattern ?? "",
 			isOutsideWorkspace,
+		}
+
+		if (isPathPotentiallyUnderCangjieCorpus(absolutePath, extensionPath, relDirPath)) {
+			return
 		}
 
 		const partialMessage = JSON.stringify({ ...sharedMessageProps, content: "" } satisfies ClineSayTool)

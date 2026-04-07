@@ -636,7 +636,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					let newValue = value
 
 					if (key === "language") {
-						newValue = value ?? "zh-CN"
+						newValue = value ?? "en"
 						changeLanguage(newValue as Language)
 					} else if (key === "allowedCommands") {
 						const commands = value ?? []

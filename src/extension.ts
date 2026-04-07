@@ -50,6 +50,7 @@ import { CangjieDefinitionProvider } from "./services/cangjie-lsp/CangjieDefinit
 import { CangjieReferenceProvider } from "./services/cangjie-lsp/CangjieReferenceProvider"
 import { CangjieEnhancedRenameProvider } from "./services/cangjie-lsp/CangjieEnhancedRenameProvider"
 import { CangjieMacroCodeLensProvider, CangjieMacroHoverProvider, registerMacroCommands } from "./services/cangjie-lsp/CangjieMacroProvider"
+import { CangjieCompileGuard } from "./services/cangjie-lsp/CangjieCompileGuard"
 import { migrateSettings } from "./utils/migrateSettings"
 import { autoImportSettings } from "./utils/autoImportSettings"
 import { API } from "./extension/api"
@@ -82,6 +83,7 @@ let cjfmtFormatter: CjfmtFormatter | undefined
 let cjlintDiagnostics: CjlintDiagnostics | undefined
 let cjpmTaskProvider: CjpmTaskProvider | undefined
 let cangjieSymbolIndex: CangjieSymbolIndex | undefined
+let cangjieCompileGuard: CangjieCompileGuard | undefined
 let rooToolsMcpServer: RooToolsMcpServer | undefined
 
 // This method is called when your extension is activated.
@@ -175,6 +177,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		if (!cjlintDiagnostics) {
 			cjlintDiagnostics = new CjlintDiagnostics(outputChannel)
 			context.subscriptions.push(cjlintDiagnostics)
+		}
+		if (!cangjieCompileGuard) {
+			cangjieCompileGuard = new CangjieCompileGuard(outputChannel)
+			cangjieCompileGuard.registerSaveHook()
+			context.subscriptions.push(cangjieCompileGuard)
 		}
 	})
 
@@ -524,6 +531,8 @@ export async function deactivate() {
 	cjpmTaskProvider = undefined
 	cangjieSymbolIndex?.dispose()
 	cangjieSymbolIndex = undefined
+	cangjieCompileGuard?.dispose()
+	cangjieCompileGuard = undefined
 
 	if (rooToolsMcpServer) {
 		await rooToolsMcpServer.stop()

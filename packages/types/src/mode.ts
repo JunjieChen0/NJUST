@@ -1,6 +1,5 @@
 import { z } from "zod"
 
-import { CANGJIE_CODING_RULES } from "./cangjie-rules-content.js"
 import { deprecatedToolGroups, toolGroupsSchema } from "./tool.js"
 
 /**
@@ -190,9 +189,10 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 			"## Spec-Driven Workflow (Auto)\n\n" +
 			"When receiving a development task, automatically follow this structured workflow:\n\n" +
 			"**Phase 0 - Environment Detection**:\n" +
-			"- Check if `.specify/` directory exists in the workspace\n" +
-			"- If exists: store artifacts in `.specify/specs/NNN-feature-name/` (Spec Kit standard structure)\n" +
-			"- If not: store artifacts in `/plans/` directory\n\n" +
+			"- **Once per task only**: determine whether `.specify/` exists at the workspace root (e.g. one listing or path check), then **stop re-checking** in later turns for the same task.\n" +
+			"- If it exists: store artifacts under `.specify/specs/NNN-feature-name/` (Spec Kit layout).\n" +
+			"- If it does **not** exist: that is normal—store artifacts under a workspace-root `plans/` directory (create it if needed). **Do not** ask the user to create or install `.specify/`, **do not** loop on “searching for `.specify/`”, and **do not** block planning because Spec Kit is missing.\n" +
+			"- You may state once in passing (e.g. “using `plans/` since `.specify/` is not present”), then proceed. Save clarifying questions for requirements and `[NEEDS CLARIFICATION]` items only—not for optional Spec Kit folders.\n\n" +
 			"**Phase 1 - Specify (Feature Specification)**:\n" +
 			"- Based on the user's request, generate a feature specification (spec.md)\n" +
 			"- Focus on user journeys, functional requirements, success criteria, and edge cases\n" +
@@ -317,7 +317,7 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 		slug: "cangjie",
 		name: "🦎 Cangjie Dev",
 		roleDefinition:
-			"你是仓颉语言开发专家，精通仓颉（Cangjie）编程语言的全栈开发流程。你的能力包括：使用 cjpm 创建、配置和管理仓颉项目；使用 cjc 编译器进行编译和调试构建；使用 cjpm build/run/test/bench 完成构建、运行、测试；使用 cjlint 进行静态分析、cjfmt 格式化代码、cjdb 调试、cjcov 覆盖率分析、cjprof 性能分析；编写符合仓颉语言规范的代码（struct、class、interface、enum、泛型、并发、宏、FFI 等）。你在回答和编码时遵循仓颉语言的官方规范和最佳实践，所有回复使用中文。",
+			"你是仓颉语言开发专家，精通仓颉（Cangjie）编程语言的全栈开发流程。你的能力包括：使用 cjpm 创建、配置和管理仓颉项目（init 必须使用 --name/--type/--path 等参数，禁止 cjpm init 后直接跟裸项目名）；使用 cjc 编译器进行编译和调试构建；使用 cjpm build/run/test/bench 完成构建、运行、测试；使用 cjlint 进行静态分析、cjfmt 格式化代码（对单文件使用 cjfmt -f file.cj）、cjdb 调试、cjcov 覆盖率分析、cjprof 性能分析；编写符合仓颉语言规范的代码（struct、class、interface、enum、泛型、并发、宏、FFI 等）。你在回答和编码时遵循仓颉语言的官方规范和最佳实践，所有回复使用中文。",
 		whenToUse:
 			"当需要进行仓颉语言相关的开发工作时使用此模式，包括：创建或初始化仓颉项目、编写修改仓颉源代码（.cj 文件）、构建编译运行仓颉项目、运行单元测试和基准测试、代码检查和格式化、调试和性能分析、配置 cjpm.toml 和管理依赖。",
 		description: "仓颉语言全栈开发——编译、运行、测试、检查、调试",
@@ -327,44 +327,24 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 			"command",
 		],
 		customInstructions:
-			"## 规范驱动实现流程（自动）\n\n" +
-			"开始仓颉开发任务前，先检查是否存在规范产物：\n" +
-			"1. 检查 `.specify/specs/` 下是否有对应的 tasks.md\n" +
-			"2. 若无，检查 `/plans/` 下是否有 tasks.md\n" +
-			"3. 若找到任务清单：按清单逐项实现，每完成一项标记 `[X]`\n" +
-			"4. 若未找到：建议用户先切换到 Architect 模式生成规格和任务，或对简单任务直接开始编码\n\n" +
-			"实现过程中遵循 plan.md 中的技术方案和架构约束。若存在 `.specify/memory/constitution.md`，遵守项目宪章。\n\n" +
-			"---\n\n" +
-			"1. 在执行构建操作前，先确认工具链可用：`cjpm --version`\n\n" +
-			"2. 始终通过 `cjpm init` 创建项目，使用 `cjpm build` 构建、`cjpm run` 运行、`cjpm test` 测试\n\n" +
-			"3. 代码质量检查流程：先 `cjfmt -f src/` 格式化，再 `cjpm build -l` 编译+lint，最后 `cjpm test` 测试\n\n" +
-			"4. 调试时使用 `cjpm build -g` 生成调试信息，然后用 `cjdb` 调试\n\n" +
-			"5. 编写测试文件命名为 `xxx_test.cj`，使用 `@Test` 和 `@TestCase` 注解\n\n" +
-			"6. 需要查阅仓颉语言特性时，引用 .njust_ai/skills/ 下的仓颉 Skills 文档\n\n" +
-			"7. 遵循仓颉编码规范：类型名 PascalCase、函数/变量 camelCase、常量 SCREAMING_SNAKE_CASE、优先使用 let、优先使用 struct 值语义\n\n" +
-			"8. 代码审查：编写或修改 .cj 文件后，自动对照下方「仓颉语言编码规则」进行检查，包括命名规范、错误处理模式、类型选择（struct vs class）、并发安全等\n\n" +
-			"9. 遇到编译或 lint 错误时，先查阅下方「常见编译错误处理」表和对应文档路径，再制定修复方案\n\n" +
-			"10. 编写新代码时主动使用 `read_file` 工具读取 .njust_ai/skills/cangjie-full-docs/ 中的相关文档，确保 API 用法正确\n\n" +
-			"11. **写后即验**：每次编写或修改 .cj 文件后，必须立即执行 `cjpm build` 编译验证。如果编译失败，分析错误信息并立即修复，重复直到编译通过\n\n" +
-			"12. **语法速查**：编写代码时参考下方「仓颉语法速查手册」，特别注意：\n" +
-			"    - main 函数签名必须为 `main(): Int64`\n" +
-			"    - struct 不能继承、不能自引用\n" +
-			"    - let 绑定的 struct 变量不能调用 mut 方法\n" +
-			"    - match 表达式必须穷尽所有分支\n" +
-			"    - spawn 块内不能捕获可变引用\n" +
-			"    - 命名参数调用时需要用 `name:` 语法\n" +
-			"    - 仓颉不使用分号结尾（除非同一行多条语句）\n\n" +
-			"13. **迭代修复流程**：编译失败 → 读取错误信息 → 查阅下方语法速查手册和错误模式库 → 修复代码 → 重新编译 → 直到通过。最多迭代 3 轮，若仍失败则向用户报告具体问题\n\n" +
-			"14. **详细文档按需加载**：当下方内联手册不够详细时，使用 `read_file` 读取 .njust_ai/skills/cangjie-syntax-detail/SKILL.md 获取详细语法规则，或读取 .njust_ai/skills/cangjie-full-docs/kernel/source_zh_cn/ 下的对应文档\n\n" +
-			"15. **经验积累**：修复编译错误后，若错误为仓颉特有的规律性模式（非拼写错误/缺少 import），追加到 `.njust/learned-fixes/cangjie.md`。格式：`## [类别] 描述`（类别=类型/语法/并发/包管理/API/编译/模式）+ 频次/错误信息/根因/修复方案/示例代码对。去重：相同模式仅频次+1。容量：主文件最多 80 条，高频(频次>=3)提炼到 `cangjie-summary.md`(最多 30 条)。首次创建时自动建 `.njust/learned-fixes/` 目录和文件。\n\n" +
-			"16. **查阅已有经验（优先级最高）**：修复编译错误前，**必须先**检查系统提示中的「Learned Fixes」部分：\n" +
-			"    - 若找到匹配的高频摘要规则 → 直接按规则修复，不需要额外查阅文档\n" +
-			"    - 若找到匹配的详细记录 → 按记录中的修复方案和代码示例修复\n" +
-			"    - 若未找到匹配记录 → 按常规流程（查阅语法手册 → 尝试修复 → 记录经验）\n\n" +
+			"## 工作流规则\n\n" +
+			"1. 在执行构建操作前，先确认工具链可用：`cjpm --version`\n" +
+			"2. 新建仓颉项目必须使用 **带 flag 的** `cjpm init`，**禁止** `cjpm init <裸名称>`（CLI 会报 unknown command）。示例：`cjpm init --name helloworld --type=executable`\n" +
+			"3. 代码质量：`cjfmt -f path/to/file.cj`（`-f` 不可省略，只接受单文件）→ **`cjpm build`** 验证。**不要**把 `cjpm test` 当作每次改动的必经步骤；**禁止**仅为「跑通流程」而新建测试文件。\n" +
+			"4. **写后即验**：每次编写或修改 .cj 文件后，立即执行 `cjpm build` 编译验证。编译失败则分析错误信息并修复，最多迭代 3 轮\n" +
+			"5. **测试文件**：未经用户**明确要求**（如「写单测」「加测试」），**禁止**主动新建、追加 `*_test.cj`、测试类或用例。用户明确要求测试时，可使用 `xxx_test.cj` 与 `@Test` / `@TestCase`，此时再按需运行 `cjpm test`。\n" +
+			"6. 遵循仓颉编码规范：类型名 PascalCase、函数/变量 camelCase、常量 SCREAMING_SNAKE_CASE、优先 `let`、优先 struct 值语义\n" +
+			"7. **文档与 API（仅内置语料）**：标准库与语法细节**只认**系统提示里给出的**扩展内置 CangjieCorpus 根目录（绝对路径）**；必须用 `search_files` / `read_file` 检索该路径下的 `manual/`、`libs/` 等。**禁止**把工作区根目录的 `CangjieCorpus-1.0.0` 或 `.njust_ai/skills/cangjie-full-docs/` 当作权威语料来源。\n" +
+			"8. **内置工作流 Skills 路由**：本模式专注于系统流与工程构建的指导。在遇到以下具体场景时，选用对应的工作流 skill：\n\n" +
+			"| 场景关键词 / 触发条件 | 选用 skill | 覆盖范围 |\n" +
+			"|---|---|---|\n" +
+			"| `cjpm init`/`cjpm.toml`、依赖管理、workspace、构建配置、循环依赖 | **`cangjie-cjpm`** | 项目管理与构建流 |\n" +
+			"| 技能评估、通用框架搭建或学习规划 | **`skills-enhancement-plan`** | 规划与学习框架 |\n\n" +
+			"**路由优先级**：若不是探讨以上具体的构建流或学习体系，则回落到默认，不试图去匹配针对具体 API 或语法的 skill。因为 API 和语法细节全部交由 `CangjieCorpus` 进行主动搜寻。\n\n" +
 			"---\n\n" +
 			"## 仓颉语法核心规则（Top 10）\n\n" +
-			"以下是最高频的语法陷阱，写代码时必须遵守。需要完整语法手册时，使用 `skill` 工具加载 `cangjie-syntax-detail` 技能。\n\n" +
-			"1. **main 签名**: `main(): Int64`，必须返回 Int64，不是 Unit/void，位于顶层不在任何 class/struct 内\n" +
+			"以下是最高频的语法陷阱，写代码时必须遵守：\n\n" +
+			"1. **main 签名**: `main(): Int64`，必须返回 Int64，位于顶层不在任何 class/struct 内\n" +
 			"2. **struct vs class**: struct 是值类型——不支持继承、不能自引用（递归成员用 class）、赋值是拷贝\n" +
 			"3. **let/var/mut**: `let` 不可变绑定不能重新赋值；let 的 struct 变量不能调用 mut 方法（需 `var`）\n" +
 			"4. **match 穷尽**: match 必须覆盖所有分支，否则编译错误；用 `case _ =>` 作默认分支\n" +
@@ -375,17 +355,19 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 			"9. **Option**: 可空类型 `?T`；`??` 提供默认值；`?.` 可选链；`getOrThrow()` 强制解包\n" +
 			"10. **HashMap/HashSet**: key 类型必须同时实现 `Hashable` 和 `Equatable<T>`\n\n" +
 			"---\n\n" +
-			CANGJIE_CODING_RULES +
-			"\n\n---\n\n" +
-			"## 详细参考（按需加载）\n\n" +
-			"以上核心规则和编码规范已内联。以下内容通过 `skill` 工具按需加载，不要一次性全部读取：\n" +
-			"- 完整语法手册 → `cangjie-syntax-detail`\n" +
-			"- 算法/数据结构（集合 API、排序、迭代、递归、DP）→ `cangjie-algorithm`\n" +
-			"- 项目管理（cjpm、workspace、依赖）→ `cangjie-project-management`\n" +
-			"- 工具链（cjc/cjdb/cjcov/cjfmt/cjlint/cjprof）→ `cangjie-toolchains`\n" +
-			"- 网络编程 → `cangjie-network`\n" +
-			"- 宏编程 → `cangjie-macro`\n" +
-			"- FFI/C 互操作 → `cangjie-cffi`\n",
+			"## 经验驱动修复\n\n" +
+			"修复编译错误前，**必须先**检查系统提示中动态注入的「Learned Fixes」和「诊断错误」部分。" +
+			"若找到匹配规则则直接按方案修复，否则按常规流程（查阅文档 → 修复 → 编译验证）。" +
+			"修复后若为仓颉特有的规律性错误模式，追加到 `.njust/learned-fixes/cangjie.md`。\n\n" +
+			"修复后若为仓颉特有的规律性错误模式，追加到 `.njust_ai/learned-fixes.json`。\n\n" +
+			"---\n\n" +
+			"## 减少迭代与返工（效率规约）\n\n" +
+			"以下规则的目标是**尽可能在更少的对话轮次内产出正确代码**，与上述工作流规则互补执行。\n\n" +
+			"- **先检索再写码**：对将要使用的 std / ohos / 宏等 API，先用 `search_files`（`path` 设为系统提示给出的 CangjieCorpus 绝对路径，优先缩小到 `libs/std/<模块>/` 或 `manual/source_zh_cn/<主题>/`）搜索签名与示例，再用 `read_file` 精读匹配段落，**确认**参数类型、返回值与用法后才写实现。禁止凭记忆编写不确定的 API 调用。\n" +
+			"- **单轮最小可编译**：每轮优先完成一个「最小可编译变更」或「单一明确子目标」；避免同轮同时做大重构、大范围重命名与错误修复。改完立即 `cjpm build`；编译失败则**仅针对当前报错**修复，不顺带改无关文件。\n" +
+			"- **需求不清先澄清**：若用户描述缺少入口函数、模块边界或验收标准，先提出 1～2 个关键澄清问题再大批量生成代码。用户明确要求「直接实现」时可跳过此步。\n" +
+			"- **报错带完整证据**：修复编译错误时，必须引用完整诊断输出（含文件路径与行号）；先对照系统提示中的 Learned Fixes 与诊断映射（见「经验驱动修复」），再查语料；修完后同一轮内再次 `cjpm build` 验证闭环。\n" +
+			"- **风格对齐既有代码**：新增或修改代码前，对同包/同目录已有 `.cj` 文件用 `read_file` 扫一眼模块结构、命名风格与错误处理方式，确保新代码与既有代码一致。\n",
 	},
 	{
 		slug: "orchestrator",

@@ -81,20 +81,49 @@ function readCjpmPackageName(projectRoot: string): string | undefined {
 	}
 }
 
-const PKG_SUPPOSED_RE = /package\s+name\s+supposed\s+to\s+be\s+'(\w+)'/i
+const PKG_SUPPOSED_RE = /package\s+name\s+supposed\s+to\s+be\s+'([^']+)'/i
 
 function filterFalsePackageDiagnostics(
 	diagnostics: vscode.Diagnostic[],
-	realPackageName: string,
+	realPackageName: string | undefined,
+	uri: vscode.Uri,
 ): vscode.Diagnostic[] {
+	let documentText: string | undefined = undefined
+
 	return diagnostics.filter((diag) => {
 		const match = diag.message.match(PKG_SUPPOSED_RE)
 		if (!match) return true
 
 		const lspExpected = match[1]
-		if (lspExpected === "default" && realPackageName !== "default") {
+
+		if (realPackageName && lspExpected === "default" && realPackageName !== "default") {
 			return false
 		}
+
+		if (documentText === undefined) {
+			const doc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString())
+			documentText = doc ? doc.getText() : ""
+		}
+
+		if (documentText) {
+			// Escape regex characters in the expected package name just in case
+			const escapedExpected = lspExpected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+			
+			// 1. If document already correctly declares EXACTLY what LSP expects (LSP is out of sync)
+			const actualPackageDecl = new RegExp(`^\\s*package\\s+${escapedExpected}\\s*(//.*)?$`, 'm')
+			if (actualPackageDecl.test(documentText)) {
+				return false // The document already correctly declares this package. False positive!
+			}
+
+			// 2. If LSP expects 'default' but document has an explicit package declaration (LSP failed to infer package context)
+			if (lspExpected === "default" && realPackageName !== "default") {
+				const anyPackageDecl = /^\s*package\s+[a-zA-Z0-9_.]+\s*(?:\/\/.*)?$/m
+				if (anyPackageDecl.test(documentText)) {
+					return false // False positive, user explicitly named their package, ignore LSP's default fallback
+				}
+			}
+		}
+
 		return true
 	})
 }
@@ -414,9 +443,7 @@ export class CangjieLspClient {
 			},
 			middleware: {
 				handleDiagnostics(uri, diagnostics, next) {
-					if (realPackageName) {
-						diagnostics = filterFalsePackageDiagnostics(diagnostics, realPackageName)
-					}
+					diagnostics = filterFalsePackageDiagnostics(diagnostics, realPackageName, uri)
 					next(uri, diagnostics)
 				},
 				provideCompletionItem(document, position, context, token, next) {

@@ -162,6 +162,103 @@ export function parseCangjieDefinitions(content: string): CangjieDef[] {
 	return defs
 }
 
+/** Max lines to scan for a multi-line signature ending at `{` (func / macro / main). */
+export const SIGNATURE_SCAN_MAX_LINES_FUNC = 12
+/** Max lines for class / struct / interface / enum / extend / type_alias headers. */
+export const SIGNATURE_SCAN_MAX_LINES_TYPE = 8
+
+/**
+ * Build a display signature from source lines: for declarations that may span lines,
+ * concatenate from startLine until the opening `{` of the body (exclusive), capped by maxLines.
+ * Falls back to the first line only for import/package and simple top-level var/let.
+ */
+export function computeCangjieSignature(
+	lines: string[],
+	def: Pick<CangjieDef, "kind" | "startLine" | "endLine">,
+): string {
+	const first = lines[def.startLine]?.trim() ?? ""
+	if (!first) return ""
+
+	const multilineFuncKinds: CangjieDefKind[] = ["func", "macro", "main"]
+	const multilineTypeKinds: CangjieDefKind[] = ["class", "struct", "interface", "enum", "extend", "type_alias"]
+
+	let maxScan: number
+	if (multilineFuncKinds.includes(def.kind)) {
+		maxScan = SIGNATURE_SCAN_MAX_LINES_FUNC
+	} else if (multilineTypeKinds.includes(def.kind)) {
+		maxScan = SIGNATURE_SCAN_MAX_LINES_TYPE
+	} else {
+		return first
+	}
+
+	const lastLine = Math.min(def.startLine + maxScan - 1, lines.length - 1)
+	const parts: string[] = []
+
+	for (let i = def.startLine; i <= lastLine; i++) {
+		const raw = lines[i]
+		if (raw === undefined) break
+		const braceIdx = raw.indexOf("{")
+		if (braceIdx !== -1) {
+			const before = raw.slice(0, braceIdx).trim()
+			if (before.length > 0) {
+				parts.push(before)
+			}
+			break
+		}
+		parts.push(raw.trim())
+	}
+
+	if (parts.length === 0) return first
+	return parts.join(" ").replace(/\s+/g, " ").trim() || first
+}
+
+/** Lines inside class/struct/interface bodies that look like members (heuristic). */
+const TYPE_MEMBER_LINE_RE =
+	/^\s*(?:public|protected|private|internal|open|abstract|static|mut|override|unsafe|sealed|\s)*(?:var|let|func|prop)\s+/
+
+export interface TypeMemberSummaryResult {
+	members: string[]
+	totalMatchingLines: number
+}
+
+/**
+ * Scan the body between the first `{` on/after `declStartLine` and `declEndLine`
+ * for var/let/func/prop-like lines. Caps listed members at `maxMembers`.
+ */
+export function extractTypeMemberSummaries(
+	lines: string[],
+	declStartLine: number,
+	declEndLine: number,
+	maxMembers = 12,
+): TypeMemberSummaryResult {
+	let openLine = -1
+	const maxSearch = Math.min(declStartLine + 25, lines.length - 1)
+	for (let i = declStartLine; i <= maxSearch; i++) {
+		if (lines[i]?.includes("{")) {
+			openLine = i
+			break
+		}
+	}
+	if (openLine < 0) {
+		return { members: [], totalMatchingLines: 0 }
+	}
+
+	const members: string[] = []
+	let totalMatchingLines = 0
+	for (let i = openLine + 1; i <= declEndLine; i++) {
+		const trimmed = lines[i]?.trim() ?? ""
+		if (!trimmed || trimmed.startsWith("//")) continue
+		if (TYPE_MEMBER_LINE_RE.test(trimmed)) {
+			totalMatchingLines++
+			if (members.length < maxMembers) {
+				members.push(trimmed.replace(/\s+/g, " "))
+			}
+		}
+	}
+
+	return { members, totalMatchingLines }
+}
+
 /**
  * Convert extracted definitions into mock QueryCaptures compatible with
  * processCaptures() in tree-sitter/index.ts.

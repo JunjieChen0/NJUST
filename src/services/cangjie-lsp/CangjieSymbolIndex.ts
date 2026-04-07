@@ -1,11 +1,16 @@
 import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
-import { parseCangjieDefinitions, type CangjieDef, type CangjieDefKind } from "../tree-sitter/cangjieParser"
+import {
+	parseCangjieDefinitions,
+	computeCangjieSignature,
+	type CangjieDef,
+	type CangjieDefKind,
+} from "../tree-sitter/cangjieParser"
 
 const INDEX_DIR = ".cangjie-index"
 const INDEX_FILE = "symbols.json"
-const INDEX_VERSION = 1
+const INDEX_VERSION = 2
 const REFERENCE_RE = /\b([A-Z]\w+|[a-z_]\w*)\b/g
 
 export interface SymbolEntry {
@@ -164,7 +169,7 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 					filePath,
 					startLine: d.startLine,
 					endLine: d.endLine,
-					signature: lines[d.startLine]?.trim() || "",
+					signature: computeCangjieSignature(lines, d),
 				}))
 
 			this.data.files[filePath] = { mtime: stat.mtimeMs, symbols }
@@ -243,6 +248,22 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		return all
 	}
 
+	/**
+	 * Smallest enclosing symbol for a 0-based line in filePath (innermost by line span).
+	 */
+	findEnclosingSymbol(filePath: string, line: number): SymbolEntry | null {
+		const fileEntry = this.data.files[filePath]
+		if (!fileEntry) return null
+
+		const candidates = fileEntry.symbols.filter(
+			(s) => line >= s.startLine && line <= s.endLine && s.kind !== "import" && s.kind !== "package",
+		)
+		if (candidates.length === 0) return null
+
+		candidates.sort((a, b) => a.endLine - a.startLine - (b.endLine - b.startLine))
+		return candidates[0] ?? null
+	}
+
 	getSymbolsByDirectory(dirPath: string): SymbolEntry[] {
 		const normalized = dirPath.replace(/\\/g, "/")
 		const results: SymbolEntry[] = []
@@ -268,6 +289,103 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 			count += file.symbols.length
 		}
 		return count
+	}
+
+	// ── Cross-file dependency graph queries ──
+
+	/**
+	 * Extract import paths from a file and map them to indexed files.
+	 * Returns files that the given file depends on (imports from).
+	 */
+	getFileDependencies(filePath: string): string[] {
+		try {
+			const content = fs.readFileSync(filePath, "utf-8")
+			const importRe = /^\s*import\s+([\w.]+)\.\*?\s*$/gm
+			const fromRe = /^\s*from\s+([\w.]+)\s+import\s+/gm
+			const importedPackages = new Set<string>()
+
+			let match: RegExpExecArray | null
+			while ((match = importRe.exec(content)) !== null) {
+				importedPackages.add(match[1])
+			}
+			while ((match = fromRe.exec(content)) !== null) {
+				importedPackages.add(match[1])
+			}
+
+			if (importedPackages.size === 0) return []
+
+			// Map package names to indexed files
+			const depFiles = new Set<string>()
+			for (const [fp, entry] of Object.entries(this.data.files)) {
+				if (fp === filePath) continue
+				for (const sym of entry.symbols) {
+					if (sym.kind === "package") continue
+					// Check if any import prefix matches the file's package context
+					const relPath = fp.replace(/\\/g, "/")
+					for (const pkg of importedPackages) {
+						const pkgPath = pkg.replace(/\./g, "/")
+						if (relPath.includes(pkgPath)) {
+							depFiles.add(fp)
+							break
+						}
+					}
+				}
+			}
+
+			return [...depFiles]
+		} catch {
+			return []
+		}
+	}
+
+	/**
+	 * Find all files that import/reference symbols defined in the given file.
+	 * These are the "reverse dependencies" — files that would break if the
+	 * given file's API changes.
+	 */
+	getReverseDependencies(filePath: string): string[] {
+		const fileEntry = this.data.files[filePath]
+		if (!fileEntry) return []
+
+		const symbolNames = fileEntry.symbols
+			.filter((s) => s.kind !== "import" && s.kind !== "package")
+			.map((s) => s.name)
+
+		if (symbolNames.length === 0) return []
+
+		const dependents = new Set<string>()
+		for (const [fp] of Object.entries(this.data.files)) {
+			if (fp === filePath) continue
+			try {
+				const content = fs.readFileSync(fp, "utf-8")
+				for (const symName of symbolNames) {
+					if (content.includes(symName)) {
+						dependents.add(fp)
+						break
+					}
+				}
+			} catch {
+				// Skip unreadable
+			}
+		}
+
+		return [...dependents]
+	}
+
+	/**
+	 * Get only public/exported symbols for a file (types with 'public' visibility).
+	 * Useful for understanding a module's external API surface.
+	 */
+	getPublicSymbolsForFile(filePath: string): SymbolEntry[] {
+		const fileEntry = this.data.files[filePath]
+		if (!fileEntry) return []
+
+		return fileEntry.symbols.filter((s) => {
+			if (s.kind === "import" || s.kind === "package") return false
+			// Check signature for 'public' keyword
+			return s.signature.includes("public") ||
+				["class", "struct", "interface", "enum", "func", "type"].includes(s.kind)
+		})
 	}
 
 	dispose(): void {

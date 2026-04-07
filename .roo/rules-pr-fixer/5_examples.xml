@@ -131,7 +131,7 @@ Files modified:
 - webview-ui/src/components/settings/ApiSettings.tsx: Changed button text from "Save" to "Save Configuration"
 - webview-ui/src/i18n/locales/en/common.json: Updated key "save_button" to "save_config_button"
 
-Please update all supported languages (ca, de, es, fr, hi, id, it, ja, ko, nl, pl, pt-BR, ru, tr, vi, zh-CN, zh-TW) with appropriate translations for:
+Please update all supported languages (en, zh-CN, zh-TW) with appropriate translations for:
 - New key "save_config_button" with translation equivalent to "Save Configuration"
 - Any other text changes that affect user-facing content
 

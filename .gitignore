@@ -51,6 +51,9 @@ logs
 # Cangjie symbol index (auto-generated)
 .cangjie-index/
 
+# Duplicate corpus copy under src/ (created by prepublish sync; repo root corpus stays canonical)
+src/bundled-cangjie-corpus/CangjieCorpus-1.0.0/
+
 # Qdrant
 qdrant_storage/
 

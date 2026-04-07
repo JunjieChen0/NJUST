@@ -25,7 +25,7 @@ Do NOT use this skill when:
 
 ## Supported Languages and Locations
 
-Localize all strings into the following locale files: ca, de, en, es, fr, hi, id, it, ja, ko, nl, pl, pt-BR, ru, tr, vi, zh-CN, zh-TW
+Localize all strings into the following locale files: en, zh-CN, zh-TW
 
 The VSCode extension has two main areas that require localization:
 

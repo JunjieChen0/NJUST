@@ -289,7 +289,7 @@ flowchart TB
 - **ContextProxy**：扩展内设置的单一可信来源，与 `vscode.workspace.getConfiguration('njust-ai-cj')` 中的部分键（如 Cloud Agent URL）协同。
 - **迁移与导入**：`migrateSettings`、`importSettings` 命令与自动导入逻辑兼容旧键名或团队分发场景。
 - **自定义存储路径**：可将任务/状态存放到用户指定目录。
-- **i18n**：`src/i18n/` 与 `webview-ui` 内文案支持多语言，随 VS Code 显示语言或用户选择切换。
+- **i18n**：`src/i18n/` 与 `webview-ui` 内文案仅维护 **English（en）**、**简体中文（zh-CN）**、**繁體中文（zh-TW）**；其他 VS Code 显示语言会回退为英文。用户可在扩展设置的外观中强制选择上述三种之一。
 
 ### 17. 对外 API 与杂项
 
