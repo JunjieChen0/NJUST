@@ -36,9 +36,52 @@ import {
 	processImageFile,
 	ImageMemoryTracker,
 } from "./helpers/imageHelpers"
+import { fileReadCache } from "./helpers/FileReadCache"
+import { toolResultCache } from "./helpers/ToolResultCache"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+/**
+ * Device files and special paths that should never be read.
+ * Reading these can cause infinite loops, hangs, or other dangerous behavior.
+ * Inspired by Claude Code's FileReadTool BLOCKED_DEVICE_PATHS.
+ */
+const BLOCKED_DEVICE_PATHS = new Set([
+	"/dev/zero",
+	"/dev/random",
+	"/dev/urandom",
+	"/dev/null",
+	"/dev/stdin",
+	"/dev/stdout",
+	"/dev/stderr",
+])
+
+/**
+ * Windows special device names (case-insensitive).
+ * These can appear as bare names or with extensions (e.g., CON.txt).
+ */
+const BLOCKED_WINDOWS_DEVICES = new Set([
+	"con", "prn", "aux", "nul",
+	"com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+	"lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+])
+
+/**
+ * Checks if a file path refers to a blocked device or special file.
+ */
+function isBlockedDevicePath(filePath: string): boolean {
+	const normalized = filePath.replace(/\\/g, "/").toLowerCase()
+
+	// Check Unix device paths
+	if (BLOCKED_DEVICE_PATHS.has(normalized)) return true
+
+	// Check Windows device names (can appear as bare name or with extensions)
+	const basename = path.basename(filePath).toLowerCase().split(".")[0]
+	if (BLOCKED_WINDOWS_DEVICES.has(basename)) return true
+
+	return false
+}
 
 /**
  * Internal entry structure for tracking file read parameters.
@@ -73,6 +116,22 @@ interface FileResult {
 
 export class ReadFileTool extends BaseTool<"read_file"> {
 	readonly name = "read_file" as const
+	override isConcurrencySafe(): boolean {
+		return true
+	}
+
+	override isReadOnly(): boolean {
+		return true
+	}
+
+	override getEagerExecutionDecision() { return "eager" as const }
+	override isPartialArgsStable(partial: Record<string, unknown>): boolean {
+		return typeof partial.path === "string" && (partial.path as string).length > 0
+	}
+
+	override userFacingName(): string {
+		return "Read File"
+	}
 
 	async execute(params: ReadFileToolParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		// Dispatch to legacy or new execution path based on format
@@ -89,14 +148,28 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 	private async executeNew(params: ReadFileParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { pushToolResult } = callbacks
 		const modelInfo = task.api.getModel().info
-		const filePath = params.path
+		const resultCacheKey = toolResultCache.makeKey("read_file", params)
+		const cached = toolResultCache.get(resultCacheKey)
+		if (cached) {
+			pushToolResult(cached)
+			return
+		}
+		const filePath = typeof params.path === "string" ? params.path.trim() : ""
 
-		// Validate input
+		// Validate input (models sometimes omit path or send "" / whitespace despite JSON schema)
 		if (!filePath) {
 			task.consecutiveMistakeCount++
 			task.recordToolError("read_file")
 			const errorMsg = await task.sayAndCreateMissingParamError("read_file", "path")
 			pushToolResult(`Error: ${errorMsg}`)
+			return
+		}
+
+		// Block device files and special paths that could cause hangs or infinite reads
+		if (isBlockedDevicePath(filePath)) {
+			task.consecutiveMistakeCount++
+			task.recordToolError("read_file")
+			pushToolResult(`Error: Reading device or special file "${filePath}" is blocked for safety. These files can cause infinite reads or system hangs.`)
 			return
 		}
 
@@ -214,11 +287,8 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 						continue
 					}
 
-					// Read text file content with lossy UTF-8 conversion
-					// Reading as Buffer first allows graceful handling of non-UTF8 bytes
-					// (they become U+FFFD replacement characters instead of throwing)
-					const buffer = await fs.readFile(fullPath)
-					const fileContent = buffer.toString("utf-8")
+					// Read text file content via mtime-aware LRU cache
+					const fileContent = await fileReadCache.getTextFile(fullPath, stats.mtimeMs, stats.size)
 					const result = this.processTextFile(fileContent, entry)
 
 					await task.fileContextTracker.trackFileContext(relPath, "read_tool" as RecordSource)
@@ -243,7 +313,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				task.didToolFailInCurrentTurn = true
 			}
 
-			this.buildAndPushResult(task, fileResults, pushToolResult)
+			this.buildAndPushResult(task, fileResults, pushToolResult, resultCacheKey)
 		} catch (error) {
 			const relPath = filePath || "unknown"
 			const errorMsg = error instanceof Error ? error.message : String(error)
@@ -604,7 +674,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 	/**
 	 * Build and push the final result to the tool output.
 	 */
-	private buildAndPushResult(task: Task, fileResults: FileResult[], pushToolResult: PushToolResult): void {
+	private buildAndPushResult(task: Task, fileResults: FileResult[], pushToolResult: PushToolResult, cacheKey?: string): void {
 		const finalResult = fileResults
 			.filter((r) => r.nativeContent)
 			.map((r) => r.nativeContent)
@@ -641,7 +711,9 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			)
 
 			if (typeof result === "string") {
-				pushToolResult(statusMessage ? `${result}\n${finalResult}` : result)
+				const out = statusMessage ? `${result}\n${finalResult}` : result
+				if (cacheKey) toolResultCache.set(cacheKey, out)
+				pushToolResult(out)
 			} else {
 				if (statusMessage) {
 					const textBlock = { type: "text" as const, text: finalResult }
@@ -651,6 +723,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				}
 			}
 		} else {
+			if (cacheKey) toolResultCache.set(cacheKey, finalResult)
 			pushToolResult(finalResult)
 		}
 	}

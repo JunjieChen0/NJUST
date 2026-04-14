@@ -27,9 +27,7 @@ const WelcomeViewProvider = () => {
 	const { t } = useAppTranslation()
 	const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined)
 	const [selectedProvider, setSelectedProvider] = useState<ProviderOption | null>(null)
-	const [showManualEntry, setShowManualEntry] = useState(false)
-	const [manualUrl, setManualUrl] = useState("")
-	const [manualErrorMessage, setManualErrorMessage] = useState<boolean | undefined>(undefined)
+	const [showManualEntry, _setShowManualEntry] = useState(false)
 	const manualUrlInputRef = useRef<HTMLInputElement | null>(null)
 
 	useEffect(() => {

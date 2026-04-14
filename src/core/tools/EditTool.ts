@@ -26,6 +26,11 @@ interface EditParams {
 
 export class EditTool extends BaseTool<"edit"> {
 	readonly name = "edit" as const
+	override readonly requiresCheckpoint = true
+
+	override get aliases(): readonly string[] {
+		return ["search_and_replace"]
+	}
 
 	async execute(params: EditParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { file_path: relPath, old_string: oldString, new_string: newString, replace_all: replaceAll } = params

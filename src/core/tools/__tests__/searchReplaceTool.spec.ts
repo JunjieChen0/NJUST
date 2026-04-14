@@ -211,19 +211,21 @@ describe("searchReplaceTool", () => {
 	}
 
 	describe("parameter validation", () => {
-		it("returns error when file_path is missing", async () => {
+		it("returns validation error when file_path is missing", async () => {
 			const result = await executeSearchReplaceTool({ file_path: undefined })
 
-			expect(result).toBe("Missing param error")
-			expect(mockCline.consecutiveMistakeCount).toBe(1)
-			expect(mockCline.recordToolError).toHaveBeenCalledWith("search_replace")
+			expect(result).toContain("Error:")
+			expect(result).toContain("file_path")
+			expect(mockCline.consecutiveMistakeCount).toBe(0)
+			expect(mockCline.recordToolError).not.toHaveBeenCalledWith("search_replace")
 		})
 
-		it("returns error when old_string is missing", async () => {
+		it("returns validation error when old_string is missing", async () => {
 			const result = await executeSearchReplaceTool({ old_string: undefined })
 
-			expect(result).toBe("Missing param error")
-			expect(mockCline.consecutiveMistakeCount).toBe(1)
+			expect(result).toContain("Error:")
+			expect(result).toContain("old_string")
+			expect(mockCline.consecutiveMistakeCount).toBe(0)
 		})
 
 		it("allows empty new_string for deletion", async () => {
@@ -237,14 +239,15 @@ describe("searchReplaceTool", () => {
 			expect(mockAskApproval).toHaveBeenCalled()
 		})
 
-		it("returns error when old_string equals new_string", async () => {
+		it("returns validation error when old_string equals new_string", async () => {
 			const result = await executeSearchReplaceTool({
 				old_string: "same",
 				new_string: "same",
 			})
 
 			expect(result).toContain("Error:")
-			expect(mockCline.consecutiveMistakeCount).toBe(1)
+			expect(result).toContain("old_string")
+			expect(mockCline.consecutiveMistakeCount).toBe(0)
 		})
 	})
 

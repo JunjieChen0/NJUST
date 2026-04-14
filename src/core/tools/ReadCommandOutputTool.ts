@@ -5,6 +5,7 @@ import { Task } from "../task/Task"
 import { getTaskDirectoryPath } from "../../utils/storage"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { toolResultCache } from "./helpers/ToolResultCache"
 
 /** Default byte limit for read operations (40KB) */
 const DEFAULT_LIMIT = 40 * 1024 // 40KB default limit
@@ -84,6 +85,14 @@ interface ReadCommandOutputParams {
  */
 export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 	readonly name = "read_command_output" as const
+	override isConcurrencySafe(): boolean {
+		return true
+	}
+
+	override getEagerExecutionDecision() { return "eager" as const }
+	override isPartialArgsStable(partial: Partial<{artifact_id: string; search?: string; offset?: number; limit?: number}>): boolean {
+		return typeof partial.artifact_id === "string" && partial.artifact_id.length > 0
+	}
 
 	/**
 	 * Execute the read_command_output tool.
@@ -96,8 +105,14 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 	 * @param callbacks - Callbacks for pushing tool results
 	 */
 	async execute(params: ReadCommandOutputParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
-		const { pushToolResult } = callbacks
+		const { pushToolResult, reportProgress } = callbacks
 		const { artifact_id, search, offset = 0, limit = DEFAULT_LIMIT } = params
+		const cacheKey = toolResultCache.makeKey("read_command_output", params)
+		const cached = toolResultCache.get(cacheKey)
+		if (cached) {
+			pushToolResult(cached)
+			return
+		}
 
 		// Validate required parameters
 		if (!artifact_id) {
@@ -121,6 +136,7 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 		}
 
 		try {
+			await reportProgress?.({ text: "Reading persisted command output" } as any)
 			// Get the task directory path
 			const provider = await task.providerRef.deref()
 			const globalStoragePath = provider?.context?.globalStorageUri?.fsPath
@@ -192,6 +208,7 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 			)
 
 			task.consecutiveMistakeCount = 0
+			toolResultCache.set(cacheKey, result)
 			pushToolResult(result)
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error)

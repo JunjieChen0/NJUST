@@ -22,17 +22,48 @@ export abstract class BaseTerminal implements RooTerminal {
 	public process?: RooTerminalProcess
 	public completedProcesses: RooTerminalProcess[] = []
 
+	/**
+	 * Tracks the last known working directory of the shell session.
+	 * Updated when a command explicitly changes the cwd (e.g., cd commands).
+	 * This allows persistent shell session semantics — the terminal remembers
+	 * its state across command invocations within the same task.
+	 */
+	private _lastKnownCwd: string
+
+	/**
+	 * Number of commands executed in this terminal instance.
+	 * Used for session persistence metrics and debugging.
+	 */
+	public commandCount: number = 0
+
 	constructor(provider: RooTerminalProvider, id: number, cwd: string) {
 		this.provider = provider
 		this.id = id
 		this.initialCwd = cwd
+		this._lastKnownCwd = cwd
 		this.busy = false
 		this.running = false
 		this.streamClosed = false
 	}
 
 	public getCurrentWorkingDirectory(): string {
-		return this.initialCwd
+		return this._lastKnownCwd
+	}
+
+	/**
+	 * Update the tracked working directory.
+	 * Called when a command is known to change the cwd (e.g., after running a cd command).
+	 */
+	public updateWorkingDirectory(newCwd: string): void {
+		this._lastKnownCwd = newCwd
+	}
+
+	/**
+	 * Whether this terminal has been used for at least one command
+	 * and can be considered a "warm" session.
+	 */
+	public get isWarmSession(): boolean {
+		return this.commandCount > 0
 	}
 
 	abstract isClosed(): boolean

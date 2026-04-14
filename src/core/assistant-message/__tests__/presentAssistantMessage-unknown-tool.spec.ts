@@ -239,4 +239,30 @@ describe("presentAssistantMessage - Unknown Tool Handling", () => {
 		expect(toolResult.is_error).toBe(true)
 		expect(toolResult.content).toContain("due to user rejecting a previous tool")
 	})
+
+	it("should skip tool execution when tool_result already exists for same tool_use_id", async () => {
+		const toolCallId = "tool_call_preexisting_result"
+		mockTask.assistantMessageContent = [
+			{
+				type: "tool_use",
+				id: toolCallId,
+				name: "unknown_tool",
+				params: {},
+				partial: false,
+			},
+		]
+		mockTask.userMessageContent = [
+			{
+				type: "tool_result",
+				tool_use_id: toolCallId,
+				content: "already handled",
+			},
+		] as any
+
+		await presentAssistantMessage(mockTask)
+
+		expect(mockTask.userMessageContent).toHaveLength(1)
+		expect(mockTask.consecutiveMistakeCount).toBe(0)
+		expect(mockTask.recordToolError).not.toHaveBeenCalled()
+	})
 })

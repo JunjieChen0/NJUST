@@ -18,6 +18,14 @@ interface AskFollowupQuestionParams {
 export class AskFollowupQuestionTool extends BaseTool<"ask_followup_question"> {
 	readonly name = "ask_followup_question" as const
 
+	override isReadOnly(): boolean {
+		return true
+	}
+
+	override userFacingName(): string {
+		return "Ask Followup Question"
+	}
+
 	async execute(params: AskFollowupQuestionParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { question, follow_up } = params
 		const { handleError, pushToolResult } = callbacks

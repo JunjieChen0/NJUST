@@ -89,6 +89,10 @@ export interface CreateTaskOptions {
 	consecutiveMistakeLimit?: number
 	experiments?: Record<string, boolean>
 	initialTodos?: TodoItem[]
+	/** Capability-scoped tool whitelist for this task (used for delegated child tasks). */
+	allowedTools?: string[]
+	/** Optional trace id used to stitch parent/child task observability spans. */
+	parentTraceId?: string
 	/** Initial status for the task's history item (e.g., "active" for child tasks) */
 	initialStatus?: "active" | "delegated" | "completed"
 	/** Whether to start the task loop immediately (default: true).

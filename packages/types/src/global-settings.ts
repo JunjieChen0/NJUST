@@ -189,6 +189,9 @@ export const globalSettingsSchema = z.object({
 	diagnosticsEnabled: z.boolean().optional(),
 
 	rateLimitSeconds: z.number().optional(),
+	unattendedRetryEnabled: z.boolean().optional(),
+	unattendedMaxRetryAttempts: z.number().int().min(0).optional(),
+	unattendedMaxBackoffSeconds: z.number().int().min(1).optional(),
 	experiments: experimentsSchema.optional(),
 
 	codebaseIndexModels: codebaseIndexModelsSchema.optional(),
@@ -238,11 +241,13 @@ export const globalSettingsSchema = z.object({
 	disabledTools: z.array(toolNamesSchema).optional(),
 
 	enableWebSearch: z.boolean().optional(),
+	enableTurnAwarePromptPruning: z.boolean().optional(),
 	webSearchProvider: z
 		.enum(["baidu-free", "sogou-free", "duckduckgo", "tavily", "bing", "google", "baidu", "serpapi"])
 		.optional(),
 	serpApiEngine: z.enum(["bing", "google", "baidu", "yandex", "yahoo", "duckduckgo"]).optional(),
 	webSearchApiKey: z.string().optional(),
+	enableStreamingToolExecution: z.boolean().optional(),
 })
 
 export type GlobalSettings = z.infer<typeof globalSettingsSchema>
@@ -376,6 +381,10 @@ export const EVALS_SETTINGS: NJUST_AI_CJSettings = {
 	enableCheckpoints: false,
 
 	rateLimitSeconds: 0,
+	enableTurnAwarePromptPruning: true,
+	unattendedRetryEnabled: false,
+	unattendedMaxRetryAttempts: 5,
+	unattendedMaxBackoffSeconds: 300,
 	maxOpenTabsContext: 10,
 	maxWorkspaceFiles: 200,
 	maxGitStatusFiles: 20,

@@ -15,6 +15,9 @@ const KIND_MAP: Record<CangjieDefKind, vscode.SymbolKind> = {
 	type_alias: vscode.SymbolKind.TypeParameter,
 	package: vscode.SymbolKind.Package,
 	import: vscode.SymbolKind.Module,
+	prop: vscode.SymbolKind.Property,
+	init: vscode.SymbolKind.Constructor,
+	operator: vscode.SymbolKind.Operator,
 }
 
 function defToSymbol(def: CangjieDef, document: vscode.TextDocument): vscode.DocumentSymbol {

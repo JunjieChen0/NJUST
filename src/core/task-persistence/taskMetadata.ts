@@ -16,6 +16,7 @@ export type TaskMetadataOptions = {
 	taskId: string
 	rootTaskId?: string
 	parentTaskId?: string
+	parentTraceId?: string
 	taskNumber: number
 	messages: ClineMessage[]
 	globalStoragePath: string
@@ -31,6 +32,7 @@ export async function taskMetadata({
 	taskId: id,
 	rootTaskId,
 	parentTaskId,
+	parentTraceId,
 	taskNumber,
 	messages,
 	globalStoragePath,
@@ -97,6 +99,7 @@ export async function taskMetadata({
 		id,
 		rootTaskId,
 		parentTaskId,
+		parentTraceId,
 		number: taskNumber,
 		ts: timestamp,
 		task: hasMessages

@@ -52,6 +52,9 @@ export type CangjieDefKind =
 	| "macro"
 	| "package"
 	| "import"
+	| "prop"
+	| "init"
+	| "operator"
 
 export interface CangjieDef {
 	kind: CangjieDefKind
@@ -60,17 +63,249 @@ export interface CangjieDef {
 	endLine: number // 0-based
 }
 
+export type CangjieSymbolVisibility = "public" | "internal" | "protected" | "private"
+
+export interface CangjieDeclarationMeta {
+	visibility: CangjieSymbolVisibility
+	modifiers: string[]
+	/** Generic parameter list including angle brackets, e.g. `<T, U>` */
+	typeParams?: string
+}
+
+const LEADING_DECL_MODIFIER_RE =
+	/^(public|protected|private|internal|open|abstract|sealed|override|static|mut|unsafe|foreign|operator)\s+/
+
+function findNameIndexInDeclarationLine(line: string, name: string): number {
+	if (!name) return -1
+	try {
+		const re = new RegExp(`\\b${name.replace(/[.+*?^${}()|[\]\\]/g, "\\$&")}\\b`)
+		const m2 = line.match(re)
+		return m2?.index ?? line.indexOf(name)
+	} catch {
+		return line.indexOf(name)
+	}
+}
+
+function scanCangjieTextStateUpTo(s: string, endExclusive: number): {
+	inString: boolean
+	inChar: boolean
+	inLineComment: boolean
+	inBlock: boolean
+} {
+	let inString = false
+	let inChar = false
+	let inLineComment = false
+	let inBlock = false
+	let i = 0
+	while (i < endExclusive && i < s.length) {
+		const ch = s[i]
+		const next = i + 1 < s.length ? s[i + 1] : ""
+
+		if (inLineComment) {
+			if (ch === "\n") inLineComment = false
+			i++
+			continue
+		}
+		if (inBlock) {
+			if (ch === "*" && next === "/") {
+				inBlock = false
+				i += 2
+				continue
+			}
+			i++
+			continue
+		}
+		if (inString) {
+			if (ch === "\\") {
+				i += 2
+				continue
+			}
+			if (ch === '"') inString = false
+			i++
+			continue
+		}
+		if (inChar) {
+			if (ch === "\\") {
+				i += 2
+				continue
+			}
+			if (ch === "'") inChar = false
+			i++
+			continue
+		}
+
+		if (ch === "/" && next === "/") {
+			inLineComment = true
+			i += 2
+			continue
+		}
+		if (ch === "/" && next === "*") {
+			inBlock = true
+			i += 2
+			continue
+		}
+		if (ch === '"') {
+			inString = true
+			i++
+			continue
+		}
+		if (ch === "'") {
+			inChar = true
+			i++
+			continue
+		}
+		i++
+	}
+	return { inString, inChar, inLineComment, inBlock }
+}
+
+/**
+ * From `s[openIdx] === '<'`, find the matching `>` index (inclusive) with nesting,
+ * ignoring `<`/`>` inside line comments, block comments, `"`, and `'`.
+ * `openIdx` may be mid-string: if that `<` lies inside a string or comment, returns `-1`.
+ */
+export function findClosingAngleBracketIndex(s: string, openIdx: number): number {
+	if (openIdx < 0 || openIdx >= s.length || s[openIdx] !== "<") return -1
+
+	const prefix = scanCangjieTextStateUpTo(s, openIdx)
+	if (prefix.inString || prefix.inChar || prefix.inLineComment || prefix.inBlock) return -1
+
+	let depth = 0
+	let i = openIdx
+	let inString = false
+	let inChar = false
+	let inLineComment = false
+	let inBlock = false
+
+	while (i < s.length) {
+		const ch = s[i]
+		const next = i + 1 < s.length ? s[i + 1] : ""
+
+		if (inLineComment) {
+			if (ch === "\n") inLineComment = false
+			i++
+			continue
+		}
+		if (inBlock) {
+			if (ch === "*" && next === "/") {
+				inBlock = false
+				i += 2
+				continue
+			}
+			i++
+			continue
+		}
+		if (inString) {
+			if (ch === "\\") {
+				i += 2
+				continue
+			}
+			if (ch === '"') inString = false
+			i++
+			continue
+		}
+		if (inChar) {
+			if (ch === "\\") {
+				i += 2
+				continue
+			}
+			if (ch === "'") inChar = false
+			i++
+			continue
+		}
+
+		if (ch === "/" && next === "/") {
+			inLineComment = true
+			i += 2
+			continue
+		}
+		if (ch === "/" && next === "*") {
+			inBlock = true
+			i += 2
+			continue
+		}
+		if (ch === '"') {
+			inString = true
+			i++
+			continue
+		}
+		if (ch === "'") {
+			inChar = true
+			i++
+			continue
+		}
+
+		if (ch === "<") {
+			depth++
+			i++
+			continue
+		}
+		if (ch === ">") {
+			depth--
+			if (depth === 0) return i
+			i++
+			continue
+		}
+		i++
+	}
+	return -1
+}
+
+/**
+ * Parse leading visibility / modifiers on the declaration start line, and `<...>` after `name`
+ * using up to {@link SIGNATURE_SCAN_MAX_LINES_TYPE} lines (multi-line generic bounds; string/comment-safe).
+ */
+export function extractCangjieDeclarationMeta(
+	lines: string[],
+	startLine: number,
+	name: string,
+): CangjieDeclarationMeta {
+	const line = lines[startLine] ?? ""
+	const modifiers: string[] = []
+	let visibility: CangjieSymbolVisibility = "internal"
+	let s = line.replace(/^\s*/, "")
+	for (;;) {
+		const m = s.match(LEADING_DECL_MODIFIER_RE)
+		if (!m) break
+		const w = m[1]
+		if (w === "public" || w === "protected" || w === "private" || w === "internal") {
+			visibility = w
+		} else {
+			modifiers.push(w)
+		}
+		s = s.slice(m[0].length)
+	}
+
+	let typeParams: string | undefined
+	const nameIdx = findNameIndexInDeclarationLine(line, name)
+	if (nameIdx >= 0) {
+		const lastLine = Math.min(startLine + SIGNATURE_SCAN_MAX_LINES_TYPE - 1, lines.length - 1)
+		const buffer = lines.slice(startLine, lastLine + 1).join("\n")
+		let pos = nameIdx + name.length
+		while (pos < buffer.length && /\s/.test(buffer[pos])) pos++
+		if (pos < buffer.length && buffer[pos] === "<") {
+			const close = findClosingAngleBracketIndex(buffer, pos)
+			if (close >= 0) typeParams = buffer.slice(pos, close + 1)
+		}
+	}
+
+	return { visibility, modifiers, typeParams }
+}
+
 // ─── Regex-based heuristic parser ───
 
-const MODIFIER_PREFIX = `(?:(?:public|protected|private|internal|open|abstract|sealed|override|static|mut|unsafe|foreign)\\s+)*`
+const MODIFIER_PREFIX = `(?:(?:public|protected|private|internal|open|abstract|sealed|override|static|mut|unsafe|foreign|operator)\\s+)*`
 
 const DEF_PATTERNS: { kind: CangjieDefKind; re: RegExp }[] = [
 	{ kind: "class", re: new RegExp(`^\\s*${MODIFIER_PREFIX}class\\s+(\\w+)`) },
 	{ kind: "struct", re: new RegExp(`^\\s*${MODIFIER_PREFIX}struct\\s+(\\w+)`) },
 	{ kind: "interface", re: new RegExp(`^\\s*${MODIFIER_PREFIX}interface\\s+(\\w+)`) },
 	{ kind: "enum", re: new RegExp(`^\\s*${MODIFIER_PREFIX}enum\\s+(\\w+)`) },
+	{ kind: "operator", re: new RegExp(`^\\s*${MODIFIER_PREFIX}operator\\s+func\\s+(\\S+)`) },
 	{ kind: "func", re: new RegExp(`^\\s*${MODIFIER_PREFIX}func\\s+(\\w+)`) },
 	{ kind: "macro", re: new RegExp(`^\\s*${MODIFIER_PREFIX}macro\\s+(\\w+)`) },
+	{ kind: "init", re: new RegExp(`^\\s*${MODIFIER_PREFIX}init\\s*\\(`) },
+	{ kind: "prop", re: new RegExp(`^\\s*${MODIFIER_PREFIX}prop\\s+(\\w+)`) },
 	{ kind: "extend", re: new RegExp(`^\\s*${MODIFIER_PREFIX}extend\\s+(\\w[\\w<>, ]*?)\\s*(<:|\\{)`) },
 	{ kind: "type_alias", re: new RegExp(`^\\s*${MODIFIER_PREFIX}type\\s+(\\w+)\\s*=`) },
 	{ kind: "var", re: new RegExp(`^\\s*${MODIFIER_PREFIX}var\\s+(\\w+)`) },
@@ -83,16 +318,44 @@ const DEF_PATTERNS: { kind: CangjieDefKind; re: RegExp }[] = [
 /**
  * Find the closing brace that matches the opening brace at `openLine`.
  * Returns the 0-based line index of the `}`, or `openLine` if none found.
+ *
+ * Skips braces inside string literals (`"…"`), character literals (`'…'`),
+ * line comments (`//`), and block comments (`/* … * /`).
  */
 function findClosingBrace(lines: string[], openLine: number): number {
 	let depth = 0
+	let inBlockComment = false
 	for (let i = openLine; i < lines.length; i++) {
-		for (const ch of lines[i]) {
-			if (ch === "{") depth++
-			if (ch === "}") {
-				depth--
-				if (depth === 0) return i
+		const line = lines[i]
+		let inString = false
+		let inChar = false
+		let j = 0
+		while (j < line.length) {
+			const ch = line[j]
+			const next = j + 1 < line.length ? line[j + 1] : ""
+
+			if (inBlockComment) {
+				if (ch === "*" && next === "/") { inBlockComment = false; j += 2; continue }
+				j++; continue
 			}
+			if (inString) {
+				if (ch === "\\" ) { j += 2; continue }
+				if (ch === '"') inString = false
+				j++; continue
+			}
+			if (inChar) {
+				if (ch === "\\") { j += 2; continue }
+				if (ch === "'") inChar = false
+				j++; continue
+			}
+			if (ch === "/" && next === "/") break
+			if (ch === "/" && next === "*") { inBlockComment = true; j += 2; continue }
+			if (ch === '"') { inString = true; j++; continue }
+			if (ch === "'") { inChar = true; j++; continue }
+
+			if (ch === "{") depth++
+			if (ch === "}") { depth--; if (depth === 0) return i }
+			j++
 		}
 	}
 	return openLine
@@ -102,7 +365,7 @@ function findClosingBrace(lines: string[], openLine: number): number {
  * Determine whether a definition kind is a "block" definition (has `{ ... }`).
  */
 function isBlockDef(kind: CangjieDefKind): boolean {
-	return ["class", "struct", "interface", "enum", "func", "extend", "main", "macro"].includes(kind)
+	return ["class", "struct", "interface", "enum", "func", "extend", "main", "macro", "init", "prop", "operator"].includes(kind)
 }
 
 /**
@@ -151,10 +414,8 @@ export function parseCangjieDefinitions(content: string): CangjieDef[] {
 
 			defs.push({ kind, name, startLine: i, endLine })
 
-			// Mark lines within this definition to avoid duplicate matches on the same opening line
-			for (let k = i; k <= endLine; k++) {
-				processedLines.add(k)
-			}
+			// Only mark the declaration line itself to allow nested types to be discovered
+			processedLines.add(i)
 			break // First matching pattern wins
 		}
 	}
@@ -214,11 +475,34 @@ export function computeCangjieSignature(
 
 /** Lines inside class/struct/interface bodies that look like members (heuristic). */
 const TYPE_MEMBER_LINE_RE =
-	/^\s*(?:public|protected|private|internal|open|abstract|static|mut|override|unsafe|sealed|\s)*(?:var|let|func|prop)\s+/
+	/^\s*(?:public|protected|private|internal|open|abstract|static|mut|override|redef|unsafe|sealed|\s)*(?:var|let|func|prop|init|operator\s+func)\s+/
+
+/** Enum variants: `| Name` / `| Name(Type)` and case-style branches */
+const ENUM_VARIANT_LINE_RE = /^\s*\|\s*.+/
+const CASE_LINE_RE = /^\s*case\s+[\w(]/
+
+type TypeMemberBucket = "methods" | "properties" | "operators" | "inits" | "enumCases"
 
 export interface TypeMemberSummaryResult {
+	/** Flat list (first `maxMembers` lines), for backward compatibility. */
 	members: string[]
+	methods: string[]
+	properties: string[]
+	operators: string[]
+	inits: string[]
+	enumCases: string[]
 	totalMatchingLines: number
+}
+
+function classifyTypeMemberLine(trimmed: string): TypeMemberBucket | null {
+	if (ENUM_VARIANT_LINE_RE.test(trimmed) || CASE_LINE_RE.test(trimmed)) return "enumCases"
+	if (/operator\s+func\b/.test(trimmed)) return "operators"
+	if (/\binit\s*\(/.test(trimmed)) return "inits"
+	if (/\bprop\b/.test(trimmed) || /^\s*(?:public|protected|private|internal|open|static|mut|override|redef|unsafe|sealed|\s)*(?:var|let)\s+/.test(trimmed)) {
+		return "properties"
+	}
+	if (/\bfunc\s+/.test(trimmed)) return "methods"
+	return null
 }
 
 /**
@@ -231,6 +515,16 @@ export function extractTypeMemberSummaries(
 	declEndLine: number,
 	maxMembers = 12,
 ): TypeMemberSummaryResult {
+	const empty: TypeMemberSummaryResult = {
+		members: [],
+		methods: [],
+		properties: [],
+		operators: [],
+		inits: [],
+		enumCases: [],
+		totalMatchingLines: 0,
+	}
+
 	let openLine = -1
 	const maxSearch = Math.min(declStartLine + 25, lines.length - 1)
 	for (let i = declStartLine; i <= maxSearch; i++) {
@@ -240,23 +534,54 @@ export function extractTypeMemberSummaries(
 		}
 	}
 	if (openLine < 0) {
-		return { members: [], totalMatchingLines: 0 }
+		return empty
 	}
 
 	const members: string[] = []
+	const methods: string[] = []
+	const properties: string[] = []
+	const operators: string[] = []
+	const inits: string[] = []
+	const enumCases: string[] = []
 	let totalMatchingLines = 0
+
+	const pushBucket = (bucket: string[], line: string, cap: number) => {
+		if (bucket.length < cap) bucket.push(line)
+	}
+
 	for (let i = openLine + 1; i <= declEndLine; i++) {
 		const trimmed = lines[i]?.trim() ?? ""
 		if (!trimmed || trimmed.startsWith("//")) continue
-		if (TYPE_MEMBER_LINE_RE.test(trimmed)) {
-			totalMatchingLines++
-			if (members.length < maxMembers) {
-				members.push(trimmed.replace(/\s+/g, " "))
-			}
+		const isMember =
+			TYPE_MEMBER_LINE_RE.test(trimmed) ||
+			ENUM_VARIANT_LINE_RE.test(trimmed) ||
+			CASE_LINE_RE.test(trimmed)
+		if (!isMember) continue
+
+		totalMatchingLines++
+		const normalized = trimmed.replace(/\s+/g, " ")
+		if (members.length < maxMembers) {
+			members.push(normalized)
 		}
+
+		const kind = classifyTypeMemberLine(trimmed)
+		const cap = Math.max(4, Math.floor(maxMembers / 2))
+		if (kind === "methods") pushBucket(methods, normalized, cap)
+		else if (kind === "properties") pushBucket(properties, normalized, cap)
+		else if (kind === "operators") pushBucket(operators, normalized, cap)
+		else if (kind === "inits") pushBucket(inits, normalized, cap)
+		else if (kind === "enumCases") pushBucket(enumCases, normalized, cap)
 	}
 
-	return { members, totalMatchingLines }
+	return {
+		members,
+		methods,
+		properties,
+		operators,
+		inits,
+		enumCases,
+		totalMatchingLines,
+	}
 }
 
 /**

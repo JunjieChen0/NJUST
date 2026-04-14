@@ -1,3 +1,5 @@
+import { assertSafeOutboundUrl, guardedFetch } from "../../core/security/networkGuard"
+
 export type WebSearchProviderName =
 	| "tavily"
 	| "bing"
@@ -22,6 +24,10 @@ function makeAbortController(timeoutMs = 15_000) {
 	const controller = new AbortController()
 	const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 	return { controller, clear: () => clearTimeout(timeoutId) }
+}
+
+async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
+	return guardedFetch(url, init)
 }
 
 /** Undici/Node often surfaces low-level errors as `fetch failed` with `error.cause`. */
@@ -138,7 +144,7 @@ export class TavilySearchProvider implements WebSearchProvider {
 		const { controller, clear } = makeAbortController()
 
 		try {
-			const response = await fetch("https://api.tavily.com/search", {
+			const response = await safeFetch("https://api.tavily.com/search", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -204,7 +210,7 @@ export class BingSearchProvider implements WebSearchProvider {
 				responseFilter: "Webpages",
 			})
 
-			const response = await fetch(`https://api.bing.microsoft.com/v7.0/search?${params}`, {
+			const response = await safeFetch(`https://api.bing.microsoft.com/v7.0/search?${params}`, {
 				headers: { "Ocp-Apim-Subscription-Key": this.apiKey },
 				signal: controller.signal,
 			})

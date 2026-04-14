@@ -5,6 +5,18 @@ import EventEmitter from "events"
 import type { ClineProvider } from "../webview/ClineProvider"
 import type { Task } from "../task/Task"
 import type { SharedContext, AgentInfo } from "./types"
+import { generateParentContextSummary, generateTaskResultSummary } from "../task/SubTaskContextBuilder"
+import { DEFAULT_FORKED_CONTEXT_CONFIG } from "../task/SubTaskOptions"
+import type { ForkedContextConfig } from "../task/SubTaskOptions"
+
+type ApiMessage = { role: string; content: any; ts?: number }
+
+interface SubtaskResult {
+	agentId: string
+	taskId: string
+	resultSummary: string
+	status: "completed" | "failed"
+}
 
 interface ParallelTaskSpec {
 	mode: string
@@ -283,5 +295,86 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 			metadata: new Map(),
 		}
 		this.agents.clear()
+	}
+
+	// --- Fork Context Methods ---
+
+	/**
+	 * Create a forked context for a subtask.
+	 * The subtask gets a summarized snapshot of the parent's messages (not a shared reference).
+	 * This prevents subtask conversation from polluting the parent context.
+	 *
+	 * @param parentMessages - The parent task's API conversation history
+	 * @param taskDescription - Description of the subtask to be performed
+	 * @param config - Optional forked context configuration
+	 * @returns A new message array with a context bootstrap message for the subtask
+	 */
+	forkContextForSubtask(
+		parentMessages: ApiMessage[],
+		taskDescription: string,
+		config?: ForkedContextConfig,
+	): ApiMessage[] {
+		const effectiveConfig = config ?? DEFAULT_FORKED_CONTEXT_CONFIG
+
+		// Generate a concise summary of parent context (not exceeding summaryMaxTokens)
+		const parentSummary = generateParentContextSummary(
+			parentMessages,
+			effectiveConfig.summaryMaxTokens,
+			effectiveConfig,
+		)
+
+		// Build a bootstrap message array for the subtask with:
+		// 1. A system-like context message with parent summary
+		// 2. The actual task description
+		const forkedMessages: ApiMessage[] = [
+			{
+				role: "user",
+				content: [
+					{
+						type: "text" as const,
+						text: `[Parent Context Summary]\n${parentSummary}\n[End Parent Context Summary]\n\nTask:\n${taskDescription}`,
+					},
+				],
+				ts: Date.now(),
+			},
+		]
+
+		this.outputChannel.appendLine(
+			`[AgentOrchestrator] Forked context for subtask: ${parentMessages.length} parent messages → summary (${parentSummary.length} chars)`,
+		)
+
+		return forkedMessages
+	}
+
+	/**
+	 * Aggregate subtask results back into parent context.
+	 * Injects a structured result summary message into the parent's message array.
+	 *
+	 * @param subtaskResult - The result from the completed subtask
+	 * @param parentMessages - The parent task's API conversation history (mutated in place)
+	 * @returns The updated parent messages array
+	 */
+	aggregateSubtaskResult(
+		subtaskResult: SubtaskResult,
+		parentMessages: ApiMessage[],
+	): ApiMessage[] {
+		const resultMessage: ApiMessage = {
+			role: "user",
+			content: [
+				{
+					type: "text" as const,
+					text: `[Subtask Result - ${subtaskResult.taskId}]\nStatus: ${subtaskResult.status}\n${subtaskResult.resultSummary}\n[End Subtask Result]`,
+				},
+			],
+			ts: Date.now(),
+		}
+
+		parentMessages.push(resultMessage)
+
+		this.outputChannel.appendLine(
+			`[AgentOrchestrator] Aggregated subtask ${subtaskResult.taskId} result (${subtaskResult.status}) into parent context`,
+		)
+
+		return parentMessages
 	}
 }

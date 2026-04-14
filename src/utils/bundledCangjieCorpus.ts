@@ -4,13 +4,20 @@ import path from "path"
 /** Shipped under extensionPath for VSIX (must match sync script + cangjie-context). */
 export const BUNDLED_CANGJIE_CORPUS_SEGMENTS = ["bundled-cangjie-corpus", "CangjieCorpus-1.0.0"] as const
 
+let bundledCorpusPathCache: { extensionPath: string; value: string | null } | null = null
+
 /**
  * Absolute path to bundled corpus directory if it exists on disk.
  */
 export function getBundledCangjieCorpusPath(extensionPath: string | undefined): string | null {
 	if (!extensionPath) return null
+	if (bundledCorpusPathCache && bundledCorpusPathCache.extensionPath === extensionPath) {
+		return bundledCorpusPathCache.value
+	}
 	const p = path.join(extensionPath, ...BUNDLED_CANGJIE_CORPUS_SEGMENTS)
-	return fs.existsSync(p) ? p : null
+	const value = fs.existsSync(p) ? p : null
+	bundledCorpusPathCache = { extensionPath, value }
+	return value
 }
 
 /**

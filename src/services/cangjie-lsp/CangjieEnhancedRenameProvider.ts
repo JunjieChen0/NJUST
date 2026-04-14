@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import * as fs from "fs"
 import type { CangjieSymbolIndex } from "./CangjieSymbolIndex"
 
 /**
@@ -46,7 +47,8 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 		if (!oldName || oldName.length < 2) return undefined
 
 		const lspEdit = await this.tryLspRename(document, position, newName)
-		const indexRefs = this.index.findReferences(oldName)
+		const rawIndexRefs = this.index.findReferences(oldName)
+		const indexRefs = this.filterRenameCandidates(oldName, rawIndexRefs)
 
 		const lspLocCount = lspEdit ? this.countLocations(lspEdit) : 0
 		const indexLocCount = indexRefs.length
@@ -121,5 +123,69 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 			edit.replace(uri, range, newName)
 		}
 		return edit
+	}
+
+	private filterRenameCandidates(
+		name: string,
+		refs: Array<{ filePath: string; line: number; column: number }>,
+	): Array<{ filePath: string; line: number; column: number }> {
+		const useAst = vscode.workspace.getConfiguration("njust-ai-cj").get<boolean>("cangjieTools.useCjcAstForIndex", false)
+		if (!useAst) return refs
+		const fileCache = new Map<string, string[]>()
+		const out: Array<{ filePath: string; line: number; column: number }> = []
+		for (const ref of refs) {
+			let lines = fileCache.get(ref.filePath)
+			if (!lines) {
+				try {
+					const doc = vscode.workspace.textDocuments.find((d) => d.fileName === ref.filePath)
+					const content = doc?.getText()
+					if (content !== undefined) lines = content.split("\n")
+					else lines = fs.readFileSync(ref.filePath, "utf-8").split("\n")
+					fileCache.set(ref.filePath, lines)
+				} catch {
+					continue
+				}
+			}
+			const lineText = lines[ref.line]
+			if (!lineText) continue
+			if (lineText.slice(ref.column, ref.column + name.length) !== name) continue
+			if (this.isIdentifierUsage(lineText, ref.column)) {
+				out.push(ref)
+			}
+		}
+		return out
+	}
+
+	private isIdentifierUsage(line: string, index: number): boolean {
+		let inString = false
+		let quote = ""
+		let escaped = false
+		for (let i = 0; i < line.length; i++) {
+			const ch = line[i]
+			const next = i + 1 < line.length ? line[i + 1] : ""
+			if (!inString && ch === "/" && next === "/") return index < i
+			if (inString) {
+				if (escaped) {
+					escaped = false
+					continue
+				}
+				if (ch === "\\") {
+					escaped = true
+					continue
+				}
+				if (ch === quote) {
+					inString = false
+					quote = ""
+				}
+				if (i === index) return false
+			} else if (ch === "\"" || ch === "'") {
+				if (i <= index) {
+					inString = true
+					quote = ch
+				}
+			}
+			if (i === index) return !inString
+		}
+		return true
 	}
 }

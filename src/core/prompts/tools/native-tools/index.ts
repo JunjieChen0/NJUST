@@ -21,6 +21,23 @@ import switchMode from "./switch_mode"
 import updateTodoList from "./update_todo_list"
 import webSearch from "./web_search"
 import writeToFile from "./write_to_file"
+import grepTool from "./grep-tool"
+import globTool from "./glob-tool"
+import lspTool from "./lsp-tool"
+import sleepTool from "./sleep-tool"
+import notebookEditTool from "./notebook-edit-tool"
+import taskCreateTool from "./task-create-tool"
+import taskUpdateTool from "./task-update-tool"
+import taskListTool from "./task-list-tool"
+import taskGetTool from "./task-get-tool"
+import taskStopTool from "./task-stop-tool"
+import taskOutputTool from "./task-output-tool"
+import toolSearchTool from "./tool-search-tool"
+import agentTool from "./agent-tool"
+import sendMessageTool from "./send-message-tool"
+import webFetchTool from "./web-fetch-tool"
+import briefTool from "./brief-tool"
+import configTool from "./config-tool"
 
 export { getMcpServerTools } from "./mcp_server"
 export { convertOpenAIToolToAnthropic, convertOpenAIToolsToAnthropic } from "./converters"
@@ -70,6 +87,23 @@ export function getNativeTools(options: NativeToolsOptions = {}): OpenAI.Chat.Ch
 		updateTodoList,
 		webSearch,
 		writeToFile,
+		grepTool,
+		globTool,
+		lspTool,
+		sleepTool,
+		notebookEditTool,
+		taskCreateTool,
+		taskUpdateTool,
+		taskListTool,
+		taskGetTool,
+		taskStopTool,
+		taskOutputTool,
+		toolSearchTool,
+		agentTool,
+		sendMessageTool,
+		webFetchTool,
+		briefTool,
+		configTool,
 	] satisfies OpenAI.Chat.ChatCompletionTool[]
 }
 

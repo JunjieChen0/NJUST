@@ -43,12 +43,15 @@ export async function executeDeferredToolCall(
 				})
 				break
 
-			case "list_files":
+			case "list_files": {
+				const raw = args.path
+				const p = typeof raw === "string" ? raw.trim() : ""
 				content = await execListFiles(cwd, {
-					path: (args.path as string) ?? ".",
+					path: p || ".",
 					recursive: args.recursive as boolean | undefined,
 				})
 				break
+			}
 
 			case "search_files":
 				content = await execSearchFiles(cwd, {

@@ -12,6 +12,7 @@ import { isPathUnderBundledCangjieCorpus, isPathPotentiallyUnderCangjieCorpus } 
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { toolResultCache } from "./helpers/ToolResultCache"
 
 interface ListFilesParams {
 	path: string
@@ -20,23 +21,34 @@ interface ListFilesParams {
 
 export class ListFilesTool extends BaseTool<"list_files"> {
 	readonly name = "list_files" as const
+	override readonly maxResultSizeChars = 50_000
+	override isConcurrencySafe(): boolean {
+		return true
+	}
+
+	override getEagerExecutionDecision() { return "eager" as const }
+	override isPartialArgsStable(partial: Partial<{path: string; recursive?: boolean}>): boolean {
+		return typeof partial.path === "string"
+	}
 
 	async execute(params: ListFilesParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
-		const { path: relDirPath, recursive } = params
+		const cacheKey = toolResultCache.makeKey("list_files", params)
+		const cached = toolResultCache.get(cacheKey)
+		if (cached) {
+			callbacks.pushToolResult(cached)
+			return
+		}
+		const rawPath = params.path
+		const relDirPath =
+			typeof rawPath === "string" ? rawPath.trim() : typeof rawPath === "number" ? String(rawPath) : ""
+		const effectivePath = relDirPath || "."
+		const { recursive } = params
 		const { askApproval, handleError, pushToolResult } = callbacks
 
 		try {
-			if (!relDirPath) {
-				task.consecutiveMistakeCount++
-				task.recordToolError("list_files")
-				task.didToolFailInCurrentTurn = true
-				pushToolResult(await task.sayAndCreateMissingParamError("list_files", "path"))
-				return
-			}
-
 			task.consecutiveMistakeCount = 0
 
-			const absolutePath = path.resolve(task.cwd, relDirPath)
+			const absolutePath = path.resolve(task.cwd, effectivePath)
 			const extensionPath = task.providerRef.deref()?.context.extensionPath
 
 			const [files, didHitLimit] = await listFiles(absolutePath, recursive || false, 200)
@@ -52,7 +64,9 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 			)
 
 			if (isPathUnderBundledCangjieCorpus(absolutePath, extensionPath)) {
-				pushToolResult(result)
+				toolResultCache.set(cacheKey, result)
+				toolResultCache.set(cacheKey, result)
+			pushToolResult(result)
 				return
 			}
 
@@ -60,7 +74,7 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 
 			const sharedMessageProps: ClineSayTool = {
 				tool: !recursive ? "listFilesTopLevel" : "listFilesRecursive",
-				path: getReadablePath(task.cwd, relDirPath),
+				path: getReadablePath(task.cwd, effectivePath),
 				isOutsideWorkspace,
 			}
 

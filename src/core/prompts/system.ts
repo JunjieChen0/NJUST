@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import crypto from "crypto"
 
 import { type ModeConfig, type PromptComponent, type CustomModePrompts, type TodoItem } from "@njust-ai-cj/types"
 
@@ -10,6 +11,7 @@ import { McpHub } from "../../services/mcp/McpHub"
 import { CodeIndexManager } from "../../services/code-index/manager"
 import { SkillsManager } from "../../services/skills/SkillsManager"
 
+import { buildBudgetedSessionMemoryPrompt } from "../condense/sessionMemoryCompact"
 import type { SystemPromptSettings } from "./types"
 import {
 	getRulesSection,
@@ -22,9 +24,42 @@ import {
 	addCustomInstructions,
 	markdownFormattingSection,
 	getSkillsSection,
+	filterCangjieSkillRoutingRows,
+	getOutputEfficiencySection,
 } from "./sections"
-import { getCangjieContextSection } from "./sections/cangjie-context"
+import { DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET, getCangjieContextSection } from "./sections/cangjie-context"
+import { Package } from "../../shared/package"
 import { getMultiFileContextSection } from "./sections/multi-file-context"
+import { applySystemPromptBudget, estimatePromptTokens, trimSectionsByBudget, derivePromptTokenBudget } from "./tokenBudget"
+import type { SectionBudget } from "./tokenBudget"
+
+export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = "\n\n====\n\nSYSTEM_PROMPT_DYNAMIC_BOUNDARY\n\n====\n\n"
+
+/** Scale Cangjie context budget from the active model context window (Task passes via settings). */
+export function deriveCangjieContextTokenBudgetFromContextWindow(contextWindow: number | undefined): number {
+	const fallback = DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET
+	if (contextWindow === undefined || contextWindow <= 0 || contextWindow < 4096) {
+		return fallback
+	}
+	if (contextWindow >= 200_000) return 6000
+	if (contextWindow >= 100_000) return 4500
+	if (contextWindow >= 64_000) return 3800
+	if (contextWindow >= 32_000) return 3000
+	if (contextWindow >= 16_000) return 2400
+	return Math.max(800, Math.min(fallback, Math.floor(contextWindow * 0.08)))
+}
+
+function resolveCangjieContextTokenBudget(settings?: SystemPromptSettings): number {
+	const fromConfig = vscode.workspace.getConfiguration(Package.name).get<number>("cangjieContextTokenBudget")
+	if (typeof fromConfig === "number" && fromConfig > 0) {
+		return Math.floor(fromConfig)
+	}
+	const explicit = settings?.cangjieContextTokenBudget
+	if (typeof explicit === "number" && explicit > 0) {
+		return Math.floor(explicit)
+	}
+	return DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET
+}
 
 // Helper function to get prompt component, filtering out empty objects
 export function getPromptComponent(
@@ -37,6 +72,14 @@ export function getPromptComponent(
 		return undefined
 	}
 	return component
+}
+
+export type SystemPromptParts = {
+	staticPart: string
+	dynamicPart: string
+	fullPrompt: string
+	cacheBreakpoints?: number[] // Character offsets where cache boundaries exist
+	perToolHashes?: Record<string, string>
 }
 
 async function generatePrompt(
@@ -56,7 +99,7 @@ async function generatePrompt(
 	todoList?: TodoItem[],
 	modelId?: string,
 	skillsManager?: SkillsManager,
-): Promise<string> {
+): Promise<SystemPromptParts> {
 	if (!context) {
 		throw new Error("Extension context is required for generating system prompt")
 	}
@@ -64,6 +107,11 @@ async function generatePrompt(
 	// Get the full mode config to ensure we have the role definition (used for groups, etc.)
 	const modeConfig = getModeBySlug(mode, customModeConfigs) || modes.find((m) => m.slug === mode) || modes[0]
 	const { roleDefinition, baseInstructions } = getModeSelection(mode, promptComponent, customModeConfigs)
+	let effectiveBaseInstructions = baseInstructions
+	if (mode === "cangjie" && skillsManager) {
+		const discovered = new Set(skillsManager.getSkillsForMode("cangjie").map((s) => s.name))
+		effectiveBaseInstructions = filterCangjieSkillRoutingRows(baseInstructions, discovered)
+	}
 
 	// Check if MCP functionality should be included
 	const hasMcpGroup = modeConfig.groups.some((groupEntry) => getGroupName(groupEntry) === "mcp")
@@ -80,7 +128,14 @@ async function generatePrompt(
 		getSkillsSection(skillsManager, mode as string),
 	])
 
-	const cangjieContextSection = await getCangjieContextSection(cwd, mode as string, context.extensionPath)
+	const cangjieTokenBudget = resolveCangjieContextTokenBudget(settings)
+	const cangjieContextSection = await getCangjieContextSection(
+		cwd,
+		mode as string,
+		context.extensionPath,
+		cangjieTokenBudget,
+		context.globalStorageUri.fsPath,
+	)
 	const multiFileContextSection = cangjieContextSection ? "" : getMultiFileContextSection(cwd)
 
 	// Tools catalog is not included in the system prompt.
@@ -122,34 +177,94 @@ HOW TO USE:
 - Prefer web search results over training data when they conflict (search results are more recent)`
 		: ""
 
-	const basePrompt = `${roleDefinition}
+	const pruningEnabled = settings?.enableTurnAwarePromptPruning ?? true
+	const isFollowupTurn = pruningEnabled && (settings?.turnIndex ?? 0) > 0
+	const reducedModesSection = isFollowupTurn ? "" : modesSection
+	const reducedCapabilitiesSection = isFollowupTurn
+		? ""
+		: getCapabilitiesSection(cwd, shouldIncludeMcp ? mcpHub : undefined, settings?.taskId)
 
-${markdownFormattingSection()}
+	// Build named sections for budget-aware trimming
+	const roleDefinitionText = roleDefinition
+	const formattingText = markdownFormattingSection()
+	const toolUseText = `${getSharedToolUseSection()}${toolsCatalog}\n\n\t${getToolUseGuidelinesSection()}`
+	const capabilitiesText = reducedCapabilitiesSection
+	const webSearchText = webSearchSection
+	const modesText = reducedModesSection
+	const skillsText = skillsSection ? `\n${skillsSection}` : ""
+	const cangjieText = cangjieContextSection ? `\n${cangjieContextSection}` : ""
+	const multiFileText = multiFileContextSection ? `\n${multiFileContextSection}` : ""
+	const outputEfficiencyText = getOutputEfficiencySection()
+	const sessionMemoryText = settings?.sessionMemory
+		? buildBudgetedSessionMemoryPrompt(settings.sessionMemory)
+		: ""
+	const rulesText = getRulesSection(cwd, settings)
+	const systemInfoText = getSystemInfoSection(cwd)
+	const objectiveText = getObjectiveSection()
+	const customInstructionsText = await addCustomInstructions(effectiveBaseInstructions, globalCustomInstructions || "", cwd, mode, {
+		language: language ?? "en",
+		rooIgnoreInstructions,
+		settings,
+	})
 
-${getSharedToolUseSection()}${toolsCatalog}
+	// Define section budgets with priorities for trimming
+	const sectionEntries: { name: string; text: string; priority: number; required: boolean }[] = [
+		{ name: "roleDefinition", text: roleDefinitionText, priority: 0, required: true },
+		{ name: "formatting", text: formattingText, priority: 0, required: true },
+		{ name: "toolDescriptions", text: toolUseText, priority: 0, required: true },
+		{ name: "capabilitiesSection", text: capabilitiesText, priority: 3, required: false },
+		{ name: "webSearchSection", text: webSearchText, priority: 2, required: false },
+		{ name: "modesSection", text: modesText, priority: 3, required: false },
+		{ name: "skillsSection", text: skillsText, priority: 2, required: false },
+		{ name: "cangjieContext", text: cangjieText, priority: 1, required: false },
+		{ name: "multiFileContext", text: multiFileText, priority: 1, required: false },
+		{ name: "rulesSection", text: rulesText, priority: 4, required: false },
+		{ name: "systemInfo", text: systemInfoText, priority: 0, required: true },
+		{ name: "objective", text: objectiveText, priority: 0, required: true },
+		{ name: "customInstructions", text: customInstructionsText, priority: 2, required: false },
+		{ name: "outputEfficiency", text: outputEfficiencyText, priority: 1, required: false },
+		{ name: "sessionMemory", text: sessionMemoryText, priority: 2, required: false },
+	]
 
-	${getToolUseGuidelinesSection()}
+	// Build SectionBudget array and apply trimming
+	const budget = derivePromptTokenBudget(settings?.contextWindow)
+	const maxTokens = budget?.systemPromptMaxTokens ?? Infinity
 
-${getCapabilitiesSection(cwd, shouldIncludeMcp ? mcpHub : undefined)}${webSearchSection}
+	const sectionBudgets: SectionBudget[] = sectionEntries.map((e) => ({
+		name: e.name,
+		priority: e.priority,
+		estimatedTokens: estimatePromptTokens(e.text),
+		required: e.required,
+	}))
 
-${modesSection}
-${skillsSection ? `\n${skillsSection}` : ""}${cangjieContextSection ? `\n${cangjieContextSection}` : ""}${multiFileContextSection ? `\n${multiFileContextSection}` : ""}
-${getRulesSection(cwd, settings)}
+	const retainedSections = trimSectionsByBudget(sectionBudgets, maxTokens)
 
-${getSystemInfoSection(cwd)}
+	// Helper to include section content only if retained
+	const sec = (name: string): string => {
+		const entry = sectionEntries.find((e) => e.name === name)
+		if (!entry || !retainedSections.has(name)) return ""
+		return entry.text
+	}
 
-${getObjectiveSection()}
+	const staticPart = [sec("roleDefinition"), sec("formatting"), sec("toolDescriptions"), sec("outputEfficiency"), sec("capabilitiesSection") + sec("webSearchSection"), sec("modesSection")]
+		.filter(Boolean)
+		.join("\n\n")
 
-${await addCustomInstructions(baseInstructions, globalCustomInstructions || "", cwd, mode, {
-	language: language ?? "en",
-	rooIgnoreInstructions,
-	settings,
-})}`
+	const dynamicPart = [sec("sessionMemory"), sec("skillsSection") + sec("cangjieContext") + sec("multiFileContext"), sec("rulesSection"), sec("systemInfo"), sec("objective"), sec("customInstructions")]
+		.filter(Boolean)
+		.join("\n\n")
 
-	return basePrompt
+	const budgeted = applySystemPromptBudget(staticPart, dynamicPart, settings?.contextWindow)
+	const fullPrompt = `${budgeted.staticPart}${SYSTEM_PROMPT_DYNAMIC_BOUNDARY}${budgeted.dynamicPart}`
+	const perToolHashes: Record<string, string> = {
+		toolDescriptions: crypto.createHash("sha256").update(toolUseText).digest("hex").slice(0, 16),
+		capabilitiesSection: crypto.createHash("sha256").update(capabilitiesText).digest("hex").slice(0, 16),
+		webSearchSection: crypto.createHash("sha256").update(webSearchText).digest("hex").slice(0, 16),
+	}
+	return { staticPart: budgeted.staticPart, dynamicPart: budgeted.dynamicPart, fullPrompt, perToolHashes }
 }
 
-export const SYSTEM_PROMPT = async (
+export const SYSTEM_PROMPT_PARTS = async (
 	context: vscode.ExtensionContext,
 	cwd: string,
 	supportsComputerUse: boolean,
@@ -166,7 +281,7 @@ export const SYSTEM_PROMPT = async (
 	todoList?: TodoItem[],
 	modelId?: string,
 	skillsManager?: SkillsManager,
-): Promise<string> => {
+): Promise<SystemPromptParts> => {
 	if (!context) {
 		throw new Error("Extension context is required for generating system prompt")
 	}
@@ -195,4 +310,43 @@ export const SYSTEM_PROMPT = async (
 		modelId,
 		skillsManager,
 	)
+}
+
+export const SYSTEM_PROMPT = async (
+	context: vscode.ExtensionContext,
+	cwd: string,
+	supportsComputerUse: boolean,
+	mcpHub?: McpHub,
+	diffStrategy?: DiffStrategy,
+	mode: Mode = defaultModeSlug,
+	customModePrompts?: CustomModePrompts,
+	customModes?: ModeConfig[],
+	globalCustomInstructions?: string,
+	experiments?: Record<string, boolean>,
+	language?: string,
+	rooIgnoreInstructions?: string,
+	settings?: SystemPromptSettings,
+	todoList?: TodoItem[],
+	modelId?: string,
+	skillsManager?: SkillsManager,
+): Promise<string> => {
+	const parts = await SYSTEM_PROMPT_PARTS(
+		context,
+		cwd,
+		supportsComputerUse,
+		mcpHub,
+		diffStrategy,
+		mode,
+		customModePrompts,
+		customModes,
+		globalCustomInstructions,
+		experiments,
+		language,
+		rooIgnoreInstructions,
+		settings,
+		todoList,
+		modelId,
+		skillsManager,
+	)
+	return parts.fullPrompt
 }

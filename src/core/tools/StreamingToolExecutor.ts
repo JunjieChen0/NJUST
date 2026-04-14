@@ -1,0 +1,126 @@
+import type { ToolUse } from "../../shared/tools"
+import type { Task } from "../task/Task"
+import { ConcurrentToolExecutor } from "./ConcurrentToolExecutor"
+import { toolRegistry } from "./ToolRegistry"
+
+export type EagerToolDecision = "eager" | "deferred"
+
+/**
+ * Result of a tool execution that was interrupted by max_output_tokens.
+ * The partial output is preserved and marked with a truncation notice.
+ */
+export interface WithheldToolResult {
+	toolUseId: string
+	toolName: string
+	partialOutput: string
+	truncated: true
+}
+
+/**
+ * Manages eager (streaming) tool execution.
+ *
+ * Delegates execution decisions to individual tools via:
+ * - tool.isPartialArgsStable() — whether partial streaming args are stable enough
+ * - tool.getEagerExecutionDecision() — whether the tool opts into eager execution
+ *
+ * Also handles max_output_tokens interruption recovery:
+ * - Detects when a tool execution is interrupted due to token limits
+ * - Preserves partial output with a truncation marker
+ * - Allows the next API turn to continue based on partial results
+ */
+export class StreamingToolExecutor {
+	private readonly executor: ConcurrentToolExecutor
+	private withheldResults: WithheldToolResult[] = []
+
+	constructor(maxConcurrency = 10) {
+		this.executor = new ConcurrentToolExecutor({ maxConcurrency })
+	}
+
+	/**
+	 * Check if a tool's partial streaming arguments have stabilized.
+	 * Delegates to the tool's own isPartialArgsStable() method via the registry.
+	 */
+	private isPartialArgsStable(toolUse: ToolUse): boolean {
+		if (!toolUse.partial) {
+			return true
+		}
+		const tool = toolRegistry.get(toolUse.name)
+		if (!tool) {
+			return false
+		}
+		return tool.isPartialArgsStable((toolUse.nativeArgs ?? {}) as Record<string, unknown>)
+	}
+
+	/**
+	 * Determine whether a tool should be eagerly executed during streaming.
+	 * Delegates to the tool's own getEagerExecutionDecision() method.
+	 */
+	shouldEagerExecute(task: Task, toolUse: ToolUse): EagerToolDecision {
+		if (task.didRejectTool) return "deferred"
+		if (!this.isPartialArgsStable(toolUse)) return "deferred"
+		const tool = toolRegistry.get(toolUse.name)
+		if (!tool) return "deferred"
+		return tool.getEagerExecutionDecision((toolUse.nativeArgs ?? {}) as any)
+	}
+
+	async runEagerBatch(task: Task, batch: ToolUse[], runOne: (toolUse: ToolUse, signal: AbortSignal) => Promise<void>): Promise<void> {
+		await this.executor.run(
+			batch,
+			async (toolUse, _index, ctx) => {
+				if (task.abort || task.didRejectTool || ctx.signal.aborted) return
+				await runOne(toolUse, ctx.signal)
+			},
+			{ failFast: true },
+		)
+	}
+
+	// ── max_output_tokens interruption recovery ──────────────────────
+
+	/**
+	 * Detect if an error represents a max_output_tokens interruption.
+	 */
+	static isMaxOutputTokensError(error: unknown): boolean {
+		if (!error) return false
+		const msg = String((error as any)?.message ?? "").toLowerCase()
+		const stopReason = String((error as any)?.stop_reason ?? (error as any)?.stopReason ?? "").toLowerCase()
+
+		return (
+			/max[_\s-]?output[_\s-]?tokens/.test(msg) ||
+			stopReason === "max_tokens" ||
+			stopReason === "length"
+		)
+	}
+
+	/**
+	 * Record a withheld (partially completed) tool result.
+	 * Called when a tool execution is interrupted by max_output_tokens.
+	 *
+	 * The partial output is preserved with a truncation marker so the model
+	 * can continue from where it left off in the next API turn.
+	 */
+	recordWithheldResult(toolUseId: string, toolName: string, partialOutput: string): void {
+		this.withheldResults.push({
+			toolUseId,
+			toolName,
+			partialOutput: partialOutput + "\n\n[Output truncated due to token limit]",
+			truncated: true,
+		})
+	}
+
+	/**
+	 * Get and clear all withheld results.
+	 * These should be included in the next API request as partial tool results.
+	 */
+	drainWithheldResults(): WithheldToolResult[] {
+		const results = this.withheldResults
+		this.withheldResults = []
+		return results
+	}
+
+	/**
+	 * Whether there are withheld results waiting to be sent.
+	 */
+	hasWithheldResults(): boolean {
+		return this.withheldResults.length > 0
+	}
+}

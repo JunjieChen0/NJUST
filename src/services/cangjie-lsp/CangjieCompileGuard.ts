@@ -2,15 +2,42 @@ import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
 import * as os from "os"
+import { createHash } from "crypto"
 import { execFile } from "child_process"
 import { promisify } from "util"
+import { Package } from "../../shared/package"
 import { resolveCangjieToolPath, buildCangjieToolEnv } from "./cangjieToolUtils"
-import { recordLearnedFix } from "../../core/prompts/sections/cangjie-context"
+import { recordLearnedFix, recordLearnedFailure } from "../../core/prompts/sections/cangjie-context"
+import { getCjpmTreeSummaryForPrompt } from "./cjpmTreeForPrompt"
+import { recordCompileHistoryEvent } from "./cangjieCompileHistory"
+import { analyzeCompileOutput, formatAnalysisSummary, getFixDirectiveForLearning, normalizeErrorPattern } from "./CangjieErrorAnalyzer"
+import type { CangjieMetricsCollector } from "./CangjieMetricsCollector"
 
 const execFileAsync = promisify(execFile)
 
 const COMPILE_TIMEOUT_MS = 60_000
 const FORMAT_TIMEOUT_MS = 15_000
+
+/** Prefer first line + last lines so location hints at the end survive UI truncation. */
+function truncateCompileDiagnosticMessage(raw: string, maxLen: number): string {
+	const normalized = raw.replace(/\s+/g, " ").trim()
+	if (normalized.length <= maxLen) return normalized
+
+	const lines = raw
+		.split(/\n/)
+		.map((l) => l.replace(/\s+/g, " ").trim())
+		.filter((l) => l.length > 0)
+	if (lines.length <= 4) {
+		return normalized.slice(0, maxLen)
+	}
+	const head = lines[0]
+	const tail = lines.slice(-3).join(" ")
+	let combined = `${head} … ${tail}`.replace(/\s+/g, " ").trim()
+	if (combined.length > maxLen) {
+		combined = combined.slice(0, Math.max(0, maxLen - 1)) + "…"
+	}
+	return combined
+}
 
 // re-export CjcErrorPattern regex used by enhanceCjcErrorOutput
 const CJC_ERROR_LOCATION_RE = /==>\s+(.+?):(\d+):(\d+):/g
@@ -20,6 +47,7 @@ export interface CompileResult {
 	output: string
 	errorCount: number
 	errorLocations: Array<{ file: string; line: number; col: number }>
+	incremental?: boolean
 }
 
 export interface FormatResult {
@@ -27,17 +55,57 @@ export interface FormatResult {
 	output: string
 }
 
+/** Fired when an auto-build starts / finishes (save pipeline or explicit `compile()`). */
+export interface CompileLifecycleEvent {
+	status: "start" | "end"
+	cwd: string
+	/** Present when status === "end" */
+	success?: boolean
+	durationMs?: number
+	incremental?: boolean
+	errorCount?: number
+	/** Last known full-build duration (ms), for incremental vs full comparison in UI */
+	lastFullBuildMs?: number | null
+}
+
 /**
  * Compile guard – provides post-write hooks for .cj files:
- *  1. Auto-compile via `cjpm build` after file save
+ *  1. Auto-compile via `cjpm build` (incremental by default) after file save
  *  2. Auto-format via `cjfmt -f` before/after save
  *  3. Record resolved errors to learned-fixes
  */
 export class CangjieCompileGuard implements vscode.Disposable {
 	private disposables: vscode.Disposable[] = []
 	private lastErrors = new Map<string, string>()
+	private lastCjpmTomlHash: string | undefined
+	/** `-i` last failed for this workspace session — use full `cjpm build` until {@link fullBuildCountSinceIncrementalFailure} reaches retry threshold. */
+	private incrementalAvailable = true
+	private fullBuildCountSinceIncrementalFailure = 0
+	private readonly INCREMENTAL_RETRY_AFTER_FULL_BUILDS = 2
+	private lastFullBuildDurationMs: number | null = null
+	private readonly _onCompile = new vscode.EventEmitter<CompileLifecycleEvent>()
+	readonly onCompile = this._onCompile.event
+	/** Serialize `cjpm build` per project root — rapid saves must not run parallel builds. */
+	private compileTailByCwd = new Map<string, Promise<void>>()
+	/** Avoid reading/hashing cjpm.toml twice in one compile decision chain. */
+	private tomlHashCache: { cwd: string; hash: string | undefined } | null = null
+	/** Merge rapid saves into a single `cjpm build` per cwd. */
+	private compileDebounceByCwd = new Map<string, ReturnType<typeof setTimeout>>()
+	private lintReportUriByCwd = new Map<string, vscode.Uri>()
+	private readonly COMPILE_DEBOUNCE_MS = 500
 
-	constructor(private readonly outputChannel: vscode.OutputChannel) {}
+	constructor(
+		private readonly outputChannel: vscode.OutputChannel,
+		private metricsCollector: CangjieMetricsCollector | undefined = undefined,
+		private readonly compileDiagnostics: vscode.DiagnosticCollection | undefined = undefined,
+		private readonly onSuccessfulBuild?: (ctx: { cwd: string; docUri?: vscode.Uri }) => void,
+		/** Fired after cjpm compile diagnostics are cleared for a successful build (any caller of publishCompileDiagnostics). */
+		private readonly onCjpmBuildSucceededForLsp?: (ctx: { cwd: string }) => void,
+	) {}
+
+	setMetricsCollector(collector: CangjieMetricsCollector | undefined): void {
+		this.metricsCollector = collector
+	}
 
 	/**
 	 * Register a post-save pipeline for .cj files (Phases 3.1, 3.2, 3.3):
@@ -61,41 +129,62 @@ export class CangjieCompileGuard implements vscode.Disposable {
 				)
 			}
 
-			// Step 2: Auto-compile (Phase 3.1) — track errors before and after
-			const beforeErrors = new Map(this.lastErrors)
-			const result = await this.compile(cwd)
-
-			if (result.success) {
-				// Step 4: Record resolved error patterns to learned-fixes (Phase 1.3)
-				for (const [errorKey, errorMsg] of beforeErrors) {
-					if (!this.lastErrors.has(errorKey)) {
-						const suggestion = this.getSuggestionForError(errorMsg)
-						if (suggestion) {
-							recordLearnedFix(cwd, errorMsg, suggestion)
-							this.outputChannel.appendLine(
-								`[CompileGuard] 📚 Learned fix recorded for: ${errorMsg.slice(0, 60)}…`,
-							)
-						}
-					}
-				}
-				this.outputChannel.appendLine(
-					`[CompileGuard] ✅ Build passed after saving ${path.basename(doc.fileName)}`,
-				)
-			} else {
-				this.outputChannel.appendLine(
-					`[CompileGuard] ❌ Build failed (${result.errorCount} error(s)) after saving ${path.basename(doc.fileName)}`,
-				)
-			}
-
-			// Step 3: Report cjlint diagnostic count (Phase 3.3, non-blocking)
-			const lintDiagCount = this.countCjlintDiagnostics(doc.uri)
-			if (lintDiagCount > 0) {
-				this.outputChannel.appendLine(
-					`[CompileGuard] ⚠️  ${lintDiagCount} cjlint diagnostic(s) on ${path.basename(doc.fileName)} — run cjpm build -l to review`,
-				)
-			}
+			this.lintReportUriByCwd.set(cwd, doc.uri)
+			const prev = this.compileDebounceByCwd.get(cwd)
+			if (prev) clearTimeout(prev)
+			const t = setTimeout(() => {
+				this.compileDebounceByCwd.delete(cwd)
+				void this.runDebouncedPostSavePipeline(cwd)
+			}, this.COMPILE_DEBOUNCE_MS)
+			this.compileDebounceByCwd.set(cwd, t)
 		})
 		this.disposables.push(watcher)
+	}
+
+	private async runDebouncedPostSavePipeline(cwd: string): Promise<void> {
+		const docUri = this.lintReportUriByCwd.get(cwd)
+		const savedLabel = docUri ? path.basename(docUri.fsPath) : path.basename(cwd)
+
+		const beforeErrors = new Map(this.lastErrors)
+		const result = await this.compile(cwd)
+
+		const buildMode = result.incremental ? "incremental" : "full"
+		if (result.success) {
+			for (const [errorKey, errorMsg] of beforeErrors) {
+				if (!this.lastErrors.has(errorKey)) {
+					const fix = getFixDirectiveForLearning(errorMsg) ?? this.getSuggestionForError(errorMsg)
+					if (fix) {
+						recordLearnedFix(cwd, errorMsg, fix)
+						this.outputChannel.appendLine(
+							`[CompileGuard] 📚 Learned fix recorded for: ${errorMsg.slice(0, 60)}…`,
+						)
+					}
+				}
+			}
+			this.outputChannel.appendLine(`[CompileGuard] ✅ Build passed (${buildMode}) after save burst (${savedLabel})`)
+			this.onSuccessfulBuild?.({ cwd, docUri: docUri ?? undefined })
+		} else {
+			this.outputChannel.appendLine(
+				`[CompileGuard] ❌ Build failed (${buildMode}, ${result.errorCount} error(s)) after save burst (${savedLabel})`,
+			)
+			const analyses = analyzeCompileOutput(result.output, result.errorLocations)
+			const summary = formatAnalysisSummary(analyses)
+			if (summary) {
+				this.outputChannel.appendLine(summary)
+			}
+			for (const errMsg of this.lastErrors.values()) {
+				recordLearnedFailure(cwd, errMsg)
+			}
+		}
+
+		if (docUri) {
+			const lintDiagCount = this.countCjlintDiagnostics(docUri)
+			if (lintDiagCount > 0) {
+				this.outputChannel.appendLine(
+					`[CompileGuard] ⚠️  ${lintDiagCount} cjlint diagnostic(s) on ${path.basename(docUri.fsPath)} — run cjpm build -l to review`,
+				)
+			}
+		}
 	}
 
 	/**
@@ -108,18 +197,261 @@ export class CangjieCompileGuard implements vscode.Disposable {
 	}
 
 	/**
-	 * Run `cjpm build` in the given project root.
+	 * Run `cjpm build` in the given project root (queued per cwd).
+	 * Defaults to incremental (`-i`) when safe; falls back to full build
+	 * when cjpm.toml changed, target/ is missing, or incremental fails.
 	 */
 	async compile(cwd: string): Promise<CompileResult> {
+		const prev = this.compileTailByCwd.get(cwd) ?? Promise.resolve()
+		let result!: CompileResult
+		const done = prev.then(async () => {
+			result = await this.compileImpl(cwd)
+		})
+		this.compileTailByCwd.set(
+			cwd,
+			done.then(() => undefined, () => undefined),
+		)
+		await done
+		return result
+	}
+
+	private async compileImpl(cwd: string): Promise<CompileResult> {
+		this.tomlHashCache = null
+		const t0 = Date.now()
+		this._onCompile.fire({ status: "start", cwd })
 		const cjpmPath = resolveCangjieToolPath("cjpm", "cangjieTools.cjpmPath")
 		if (!cjpmPath) {
-			return { success: false, output: "cjpm not found", errorCount: 0, errorLocations: [] }
+			const r: CompileResult = { success: false, output: "cjpm not found", errorCount: 0, errorLocations: [] }
+			const dt = Date.now() - t0
+			this.metricsCollector?.recordBuild(r, dt)
+			void vscode.window.showErrorMessage(
+				"未找到 cjpm：请设置 CANGJIE_HOME、PATH，或在设置中配置 njust-ai-cj.cangjieTools.cjpmPath。",
+				"打开设置",
+			).then((c) => {
+				if (c === "打开设置") {
+					void vscode.commands.executeCommand("workbench.action.openSettings", `${Package.name}.cangjieTools.cjpmPath`)
+				}
+			})
+			this._onCompile.fire({
+				status: "end",
+				cwd,
+				success: false,
+				durationMs: dt,
+				incremental: false,
+				errorCount: 0,
+				lastFullBuildMs: this.lastFullBuildDurationMs,
+			})
+			recordCompileHistoryEvent({
+				cwd,
+				success: false,
+				incremental: false,
+				durationMs: dt,
+				errorCount: 0,
+				errors: [{ file: "-", line: 0, message: "cjpm not found" }],
+			})
+			return r
 		}
 
+		const useIncremental = this.shouldUseIncremental(cwd)
+		const args = useIncremental ? ["build", "-i"] : ["build"]
+		const result = await this.execBuild(cjpmPath, args, cwd)
+		result.incremental = useIncremental
+
+		let final: CompileResult
+		if (result.success) {
+			this.publishCompileDiagnostics(cwd, result.errorLocations, result.output, true)
+			this.lastCjpmTomlHash = this.computeTomlHash(cwd)
+			if (useIncremental) {
+				this.incrementalAvailable = true
+				this.fullBuildCountSinceIncrementalFailure = 0
+				this.outputChannel.appendLine(`[CompileGuard] ⚡ Incremental build succeeded`)
+			}
+			final = result
+		} else if (useIncremental) {
+			this.incrementalAvailable = false
+			this.fullBuildCountSinceIncrementalFailure = 0
+			this.outputChannel.appendLine(
+				`[CompileGuard] Incremental build failed, retrying with full build…`,
+			)
+			const fullResult = await this.execBuild(cjpmPath, ["build"], cwd)
+			fullResult.incremental = false
+			if (fullResult.success) {
+				this.publishCompileDiagnostics(cwd, fullResult.errorLocations, fullResult.output, true)
+				this.lastCjpmTomlHash = this.computeTomlHash(cwd)
+			} else {
+				this.publishCompileDiagnostics(cwd, fullResult.errorLocations, fullResult.output, false)
+			}
+			final = fullResult
+		} else {
+			this.publishCompileDiagnostics(cwd, result.errorLocations, result.output, false)
+			final = result
+		}
+
+		const durationMs = Date.now() - t0
+		if (!final.incremental) {
+			this.lastFullBuildDurationMs = durationMs
+		}
+		this.metricsCollector?.recordBuild(final, durationMs)
+		if (!final.success) {
+			for (const a of analyzeCompileOutput(final.output, final.errorLocations)) {
+				this.metricsCollector?.recordErrorCategory(a.category)
+			}
+		}
+
+		this._onCompile.fire({
+			status: "end",
+			cwd,
+			success: final.success,
+			durationMs,
+			incremental: final.incremental,
+			errorCount: final.errorCount,
+			lastFullBuildMs: this.lastFullBuildDurationMs,
+		})
+
+		const historyErrors: Array<{ file: string; line: number; message: string }> = []
+		if (!final.success) {
+			for (const loc of final.errorLocations) {
+				const keyRel = `${loc.file}:${loc.line}`
+				const abs = path.isAbsolute(loc.file) ? loc.file : path.resolve(cwd, loc.file)
+				const keyAbs = `${abs}:${loc.line}`
+				const msg =
+					this.lastErrors.get(keyRel) ??
+					this.lastErrors.get(keyAbs) ??
+					truncateCompileDiagnosticMessage(final.output, 400)
+				historyErrors.push({ file: loc.file, line: loc.line, message: msg })
+			}
+			if (historyErrors.length === 0 && final.output.trim()) {
+				const first = final.output
+					.split(/\r?\n/)
+					.map((l) => l.trim())
+					.find((l) => l.length > 0)
+				historyErrors.push({
+					file: "-",
+					line: 0,
+					message: first ?? truncateCompileDiagnosticMessage(final.output, 400),
+				})
+			}
+		}
+		recordCompileHistoryEvent({
+			cwd,
+			success: final.success,
+			incremental: final.incremental ?? false,
+			durationMs,
+			errorCount: final.errorCount,
+			errors: historyErrors,
+		})
+
+		return final
+	}
+
+	private shouldUseIncremental(cwd: string): boolean {
+		if (this.lastFullBuildDurationMs !== null && this.lastFullBuildDurationMs < 5_000) {
+			return false
+		}
+
+		if (!this.incrementalAvailable) {
+			this.fullBuildCountSinceIncrementalFailure++
+			if (this.fullBuildCountSinceIncrementalFailure >= this.INCREMENTAL_RETRY_AFTER_FULL_BUILDS) {
+				this.fullBuildCountSinceIncrementalFailure = 0
+				this.incrementalAvailable = true
+				this.outputChannel.appendLine(
+					`[CompileGuard] 已连续 ${this.INCREMENTAL_RETRY_AFTER_FULL_BUILDS} 次全量编译，重新尝试增量编译 (-i)`,
+				)
+				// Fall through to target/toml checks below
+			} else {
+				return false
+			}
+		}
+
+		const targetDir = path.join(cwd, "target")
+		if (!fs.existsSync(targetDir)) {
+			this.outputChannel.appendLine(`[CompileGuard] target/ missing — using full build`)
+			return false
+		}
+
+		const currentHash = this.computeTomlHash(cwd)
+		if (currentHash && this.lastCjpmTomlHash && currentHash !== this.lastCjpmTomlHash) {
+			this.fullBuildCountSinceIncrementalFailure = 0
+			this.outputChannel.appendLine(`[CompileGuard] cjpm.toml changed — using full build`)
+			return false
+		}
+
+		return true
+	}
+
+	private computeTomlHash(cwd: string): string | undefined {
+		if (this.tomlHashCache?.cwd === cwd) {
+			return this.tomlHashCache.hash
+		}
+		try {
+			const tomlPath = path.join(cwd, "cjpm.toml")
+			if (!fs.existsSync(tomlPath)) {
+				this.tomlHashCache = { cwd, hash: undefined }
+				return undefined
+			}
+			const content = fs.readFileSync(tomlPath, "utf-8")
+			const hash = createHash("md5").update(content).digest("hex")
+			this.tomlHashCache = { cwd, hash }
+			return hash
+		} catch {
+			this.tomlHashCache = { cwd, hash: undefined }
+			return undefined
+		}
+	}
+
+	private publishCompileDiagnostics(
+		cwd: string,
+		locations: CompileResult["errorLocations"],
+		buildOutput: string,
+		success: boolean,
+	): void {
+		const coll = this.compileDiagnostics
+		if (success) {
+			coll?.clear()
+			this.onCjpmBuildSucceededForLsp?.({ cwd })
+			return
+		}
+		if (!coll) return
+		if (locations.length === 0) {
+			coll.clear()
+			return
+		}
+		const byFile = new Map<string, vscode.Diagnostic[]>()
+		for (const loc of locations) {
+			const abs = path.isAbsolute(loc.file) ? loc.file : path.resolve(cwd, loc.file)
+			let uri: vscode.Uri
+			try {
+				uri = vscode.Uri.file(abs)
+			} catch {
+				continue
+			}
+			const line = Math.max(0, loc.line - 1)
+			const col = Math.max(0, loc.col - 1)
+			const range = new vscode.Range(line, col, line, col + 1)
+			const errKey = `${loc.file}:${loc.line}`
+			const errKeyAbs = `${abs}:${loc.line}`
+			const snippet =
+				this.lastErrors.get(errKey) ?? this.lastErrors.get(errKeyAbs) ?? buildOutput.slice(0, 300)
+			const diag = new vscode.Diagnostic(
+				range,
+				truncateCompileDiagnosticMessage(snippet, 500),
+				vscode.DiagnosticSeverity.Error,
+			)
+			diag.source = "cjpm"
+			if (!byFile.has(abs)) byFile.set(abs, [])
+			byFile.get(abs)!.push(diag)
+		}
+		coll.clear()
+		for (const [filePath, diags] of byFile) {
+			coll.set(vscode.Uri.file(filePath), diags)
+		}
+	}
+
+	private async execBuild(cjpmPath: string, args: string[], cwd: string): Promise<CompileResult> {
 		try {
 			const { stdout, stderr } = await execFileAsync(
 				cjpmPath,
-				["build"],
+				args,
 				{
 					timeout: COMPILE_TIMEOUT_MS,
 					cwd,
@@ -143,7 +475,7 @@ export class CangjieCompileGuard implements vscode.Disposable {
 				const line = parseInt(match[2], 10)
 				const col = parseInt(match[3], 10)
 				errorLocations.push({ file, line, col })
-				this.lastErrors.set(`${file}:${line}`, output.slice(match.index, match.index + 200))
+				this.lastErrors.set(`${file}:${line}`, normalizeErrorPattern(output.slice(match.index, match.index + 300)))
 			}
 
 			return {
@@ -238,7 +570,13 @@ export class CangjieCompileGuard implements vscode.Disposable {
 	}
 
 	dispose(): void {
+		for (const t of this.compileDebounceByCwd.values()) {
+			clearTimeout(t)
+		}
+		this.compileDebounceByCwd.clear()
+		this.lintReportUriByCwd.clear()
 		this.disposables.forEach((d) => d.dispose())
+		this._onCompile.dispose()
 	}
 
 	// ── Phase 2.3: cjpm tree integration ──
@@ -272,25 +610,9 @@ export class CangjieCompileGuard implements vscode.Disposable {
 
 	/**
 	 * Get a concise package dependency summary for the AI context.
-	 * Tries cjpm tree first; falls back to empty string.
-	 * Result is cached per-second to avoid re-running on every prompt.
+	 * Delegates to shared {@link getCjpmTreeSummaryForPrompt} (module cache, no OutputChannel).
 	 */
-	private treeCache: { cwd: string; result: string; ts: number } | undefined
-
 	async getCjpmTreeSummary(cwd: string): Promise<string> {
-		const now = Date.now()
-		if (this.treeCache && this.treeCache.cwd === cwd && now - this.treeCache.ts < 30_000) {
-			return this.treeCache.result
-		}
-
-		const tree = await this.runCjpmTree(cwd)
-		if (!tree) return ""
-
-		// Truncate to avoid inflating the prompt
-		const truncated = tree.length > 2000 ? tree.slice(0, 2000) + "\n…（已截断）" : tree
-		const result = `## 仓颉依赖树 (cjpm tree)\n\n\`\`\`\n${truncated}\n\`\`\``
-
-		this.treeCache = { cwd, result, ts: now }
-		return result
+		return getCjpmTreeSummaryForPrompt(cwd)
 	}
 }

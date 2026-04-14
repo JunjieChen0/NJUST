@@ -10,8 +10,9 @@ interface CjpmTaskDefinition extends vscode.TaskDefinition {
 	args?: string[]
 }
 
-const CJPM_COMMANDS: { command: string; label: string; group?: vscode.TaskGroup }[] = [
+const CJPM_COMMANDS: { command: string; label: string; group?: vscode.TaskGroup; args?: string[] }[] = [
 	{ command: "build", label: "cjpm build", group: vscode.TaskGroup.Build },
+	{ command: "build", label: "cjpm: build (debug)", group: vscode.TaskGroup.Build, args: ["-g"] },
 	{ command: "run", label: "cjpm run" },
 	{ command: "test", label: "cjpm test", group: vscode.TaskGroup.Test },
 	{ command: "bench", label: "cjpm bench", group: vscode.TaskGroup.Test },
@@ -56,7 +57,7 @@ export class CjpmTaskProvider implements vscode.TaskProvider, vscode.Disposable 
 			if (!fs.existsSync(cjpmToml)) continue
 
 			for (const cmd of CJPM_COMMANDS) {
-				const task = this.createTask(cmd.command, cmd.label, folder, cmd.group)
+				const task = this.createTask(cmd.command, cmd.label, folder, cmd.group, cmd.args)
 				if (task) tasks.push(task)
 			}
 		}

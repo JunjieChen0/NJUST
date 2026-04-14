@@ -1,4 +1,5 @@
 import path from "path"
+import { createHash } from "crypto"
 
 import type OpenAI from "openai"
 
@@ -14,6 +15,7 @@ import {
 	filterMcpToolsForMode,
 	resolveToolAlias,
 } from "../prompts/tools/filter-tools-for-mode"
+import { globalToolSchemaCache } from "../tools/toolSchemaCache"
 
 interface BuildToolsOptions {
 	provider: ClineProvider
@@ -96,13 +98,41 @@ export async function buildNativeToolsArrayWithRestrictions(options: BuildToolsO
 
 	const mcpHub = provider.getMcpHub()
 
-	// Get CodeIndexManager for feature checking.
-	const { CodeIndexManager } = await import("../../services/code-index/manager")
-	const codeIndexManager = CodeIndexManager.getInstance(provider.context, cwd)
-
 	const effectiveDisabledTools = [...(disabledTools ?? [])]
 	if (!enableWebSearch) {
 		effectiveDisabledTools.push("web_search")
+	}
+
+	// Compute a config hash for schema cache validation.
+	// Includes: mode, disabled tools, supportsImages, MCP server+tool names, custom tools flag.
+	const mcpToolNames = mcpHub
+		? getMcpServerTools(mcpHub).map((t) => getToolName(t)).sort().join(",")
+		: ""
+	const configKey = [
+		mode ?? "",
+		effectiveDisabledTools.sort().join(","),
+		String(modelInfo?.supportsImages ?? false),
+		String(apiConfiguration?.todoListEnabled ?? true),
+		String(!!experiments?.customTools),
+		String(!!includeAllToolsWithRestrictions),
+		mcpToolNames,
+	].join("|")
+	const configHash = createHash("md5").update(configKey).digest("hex")
+
+	const cacheValid = globalToolSchemaCache.validateConfig(configHash)
+
+	// If cache is valid and has entries, return cached tools directly.
+	if (cacheValid && globalToolSchemaCache.size > 0) {
+		const cachedTools = globalToolSchemaCache.getAllTools()
+		if (includeAllToolsWithRestrictions) {
+			// We need allowedFunctionNames — retrieve from cache metadata
+			const allowedNames = globalToolSchemaCache.get("__allowedFunctionNames__")
+			return {
+				tools: cachedTools.filter((t) => getToolName(t) !== "__allowedFunctionNames__").sort((a, b) => getToolName(a).localeCompare(getToolName(b))),
+				allowedFunctionNames: allowedNames ? JSON.parse(allowedNames.hash) : undefined,
+			}
+		}
+		return { tools: cachedTools.sort((a, b) => getToolName(a).localeCompare(getToolName(b))) }
 	}
 
 	// Build settings object for tool filtering.
@@ -120,6 +150,13 @@ export async function buildNativeToolsArrayWithRestrictions(options: BuildToolsO
 		supportsImages,
 	})
 
+	// Build independent prerequisites in parallel where possible.
+	const codeIndexManagerPromise = import("../../services/code-index/manager").then(({ CodeIndexManager }) =>
+		CodeIndexManager.getInstance(provider.context, cwd),
+	)
+	const mcpToolsPromise = Promise.resolve(getMcpServerTools(mcpHub))
+	const [codeIndexManager, mcpTools] = await Promise.all([codeIndexManagerPromise, mcpToolsPromise])
+
 	// Filter native tools based on mode restrictions.
 	const filteredNativeTools = filterNativeToolsForMode(
 		nativeTools,
@@ -132,7 +169,6 @@ export async function buildNativeToolsArrayWithRestrictions(options: BuildToolsO
 	)
 
 	// Filter MCP tools based on mode restrictions.
-	const mcpTools = getMcpServerTools(mcpHub)
 	const filteredMcpTools = filterMcpToolsForMode(mcpTools, mode, customModes, experiments)
 
 	// Add custom tools if they are available and the experiment is enabled.
@@ -163,14 +199,32 @@ export async function buildNativeToolsArrayWithRestrictions(options: BuildToolsO
 		// to aliases in filteredTools but allTools contains the original canonical names.
 		const allowedFunctionNames = filteredTools.map((tool) => resolveToolAlias(getToolName(tool)))
 
+		// Cache each tool schema for future reuse.
+		for (const tool of allTools) {
+			const name = getToolName(tool)
+			globalToolSchemaCache.set(name, { name, schema: tool, hash: configHash })
+		}
+		// Store allowedFunctionNames in cache as metadata.
+		globalToolSchemaCache.set("__allowedFunctionNames__", {
+			name: "__allowedFunctionNames__",
+			schema: {} as OpenAI.Chat.ChatCompletionTool,
+			hash: JSON.stringify(allowedFunctionNames),
+		})
+
 		return {
-			tools: allTools,
+			tools: allTools.sort((a, b) => getToolName(a).localeCompare(getToolName(b))),
 			allowedFunctionNames,
 		}
 	}
 
+	// Cache each tool schema for future reuse.
+	for (const tool of filteredTools) {
+		const name = getToolName(tool)
+		globalToolSchemaCache.set(name, { name, schema: tool, hash: configHash })
+	}
+
 	// Default behavior: return only filtered tools
 	return {
-		tools: filteredTools,
+		tools: filteredTools.sort((a, b) => getToolName(a).localeCompare(getToolName(b))),
 	}
 }

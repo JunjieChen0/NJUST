@@ -38,8 +38,10 @@ import { CjfmtFormatter } from "./services/cangjie-lsp/CjfmtFormatter"
 import { CjlintDiagnostics } from "./services/cangjie-lsp/CjlintDiagnostics"
 import { CjpmTaskProvider } from "./services/cangjie-lsp/CjpmTaskProvider"
 import { registerCangjieCommands } from "./services/cangjie-lsp/cangjieCommands"
+import { cleanupOrphanedTestFiles, initTestCleanup } from "./services/cangjie-lsp/cangjieGeneratedTestCleanup"
 import { CangjieCodeActionProvider } from "./services/cangjie-lsp/CangjieCodeActionProvider"
 import { checkAndPromptSdkSetup } from "./services/cangjie-lsp/CangjieSdkSetup"
+import { probeCangjieToolchain } from "./services/cangjie-lsp/cangjieToolUtils"
 import { CangjieDocumentSymbolProvider } from "./services/cangjie-lsp/CangjieDocumentSymbolProvider"
 import { CangjieFoldingRangeProvider } from "./services/cangjie-lsp/CangjieFoldingRangeProvider"
 import { CangjieHoverProvider } from "./services/cangjie-lsp/CangjieHoverProvider"
@@ -51,8 +53,15 @@ import { CangjieReferenceProvider } from "./services/cangjie-lsp/CangjieReferenc
 import { CangjieEnhancedRenameProvider } from "./services/cangjie-lsp/CangjieEnhancedRenameProvider"
 import { CangjieMacroCodeLensProvider, CangjieMacroHoverProvider, registerMacroCommands } from "./services/cangjie-lsp/CangjieMacroProvider"
 import { CangjieCompileGuard } from "./services/cangjie-lsp/CangjieCompileGuard"
+import { invalidateCangjieToolEnvCache } from "./services/cangjie-lsp/cangjieToolUtils"
+import { bumpCangjieL3TtlConfigCache, invalidateCangjieL3ContextCache } from "./core/prompts/sections/cangjie-context"
+import { registerCangjieRulesHotReload } from "./services/cangjie-lsp/cangjieRulesHotReload"
+import { cangjieDiagnosticModeSwitch } from "./services/cangjie-lsp/cangjieDiagnosticModeSwitch"
+import { CangjieLintConfig } from "./services/cangjie-lsp/CangjieLintConfig"
+import { CangjieMetricsCollector } from "./services/cangjie-lsp/CangjieMetricsCollector"
 import { migrateSettings } from "./utils/migrateSettings"
 import { autoImportSettings } from "./utils/autoImportSettings"
+import { startupProfiler } from "./utils/profiler"
 import { API } from "./extension/api"
 import { RooToolsMcpServer } from "./services/mcp-server/RooToolsMcpServer"
 import { getWorkspacePath } from "./utils/path"
@@ -84,29 +93,111 @@ let cjlintDiagnostics: CjlintDiagnostics | undefined
 let cjpmTaskProvider: CjpmTaskProvider | undefined
 let cangjieSymbolIndex: CangjieSymbolIndex | undefined
 let cangjieCompileGuard: CangjieCompileGuard | undefined
+let cangjieDebugFactory: CangjieDebugAdapterFactory | undefined
 let rooToolsMcpServer: RooToolsMcpServer | undefined
+
+let lastCangjieToolchainGapWarn = 0
+
+function scheduleCangjieToolchainGapCheck(): void {
+	void (async () => {
+		if (Date.now() - lastCangjieToolchainGapWarn < 3_600_000) return
+		if (!vscode.workspace.workspaceFolders?.some((f) => fs.existsSync(path.join(f.uri.fsPath, "cjpm.toml")))) {
+			return
+		}
+		const probes = await probeCangjieToolchain()
+		const bad = probes.filter((p) => !p.ok)
+		if (bad.length === 0) return
+		lastCangjieToolchainGapWarn = Date.now()
+		const detail = bad.map((b) => b.label).join(", ")
+		void vscode.window
+			.showWarningMessage(`仓颉工具链不完整或不可运行：${detail}`, "验证 SDK", "打开工具设置")
+			.then((c) => {
+				if (c === "验证 SDK") void vscode.commands.executeCommand("njust-ai-cj.cangjieVerifySdk")
+				if (c === "打开工具设置") {
+					void vscode.commands.executeCommand("workbench.action.openSettings", `${Package.name}.cangjieTools`)
+				}
+			})
+	})()
+}
 
 // This method is called when your extension is activated.
 // Your extension is activated the very first time the command is executed.
 export async function activate(context: vscode.ExtensionContext) {
+	startupProfiler.start("activate")
 	extensionContext = context
 	outputChannel = vscode.window.createOutputChannel(Package.outputChannel)
 	context.subscriptions.push(outputChannel)
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeConfiguration((e) => {
+			if (e.affectsConfiguration(Package.name)) {
+				invalidateCangjieToolEnvCache()
+				bumpCangjieL3TtlConfigCache()
+			}
+		}),
+	)
+	let l3InvalidateTimer: ReturnType<typeof setTimeout> | undefined
+	context.subscriptions.push(
+		vscode.workspace.onDidSaveTextDocument((doc) => {
+			if (doc.languageId === "cangjie" || doc.fileName.endsWith(".cj")) {
+				invalidateCangjieL3ContextCache()
+			}
+		}),
+	)
+	context.subscriptions.push(
+		vscode.languages.onDidChangeDiagnostics(() => {
+			if (l3InvalidateTimer !== undefined) clearTimeout(l3InvalidateTimer)
+			l3InvalidateTimer = setTimeout(() => {
+				l3InvalidateTimer = undefined
+				invalidateCangjieL3ContextCache()
+			}, 800)
+		}),
+	)
+	context.subscriptions.push({
+		dispose() {
+			if (l3InvalidateTimer !== undefined) clearTimeout(l3InvalidateTimer)
+		},
+	})
 	outputChannel.appendLine(`${Package.name} extension activated - ${JSON.stringify(Package)}`)
 
-	// Initialize network proxy configuration early, before any network requests.
-	// When proxyUrl is configured, all HTTP/HTTPS traffic will be routed through it.
-	// Only applied in debug mode (F5).
-	await initializeNetworkProxy(context, outputChannel)
+	initTestCleanup(context.workspaceState)
+	void cleanupOrphanedTestFiles(context.globalStorageUri.fsPath)
+		.then((r) => {
+			if (r.filesRemoved > 0) {
+				outputChannel.appendLine(
+					`[CangjieTestCleanup] 启动孤儿清理：移除 ${r.filesRemoved} 个生成测试文件（${r.taskEntriesRemoved} 个任务桶）。`,
+				)
+			}
+		})
+		.catch((e) => {
+			outputChannel.appendLine(
+				`[CangjieTestCleanup] 启动孤儿清理失败：${e instanceof Error ? e.message : String(e)}`,
+			)
+		})
+
+	registerCangjieRulesHotReload(context, outputChannel)
 
 	// Set extension path for custom tool registry to find bundled esbuild
 	customToolRegistry.setExtensionPath(context.extensionPath)
 
-	// Migrate old settings to new
-	await migrateSettings(context, outputChannel)
-
 	// Initialize i18n for internationalization support (follow VS Code UI language until user sets language in extension state).
 	initializeI18n(context.globalState.get("language") ?? formatLanguage(vscode.env.language))
+
+	// Parallelize independent initialization steps for faster startup.
+	// - Network proxy configuration (before any network requests)
+	// - Settings migration (independent of network proxy)
+	// Each step has its own error handling so one failure doesn't block the other.
+	await Promise.allSettled([
+		initializeNetworkProxy(context, outputChannel).catch((err) =>
+			outputChannel.appendLine(
+				`[Startup] Network proxy init failed: ${err instanceof Error ? err.message : String(err)}`,
+			),
+		),
+		migrateSettings(context, outputChannel).catch((err) =>
+			outputChannel.appendLine(
+				`[Startup] Settings migration failed: ${err instanceof Error ? err.message : String(err)}`,
+			),
+		),
+	])
 
 	// Initialize terminal shell execution handlers.
 	TerminalRegistry.initialize()
@@ -164,9 +255,36 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 	}
 
+	const cangjieLintConfig = new CangjieLintConfig(outputChannel)
+	context.subscriptions.push(cangjieLintConfig)
+	void cangjieLintConfig.initialize()
+
+	let cangjieMetricsCollector: CangjieMetricsCollector | undefined
+	const metricsCwd = vscode.workspace.workspaceFolders?.find((f) =>
+		fs.existsSync(path.join(f.uri.fsPath, "cjpm.toml")),
+	)?.uri.fsPath
+	if (metricsCwd) {
+		cangjieMetricsCollector = new CangjieMetricsCollector(metricsCwd, outputChannel)
+		context.subscriptions.push(cangjieMetricsCollector)
+	}
+
 	// Initialize and start the Cangjie Language Server client (lazy: defers until .cj file is opened).
 	cangjieLspClient = new CangjieLspClient(outputChannel)
 	context.subscriptions.push({ dispose: () => cangjieLspClient?.dispose() })
+
+	// Cangjie debugger — register before onCangjieActivated so setCompileGuard always has a target.
+	cangjieDebugFactory = new CangjieDebugAdapterFactory(undefined, outputChannel)
+	context.subscriptions.push(cangjieDebugFactory)
+	context.subscriptions.push(
+		vscode.debug.registerDebugAdapterDescriptorFactory("cangjie", cangjieDebugFactory),
+	)
+	context.subscriptions.push(
+		vscode.debug.registerDebugConfigurationProvider("cangjie", new CangjieDebugConfigurationProvider()),
+	)
+
+	// Status bar must exist before onCangjieActivated so compile-guard attach always has a target.
+	cangjieLspStatusBar = new CangjieLspStatusBar(cangjieLspClient, cangjieLspClient.lspOutputChannel, outputChannel)
+	context.subscriptions.push(cangjieLspStatusBar)
 
 	// Defer formatter and linter until a .cj file is actually opened.
 	cangjieLspClient.onCangjieActivated(() => {
@@ -175,22 +293,42 @@ export async function activate(context: vscode.ExtensionContext) {
 			context.subscriptions.push(cjfmtFormatter)
 		}
 		if (!cjlintDiagnostics) {
-			cjlintDiagnostics = new CjlintDiagnostics(outputChannel)
+			cjlintDiagnostics = new CjlintDiagnostics(outputChannel, cangjieLintConfig)
 			context.subscriptions.push(cjlintDiagnostics)
+			cangjieDiagnosticModeSwitch.clearCjlint = () => cjlintDiagnostics?.clearAll()
 		}
 		if (!cangjieCompileGuard) {
-			cangjieCompileGuard = new CangjieCompileGuard(outputChannel)
+			const cjpmDiag = vscode.languages.createDiagnosticCollection("cangjie-cjpm")
+			context.subscriptions.push(cjpmDiag)
+			cangjieDiagnosticModeSwitch.clearCjpm = () => cjpmDiag.clear()
+			cangjieCompileGuard = new CangjieCompileGuard(
+				outputChannel,
+				cangjieMetricsCollector,
+				cjpmDiag,
+				({ docUri }) => {
+					const cfg = vscode.workspace.getConfiguration(Package.name)
+					if (cfg.get<boolean>("cangjieTools.runLintAfterBuild", true) !== true) return
+					const uri =
+						docUri ??
+						(vscode.window.activeTextEditor?.document.languageId === "cangjie"
+							? vscode.window.activeTextEditor.document.uri
+							: undefined)
+					if (uri?.fsPath.endsWith(".cj")) void cjlintDiagnostics?.lintSingleFile(uri)
+				},
+				({ cwd }) => {
+					cangjieLspClient?.markCjpmBuildSuccess(cwd)
+					cangjieLspClient?.clearPublishedDiagnostics({ cwd })
+				},
+			)
 			cangjieCompileGuard.registerSaveHook()
 			context.subscriptions.push(cangjieCompileGuard)
+			cangjieLspStatusBar?.attachCompileGuard(cangjieCompileGuard)
+			cangjieDebugFactory?.setCompileGuard(cangjieCompileGuard)
 		}
 	})
 
-	cangjieLspStatusBar = new CangjieLspStatusBar(cangjieLspClient, cangjieLspClient.lspOutputChannel)
-	context.subscriptions.push(cangjieLspStatusBar)
-
-	registerCangjieCommands(context, cangjieLspClient)
-
 	void checkAndPromptSdkSetup(context, outputChannel).catch(() => {})
+	scheduleCangjieToolchainGapCheck()
 
 	void cangjieLspClient.start().catch((error) => {
 		const message = error instanceof Error ? error.message : String(error)
@@ -307,15 +445,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		),
 	)
 
-	// Cangjie debugger (DAP)
-	const debugFactory = new CangjieDebugAdapterFactory()
-	context.subscriptions.push(
-		vscode.debug.registerDebugAdapterDescriptorFactory("cangjie", debugFactory),
-	)
-	context.subscriptions.push(
-		vscode.debug.registerDebugConfigurationProvider("cangjie", new CangjieDebugConfigurationProvider()),
-	)
-
 	// Test run/debug commands for CodeLens
 	context.subscriptions.push(
 		vscode.commands.registerCommand("njust-ai-cj.cangjieRunTest", (testName: string, fileUri?: vscode.Uri) => {
@@ -342,11 +471,16 @@ export async function activate(context: vscode.ExtensionContext) {
 	)
 
 	// Cangjie symbol index (persistent cross-file index for definition/reference/rename fallback)
+	// Deferred to background with a short delay — non-critical for first interaction.
 	cangjieSymbolIndex = new CangjieSymbolIndex(outputChannel)
 	context.subscriptions.push(cangjieSymbolIndex)
-	void cangjieSymbolIndex.initialize().catch((err) => {
-		outputChannel.appendLine(`[SymbolIndex] Initialization error: ${err instanceof Error ? err.message : String(err)}`)
-	})
+	setTimeout(() => {
+		void cangjieSymbolIndex?.initialize().catch((err) => {
+			outputChannel.appendLine(
+				`[SymbolIndex] Background initialization error: ${err instanceof Error ? err.message : String(err)}`,
+			)
+		})
+	}, 1000)
 
 	context.subscriptions.push(
 		vscode.languages.registerDefinitionProvider(
@@ -385,6 +519,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	)
 
 	registerMacroCommands(context, outputChannel)
+
+	if (cangjieLspClient && cangjieSymbolIndex) {
+		registerCangjieCommands(context, cangjieLspClient, cangjieSymbolIndex, () => provider.getCurrentTask()?.taskId)
+	}
 
 	registerCodeActions(context)
 	registerTerminalActions(context)
@@ -509,6 +647,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		})
 	}
 
+	startupProfiler.end("activate")
+	const profile = startupProfiler.summary()
+	if (profile.length) {
+		outputChannel.appendLine(`[StartupProfiler] ${JSON.stringify(profile)}`)
+	}
+
 	return new API(outputChannel, provider, socketPath, enableLogging)
 }
 
@@ -518,8 +662,10 @@ export async function deactivate() {
 
 	if (cangjieLspClient) {
 		await cangjieLspClient.stop()
+		cangjieLspClient.dispose()
 		cangjieLspClient = undefined
 	}
+
 
 	cangjieLspStatusBar?.dispose()
 	cangjieLspStatusBar = undefined

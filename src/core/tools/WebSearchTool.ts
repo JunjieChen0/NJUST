@@ -1,19 +1,35 @@
 import { BaseTool, type ToolCallbacks } from "./BaseTool"
+import { toolResultCache } from "./helpers/ToolResultCache"
 import type { Task } from "../task/Task"
 import { createSearchProvider, formatSearchResults, SEARCH_PROVIDER_INFO } from "../../services/web-search/WebSearchProvider"
 import type { WebSearchProviderName, SerpApiEngine } from "../../services/web-search/WebSearchProvider"
 
 class WebSearchToolImpl extends BaseTool<"web_search"> {
 	readonly name = "web_search" as const
+	override isConcurrencySafe(): boolean {
+		return true
+	}
+
+	override getEagerExecutionDecision() { return "eager" as const }
+	override isPartialArgsStable(partial: Partial<{search_query: string; count?: number}>): boolean {
+		return typeof partial.search_query === "string" && partial.search_query.length > 0
+	}
 
 	async execute(
 		params: { search_query: string; count?: number | null },
 		task: Task,
-		{ askApproval, handleError, pushToolResult }: ToolCallbacks,
+		{ askApproval, handleError, pushToolResult, reportProgress }: ToolCallbacks,
 	): Promise<void> {
+		const cacheKey = toolResultCache.makeKey("web_search", params)
+		const cached = toolResultCache.get(cacheKey)
+		if (cached) {
+			pushToolResult(cached)
+			return
+		}
 		try {
 			const query = params.search_query
 			const count = params.count ?? 5
+			await reportProgress?.({ icon: "search", text: "Validating web search request" })
 
 			if (!query || query.trim().length === 0) {
 				pushToolResult("Error: search_query is required and cannot be empty.")
@@ -44,9 +60,11 @@ class WebSearchToolImpl extends BaseTool<"web_search"> {
 
 			const serpApiEngine = (state?.serpApiEngine ?? "bing") as SerpApiEngine
 			const searchProvider = createSearchProvider(providerName, apiKey ?? "", serpApiEngine)
+			await reportProgress?.({ icon: "search", text: "Executing web search" })
 			const results = await searchProvider.search(query, count)
 			const formatted = formatSearchResults(results)
 
+			toolResultCache.set(cacheKey, formatted)
 			pushToolResult(formatted)
 		} catch (error) {
 			await handleError("web search", error instanceof Error ? error : new Error(String(error)))

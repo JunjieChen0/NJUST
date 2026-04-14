@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { z } from "zod"
 import { useQuery } from "@tanstack/react-query"
-import { useForm, FormProvider } from "react-hook-form"
+import { useForm, FormProvider, type SubmitHandler, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 import {
@@ -134,7 +134,7 @@ export function NewRun() {
 	const [selectedExercises, setSelectedExercises] = useState<string[]>([])
 
 	const form = useForm<CreateRun>({
-		resolver: zodResolver(createRunSchema),
+		resolver: zodResolver(createRunSchema) as Resolver<CreateRun>,
 		defaultValues: {
 			model: "",
 			description: "",
@@ -411,8 +411,7 @@ export function NewRun() {
 		setConfigSelections((prev) => prev.map((s) => (s.id === id ? { ...s, popoverOpen: open } : s)))
 	}, [])
 
-	const onSubmit = useCallback(
-		async (values: CreateRun) => {
+	const onSubmit: SubmitHandler<CreateRun> = useCallback(async (values) => {
 			try {
 				const baseValues = normalizeCreateRunForSubmit(values, selectedExercises, suite)
 

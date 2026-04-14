@@ -15,6 +15,7 @@ import { EXPERIMENT_IDS, experiments } from "../../shared/experiments"
 import { sanitizeUnifiedDiff, computeDiffStats } from "../diff/stats"
 import type { ToolUse } from "../../shared/tools"
 
+import { z } from "zod"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
 interface SearchReplaceParams {
@@ -23,8 +24,25 @@ interface SearchReplaceParams {
 	new_string: string
 }
 
+/**
+ * @deprecated Use EditTool (name: "edit") instead. This tool is retained for backward
+ * compatibility and will be removed in a future version. All calls are handled by the
+ * alias mapping in TOOL_ALIASES: "search_replace" → "edit".
+ */
 export class SearchReplaceTool extends BaseTool<"search_replace"> {
 	readonly name = "search_replace" as const
+	override readonly requiresCheckpoint = true
+
+	protected override get inputSchema() {
+		return z.object({
+			file_path: z.string().min(1, "File path is required"),
+			old_string: z.string(),
+			new_string: z.string(),
+		}).refine(
+			(data) => data.old_string !== data.new_string,
+			{ message: "old_string and new_string must be different" },
+		)
+	}
 
 	async execute(params: SearchReplaceParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { file_path, old_string, new_string } = params

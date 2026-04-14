@@ -23,6 +23,12 @@ describe("skillTool", () => {
 			didToolFailInCurrentTurn: false,
 			sayAndCreateMissingParamError: vi.fn().mockResolvedValue("Missing parameter error"),
 			ask: vi.fn().mockResolvedValue({}),
+			api: {
+				getModel: vi.fn().mockReturnValue({
+					id: "test-model",
+					info: { contextWindow: 200_000 },
+				}),
+			},
 			providerRef: {
 				deref: vi.fn().mockReturnValue({
 					getState: vi.fn().mockResolvedValue({ mode: "code" }),

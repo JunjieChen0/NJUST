@@ -72,6 +72,12 @@ describe("useMcpToolTool", () => {
 			say: vi.fn(),
 			ask: vi.fn(),
 			lastMessageTs: 123456789,
+			api: {
+				getModel: vi.fn().mockReturnValue({
+					id: "test-model",
+					info: { contextWindow: 200_000 },
+				}),
+			},
 			providerRef: mockProviderRef,
 		}
 	})

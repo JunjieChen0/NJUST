@@ -15,7 +15,7 @@ import { EXPERIMENT_IDS, experiments } from "../../shared/experiments"
 import { sanitizeUnifiedDiff, computeDiffStats } from "../diff/stats"
 import type { ToolUse } from "../../shared/tools"
 
-import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { BaseTool, ToolCallbacks, type ValidationResult } from "./BaseTool"
 
 interface EditFileParams {
 	file_path: string
@@ -86,13 +86,71 @@ function escapeRegExp(input: string): string {
 	return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
-function buildWhitespaceTolerantRegex(oldLF: string): RegExp {
+/** Multi-character operators/tokens: do not allow \\s+ to appear between these characters. */
+const CANGJIE_COMPOSITE_OPS_SORTED = [
+	"|>",
+	"::",
+	"<:",
+	":>",
+	"=>",
+	"->",
+	"<<",
+	">>",
+	"==",
+	"!=",
+	"<=",
+	">=",
+	"&&",
+	"||",
+	"++",
+	"--",
+	"+=",
+	"-=",
+	"*=",
+	"/=",
+	"%=",
+	"&=",
+	"|=",
+	"^=",
+	"..",
+	"??",
+].sort((a, b) => b.length - a.length)
+
+function tokenizeCangjieForEditMatch(s: string): string[] {
+	const out: string[] = []
+	let i = 0
+	while (i < s.length) {
+		const c = s[i]
+		if (/\s/.test(c)) {
+			let j = i
+			while (j < s.length && /\s/.test(s[j])) j++
+			out.push(s.slice(i, j))
+			i = j
+			continue
+		}
+		let matched = false
+		for (const op of CANGJIE_COMPOSITE_OPS_SORTED) {
+			if (s.startsWith(op, i)) {
+				out.push(op)
+				i += op.length
+				matched = true
+				break
+			}
+		}
+		if (matched) continue
+		out.push(c)
+		i++
+	}
+	return out
+}
+
+function buildWhitespaceTolerantRegex(oldLF: string, opts?: { cangjie?: boolean }): RegExp {
 	if (oldLF === "") {
 		// Never match empty string
 		return new RegExp("(?!)", "g")
 	}
 
-	const parts = oldLF.match(/(\s+|\S+)/g) ?? []
+	const parts = opts?.cangjie ? tokenizeCangjieForEditMatch(oldLF) : (oldLF.match(/(\s+|\S+)/g) ?? [])
 	const whitespacePatternForRun = (run: string): string => {
 		// If the whitespace run includes a newline, allow matching any whitespace (including newlines)
 		// to tolerate wrapping changes across lines.
@@ -132,11 +190,27 @@ function countRegexMatches(content: string, regex: RegExp): number {
 	return Array.from(content.matchAll(stable)).length
 }
 
+/**
+ * @deprecated Use EditTool (name: "edit") instead. This tool is retained for backward
+ * compatibility and will be removed in a future version. All calls are handled by the
+ * alias mapping in TOOL_ALIASES: "edit_file" → "edit".
+ */
 export class EditFileTool extends BaseTool<"edit_file"> {
 	readonly name = "edit_file" as const
+	override readonly requiresCheckpoint = true
 
 	private didSendPartialToolAsk = false
 	private partialToolAskRelPath: string | undefined
+
+	override validateInput(params: EditFileParams): ValidationResult {
+		if (!params.file_path || params.file_path.trim() === "") {
+			return { valid: false, error: "File path is required for edit_file." }
+		}
+		if (params.expected_replacements !== undefined && params.expected_replacements < 1) {
+			return { valid: false, error: "expected_replacements must be >= 1." }
+		}
+		return { valid: true }
+	}
 
 	async execute(params: EditFileParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		// Coerce old_string/new_string to handle malformed native tool calls where they could be non-strings.
@@ -298,8 +372,10 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 					return
 				}
 
-				const wsRegex = buildWhitespaceTolerantRegex(oldLF)
-				const tokenRegex = buildTokenRegex(oldLF)
+				const cangjieFile = absolutePath.toLowerCase().endsWith(".cj")
+				const wsRegex = buildWhitespaceTolerantRegex(oldLF, { cangjie: cangjieFile })
+				// Token fallback joins tokens with \\s+, which can wrongly match `a|>b` against `a |> b`; skip on .cj.
+				const tokenRegex = cangjieFile ? new RegExp("(?!)", "g") : buildTokenRegex(oldLF)
 
 				// Strategy 1: exact literal match
 				const exactOccurrences = countOccurrences(currentContentLF, oldLF)

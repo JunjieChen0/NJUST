@@ -22,6 +22,9 @@ import { t } from "../../i18n"
 
 export class GenerateImageTool extends BaseTool<"generate_image"> {
 	readonly name = "generate_image" as const
+	override readonly requiresCheckpoint = true
+
+	override get shouldDefer() { return true }
 
 	async execute(params: GenerateImageParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { prompt, path: relPath, image: inputImagePath } = params

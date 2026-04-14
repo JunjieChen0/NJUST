@@ -38,6 +38,7 @@ import type { ApiHandlerCreateMessageMetadata, SingleCompletionHandler } from ".
 import { handleOpenAIError } from "./utils/openai-error-handler"
 import { generateImageWithProvider, ImageGenerationResult } from "./utils/image-generation"
 import { applyRouterToolPreferences } from "./utils/router-tool-preferences"
+import { globalCostTracker } from "../../utils/costTracker"
 
 // Add custom interface for OpenRouter params.
 type OpenRouterChatCompletionParams = OpenAI.Chat.ChatCompletionCreateParams & {
@@ -496,14 +497,25 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 		}
 
 		if (lastUsage) {
+			const cachedTokens = lastUsage.prompt_tokens_details?.cached_tokens
+			const totalCost = (lastUsage.cost_details?.upstream_inference_cost || 0) + (lastUsage.cost || 0)
+
 			yield {
 				type: "usage",
 				inputTokens: lastUsage.prompt_tokens || 0,
 				outputTokens: lastUsage.completion_tokens || 0,
-				cacheReadTokens: lastUsage.prompt_tokens_details?.cached_tokens,
+				cacheReadTokens: cachedTokens,
 				reasoningTokens: lastUsage.completion_tokens_details?.reasoning_tokens,
-				totalCost: (lastUsage.cost_details?.upstream_inference_cost || 0) + (lastUsage.cost || 0),
+				totalCost,
 			}
+
+			// Track cost and usage metrics
+			globalCostTracker.recordUsage(modelId, {
+				inputTokens: lastUsage.prompt_tokens || 0,
+				outputTokens: lastUsage.completion_tokens || 0,
+				cacheReadInputTokens: cachedTokens ?? 0,
+				costUSD: totalCost,
+			})
 		}
 	}
 

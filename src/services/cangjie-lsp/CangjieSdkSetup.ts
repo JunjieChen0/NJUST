@@ -4,7 +4,7 @@ import * as fs from "fs"
 import { execFile } from "child_process"
 import { promisify } from "util"
 import { Package } from "../../shared/package"
-import { detectCangjieHome } from "./cangjieToolUtils"
+import { detectCangjieHome, formatCangjieToolchainSummaryLine } from "./cangjieToolUtils"
 
 const execFileAsync = promisify(execFile)
 const DISMISSED_KEY = "cangjie.sdkSetupDismissed"
@@ -60,6 +60,13 @@ async function promptManualSelect(context: vscode.ExtensionContext, outputChanne
 		await configureSdkPath(selectedPath)
 		vscode.window.showInformationMessage(`仓颉 SDK 已配置成功（${version}）`)
 		outputChannel.appendLine(`[CangjieSdkSetup] SDK configured at ${selectedPath} (${version})`)
+		void formatCangjieToolchainSummaryLine().then((line) => {
+			if (line) {
+				vscode.window.showInformationMessage(line, "验证工具链").then((c) => {
+					if (c === "验证工具链") void vscode.commands.executeCommand("njust-ai-cj.cangjieVerifySdk")
+				})
+			}
+		})
 	} else {
 		const retry = await vscode.window.showWarningMessage(
 			`所选目录下未找到有效的 cjc 编译器。请确认选择了正确的 SDK 根目录。`,
@@ -72,17 +79,32 @@ async function promptManualSelect(context: vscode.ExtensionContext, outputChanne
 	}
 }
 
+const QUICK_START_KEY = "cangjie.quickStartNudgeShown"
+
 export async function checkAndPromptSdkSetup(
 	context: vscode.ExtensionContext,
 	outputChannel: vscode.OutputChannel,
 ): Promise<void> {
-	if (context.globalState.get<boolean>(DISMISSED_KEY)) {
-		return
-	}
-
 	const config = vscode.workspace.getConfiguration(Package.name)
 	const configuredServerPath = config.get<string>("cangjieLsp.serverPath", "")
 	if (configuredServerPath && fs.existsSync(configuredServerPath)) {
+		if (!context.globalState.get<boolean>(QUICK_START_KEY)) {
+			await context.globalState.update(QUICK_START_KEY, true)
+			void formatCangjieToolchainSummaryLine().then((line) => {
+				const msg =
+					line ??
+					"仓颉 LSP 已就绪。"
+				const steps =
+					"快速开始：(1) 命令面板「Cangjie: Verify SDK Installation」确认工具链 (2) 使用 cjpm init 或打开含 cjpm.toml 的工程 (3) 打开 .cj 以启动 LSP 与保存编译。"
+				void vscode.window.showInformationMessage(`${msg}\n${steps}`, "验证工具链").then((c) => {
+					if (c === "验证工具链") void vscode.commands.executeCommand("njust-ai-cj.cangjieVerifySdk")
+				})
+			})
+		}
+		return
+	}
+
+	if (context.globalState.get<boolean>(DISMISSED_KEY)) {
 		return
 	}
 
@@ -103,6 +125,13 @@ export async function checkAndPromptSdkSetup(
 			await configureSdkPath(detectedHome)
 			vscode.window.showInformationMessage(`仓颉 SDK 已自动配置${label}`)
 			outputChannel.appendLine(`[CangjieSdkSetup] Auto-configured SDK at ${detectedHome} ${label}`)
+			void formatCangjieToolchainSummaryLine().then((line) => {
+				if (line) {
+					vscode.window.showInformationMessage(line, "验证工具链").then((c) => {
+						if (c === "验证工具链") void vscode.commands.executeCommand("njust-ai-cj.cangjieVerifySdk")
+					})
+				}
+			})
 		} else if (choice === "手动选择") {
 			await promptManualSelect(context, outputChannel)
 		} else {

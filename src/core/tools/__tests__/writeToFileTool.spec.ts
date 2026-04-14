@@ -175,7 +175,10 @@ describe("writeToFileTool", () => {
 			}),
 		}
 		mockCline.api = {
-			getModel: vi.fn().mockReturnValue({ id: "claude-3" }),
+			getModel: vi.fn().mockReturnValue({
+				id: "claude-3",
+				info: { contextWindow: 200_000 },
+			}),
 		}
 		mockCline.fileContextTracker = {
 			trackFileContext: vi.fn().mockResolvedValue(undefined),
@@ -332,7 +335,7 @@ describe("writeToFileTool", () => {
 		})
 
 		it("unescapes HTML entities for non-Claude models", async () => {
-			mockCline.api.getModel.mockReturnValue({ id: "gpt-4" })
+			mockCline.api.getModel.mockReturnValue({ id: "gpt-4", info: { contextWindow: 200_000 } })
 
 			await executeWriteFileTool({ content: "&lt;test&gt;" })
 
@@ -340,7 +343,7 @@ describe("writeToFileTool", () => {
 		})
 
 		it("skips HTML unescaping for Claude models", async () => {
-			mockCline.api.getModel.mockReturnValue({ id: "claude-3" })
+			mockCline.api.getModel.mockReturnValue({ id: "claude-3", info: { contextWindow: 200_000 } })
 
 			await executeWriteFileTool({ content: "&lt;test&gt;" })
 

@@ -12,6 +12,8 @@ import { ClineAskResponse } from "../../shared/WebviewMessage"
 import { isWriteToolAction, isReadOnlyToolAction } from "./tools"
 import { isMcpToolAlwaysAllowed } from "./mcp"
 import { getCommandDecision } from "./commands"
+import { classifyBashCommand } from "./bashClassifier"
+import { matchPatternRules, type PatternRule } from "./patternRules"
 
 // We have auto-approval actions for different categories.
 export type AutoApprovalState =
@@ -33,6 +35,7 @@ export type AutoApprovalStateOptions =
 	| "mcpServers" // For `alwaysAllowMcp`.
 	| "allowedCommands" // For `alwaysAllowExecute`.
 	| "deniedCommands"
+	| "commandPatternRules"
 
 export type CheckAutoApprovalResult =
 	| { decision: "approve" }
@@ -50,7 +53,7 @@ export async function checkAutoApproval({
 	text,
 	isProtected,
 }: {
-	state?: Pick<ExtensionState, AutoApprovalState | AutoApprovalStateOptions>
+	state?: Partial<ExtensionState> & Record<string, any>
 	ask: ClineAsk
 	text?: string
 	isProtected?: boolean
@@ -115,6 +118,15 @@ export async function checkAutoApproval({
 		if (!text) {
 			return { decision: "ask" }
 		}
+
+		const patternRules = ((state as any)?.commandPatternRules ?? []) as PatternRule[]
+		const patternDecision = matchPatternRules(text, patternRules)
+		if (patternDecision === "allow") return { decision: "approve" }
+		if (patternDecision === "deny") return { decision: "deny" }
+
+		const risk = classifyBashCommand(text)
+		if (risk === "dangerous") return { decision: "deny" }
+		if (risk === "medium" && state.alwaysAllowExecute !== true) return { decision: "ask" }
 
 		if (state.alwaysAllowExecute === true) {
 			const decision = getCommandDecision(text, state.allowedCommands || [], state.deniedCommands || [])

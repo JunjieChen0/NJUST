@@ -32,6 +32,9 @@ class Foo {
 
 	it("returns empty when no opening brace in search window", () => {
 		const lines = ["struct X"]
-		expect(extractTypeMemberSummaries(lines, 0, 0, 5).members).toEqual([])
+		const r = extractTypeMemberSummaries(lines, 0, 0, 5)
+		expect(r.members).toEqual([])
+		expect(r.methods).toEqual([])
+		expect(r.totalMatchingLines).toBe(0)
 	})
 })

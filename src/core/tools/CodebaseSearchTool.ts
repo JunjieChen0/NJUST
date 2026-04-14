@@ -10,6 +10,7 @@ import { VectorStoreSearchResult } from "../../services/code-index/interfaces"
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { toolResultCache } from "./helpers/ToolResultCache"
 
 interface CodebaseSearchParams {
 	query: string
@@ -18,9 +19,24 @@ interface CodebaseSearchParams {
 
 export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 	readonly name = "codebase_search" as const
+	override readonly maxResultSizeChars = 50_000
+	override isConcurrencySafe(): boolean {
+		return true
+	}
+
+	override getEagerExecutionDecision() { return "eager" as const }
+	override isPartialArgsStable(partial: Partial<{query: string; path?: string}>): boolean {
+		return typeof partial.query === "string" && partial.query.length > 0
+	}
 
 	async execute(params: CodebaseSearchParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
-		const { askApproval, handleError, pushToolResult } = callbacks
+		const { askApproval, handleError, pushToolResult, reportProgress } = callbacks
+		const cacheKey = toolResultCache.makeKey("codebase_search", params)
+		const cached = toolResultCache.get(cacheKey)
+		if (cached) {
+			pushToolResult(cached)
+			return
+		}
 		const { query, path: directoryPrefix } = params
 
 		const workspacePath = task.cwd && task.cwd.trim() !== "" ? task.cwd : getWorkspacePath()
@@ -53,6 +69,7 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 		task.consecutiveMistakeCount = 0
 
 		try {
+			await reportProgress?.({ text: "Building codebase search context" } as any)
 			const context = task.providerRef.deref()?.context
 			if (!context) {
 				throw new Error("Extension context is not available.")
@@ -71,10 +88,13 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 				throw new Error("Code Indexing is not configured (Missing OpenAI Key or Qdrant URL).")
 			}
 
+			await reportProgress?.({ text: "Searching indexed codebase" } as any)
 			const searchResults: VectorStoreSearchResult[] = await manager.searchIndex(query, directoryPrefix)
 
 			if (!searchResults || searchResults.length === 0) {
-				pushToolResult(`No relevant code snippets found for the query: "${query}"`)
+				const out = `No relevant code snippets found for the query: "${query}"`
+				toolResultCache.set(cacheKey, out)
+				pushToolResult(out)
 				return
 			}
 
@@ -123,6 +143,7 @@ Code Chunk: ${result.codeChunk}
 	)
 	.join("\n")}`
 
+			toolResultCache.set(cacheKey, output)
 			pushToolResult(output)
 		} catch (error: any) {
 			await handleError("codebase_search", error)

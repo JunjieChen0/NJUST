@@ -145,6 +145,13 @@ export class TerminalRegistry {
 	 * Gets an existing terminal or creates a new one for the given working
 	 * directory.
 	 *
+	 * Terminal reuse strategy (persistent shell session support):
+	 *   1. First: find a terminal already assigned to this taskId with matching cwd
+	 *   2. Second: find a terminal assigned to this taskId (any cwd — persistent session)
+	 *      This enables persistent shell sessions where cd/env state is preserved.
+	 *   3. Third: find any available terminal with matching cwd and provider
+	 *   4. Last resort: create a new terminal
+	 *
 	 * @param cwd The working directory path
 	 * @param taskId Optional task ID to associate with the terminal
 	 * @returns A Terminal instance
@@ -175,7 +182,29 @@ export class TerminalRegistry {
 			})
 		}
 
-		// Second priority: Find any available terminal with matching directory.
+		// Second priority (persistent shell session): Find a terminal assigned
+		// to this task regardless of cwd. The shell session preserves its own
+		// working directory state from previous commands (cd, pushd, etc.).
+		// This avoids creating new terminals for every cwd change within the
+		// same task, enabling persistent environment variable and shell state.
+		if (!terminal && taskId) {
+			terminal = terminals.find((t) => {
+				if (t.busy || t.taskId !== taskId || t.provider !== provider) {
+					return false
+				}
+				// Accept any non-busy terminal belonging to this task
+				return !t.isClosed()
+			})
+
+			if (terminal) {
+				console.log(
+					`[TerminalRegistry] Reusing persistent shell session for task ${taskId} ` +
+					`(terminal cwd: ${terminal.getCurrentWorkingDirectory()}, requested cwd: ${cwd})`,
+				)
+			}
+		}
+
+		// Third priority: Find any available terminal with matching directory.
 		if (!terminal) {
 			terminal = terminals.find((t) => {
 				if (t.busy || t.provider !== provider) {

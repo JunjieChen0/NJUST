@@ -2,16 +2,44 @@ import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
 import * as os from "os"
+import * as crypto from "crypto"
 import { execFile } from "child_process"
 import { promisify } from "util"
 import { resolveCangjieToolPath, buildCangjieToolEnv } from "./cangjieToolUtils"
 
 const execFileAsync = promisify(execFile)
 
+const CJFMT_TMP_MAX_AGE_MS = 5 * 60 * 1000
+
+/** Remove orphaned `cjfmt_*` files in tmp (crash/kill can skip finally unlink). */
+export function cleanupStaleCjfmtTempFiles(log?: vscode.OutputChannel): void {
+	try {
+		const tmpDir = os.tmpdir()
+		const now = Date.now()
+		for (const name of fs.readdirSync(tmpDir)) {
+			if (!name.startsWith("cjfmt_")) continue
+			const fp = path.join(tmpDir, name)
+			try {
+				const st = fs.statSync(fp)
+				if (!st.isFile()) continue
+				if (now - st.mtimeMs > CJFMT_TMP_MAX_AGE_MS) {
+					fs.unlinkSync(fp)
+					log?.appendLine(`[CjFmt] Removed stale temp file: ${name}`)
+				}
+			} catch {
+				/* ignore */
+			}
+		}
+	} catch {
+		/* ignore */
+	}
+}
+
 export class CjfmtFormatter implements vscode.DocumentFormattingEditProvider, vscode.DocumentRangeFormattingEditProvider, vscode.Disposable {
 	private disposables: vscode.Disposable[] = []
 
 	constructor(private readonly outputChannel: vscode.OutputChannel) {
+		cleanupStaleCjfmtTempFiles(outputChannel)
 		this.disposables.push(
 			vscode.languages.registerDocumentFormattingEditProvider(
 				{ language: "cangjie", scheme: "file" },
@@ -57,8 +85,9 @@ export class CjfmtFormatter implements vscode.DocumentFormattingEditProvider, vs
 
 		const originalContent = document.getText()
 		const tmpDir = os.tmpdir()
-		const tmpInput = path.join(tmpDir, `cjfmt_input_${Date.now()}.cj`)
-		const tmpOutput = path.join(tmpDir, `cjfmt_output_${Date.now()}.cj`)
+		const id = crypto.randomUUID()
+		const tmpInput = path.join(tmpDir, `cjfmt_input_${id}.cj`)
+		const tmpOutput = path.join(tmpDir, `cjfmt_output_${id}.cj`)
 
 		try {
 			fs.writeFileSync(tmpInput, originalContent, "utf-8")

@@ -30,6 +30,20 @@ export default [
 		},
 	},
 	{
+		files: ["**/*.mjs"],
+		languageOptions: {
+			globals: {
+				process: "readonly",
+				console: "readonly",
+				setTimeout: "readonly",
+				clearTimeout: "readonly",
+				URL: "readonly",
+				__dirname: "readonly",
+				__filename: "readonly",
+			},
+		},
+	},
+	{
 		ignores: ["webview-ui", "out"],
 	},
 ]

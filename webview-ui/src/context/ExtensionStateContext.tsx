@@ -14,6 +14,7 @@ import {
 	type SkillMetadata,
 	type Command,
 	type McpServer,
+	type TaskMetricsSnapshot,
 	RouterModels,
 	ORGANIZATION_ALLOW_ALL,
 	DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
@@ -137,6 +138,8 @@ export interface ExtensionStateContextType extends ExtensionState {
 	includeCurrentCost?: boolean
 	setIncludeCurrentCost: (value: boolean) => void
 	skills?: SkillMetadata[]
+	latestTaskMetrics?: TaskMetricsSnapshot
+	taskMetricsHistory?: TaskMetricsSnapshot[]
 }
 
 export const ExtensionStateContext = createContext<ExtensionStateContextType | undefined>(undefined)
@@ -278,6 +281,8 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 	const [includeTaskHistoryInEnhance, setIncludeTaskHistoryInEnhance] = useState(true)
 	const [includeCurrentTime, setIncludeCurrentTime] = useState(true)
 	const [includeCurrentCost, setIncludeCurrentCost] = useState(true)
+	const [latestTaskMetrics, setLatestTaskMetrics] = useState<TaskMetricsSnapshot | undefined>(undefined)
+	const [taskMetricsHistory, setTaskMetricsHistory] = useState<TaskMetricsSnapshot[]>([])
 
 	const setListApiConfigMeta = useCallback(
 		(value: ProviderSettingsEntry[]) => setState((prevState) => ({ ...prevState, listApiConfigMeta: value })),
@@ -434,6 +439,13 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 					})
 					break
 				}
+				case "taskMetrics": {
+					if (message.taskMetrics) {
+						setLatestTaskMetrics(message.taskMetrics)
+						setTaskMetricsHistory((prev) => [...prev.slice(-29), message.taskMetrics!])
+					}
+					break
+				}
 			}
 		},
 		[setListApiConfigMeta],
@@ -568,6 +580,8 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		includeCurrentCost,
 		setIncludeCurrentCost,
 		skills,
+		latestTaskMetrics,
+		taskMetricsHistory,
 	}
 
 	return <ExtensionStateContext.Provider value={contextValue}>{children}</ExtensionStateContext.Provider>

@@ -16,13 +16,15 @@ interface NewTaskParams {
 	mode: string
 	message: string
 	todos?: string
+	isolation_level?: string
 }
 
 export class NewTaskTool extends BaseTool<"new_task"> {
 	readonly name = "new_task" as const
+	override readonly requiresCheckpoint = true
 
 	async execute(params: NewTaskParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
-		const { mode, message, todos } = params
+		const { mode, message, todos, isolation_level } = params
 		const { askApproval, handleError, pushToolResult } = callbacks
 
 		try {
@@ -111,11 +113,13 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 			}
 
 			// Delegate parent and open child as sole active task
+			const isolationLevel = isolation_level === "forked" ? "forked" : "shared"
 			const child = await (provider as any).delegateParentAndOpenChild({
 				parentTaskId: task.taskId,
 				message: unescapedMessage,
 				initialTodos: todoItems,
 				mode,
+				isolationLevel,
 			})
 
 			// Reflect delegation in tool result (no pause/unpause, no wait)

@@ -356,6 +356,9 @@
 	"Test Class": {
 		"prefix": "test",
 		"body": [
+			"import std.unittest.*",
+			"import std.unittest.testmacro.*",
+			"",
 			"@Test",
 			"class ${1:MyTest} {",
 			"\t@TestCase",
@@ -371,7 +374,7 @@
 		"body": [
 			"@TestCase",
 			"func ${1:testName}() {",
-			"\t${0:@Assert(true)}",
+			"\t${0:@Assert(1 + 1 == 2)}",
 			"}"
 		],
 		"description": "Single test case"
@@ -466,5 +469,109 @@
 			"target-dir = \"target\""
 		],
 		"description": "cjpm.toml for library project"
+	},
+	"HTTP Server": {
+		"prefix": "httpserver",
+		"body": [
+			"import std.net.*",
+			"import std.io.*",
+			"import std.console.*",
+			"",
+			"main(): Int64 {",
+			"\tlet server = ServerSocket(${1:8080})",
+			"\tprintln(\"Listening on port ${1:8080}…\")",
+			"\twhile (true) {",
+			"\t\tlet client = server.accept()",
+			"\t\tspawn {",
+			"\t\t\t${0:// handle client}",
+			"\t\t\tclient.close()",
+			"\t\t}",
+			"\t}",
+			"\treturn 0",
+			"}"
+		],
+		"description": "HTTP server with concurrent connections"
+	},
+	"CLI Tool": {
+		"prefix": "clitool",
+		"body": [
+			"import std.console.*",
+			"import std.env.*",
+			"",
+			"main(): Int64 {",
+			"\tlet args = getArgs()",
+			"\tif (args.size < 2) {",
+			"\t\tprintln(\"Usage: ${1:mytool} <command>\")",
+			"\t\treturn 1",
+			"\t}",
+			"\tmatch (args[1]) {",
+			"\t\tcase \"help\" => println(\"${1:mytool} - help\")",
+			"\t\tcase _ => println(\"Unknown: \\\\(args[1])\")",
+			"\t}",
+			"\treturn 0",
+			"}"
+		],
+		"description": "CLI tool skeleton with argument parsing"
+	},
+	"Mutex Concurrency": {
+		"prefix": "mutex",
+		"body": [
+			"import std.sync.*",
+			"",
+			"let ${1:mutex} = ReentrantMutex()",
+			"var ${2:counter} = 0",
+			"",
+			"${1:mutex}.lock()",
+			"${2:counter}++",
+			"${1:mutex}.unlock()"
+		],
+		"description": "Mutex-protected shared state"
+	},
+	"File Read": {
+		"prefix": "fileread",
+		"body": [
+			"import std.fs.*",
+			"import std.io.*",
+			"",
+			"let file = File(\"${1:path/to/file}\", OpenOption.Open(true, false))",
+			"let reader = BufferedReader(file)",
+			"while (let line = reader.readLine()) {",
+			"\t${0:println(line)}",
+			"}",
+			"reader.close()"
+		],
+		"description": "Read file line by line"
+	},
+	"HashMap Usage": {
+		"prefix": "hashmap",
+		"body": [
+			"import std.collection.*",
+			"",
+			"var ${1:map} = HashMap<${2:String}, ${3:Int64}>()",
+			"${1:map}[\"${4:key}\"] = ${5:0}",
+			"for ((k, v) in ${1:map}) {",
+			"\t${0:println(\"\\\\(k): \\\\(v)\")}",
+			"}"
+		],
+		"description": "HashMap creation and iteration"
+	},
+	"Singleton Pattern": {
+		"prefix": "singleton",
+		"body": [
+			"class ${1:Singleton} {",
+			"\tprivate static var _instance: ?${1:Singleton} = None",
+			"\tprivate init() {}",
+			"",
+			"\tstatic func getInstance(): ${1:Singleton} {",
+			"\t\tif (let inst = _instance) {",
+			"\t\t\treturn inst",
+			"\t\t}",
+			"\t\tlet inst = ${1:Singleton}()",
+			"\t\t_instance = inst",
+			"\t\treturn inst",
+			"\t}",
+			"}"
+		],
+		"description": "Thread-safe singleton pattern"
 	}
 }

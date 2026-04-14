@@ -217,13 +217,14 @@ describe("editFileTool", () => {
 	}
 
 	describe("parameter validation", () => {
-		it("returns error when file_path is missing", async () => {
+		it("returns validation error when file_path is missing", async () => {
 			const result = await executeEditFileTool({ file_path: undefined })
 
-			expect(result).toBe("Missing param error")
-			expect(mockTask.consecutiveMistakeCount).toBe(1)
-			expect(mockTask.recordToolError).toHaveBeenCalledWith("edit_file")
-			expect(mockTask.didToolFailInCurrentTurn).toBe(true)
+			expect(result).toContain("Error:")
+			expect(result).toContain("File path is required")
+			expect(mockTask.consecutiveMistakeCount).toBe(0)
+			expect(mockTask.recordToolError).not.toHaveBeenCalledWith("edit_file")
+			expect(mockTask.didToolFailInCurrentTurn).toBe(false)
 		})
 
 		it("treats undefined new_string as empty string (deletion)", async () => {
@@ -709,6 +710,43 @@ describe("editFileTool", () => {
 			expect(mockTask.consecutiveMistakeCount).toBe(0)
 			expect(mockAskApproval).toHaveBeenCalled()
 			expect(mockTask.diffViewProvider.update).toHaveBeenCalledWith("Line 1\nModified Line 2\nLine 3", true)
+		})
+	})
+
+	describe("Cangjie (.cj) operator boundaries in fallback matching", () => {
+		const cjPath = "pkg/foo.cj"
+		const cjAbs = process.platform === "win32" ? "C:\\pkg\\foo.cj" : "/pkg/foo.cj"
+
+		it("does not match |> across inserted horizontal whitespace on .cj (avoids wrong branch)", async () => {
+			mockedPathResolve.mockReturnValue(cjAbs)
+
+			const result = await executeEditFileTool(
+				{
+					file_path: cjPath,
+					old_string: "a|>b",
+					new_string: "x",
+				},
+				{ fileContent: "a |> b" },
+			)
+
+			expect(result).toContain("No match found")
+			expect(mockTask.consecutiveMistakeCount).toBe(1)
+		})
+
+		it("still allows normal horizontal whitespace tolerance between tokens on .cj", async () => {
+			mockedPathResolve.mockReturnValue(cjAbs)
+
+			await executeEditFileTool(
+				{
+					file_path: cjPath,
+					old_string: "let x = 1",
+					new_string: "let x = 2",
+				},
+				{ fileContent: "let  x  = 1" },
+			)
+
+			expect(mockTask.consecutiveMistakeCount).toBe(0)
+			expect(mockAskApproval).toHaveBeenCalled()
 		})
 	})
 

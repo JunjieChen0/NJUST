@@ -9,7 +9,8 @@
 		"watch": "tsc --watch"
 	},
 	"dependencies": {
-		"@njust-ai-cj/types": "workspace:^"
+		"@njust-ai-cj/types": "workspace:^",
+		"@opentelemetry/api": "^1.9.0"
 	},
 	"devDependencies": {
 		"typescript": "5.8.3"

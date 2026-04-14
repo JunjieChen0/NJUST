@@ -747,6 +747,49 @@ describe("Cline", () => {
 				await task.catch(() => {})
 			})
 
+			it("should stop auto retries when unattended max attempts is reached", async () => {
+				const [cline, task] = Task.create({
+					provider: mockProvider,
+					apiConfiguration: mockApiConfig,
+					task: "test task",
+				})
+
+				const mockError = new Error("Persistent API Error")
+				const mockFailedStream = {
+					// eslint-disable-next-line require-yield
+					async *[Symbol.asyncIterator]() {
+						throw mockError
+					},
+					async next() {
+						throw mockError
+					},
+					async return() {
+						return { done: true, value: undefined }
+					},
+					async throw(e: any) {
+						throw e
+					},
+					async [Symbol.asyncDispose]() {
+						// Cleanup
+					},
+				} as AsyncGenerator<ApiStreamChunk>
+
+				vi.spyOn(cline.api, "createMessage").mockImplementation(() => mockFailedStream)
+
+				mockProvider.getState = vi.fn().mockResolvedValue({
+					autoApprovalEnabled: true,
+					unattendedRetryEnabled: true,
+					unattendedMaxRetryAttempts: 1,
+					requestDelaySeconds: 1,
+				})
+
+				const iterator = cline.attemptApiRequest(0)
+				await expect(iterator.next()).rejects.toThrow("Unattended retry limit reached")
+
+				await cline.abortTask(true)
+				await task.catch(() => {})
+			})
+
 			it.skip("should not apply retry delay twice", async () => {
 				const [cline, task] = Task.create({
 					provider: mockProvider,

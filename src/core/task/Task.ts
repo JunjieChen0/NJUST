@@ -2,10 +2,12 @@ import * as path from "path"
 import * as vscode from "vscode"
 import os from "os"
 import crypto from "crypto"
+import { promises as fs } from "fs"
 import { v7 as uuidv7 } from "uuid"
 import EventEmitter from "events"
 
 import { AskIgnoredError } from "./AskIgnoredError"
+import { startAllPrefetch } from "../prefetch"
 
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI from "openai"
@@ -72,9 +74,9 @@ import { DiffStrategy, type ToolUse, type ToolParamName, toolParamNames } from "
 import { getModelMaxOutputTokens } from "../../shared/api"
 
 // services
-import { McpHub } from "../../services/mcp/McpHub"
 import { McpServerManager } from "../../services/mcp/McpServerManager"
 import { RepoPerTaskCheckpointService } from "../../services/checkpoints"
+import { deleteGeneratedCangjieTestFilesForTask } from "../../services/cangjie-lsp/cangjieGeneratedTestCleanup"
 
 // integrations
 import { DiffViewProvider } from "../../integrations/editor/DiffViewProvider"
@@ -104,10 +106,15 @@ import type {
 } from "../../services/cloud-agent/types"
 import { sanitizeToolUseId } from "../../utils/tool-id"
 import { getTaskDirectoryPath } from "../../utils/storage"
+import { globalCacheMetrics } from "../../utils/cacheMetrics"
+import { globalQueryProfiler } from "../../utils/queryProfiler"
+import { globalPromptCacheBreakDetector } from "../prompts/promptCacheBreakDetection"
 
 // prompts
 import { formatResponse } from "../prompts/responses"
-import { SYSTEM_PROMPT } from "../prompts/system"
+import {
+	type SystemPromptParts,
+} from "../prompts/system"
 import { buildNativeToolsArrayWithRestrictions } from "./build-tools"
 
 // core modules
@@ -118,7 +125,9 @@ import { allowRooIgnorePathAccess, RooIgnoreController } from "../ignore/RooIgno
 import { RooProtectedController } from "../protect/RooProtectedController"
 import { type AssistantMessageContent, presentAssistantMessage } from "../assistant-message"
 import { NativeToolCallParser } from "../assistant-message/NativeToolCallParser"
+import { StreamingToolExecutor } from "../tools/StreamingToolExecutor"
 import { manageContext, willManageContext } from "../context-management"
+import { TokenGrowthTracker } from "../context-management/tokenGrowthTracker"
 import { ClineProvider } from "../webview/ClineProvider"
 import { MultiSearchReplaceDiffStrategy } from "../diff/strategies/multi-search-replace"
 import {
@@ -130,7 +139,10 @@ import {
 	taskMetadata,
 } from "../task-persistence"
 import { getEnvironmentDetails } from "../environment/getEnvironmentDetails"
-import { checkContextWindowExceededError } from "../context/context-management/context-error-handling"
+import { clearRetryEvents } from "../errors/retryPersistence"
+import { ErrorRecoveryHandler } from "./ErrorRecoveryHandler"
+import { PersistentRetryManager } from "./PersistentRetry"
+import { clearMcpInstructionsDelta } from "../prompts/sections/mcp-instructions-delta"
 import {
 	type CheckpointDiffOptions,
 	type CheckpointRestoreOptions,
@@ -140,17 +152,23 @@ import {
 	checkpointDiff,
 } from "../checkpoints"
 import { processUserContentMentions } from "../mentions/processUserContentMentions"
-import { getMessagesSinceLastSummary, summarizeConversation, getEffectiveApiHistory } from "../condense"
+import { getMessagesSinceLastSummary, getEffectiveApiHistory } from "../condense"
 import { MessageQueueService } from "../message-queue/MessageQueueService"
 import { AutoApprovalHandler, checkAutoApproval } from "../auto-approval"
 import { MessageManager } from "../message-manager"
 import { validateAndFixToolResultIds } from "./validateToolResultIds"
 import { mergeConsecutiveApiMessages } from "./mergeConsecutiveApiMessages"
+import { TaskStateMachine, TaskState } from "./TaskStateMachine"
+import { TaskRequestBuilder } from "./TaskRequestBuilder"
+import { TaskStreamProcessor } from "./TaskStreamProcessor"
+import { generateParentContextSummary } from "./SubTaskContextBuilder"
+import { AGENT_TYPE_CONTEXT_BUDGET } from "./SubTaskOptions"
+import type { IsolationLevel, ForkedContextConfig } from "./SubTaskOptions"
+import { DEFAULT_FORKED_CONTEXT_CONFIG } from "./SubTaskOptions"
 
 const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
 const DEFAULT_USAGE_COLLECTION_TIMEOUT_MS = 5000 // 5 seconds
 const FORCED_CONTEXT_REDUCTION_PERCENT = 75 // Keep 75% of context (remove 25%) on context window errors
-const MAX_CONTEXT_WINDOW_RETRIES = 3 // Maximum retries for context window errors
 
 export interface TaskOptions extends CreateTaskOptions {
 	provider: ClineProvider
@@ -169,6 +187,10 @@ export interface TaskOptions extends CreateTaskOptions {
 	onCreated?: (task: Task) => void
 	initialTodos?: TodoItem[]
 	workspacePath?: string
+	/** Capability-scoped tool whitelist for this task (used for delegated child tasks). */
+	allowedTools?: string[]
+	/** Optional trace id used to stitch parent/child task observability spans. */
+	parentTraceId?: string
 	/** Initial status for the task's history item (e.g., "active" for child tasks) */
 	initialStatus?: "active" | "delegated" | "completed"
 }
@@ -189,6 +211,19 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	readonly parentTask: Task | undefined = undefined
 	readonly taskNumber: number
 	readonly workspacePath: string
+	readonly allowedTools?: ReadonlySet<string>
+	readonly parentTraceId?: string
+
+	/** Forked context summary injected by parent when isolationLevel is "forked" */
+	forkedContextSummary?: string
+	/** Isolation level for this task (set when created as a sub-task) */
+	isolationLevel?: IsolationLevel
+
+	/**
+	 * Cached tool definitions to avoid rebuilding for the same mode.
+	 * Shared from parent to child via inheritCacheFromParent.
+	 */
+	public cachedToolDefinitions?: { mode: string; tools: any[]; time: number }
 
 	/**
 	 * The mode associated with this task. Persisted across sessions
@@ -278,8 +313,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private taskApiConfigReady: Promise<void>
 
 	providerRef: WeakRef<ClineProvider>
-	private readonly globalStoragePath: string
+	readonly globalStoragePath: string
 	abort: boolean = false
+	private persistentRetryHandler?: PersistentRetryManager
 	currentRequestAbortController?: AbortController
 	skipPrevResponseIdOnce: boolean = false
 
@@ -287,6 +323,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	idleAsk?: ClineMessage
 	resumableAsk?: ClineMessage
 	interactiveAsk?: ClineMessage
+
+	// Context management circuit breaker
+	compactFailureCount = 0
+	readonly maxCompactFailures = 3
 
 	didFinishAbortingStream = false
 	abandoned = false
@@ -306,6 +346,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 */
 	static resetGlobalApiRequestTime(): void {
 		Task.lastGlobalApiRequestTime = undefined
+	}
+
+	/**
+	 * Get the last global API request timestamp.
+	 * Exposed for TaskStreamProcessor (delegation pattern).
+	 */
+	static getLastGlobalApiRequestTime(): number | undefined {
+		return Task.lastGlobalApiRequestTime
 	}
 
 	toolRepetitionDetector: ToolRepetitionDetector
@@ -406,14 +454,20 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// Native tool call streaming state (track which index each tool is at)
 	private streamingToolCallIndices: Map<string, number> = new Map()
+	private readonly streamingToolExecutor = new StreamingToolExecutor(
+		Math.max(1, Number(process.env.ROO_MAX_TOOL_CONCURRENCY ?? 10) || 10),
+	)
+	private requestCacheReadWindow: number[] = []
+	private requestInputTokensWindow: number[] = []
+	private readonly tokenGrowthTracker = new TokenGrowthTracker({ maxWindowSize: 6, emaAlpha: 0.4 })
 
 	// Cached model info for current streaming session (set at start of each API request)
 	// This prevents excessive getModel() calls during tool execution
 	cachedStreamingModel?: { id: string; info: ModelInfo }
 
 	// Token Usage Cache
-	private tokenUsageSnapshot?: TokenUsage
-	private tokenUsageSnapshotAt?: number
+	tokenUsageSnapshot?: TokenUsage
+	tokenUsageSnapshotAt?: number
 
 	// Tool Usage Cache
 	private toolUsageSnapshot?: ToolUsage
@@ -422,11 +476,29 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private readonly TOKEN_USAGE_EMIT_INTERVAL_MS = 2000 // 2 seconds
 	private debouncedEmitTokenUsage: ReturnType<typeof debounce>
 
+	// Delegate for system prompt generation, caching, and context condensation
+	readonly requestBuilder: TaskRequestBuilder
+
+	// Delegate for stream-related helpers (rate limiting, backoff, context window recovery, etc.)
+	readonly streamProcessor: TaskStreamProcessor
+
+	// Delegate for error classification, recovery strategies, and circuit breaker logic
+	readonly errorRecovery: ErrorRecoveryHandler
+
 	// Initial status for the task's history item (set at creation time to avoid race conditions)
 	private readonly initialStatus?: "active" | "delegated" | "completed"
 
 	// MessageManager for high-level message operations (lazy initialized)
 	private _messageManager?: MessageManager
+	private readonly stateMachine = new TaskStateMachine()
+
+	public get taskState(): TaskState {
+		return this.stateMachine.state
+	}
+
+	public forceTaskState(state: TaskState): void {
+		this.stateMachine.force(state)
+	}
 
 	constructor({
 		provider,
@@ -508,6 +580,12 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.parentTask = parentTask
 		this.taskNumber = taskNumber
 		this.initialStatus = initialStatus
+		this.requestBuilder = new TaskRequestBuilder(this)
+		this.streamProcessor = new TaskStreamProcessor(this)
+		this.errorRecovery = new ErrorRecoveryHandler(this)
+		if (parentTask) {
+			this.requestBuilder.inheritCacheFromParent(parentTask)
+		}
 
 		// Store the task's mode and API config name when it's created.
 		// For history items, use the stored values; for new tasks, we'll set them
@@ -869,7 +947,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		return readApiMessages({ taskId: this.taskId, globalStoragePath: this.globalStoragePath })
 	}
 
-	private async addToApiConversationHistory(message: Anthropic.MessageParam, reasoning?: string) {
+	async addToApiConversationHistory(message: Anthropic.MessageParam, reasoning?: string) {
 		// Capture the encrypted_content / thought signatures from the provider (e.g., OpenAI Responses API, Google GenAI) if present.
 		// We only persist data reported by the current response body.
 		const handler = this.api as ApiHandler & {
@@ -1342,7 +1420,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// Automatically approve if the ask according to the user's settings.
 		const provider = this.providerRef.deref()
 		const state = provider ? await provider.getState() : undefined
-		const approval = await checkAutoApproval({ state, ask: type, text, isProtected })
+		const approval = await checkAutoApproval({ state: state as any, ask: type, text, isProtected })
 
 		if (approval.decision === "approve") {
 			this.approveAsk()
@@ -1615,121 +1693,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		}
 	}
 
+	// Delegated to TaskStreamProcessor
 	private async getFilesReadByRooSafely(context: string): Promise<string[] | undefined> {
-		try {
-			return await this.fileContextTracker.getFilesReadByRoo()
-		} catch (error) {
-			console.error(`[Task#${context}] Failed to get files read by Roo:`, error)
-			return undefined
-		}
+		return this.streamProcessor.getFilesReadByRooSafely(context)
 	}
 
 	public async condenseContext(): Promise<void> {
-		// CRITICAL: Flush any pending tool results before condensing
-		// to ensure tool_use/tool_result pairs are complete in history
-		await this.flushPendingToolResultsToHistory()
-
-		const systemPrompt = await this.getSystemPrompt()
-
-		// Get condensing configuration
-		const state = await this.providerRef.deref()?.getState()
-		const customCondensingPrompt = state?.customSupportPrompts?.CONDENSE
-		const { mode, apiConfiguration } = state ?? {}
-
-		const { contextTokens: prevContextTokens } = this.getTokenUsage()
-
-		// Build tools for condensing metadata (same tools used for normal API calls)
-		const provider = this.providerRef.deref()
-		let allTools: import("openai").default.Chat.ChatCompletionTool[] = []
-		if (provider) {
-			const modelInfo = this.api.getModel().info
-			const toolsResult = await buildNativeToolsArrayWithRestrictions({
-				provider,
-				cwd: this.cwd,
-				mode,
-				customModes: state?.customModes,
-				experiments: state?.experiments,
-				apiConfiguration,
-				disabledTools: state?.disabledTools,
-				enableWebSearch: state?.enableWebSearch,
-				modelInfo,
-				includeAllToolsWithRestrictions: false,
-			})
-			allTools = toolsResult.tools
-		}
-
-		// Build metadata with tools and taskId for the condensing API call
-		const metadata: ApiHandlerCreateMessageMetadata = {
-			mode,
-			taskId: this.taskId,
-			...(allTools.length > 0
-				? {
-						tools: allTools,
-						tool_choice: "auto",
-						parallelToolCalls: true,
-					}
-				: {}),
-		}
-		// Generate environment details to include in the condensed summary
-		const environmentDetails = await getEnvironmentDetails(this, true)
-
-		const filesReadByRoo = await this.getFilesReadByRooSafely("condenseContext")
-
-		const {
-			messages,
-			summary,
-			cost,
-			newContextTokens = 0,
-			error,
-			errorDetails,
-			condenseId,
-		} = await summarizeConversation({
-			messages: this.apiConversationHistory,
-			apiHandler: this.api,
-			systemPrompt,
-			taskId: this.taskId,
-			isAutomaticTrigger: false,
-			customCondensingPrompt,
-			metadata,
-			environmentDetails,
-			filesReadByRoo,
-			cwd: this.cwd,
-			rooIgnoreController: this.rooIgnoreController,
-		})
-		if (error) {
-			await this.say(
-				"condense_context_error",
-				error,
-				undefined /* images */,
-				false /* partial */,
-				undefined /* checkpoint */,
-				undefined /* progressStatus */,
-				{ isNonInteractive: true } /* options */,
-			)
-			return
-		}
-		await this.overwriteApiConversationHistory(messages)
-
-		const contextCondense: ContextCondense = {
-			summary,
-			cost,
-			newContextTokens,
-			prevContextTokens,
-			condenseId: condenseId!,
-		}
-		await this.say(
-			"condense_context",
-			undefined /* text */,
-			undefined /* images */,
-			false /* partial */,
-			undefined /* checkpoint */,
-			undefined /* progressStatus */,
-			{ isNonInteractive: true } /* options */,
-			contextCondense,
-		)
-
-		// Process any queued messages after condensing completes
-		this.processQueuedMessages()
+		return this.requestBuilder.condenseContext()
 	}
 
 	async say(
@@ -2041,7 +2011,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			// This is important in case the user deletes messages without resuming
 			// the task first.
 			this.apiConversationHistory = await this.getSavedApiConversationHistory()
-
+			
+			// Reset circuit breaker state so resumed tasks don't immediately degrade
+			// to truncation mode due to failures from a prior session.
+			this.errorRecovery.resetCompactFailure()
+			
 			const lastClineMessage = this.clineMessages
 				.slice()
 				.reverse()
@@ -2245,6 +2219,35 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.debouncedEmitTokenUsage.flush()
 	}
 
+	private emitTaskSessionMetricsSummary(trigger: "abort" | "dispose"): void {
+		const cacheSummary = globalCacheMetrics.getSummary()
+		const breakSummary = globalPromptCacheBreakDetector.getBreaksBySource()
+		const payload = {
+			timestamp: Date.now(),
+			trigger,
+			taskId: this.taskId,
+			cacheRequests: cacheSummary.totalRequests,
+			cacheHitRate: cacheSummary.cacheHitRate,
+			cacheReadTokens: cacheSummary.totalCacheReadTokens,
+			cacheCreationTokens: cacheSummary.totalCacheCreationTokens,
+			estimatedSavingsPercent: cacheSummary.estimatedSavingsPercent,
+			cacheBreaks: globalPromptCacheBreakDetector.getTotalBreaks(),
+			cacheBreaksBySource: breakSummary,
+		}
+		console.log(
+			`[Task Session Summary] trigger=${payload.trigger} task=${payload.taskId} cacheRequests=${payload.cacheRequests} cacheHitRate=${payload.cacheHitRate.toFixed(3)} cacheRead=${payload.cacheReadTokens} cacheCreate=${payload.cacheCreationTokens} estSavings=${(payload.estimatedSavingsPercent * 100).toFixed(1)}% cacheBreaks=${payload.cacheBreaks} breakBySource=${JSON.stringify(payload.cacheBreaksBySource)}`,
+		)
+
+		getTaskDirectoryPath(this.globalStoragePath, this.taskId)
+			.then(async (taskDir) => {
+				const metricsPath = path.join(taskDir, "task-metrics.jsonl")
+				await fs.appendFile(metricsPath, `${JSON.stringify(payload)}\n`, "utf8")
+			})
+			.catch((error) => {
+				console.error(`[Task Session Summary] failed to persist metrics for task ${this.taskId}:`, error)
+			})
+	}
+
 	public async abortTask(isAbandoned = false) {
 		// Aborting task
 
@@ -2254,6 +2257,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		}
 
 		this.abort = true
+		this.persistentRetryHandler?.cancel()
+		this.persistentRetryHandler = undefined
 
 		// Reset consecutive error counters on abort (manual intervention)
 		this.consecutiveNoToolUseCount = 0
@@ -2281,6 +2286,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	public dispose(): void {
 		console.log(`[Task#dispose] disposing task ${this.taskId}.${this.instanceId}`)
+		this.emitTaskSessionMetricsSummary(this.abort ? "abort" : "dispose")
+		clearMcpInstructionsDelta(this.taskId)
+
+		try {
+			deleteGeneratedCangjieTestFilesForTask(this.taskId)
+		} catch (e) {
+			console.error("Error deleting generated Cangjie test files:", e)
+		}
 
 		// Cancel any in-progress HTTP request
 		try {
@@ -2368,11 +2381,29 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	// Subtasks
 	// Spawn / Wait / Complete
 
-	public async startSubtask(message: string, initialTodos: TodoItem[], mode: string) {
+	public async startSubtask(
+		message: string,
+		initialTodos: TodoItem[],
+		mode: string,
+		isolationLevel: IsolationLevel = "shared",
+		forkedConfig?: ForkedContextConfig,
+	) {
 		const provider = this.providerRef.deref()
 
 		if (!provider) {
 			throw new Error("Provider not available")
+		}
+
+		let forkedContextSummary: string | undefined
+
+		if (isolationLevel === "forked") {
+			// Generate a concise summary of parent context instead of passing full history
+			const config = forkedConfig ?? DEFAULT_FORKED_CONTEXT_CONFIG
+			forkedContextSummary = generateParentContextSummary(
+				this.apiConversationHistory,
+				config.summaryMaxTokens,
+				config,
+			)
 		}
 
 		const child = await (provider as any).delegateParentAndOpenChild({
@@ -2380,6 +2411,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			message,
 			initialTodos,
 			mode,
+			isolationLevel,
+			forkedContextSummary,
 		})
 		return child
 	}
@@ -3078,6 +3111,16 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// Kicks off the checkpoints initialization process in the background.
 		getCheckpointService(this)
 
+		// Start skill/memory prefetch in parallel (non-blocking)
+		const provider = this.providerRef.deref()
+		startAllPrefetch({
+			skillFetchFn: async () => {
+				const skillsManager = provider?.getSkillsManager()
+				const skills = skillsManager?.getAllSkills() ?? []
+				return skills.map((s) => s.name)
+			},
+		})
+
 		let nextUserContent = userContent
 		let includeFileDetails = true
 
@@ -3162,6 +3205,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				apiProvider && !isRetiredProvider(apiProvider) ? apiProvider : undefined,
 				modelId,
 			)
+			const requestStartedAt = Date.now()
+			const requestProfileId = `${this.taskId}-${requestStartedAt}-${this.apiConversationHistory.length + 1}`
+			globalQueryProfiler.start({
+				requestId: requestProfileId,
+				taskId: this.taskId,
+				modelId: modelId ?? "unknown",
+				startedAt: requestStartedAt,
+			})
 
 			// Respect user-configured provider rate limiting BEFORE we emit api_req_started.
 			// This prevents the UI from showing an "API Request..." spinner while we are
@@ -3546,6 +3597,20 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 											// Mark that we have new content to process
 											this.userMessageContentReady = false
 
+											// Try eager execution for safe auto-approve tools; fallback to regular path.
+											const latest = this.assistantMessageContent[toolUseIndex ?? -1] as any
+											if (latest?.type === "tool_use") {
+												const state = await this.providerRef.deref()?.getState()
+												const enabled = state?.enableStreamingToolExecution !== false
+												if (enabled && (state?.autoApprovalEnabled ?? false)) {
+													const decision = this.streamingToolExecutor.shouldEagerExecute(this, latest)
+													if (decision === "eager") {
+														presentAssistantMessage(this)
+														break
+													}
+												}
+											}
+
 											// Present the finalized tool call
 											presentAssistantMessage(this)
 										} else if (toolUseIndex !== undefined) {
@@ -3604,6 +3669,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 							}
 							case "text": {
 								assistantMessage += chunk.text
+								globalQueryProfiler.markFirstToken(requestProfileId)
 
 								// Native tool calling: text chunks are plain text.
 								// Create or update a text content block directly
@@ -3735,6 +3801,72 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 												tokens.cacheWrite,
 												tokens.cacheRead,
 											)
+
+								globalCacheMetrics.record({
+									timestamp: Date.now(),
+									inputTokens: tokens.input,
+									cacheCreationInputTokens: tokens.cacheWrite,
+									cacheReadInputTokens: tokens.cacheRead,
+									outputTokens: tokens.output,
+									model: cachedModelId,
+								})
+								this.requestCacheReadWindow.push(tokens.cacheRead)
+								if (this.requestCacheReadWindow.length > 5) {
+									this.requestCacheReadWindow.shift()
+								}
+								this.requestInputTokensWindow.push(tokens.input)
+								if (this.requestInputTokensWindow.length > 5) {
+									this.requestInputTokensWindow.shift()
+								}
+								const cacheSummary = globalCacheMetrics.getSummary()
+
+								const latencyMs = Date.now() - requestStartedAt
+								console.log(
+									`[Task Metrics] task=${this.taskId} mode=${await this.getTaskMode()} latencyMs=${latencyMs} input=${tokens.input} output=${tokens.output} cacheCreate=${tokens.cacheWrite} cacheRead=${tokens.cacheRead} contextTokens=${this.getTokenUsage().contextTokens ?? 0} cacheHitRate=${cacheSummary.cacheHitRate.toFixed(3)} estSavings=${(cacheSummary.estimatedSavingsPercent * 100).toFixed(1)}% requests=${cacheSummary.totalRequests}`,
+								)
+								const runtimeTokenUsage = this.getTokenUsage()
+								const runtimeContextTokens = runtimeTokenUsage.contextTokens ?? 0
+								const runtimeModel = this.api.getModel().info
+								const runtimeContextWindow = runtimeModel?.contextWindow ?? 0
+								const runtimeContextPercent =
+									runtimeContextWindow > 0
+										? (runtimeContextTokens / runtimeContextWindow) * 100
+										: 0
+								const runtimeState = await this.providerRef.deref()?.getState()
+								const runtimeAutoCondenseContext = runtimeState?.autoCondenseContext ?? true
+								const runtimeAutoCondenseContextPercent =
+									runtimeState?.autoCondenseContextPercent ?? DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT
+								const runtimeProfileThresholds = runtimeState?.profileThresholds ?? {}
+								const runtimeCurrentProfileId = runtimeState?.currentApiConfigName ?? "default"
+								const compactLikelyTriggered = willManageContext({
+									totalTokens: runtimeContextTokens,
+									contextWindow: runtimeContextWindow,
+									maxTokens: runtimeModel?.maxTokens,
+									autoCondenseContext: runtimeAutoCondenseContext,
+									autoCondenseContextPercent: runtimeAutoCondenseContextPercent,
+									profileThresholds: runtimeProfileThresholds,
+									currentProfileId: runtimeCurrentProfileId,
+									lastMessageTokens: 0,
+								})
+								await this.providerRef.deref()?.postMessageToWebview({
+									type: "taskMetrics",
+									taskMetrics: {
+										taskId: this.taskId,
+										latencyMs,
+										cacheHitRate: cacheSummary.cacheHitRate,
+										estimatedSavingsPercent: cacheSummary.estimatedSavingsPercent * 100,
+										cacheReadInputTokens: tokens.cacheRead,
+										cacheCreationInputTokens: tokens.cacheWrite,
+										inputTokens: tokens.input,
+										outputTokens: tokens.output,
+										contextTokens: runtimeContextTokens,
+										contextPercent: runtimeContextPercent,
+										compactLikelyTriggered,
+										cacheBreaksTotal: globalPromptCacheBreakDetector.getTotalBreaks(),
+										cacheBreaksBySource: globalPromptCacheBreakDetector.getBreaksBySource(),
+									},
+								})
+
 							}
 						}
 
@@ -3878,6 +4010,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					}
 				} finally {
 					this.isStreaming = false
+					const profile = globalQueryProfiler.finish(requestProfileId, {
+						aborted: this.abort || this.abandoned,
+					})
+					if (profile) {
+						console.log(
+							`[Query Profiler] task=${profile.taskId} model=${profile.modelId} ttftMs=${profile.ttftMs ?? -1} e2eMs=${profile.e2eMs ?? -1} aborted=${profile.aborted}`,
+						)
+					}
 					// Clean up the abort controller when streaming completes
 					this.currentRequestAbortController = undefined
 				}
@@ -4319,256 +4459,44 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		return false
 	}
 
+	private inheritSystemPromptPartsCacheFromParent(): void {
+		if (!this.parentTask) return
+		this.requestBuilder.inheritCacheFromParent(this.parentTask)
+	}
+
+	private async getSystemPromptParts(): Promise<SystemPromptParts> {
+		return this.requestBuilder.getSystemPromptParts()
+	}
+
 	private async getSystemPrompt(): Promise<string> {
-		const { mcpEnabled } = (await this.providerRef.deref()?.getState()) ?? {}
-		let mcpHub: McpHub | undefined
-		if (mcpEnabled ?? true) {
-			const provider = this.providerRef.deref()
-
-			if (!provider) {
-				throw new Error("Provider reference lost during view transition")
-			}
-
-			// Wait for MCP hub initialization through McpServerManager
-			mcpHub = await McpServerManager.getInstance(provider.context, provider)
-
-			if (!mcpHub) {
-				throw new Error("Failed to get MCP hub from server manager")
-			}
-
-			// Wait for MCP servers to be connected before generating system prompt
-			await pWaitFor(() => !mcpHub!.isConnecting, { timeout: 10_000 }).catch(() => {
-				console.error("MCP servers failed to connect in time")
-			})
-		}
-
-		const rooIgnoreInstructions = this.rooIgnoreController?.getInstructions()
-
-		const state = await this.providerRef.deref()?.getState()
-
-		const {
-			mode,
-			customModes,
-			customModePrompts,
-			customInstructions,
-			experiments,
-			language,
-			apiConfiguration,
-			enableSubfolderRules,
-			enableWebSearch,
-		} = state ?? {}
-
-		return await (async () => {
-			const provider = this.providerRef.deref()
-
-			if (!provider) {
-				throw new Error("Provider not available")
-			}
-
-			const modelInfo = this.api.getModel().info
-
-			return SYSTEM_PROMPT(
-				provider.context,
-				this.cwd,
-				false,
-				mcpHub,
-				this.diffStrategy,
-				mode ?? defaultModeSlug,
-				customModePrompts,
-				customModes,
-				customInstructions,
-				experiments,
-				language,
-				rooIgnoreInstructions,
-				{
-					todoListEnabled: apiConfiguration?.todoListEnabled ?? true,
-					useAgentRules:
-						vscode.workspace.getConfiguration(Package.name).get<boolean>("useAgentRules") ?? true,
-					enableSubfolderRules: enableSubfolderRules ?? false,
-					newTaskRequireTodos: vscode.workspace
-						.getConfiguration(Package.name)
-						.get<boolean>("newTaskRequireTodos", false),
-					isStealthModel: modelInfo?.isStealthModel,
-					enableWebSearch: enableWebSearch ?? false,
-				},
-				undefined, // todoList
-				this.api.getModel().id,
-				provider.getSkillsManager(),
-			)
-		})()
+		return this.requestBuilder.getSystemPrompt()
 	}
 
+	// Delegated to TaskStreamProcessor
 	private getCurrentProfileId(state: any): string {
-		return (
-			state?.listApiConfigMeta?.find((profile: any) => profile.name === state?.currentApiConfigName)?.id ??
-			"default"
-		)
+		return this.streamProcessor.getCurrentProfileId(state)
 	}
 
-	private async handleContextWindowExceededError(): Promise<void> {
-		const state = await this.providerRef.deref()?.getState()
-		const { profileThresholds = {}, mode, apiConfiguration } = state ?? {}
-
-		const { contextTokens } = this.getTokenUsage()
-		const modelInfo = this.api.getModel().info
-
-		const maxTokens = getModelMaxOutputTokens({
-			modelId: this.api.getModel().id,
-			model: modelInfo,
-			settings: this.apiConfiguration,
-		})
-
-		const contextWindow = modelInfo.contextWindow
-
-		// Get the current profile ID using the helper method
-		const currentProfileId = this.getCurrentProfileId(state)
-
-		// Log the context window error for debugging
-		console.warn(
-			`[Task#${this.taskId}] Context window exceeded for model ${this.api.getModel().id}. ` +
-				`Current tokens: ${contextTokens}, Context window: ${contextWindow}. ` +
-				`Forcing truncation to ${FORCED_CONTEXT_REDUCTION_PERCENT}% of current context.`,
-		)
-		// Send condenseTaskContextStarted to show in-progress indicator
-		await this.providerRef.deref()?.postMessageToWebview({ type: "condenseTaskContextStarted", text: this.taskId })
-
-		// Build tools for condensing metadata (same tools used for normal API calls)
-		const provider = this.providerRef.deref()
-		let allTools: import("openai").default.Chat.ChatCompletionTool[] = []
-		if (provider) {
-			const toolsResult = await buildNativeToolsArrayWithRestrictions({
-				provider,
-				cwd: this.cwd,
-				mode,
-				customModes: state?.customModes,
-				experiments: state?.experiments,
-				apiConfiguration,
-				disabledTools: state?.disabledTools,
-				enableWebSearch: state?.enableWebSearch,
-				modelInfo,
-				includeAllToolsWithRestrictions: false,
-			})
-			allTools = toolsResult.tools
-		}
-
-		// Build metadata with tools and taskId for the condensing API call
-		const metadata: ApiHandlerCreateMessageMetadata = {
-			mode,
-			taskId: this.taskId,
-			...(allTools.length > 0
-				? {
-						tools: allTools,
-						tool_choice: "auto",
-						parallelToolCalls: true,
-					}
-				: {}),
-		}
-
-		try {
-			// Generate environment details to include in the condensed summary
-			const environmentDetails = await getEnvironmentDetails(this, true)
-
-			// Force aggressive truncation by keeping only 75% of the conversation history
-			const truncateResult = await manageContext({
-				messages: this.apiConversationHistory,
-				totalTokens: contextTokens || 0,
-				maxTokens,
-				contextWindow,
-				apiHandler: this.api,
-				autoCondenseContext: true,
-				autoCondenseContextPercent: FORCED_CONTEXT_REDUCTION_PERCENT,
-				systemPrompt: await this.getSystemPrompt(),
-				taskId: this.taskId,
-				profileThresholds,
-				currentProfileId,
-				metadata,
-				environmentDetails,
-			})
-
-			if (truncateResult.messages !== this.apiConversationHistory) {
-				await this.overwriteApiConversationHistory(truncateResult.messages)
-			}
-
-			if (truncateResult.summary) {
-				const { summary, cost, prevContextTokens, newContextTokens = 0 } = truncateResult
-				const contextCondense: ContextCondense = { summary, cost, newContextTokens, prevContextTokens }
-				await this.say(
-					"condense_context",
-					undefined /* text */,
-					undefined /* images */,
-					false /* partial */,
-					undefined /* checkpoint */,
-					undefined /* progressStatus */,
-					{ isNonInteractive: true } /* options */,
-					contextCondense,
-				)
-			} else if (truncateResult.truncationId) {
-				// Sliding window truncation occurred (fallback when condensing fails or is disabled)
-				const contextTruncation: ContextTruncation = {
-					truncationId: truncateResult.truncationId,
-					messagesRemoved: truncateResult.messagesRemoved ?? 0,
-					prevContextTokens: truncateResult.prevContextTokens,
-					newContextTokens: truncateResult.newContextTokensAfterTruncation ?? 0,
-				}
-				await this.say(
-					"sliding_window_truncation",
-					undefined /* text */,
-					undefined /* images */,
-					false /* partial */,
-					undefined /* checkpoint */,
-					undefined /* progressStatus */,
-					{ isNonInteractive: true } /* options */,
-					undefined /* contextCondense */,
-					contextTruncation,
-				)
-			}
-		} finally {
-			// Notify webview that context management is complete (removes in-progress spinner)
-			// IMPORTANT: Must always be sent to dismiss the spinner, even on error
-			await this.providerRef
-				.deref()
-				?.postMessageToWebview({ type: "condenseTaskContextResponse", text: this.taskId })
-		}
+	// Delegated to TaskStreamProcessor
+	async handleContextWindowExceededError(): Promise<void> {
+		return this.streamProcessor.handleContextWindowExceededError()
 	}
 
-	/**
-	 * Enforce the user-configured provider rate limit.
-	 *
-	 * NOTE: This is intentionally treated as expected behavior and is surfaced via
-	 * the `api_req_rate_limit_wait` say type (not an error).
-	 */
+	// Delegated to TaskStreamProcessor
 	private async maybeWaitForProviderRateLimit(retryAttempt: number): Promise<void> {
-		const state = await this.providerRef.deref()?.getState()
-		const rateLimitSeconds =
-			state?.apiConfiguration?.rateLimitSeconds ?? this.apiConfiguration?.rateLimitSeconds ?? 0
-
-		if (rateLimitSeconds <= 0 || !Task.lastGlobalApiRequestTime) {
-			return
-		}
-
-		const now = performance.now()
-		const timeSinceLastRequest = now - Task.lastGlobalApiRequestTime
-		const rateLimitDelay = Math.ceil(
-			Math.min(rateLimitSeconds, Math.max(0, rateLimitSeconds * 1000 - timeSinceLastRequest) / 1000),
-		)
-
-		// Only show the countdown UX on the first attempt. Retry flows have their own delay messaging.
-		if (rateLimitDelay > 0 && retryAttempt === 0) {
-			for (let i = rateLimitDelay; i > 0; i--) {
-				// Send structured JSON data for i18n-safe transport
-				const delayMessage = JSON.stringify({ seconds: i })
-				await this.say("api_req_rate_limit_wait", delayMessage, undefined, true)
-				await delay(1000)
-			}
-			// Finalize the partial message so the UI doesn't keep rendering an in-progress spinner.
-			await this.say("api_req_rate_limit_wait", undefined, undefined, false)
-		}
+		return this.streamProcessor.maybeWaitForProviderRateLimit(retryAttempt)
 	}
 
 	public async *attemptApiRequest(
 		retryAttempt: number = 0,
 		options: { skipProviderRateLimit?: boolean } = {},
 	): ApiStream {
+		// Warn if this subtask is approaching the parent's remaining token budget.
+		if (this.parentTask) {
+			this.checkSubtaskTokenBudget()
+		}
+
+		this.stateMachine.force(TaskState.PREPARING)
 		const state = await this.providerRef.deref()?.getState()
 
 		const {
@@ -4580,6 +4508,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			autoCondenseContextPercent = DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT,
 			profileThresholds = {},
 		} = state ?? {}
+		const unattendedRetryEnabled = (state as any)?.unattendedRetryEnabled ?? false
+		const unattendedMaxRetryAttempts = (state as any)?.unattendedMaxRetryAttempts ?? 5
+
+		// Persistent retry: long-duration retry for unattended scenarios (rate_limit / capacity).
+		// Default disabled; enable via state configuration.
+		const enablePersistentRetry = (state as any)?.enablePersistentRetry ?? false
+		const persistentRetryHandler = this.persistentRetryHandler ?? (this.persistentRetryHandler = new PersistentRetryManager())
 
 		// Get condensing configuration for automatic triggers.
 		const customCondensingPrompt = state?.customSupportPrompts?.CONDENSE
@@ -4597,14 +4532,57 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// in the caller.
 		Task.lastGlobalApiRequestTime = performance.now()
 
-		const systemPrompt = await this.getSystemPrompt()
-		const { contextTokens } = this.getTokenUsage()
+		// Pre-fetch core request prerequisites concurrently to reduce start latency.
+		void this.requestBuilder.prefetchSystemPromptData()
+		const systemPromptPartsPromise = this.getSystemPromptParts()
+		const tokenUsagePromise = Promise.resolve(this.getTokenUsage())
+		const modelSnapshotPromise = Promise.resolve(this.api.getModel())
+
+		// Prepare lastMessageContent before Promise.all so countTokens can run concurrently.
+		const lastMessage = this.apiConversationHistory[this.apiConversationHistory.length - 1]
+		const lastMessageContent = lastMessage?.content
+		const lastMsgTokensPromise = lastMessageContent
+			? Array.isArray(lastMessageContent)
+				? this.api.countTokens(lastMessageContent)
+				: this.api.countTokens([{ type: "text", text: lastMessageContent as string }])
+			: Promise.resolve(0)
+
+		const [systemPromptParts, tokenUsage, modelSnapshot, lastMessageTokens] = await Promise.all([
+			systemPromptPartsPromise,
+			tokenUsagePromise,
+			modelSnapshotPromise,
+			lastMsgTokensPromise,
+		])
+		const systemPrompt = systemPromptParts.fullPrompt
+
+		const cacheBreak = globalPromptCacheBreakDetector.check(
+			systemPromptParts.staticPart,
+			systemPromptParts.dynamicPart,
+			systemPromptParts.perToolHashes,
+		)
+		if (cacheBreak) {
+			console.log(
+				`[Prompt Cache] break source=${cacheBreak.changeSource} staticChanged=${cacheBreak.staticPartChanged} dynamicChanged=${cacheBreak.dynamicPartChanged} changedTools=${(cacheBreak.changedTools ?? []).join(",") || "none"}`,
+			)
+		}
+		const { contextTokens } = tokenUsage
+		const cacheReadTokens = this.requestCacheReadWindow.length
+			? Math.round(this.requestCacheReadWindow.reduce((sum, n) => sum + n, 0) / this.requestCacheReadWindow.length)
+			: undefined
+		const cacheAwareTotalTokens = this.requestInputTokensWindow.length
+			? Math.max(
+				1,
+				Math.round(
+					this.requestInputTokensWindow.reduce((sum, n) => sum + n, 0) / this.requestInputTokensWindow.length,
+				),
+			)
+			: undefined
 
 		if (contextTokens) {
-			const modelInfo = this.api.getModel().info
+			const modelInfo = modelSnapshot.info
 
 			const maxTokens = getModelMaxOutputTokens({
-				modelId: this.api.getModel().id,
+				modelId: modelSnapshot.id,
 				model: modelInfo,
 				settings: this.apiConfiguration,
 			})
@@ -4613,20 +4591,28 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 			// Get the current profile ID using the helper method
 			const currentProfileId = this.getCurrentProfileId(state)
-			// Check if context management will likely run (threshold check)
-			// This allows us to show an in-progress indicator to the user
-			// We use the centralized willManageContext helper to avoid duplicating threshold logic
-			const lastMessage = this.apiConversationHistory[this.apiConversationHistory.length - 1]
-			const lastMessageContent = lastMessage?.content
-			let lastMessageTokens = 0
-			if (lastMessageContent) {
-				lastMessageTokens = Array.isArray(lastMessageContent)
-					? await this.api.countTokens(lastMessageContent)
-					: await this.api.countTokens([{ type: "text", text: lastMessageContent as string }])
-			}
+			const ctxProvider = this.providerRef.deref()
+			const contextMgmtToolsPromise = ctxProvider
+				? buildNativeToolsArrayWithRestrictions({
+						provider: ctxProvider,
+						cwd: this.cwd,
+						mode,
+						customModes: state?.customModes,
+						experiments: state?.experiments,
+						apiConfiguration,
+						disabledTools: state?.disabledTools,
+						enableWebSearch: state?.enableWebSearch,
+						modelInfo,
+						includeAllToolsWithRestrictions: false,
+					})
+				: Promise.resolve({ tools: [] as OpenAI.Chat.ChatCompletionTool[] })
+
+			this.tokenGrowthTracker.addSample(contextTokens + lastMessageTokens)
+			const growthSnapshot = this.tokenGrowthTracker.getSnapshot()
+			const predictedTotalTokens = growthSnapshot?.predictedNextTokens ?? contextTokens
 
 			const contextManagementWillRun = willManageContext({
-				totalTokens: contextTokens,
+				totalTokens: Math.max(contextTokens, predictedTotalTokens),
 				contextWindow,
 				maxTokens,
 				autoCondenseContext,
@@ -4645,27 +4631,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					?.postMessageToWebview({ type: "condenseTaskContextStarted", text: this.taskId })
 			}
 
-			// Build tools for condensing metadata (same tools used for normal API calls)
-			// This ensures the condensing API call includes tool definitions for providers that need them
-			let contextMgmtTools: import("openai").default.Chat.ChatCompletionTool[] = []
-			{
-				const provider = this.providerRef.deref()
-				if (provider) {
-					const toolsResult = await buildNativeToolsArrayWithRestrictions({
-						provider,
-						cwd: this.cwd,
-						mode,
-						customModes: state?.customModes,
-						experiments: state?.experiments,
-						apiConfiguration,
-						disabledTools: state?.disabledTools,
-				enableWebSearch: state?.enableWebSearch,
-						modelInfo,
-						includeAllToolsWithRestrictions: false,
-					})
-					contextMgmtTools = toolsResult.tools
-				}
-			}
+			// Build tools for condensing metadata only when context management will run.
+			// This avoids awaiting tool schema preparation on non-compaction turns.
+			const contextMgmtTools: import("openai").default.Chat.ChatCompletionTool[] = contextManagementWillRun
+				? (await contextMgmtToolsPromise).tools
+				: []
 
 			// Build metadata with tools and taskId for the condensing API call
 			const contextMgmtMetadata: ApiHandlerCreateMessageMetadata = {
@@ -4680,27 +4650,26 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					: {}),
 			}
 
-			// Only generate environment details when context management will actually run.
-			// getEnvironmentDetails(this, true) triggers a recursive workspace listing which
-			// adds overhead - avoid this for the common case where context is below threshold.
-			const contextMgmtEnvironmentDetails = contextManagementWillRun
-				? await getEnvironmentDetails(this, true)
-				: undefined
-
-			// Get files read by Roo for code folding - only when context management will run
-			const contextMgmtFilesReadByRoo =
-				contextManagementWillRun && autoCondenseContext
-					? await this.getFilesReadByRooSafely("attemptApiRequest")
-					: undefined
+			// Run environment details, file list, and tool schema fetch concurrently
+			// when context management will actually run. Avoids serial await overhead.
+			const [contextMgmtEnvironmentDetails, contextMgmtFilesReadByRoo] = contextManagementWillRun
+				? await Promise.all([
+						getEnvironmentDetails(this, true),
+						autoCondenseContext
+							? this.getFilesReadByRooSafely("attemptApiRequest")
+							: Promise.resolve(undefined),
+					])
+				: [undefined, undefined]
 
 			try {
+				const shouldBypassCondense = this.errorRecovery.shouldBypassCondense()
 				const truncateResult = await manageContext({
 					messages: this.apiConversationHistory,
 					totalTokens: contextTokens,
 					maxTokens,
 					contextWindow,
 					apiHandler: this.api,
-					autoCondenseContext,
+					autoCondenseContext: shouldBypassCondense ? false : autoCondenseContext,
 					autoCondenseContextPercent,
 					systemPrompt,
 					taskId: this.taskId,
@@ -4712,14 +4681,18 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					filesReadByRoo: contextMgmtFilesReadByRoo,
 					cwd: this.cwd,
 					rooIgnoreController: this.rooIgnoreController,
+					enableMicroCompact: true,
+					cacheReadTokens,
+					cacheAwareTotalTokens,
 				})
 				if (truncateResult.messages !== this.apiConversationHistory) {
 					await this.overwriteApiConversationHistory(truncateResult.messages)
 				}
 				if (truncateResult.error) {
-					await this.say("condense_context_error", truncateResult.error)
+					await this.errorRecovery.recordCompactFailure(truncateResult.error)
 				}
 				if (truncateResult.summary) {
+					this.errorRecovery.resetCompactFailure()
 					const { summary, cost, prevContextTokens, newContextTokens = 0, condenseId } = truncateResult
 					const contextCondense: ContextCondense = {
 						summary,
@@ -4794,7 +4767,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		}
 
 		// Whether we include tools is determined by whether we have any tools to send.
-		const modelInfo = this.api.getModel().info
+		const modelInfo = modelSnapshot.info
 
 		// Build complete tools array: native tools + dynamic MCP tools
 		// When includeAllToolsWithRestrictions is true, returns all tools but provides
@@ -4803,6 +4776,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// Only Gemini currently supports this - other providers filter tools normally.
 		let allTools: OpenAI.Chat.ChatCompletionTool[] = []
 		let allowedFunctionNames: string[] | undefined
+		const provider = this.providerRef.deref()
+		if (!provider) {
+			throw new Error("Provider reference lost during tool building")
+		}
 
 		// Gemini requires all tool definitions to be present for history compatibility,
 		// but uses allowedFunctionNames to restrict which tools can be called.
@@ -4810,26 +4787,24 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// so they continue to receive only the filtered tools for the current mode.
 		const supportsAllowedFunctionNames = apiConfiguration?.apiProvider === "gemini"
 
-		{
-			const provider = this.providerRef.deref()
-			if (!provider) {
-				throw new Error("Provider reference lost during tool building")
-			}
+		const toolsResult = await buildNativeToolsArrayWithRestrictions({
+			provider,
+			cwd: this.cwd,
+			mode,
+			customModes: state?.customModes,
+			experiments: state?.experiments,
+			apiConfiguration,
+			disabledTools: state?.disabledTools,
+			enableWebSearch: state?.enableWebSearch,
+			modelInfo,
+			includeAllToolsWithRestrictions: supportsAllowedFunctionNames,
+		})
+		allTools = toolsResult.tools
+		allowedFunctionNames = toolsResult.allowedFunctionNames
 
-			const toolsResult = await buildNativeToolsArrayWithRestrictions({
-				provider,
-				cwd: this.cwd,
-				mode,
-				customModes: state?.customModes,
-				experiments: state?.experiments,
-				apiConfiguration,
-				disabledTools: state?.disabledTools,
-				enableWebSearch: state?.enableWebSearch,
-				modelInfo,
-				includeAllToolsWithRestrictions: supportsAllowedFunctionNames,
-			})
-			allTools = toolsResult.tools
-			allowedFunctionNames = toolsResult.allowedFunctionNames
+		// Cache tool definitions for reuse by child tasks with the same mode.
+		if (mode) {
+			this.cachedToolDefinitions = { mode, tools: allTools, time: Date.now() }
 		}
 
 		const shouldIncludeTools = allTools.length > 0
@@ -4863,6 +4838,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			cleanConversationHistory as unknown as Anthropic.Messages.MessageParam[],
 			metadata,
 		)
+		this.stateMachine.force(TaskState.STREAMING)
 		const iterator = stream[Symbol.asyncIterator]()
 
 		// Set up abort handling - when the signal is aborted, clean up the controller reference
@@ -4888,28 +4864,73 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			})
 
 			const firstChunk = await Promise.race([firstChunkPromise, abortPromise])
-			yield firstChunk.value
+			await clearRetryEvents(this.globalStoragePath, this.taskId)
+			const firstValue = firstChunk.value
+			if ((firstValue as any)?.type === "error") {
+				const errMsg = (firstValue as any)?.message || (firstValue as any)?.error || "API stream error"
+				throw new Error(String(errMsg))
+			}
+			yield firstValue
 			this.isWaitingForFirstChunk = false
 		} catch (error) {
 			this.isWaitingForFirstChunk = false
 			this.currentRequestAbortController = undefined
-			const isContextWindowExceededError = checkContextWindowExceededError(error)
+			this.stateMachine.force(TaskState.ERROR)
 
-			// If it's a context window error and we haven't exceeded max retries for this error type
-			if (isContextWindowExceededError && retryAttempt < MAX_CONTEXT_WINDOW_RETRIES) {
-				console.warn(
-					`[Task#${this.taskId}] Context window exceeded for model ${this.api.getModel().id}. ` +
-						`Retry attempt ${retryAttempt + 1}/${MAX_CONTEXT_WINDOW_RETRIES}. ` +
-						`Attempting automatic truncation...`,
-				)
-				await this.handleContextWindowExceededError()
-				// Retry the request after handling the context window error
-				yield* this.attemptApiRequest(retryAttempt + 1)
+			// Delegate error classification, retry event recording, and structured recovery
+			// to ErrorRecoveryHandler. It returns a decision; we handle flow control here.
+			const recovery = await this.errorRecovery.handleApiError(error, retryAttempt)
+			if (recovery.action === "retry") {
+				yield* this.attemptApiRequest(recovery.nextAttempt)
 				return
 			}
 
 			// note that this api_req_failed ask is unique in that we only present this option if the api hasn't streamed any content yet (ie it fails on the first chunk due), as it would allow them to hit a retry button. However if the api failed mid-stream, it could be in any arbitrary state where some tools may have executed, so that error is handled differently and requires cancelling the task entirely.
 			if (autoApprovalEnabled) {
+				this.stateMachine.force(TaskState.RECOVERING_MAX_TOKENS)
+				if (unattendedRetryEnabled && retryAttempt >= unattendedMaxRetryAttempts) {
+					// Before giving up, check if persistent retry is eligible for this error.
+					// Persistent retry handles rate_limit and capacity errors with long-duration
+					// backoff (up to 6 hours) and heartbeat messages to the UI.
+					const { classifyApiError } = await import("../errors/apiErrorClassifier")
+					const errorType = classifyApiError(error)
+					if (persistentRetryHandler.isEligible(errorType)) {
+						console.log(
+							`[Task#${this.taskId}] Normal retry limit reached. Entering persistent retry for ${errorType}...`,
+						)
+						try {
+							await persistentRetryHandler.waitForRetry(
+								errorType,
+								(message, _retryCount, _elapsed) => {
+									// Send heartbeat to UI via the existing retry delayed say type
+									this.say("api_req_retry_delayed", message, undefined, true)
+								},
+							)
+						} catch (persistentErr) {
+							// Persistent retry expired or was cancelled
+							const stats = persistentRetryHandler.getStats()
+							throw new Error(
+								`[Task#${this.taskId}] Persistent retry ended after ${stats.totalRetries} attempts: ${persistentErr instanceof Error ? persistentErr.message : String(persistentErr)}`,
+							)
+						}
+
+						// Check abort after persistent retry wait
+						if (this.abort) {
+							persistentRetryHandler.cancel()
+							throw new Error(
+								`[Task#attemptApiRequest] task ${this.taskId}.${this.instanceId} aborted during persistent retry`,
+							)
+						}
+
+						// Continue retrying from current attempt
+						yield* this.attemptApiRequest(retryAttempt + 1)
+						return
+					}
+
+					throw new Error(
+						`[Task#${this.taskId}] Unattended retry limit reached (${unattendedMaxRetryAttempts}).`,
+					)
+				}
 				// Apply shared exponential backoff and countdown UX
 				await this.backoffAndAnnounce(retryAttempt, error)
 
@@ -4956,80 +4977,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// effectively passes along all subsequent chunks from the original
 		// stream.
 		yield* iterator
+		this.stateMachine.force(TaskState.COMPLETED)
 	}
 
+	// Delegated to TaskStreamProcessor
 	// Shared exponential backoff for retries (first-chunk and mid-stream)
 	private async backoffAndAnnounce(retryAttempt: number, error: any): Promise<void> {
-		try {
-			const state = await this.providerRef.deref()?.getState()
-			const baseDelay = state?.requestDelaySeconds ?? DEFAULT_REQUEST_DELAY_SECONDS
-
-			let exponentialDelay = Math.min(
-				Math.ceil(baseDelay * Math.pow(2, retryAttempt)),
-				MAX_EXPONENTIAL_BACKOFF_SECONDS,
-			)
-
-			// Respect provider rate limit window
-			let rateLimitDelay = 0
-			const rateLimit = (state?.apiConfiguration ?? this.apiConfiguration)?.rateLimitSeconds || 0
-			if (Task.lastGlobalApiRequestTime && rateLimit > 0) {
-				const elapsed = performance.now() - Task.lastGlobalApiRequestTime
-				rateLimitDelay = Math.ceil(Math.min(rateLimit, Math.max(0, rateLimit * 1000 - elapsed) / 1000))
-			}
-
-			// Prefer RetryInfo on 429 if present
-			if (error?.status === 429) {
-				const retryInfo = error?.errorDetails?.find(
-					(d: any) => d["@type"] === "type.googleapis.com/google.rpc.RetryInfo",
-				)
-				const match = retryInfo?.retryDelay?.match?.(/^(\d+)s$/)
-				if (match) {
-					exponentialDelay = Number(match[1]) + 1
-				}
-			}
-
-			const finalDelay = Math.max(exponentialDelay, rateLimitDelay)
-			if (finalDelay <= 0) {
-				return
-			}
-
-			// Build header text; fall back to error message if none provided
-			let headerText
-			if (error.status) {
-				// Include both status code (for ChatRow parsing) and detailed message (for error details)
-				// Format: "<status>\n<message>" allows ChatRow to extract status via parseInt(text.substring(0,3))
-				// while preserving the full error message in errorDetails for debugging
-				const errorMessage = error?.message || "Unknown error"
-				headerText = `${error.status}\n${errorMessage}`
-			} else if (error?.message) {
-				headerText = error.message
-			} else {
-				headerText = "Unknown error"
-			}
-
-			headerText = headerText ? `${headerText}\n` : ""
-
-			// Show countdown timer with exponential backoff
-			for (let i = finalDelay; i > 0; i--) {
-				// Check abort flag during countdown to allow early exit
-				if (this.abort) {
-					throw new Error(`[Task#${this.taskId}] Aborted during retry countdown`)
-				}
-
-				await this.say("api_req_retry_delayed", `${headerText}<retry_timer>${i}</retry_timer>`, undefined, true)
-				await delay(1000)
-			}
-
-			await this.say("api_req_retry_delayed", headerText, undefined, false)
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err)
-
-			if (this.abort && message.includes("Aborted during retry countdown")) {
-				return
-			}
-
-			console.error("Exponential backoff failed:", err)
-		}
+		return this.streamProcessor.backoffAndAnnounce(retryAttempt, error)
 	}
 
 	// Checkpoints
@@ -5038,146 +4992,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		return checkpointSave(this, force, suppressMessage)
 	}
 
+	// Delegated to TaskStreamProcessor
 	private buildCleanConversationHistory(
 		messages: ApiMessage[],
 	): Array<
 		Anthropic.Messages.MessageParam | { type: "reasoning"; encrypted_content: string; id?: string; summary?: any[] }
 	> {
-		type ReasoningItemForRequest = {
-			type: "reasoning"
-			encrypted_content: string
-			id?: string
-			summary?: any[]
-		}
-
-		const cleanConversationHistory: (Anthropic.Messages.MessageParam | ReasoningItemForRequest)[] = []
-
-		for (const msg of messages) {
-			// Standalone reasoning: send encrypted, skip plain text
-			if (msg.type === "reasoning") {
-				if (msg.encrypted_content) {
-					cleanConversationHistory.push({
-						type: "reasoning",
-						summary: msg.summary,
-						encrypted_content: msg.encrypted_content!,
-						...(msg.id ? { id: msg.id } : {}),
-					})
-				}
-				continue
-			}
-
-			// Preferred path: assistant message with embedded reasoning as first content block
-			if (msg.role === "assistant") {
-				const rawContent = msg.content
-
-				const contentArray: Anthropic.Messages.ContentBlockParam[] = Array.isArray(rawContent)
-					? (rawContent as Anthropic.Messages.ContentBlockParam[])
-					: rawContent !== undefined
-						? ([
-								{ type: "text", text: rawContent } satisfies Anthropic.Messages.TextBlockParam,
-							] as Anthropic.Messages.ContentBlockParam[])
-						: []
-
-				const [first, ...rest] = contentArray
-
-				// Check if this message has reasoning_details (OpenRouter format for Gemini 3, etc.)
-				const msgWithDetails = msg
-				if (msgWithDetails.reasoning_details && Array.isArray(msgWithDetails.reasoning_details)) {
-					// Build the assistant message with reasoning_details
-					let assistantContent: Anthropic.Messages.MessageParam["content"]
-
-					if (contentArray.length === 0) {
-						assistantContent = ""
-					} else if (contentArray.length === 1 && contentArray[0].type === "text") {
-						assistantContent = (contentArray[0] as Anthropic.Messages.TextBlockParam).text
-					} else {
-						assistantContent = contentArray
-					}
-
-					// Create message with reasoning_details property
-					cleanConversationHistory.push({
-						role: "assistant",
-						content: assistantContent,
-						reasoning_details: msgWithDetails.reasoning_details,
-					} as any)
-
-					continue
-				}
-
-				// Embedded reasoning: encrypted (send) or plain text (skip)
-				const hasEncryptedReasoning =
-					first && (first as any).type === "reasoning" && typeof (first as any).encrypted_content === "string"
-				const hasPlainTextReasoning =
-					first && (first as any).type === "reasoning" && typeof (first as any).text === "string"
-
-				if (hasEncryptedReasoning) {
-					const reasoningBlock = first as any
-
-					// Send as separate reasoning item (OpenAI Native)
-					cleanConversationHistory.push({
-						type: "reasoning",
-						summary: reasoningBlock.summary ?? [],
-						encrypted_content: reasoningBlock.encrypted_content,
-						...(reasoningBlock.id ? { id: reasoningBlock.id } : {}),
-					})
-
-					// Send assistant message without reasoning
-					let assistantContent: Anthropic.Messages.MessageParam["content"]
-
-					if (rest.length === 0) {
-						assistantContent = ""
-					} else if (rest.length === 1 && rest[0].type === "text") {
-						assistantContent = (rest[0] as Anthropic.Messages.TextBlockParam).text
-					} else {
-						assistantContent = rest
-					}
-
-					cleanConversationHistory.push({
-						role: "assistant",
-						content: assistantContent,
-					} satisfies Anthropic.Messages.MessageParam)
-
-					continue
-				} else if (hasPlainTextReasoning) {
-					// Check if the model's preserveReasoning flag is set
-					// If true, include the reasoning block in API requests
-					// If false/undefined, strip it out (stored for history only, not sent back to API)
-					const shouldPreserveForApi = this.api.getModel().info.preserveReasoning === true
-					let assistantContent: Anthropic.Messages.MessageParam["content"]
-
-					if (shouldPreserveForApi) {
-						// Include reasoning block in the content sent to API
-						assistantContent = contentArray
-					} else {
-						// Strip reasoning out - stored for history only, not sent back to API
-						if (rest.length === 0) {
-							assistantContent = ""
-						} else if (rest.length === 1 && rest[0].type === "text") {
-							assistantContent = (rest[0] as Anthropic.Messages.TextBlockParam).text
-						} else {
-							assistantContent = rest
-						}
-					}
-
-					cleanConversationHistory.push({
-						role: "assistant",
-						content: assistantContent,
-					} satisfies Anthropic.Messages.MessageParam)
-
-					continue
-				}
-			}
-
-			// Default path for regular messages (no embedded reasoning)
-			if (msg.role) {
-				cleanConversationHistory.push({
-					role: msg.role,
-					content: msg.content as Anthropic.Messages.ContentBlockParam[] | string,
-				})
-			}
-		}
-
-		return cleanConversationHistory
+		return this.streamProcessor.buildCleanConversationHistory(messages)
 	}
 	public async checkpointRestore(options: CheckpointRestoreOptions) {
 		return checkpointRestore(this, options)
@@ -5195,6 +5016,26 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	public getTokenUsage(): TokenUsage {
 		return getApiMetrics(this.combineMessages(this.clineMessages.slice(1)))
+	}
+
+	/**
+	 * Check if this subtask is approaching the parent's remaining token budget.
+	 * Emits a warning when usage exceeds 80% of parent's remaining capacity.
+	 */
+	private checkSubtaskTokenBudget(): void {
+		if (!this.parentTask) return
+		const parentUsage = this.parentTask.getTokenUsage()
+		const myUsage = this.getTokenUsage()
+		const modelInfo = this.api.getModel().info
+		const contextWindow = modelInfo.contextWindow || 200_000
+		const parentRemaining = contextWindow - (parentUsage.contextTokens || 0)
+		const myTokens = myUsage.contextTokens || 0
+		if (parentRemaining > 0 && myTokens > parentRemaining * 0.8) {
+			console.warn(
+				`[Task#${this.taskId}] SubTask token usage (${myTokens}) approaching parent's remaining budget (${parentRemaining}). ` +
+					`Consider completing this subtask soon.`,
+			)
+		}
 	}
 
 	public recordToolUsage(toolName: ToolName) {

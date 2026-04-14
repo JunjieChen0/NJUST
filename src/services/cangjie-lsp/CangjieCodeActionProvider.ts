@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import { inferCangjiePackageFromSrcLayout } from "./cangjieSourceLayout"
 
 interface QuickFixPattern {
 	pattern: RegExp
@@ -51,7 +52,9 @@ const QUICK_FIX_PATTERNS: QuickFixPattern[] = [
 	{
 		pattern: /(?:undeclared|cannot find|not found|未找到符号|unresolved)\b.*?\b(\w+)/i,
 		createFix(document, diagnostic, match) {
-			const symbolName = match[1]
+			let symbolName = match[1]
+			const quoted = diagnostic.message.match(/['"`](\w+)['"`]/)
+			if (quoted?.[1]) symbolName = quoted[1]
 			const pkg = STDLIB_IMPORT_HINTS[symbolName]
 			if (!pkg) return undefined
 
@@ -158,7 +161,9 @@ const QUICK_FIX_PATTERNS: QuickFixPattern[] = [
 	{
 		pattern: /(?:missing import|import.*not found|未导入)\b.*?\b(\w+)/i,
 		createFix(document, diagnostic, match) {
-			const symbolName = match[1]
+			let symbolName = match[1]
+			const quoted = diagnostic.message.match(/['"`](\w+)['"`]/)
+			if (quoted?.[1]) symbolName = quoted[1]
 			const pkg = STDLIB_IMPORT_HINTS[symbolName]
 			if (!pkg) return undefined
 
@@ -176,6 +181,23 @@ const QUICK_FIX_PATTERNS: QuickFixPattern[] = [
 			action.isPreferred = true
 			const edit = new vscode.WorkspaceEdit()
 			edit.insert(document.uri, pos, importLine)
+			action.edit = edit
+			return action
+		},
+	},
+	{
+		pattern: /(?:missing package|package declaration|expected\s+package|缺少\s*package)/i,
+		createFix(document, diagnostic) {
+			const pkg = inferCangjiePackageFromSrcLayout(document.uri)
+			if (!pkg) return undefined
+
+			const firstLine = document.lineAt(0).text.trim()
+			if (firstLine.startsWith("package ")) return undefined
+
+			const action = new vscode.CodeAction(`添加 package ${pkg}`, vscode.CodeActionKind.QuickFix)
+			action.diagnostics = [diagnostic]
+			const edit = new vscode.WorkspaceEdit()
+			edit.insert(document.uri, new vscode.Position(0, 0), `package ${pkg}\n\n`)
 			action.edit = edit
 			return action
 		},

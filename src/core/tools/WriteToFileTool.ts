@@ -13,6 +13,7 @@ import { stripLineNumbers, everyLineHasLineNumbers } from "../../integrations/mi
 import { getReadablePath } from "../../utils/path"
 import { ignoreAbortError } from "../../utils/errorHandling"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
+import { z } from "zod"
 import { unescapeHtmlEntities } from "../../utils/text-normalization"
 import { EXPERIMENT_IDS, experiments } from "../../shared/experiments"
 import { convertNewFileToUnifiedDiff, computeDiffStats, sanitizeUnifiedDiff } from "../diff/stats"
@@ -27,6 +28,22 @@ interface WriteToFileParams {
 
 export class WriteToFileTool extends BaseTool<"write_to_file"> {
 	readonly name = "write_to_file" as const
+	override readonly requiresCheckpoint = true
+
+	override interruptBehavior(): "cancel" | "block" {
+		return "block"
+	}
+
+	override userFacingName(): string {
+		return "Write To File"
+	}
+
+	protected override get inputSchema() {
+		return z.object({
+			path: z.string().min(1, "File path is required"),
+			content: z.string(), // allow empty string (clearing file)
+		})
+	}
 
 	async execute(params: WriteToFileParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { pushToolResult, handleError, askApproval } = callbacks

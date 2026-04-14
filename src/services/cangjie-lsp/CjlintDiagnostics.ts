@@ -5,6 +5,7 @@ import * as os from "os"
 import { execFile } from "child_process"
 import { promisify } from "util"
 import { resolveCangjieToolPath, buildCangjieToolEnv } from "./cangjieToolUtils"
+import type { CangjieLintConfig } from "./CangjieLintConfig"
 
 const execFileAsync = promisify(execFile)
 
@@ -30,7 +31,10 @@ export class CjlintDiagnostics implements vscode.Disposable {
 	private running = false
 	private debounceTimer: ReturnType<typeof setTimeout> | undefined
 
-	constructor(private readonly outputChannel: vscode.OutputChannel) {
+	constructor(
+		private readonly outputChannel: vscode.OutputChannel,
+		private readonly lintConfig?: CangjieLintConfig,
+	) {
 		this.diagnosticCollection = vscode.languages.createDiagnosticCollection("cjlint")
 		this.disposables.push(this.diagnosticCollection)
 
@@ -107,8 +111,15 @@ export class CjlintDiagnostics implements vscode.Disposable {
 			try { fs.unlinkSync(tmpReport) } catch {}
 
 			const normalized = path.resolve(filePath)
+			if (this.lintConfig?.isFileExcluded(normalized)) {
+				this.diagnosticCollection.delete(uri)
+				return
+			}
 			const fileDiags = allDiagnostics.get(normalized) || []
-			const deduplicated = this.deduplicateWithLsp(uri, fileDiags)
+			let deduplicated = this.deduplicateWithLsp(uri, fileDiags)
+			if (this.lintConfig) {
+				deduplicated = this.lintConfig.filterDiagnostics(deduplicated)
+			}
 			this.diagnosticCollection.set(uri, deduplicated)
 
 			this.outputChannel.appendLine(
@@ -120,6 +131,11 @@ export class CjlintDiagnostics implements vscode.Disposable {
 		} finally {
 			this.running = false
 		}
+	}
+
+	/** Clear all cjlint-reported diagnostics (e.g. when leaving Cangjie Dev mode). */
+	clearAll(): void {
+		this.diagnosticCollection.clear()
 	}
 
 	async lintWorkspace(): Promise<void> {
@@ -172,8 +188,12 @@ export class CjlintDiagnostics implements vscode.Disposable {
 			}
 
 			for (const [filePath, diagnostics] of allDiagnostics) {
+				if (this.lintConfig?.isFileExcluded(filePath)) continue
 				const uri = vscode.Uri.file(filePath)
-				const deduplicated = this.deduplicateWithLsp(uri, diagnostics)
+				let deduplicated = this.deduplicateWithLsp(uri, diagnostics)
+				if (this.lintConfig) {
+					deduplicated = this.lintConfig.filterDiagnostics(deduplicated)
+				}
 				this.diagnosticCollection.set(uri, deduplicated)
 			}
 
@@ -198,12 +218,23 @@ export class CjlintDiagnostics implements vscode.Disposable {
 
 		if (lspDiags.length === 0) return cjlintDiags
 
+		const stripRule = (m: string) => m.replace(/^\[.*?\]\s*/, "")
+		const byLine = new Map<number, vscode.Diagnostic[]>()
+		for (const lspd of lspDiags) {
+			const line = lspd.range.start.line
+			const arr = byLine.get(line) ?? []
+			arr.push(lspd)
+			byLine.set(line, arr)
+		}
+
 		return cjlintDiags.filter((cjd) => {
-			return !lspDiags.some((lspd) =>
-				lspd.range.start.line === cjd.range.start.line &&
-				(lspd.message.includes(cjd.message.replace(/^\[.*?\]\s*/, "")) ||
-				 cjd.message.replace(/^\[.*?\]\s*/, "").includes(lspd.message)),
-			)
+			const sameLine = byLine.get(cjd.range.start.line)
+			if (!sameLine?.length) return true
+			const cm = stripRule(cjd.message)
+			return !sameLine.some((lspd) => {
+				const lm = stripRule(lspd.message)
+				return lm.includes(cm) || cm.includes(lm)
+			})
 		})
 	}
 

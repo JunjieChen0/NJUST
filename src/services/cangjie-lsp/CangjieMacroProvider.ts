@@ -1,12 +1,47 @@
 import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
+import * as os from "os"
 import { execFile } from "child_process"
 import { promisify } from "util"
-import { resolveCangjieToolPath, buildCangjieToolEnv } from "./cangjieToolUtils"
+import { resolveCangjieToolPath, buildCangjieToolEnv, CJC_CONFIG_KEY } from "./cangjieToolUtils"
 import type { CangjieSymbolIndex } from "./CangjieSymbolIndex"
 
 const execFileAsync = promisify(execFile)
+
+async function formatExpandedCangjieWithCjfmt(expanded: string, outputChannel: vscode.OutputChannel): Promise<string> {
+	const cjfmtPath = resolveCangjieToolPath("cjfmt", "cangjieTools.cjfmtPath")
+	if (!cjfmtPath) return expanded
+
+	const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+	const tmpIn = path.join(os.tmpdir(), `cjc_expand_${id}.cj`)
+	const tmpOut = path.join(os.tmpdir(), `cjc_expand_${id}_out.cj`)
+	try {
+		fs.writeFileSync(tmpIn, expanded, "utf-8")
+		await execFileAsync(cjfmtPath, ["-f", tmpIn, "-o", tmpOut], {
+			timeout: 15_000,
+			env: buildCangjieToolEnv() as NodeJS.ProcessEnv,
+		})
+		if (fs.existsSync(tmpOut)) {
+			return fs.readFileSync(tmpOut, "utf-8")
+		}
+	} catch (e) {
+		const msg = e instanceof Error ? e.message : String(e)
+		outputChannel.appendLine(`[MacroExpand] cjfmt skipped: ${msg}`)
+	} finally {
+		try {
+			fs.unlinkSync(tmpIn)
+		} catch {
+			/* ignore */
+		}
+		try {
+			fs.unlinkSync(tmpOut)
+		} catch {
+			/* ignore */
+		}
+	}
+	return expanded
+}
 
 const MACRO_CALL_RE = /(?:^|\s)@(\w+)/g
 const MACRO_DEF_RE = /^\s*(?:public\s+|private\s+|protected\s+|internal\s+)*macro\s+(\w+)/
@@ -124,7 +159,7 @@ export function registerMacroCommands(context: vscode.ExtensionContext, outputCh
 		vscode.commands.registerCommand(
 			"njust-ai-cj.cangjieExpandMacro",
 			async (uri: vscode.Uri, _line: number) => {
-				const cjcPath = resolveCangjieToolPath("cjc")
+				const cjcPath = resolveCangjieToolPath("cjc", CJC_CONFIG_KEY)
 				if (!cjcPath) {
 					vscode.window.showWarningMessage("未找到 cjc 编译器，无法展开宏。")
 					return
@@ -140,11 +175,13 @@ export function registerMacroCommands(context: vscode.ExtensionContext, outputCh
 						{ timeout: 15_000, env: buildCangjieToolEnv() as NodeJS.ProcessEnv },
 					)
 
-					const expanded = stdout || stderr
+					let expanded = stdout || stderr
 					if (!expanded || expanded.trim().length === 0) {
 						vscode.window.showInformationMessage("宏展开未产生输出（可能 cjc 不支持 --expand-macros 标志）。")
 						return
 					}
+
+					expanded = await formatExpandedCangjieWithCjfmt(expanded, outputChannel)
 
 					const doc = await vscode.workspace.openTextDocument({
 						content: expanded,

@@ -4,6 +4,7 @@ import OpenAI from "openai"
 import { isRetiredProvider, type ProviderSettings, type ModelInfo } from "@njust-ai-cj/types"
 
 import { ApiStream } from "./transform/stream"
+import { ModelFallbackManager, type FallbackConfig } from "../core/task/ModelFallback"
 
 import {
 	AnthropicHandler,
@@ -111,7 +112,33 @@ export interface ApiHandler {
 	countTokens(content: Array<Anthropic.Messages.ContentBlockParam>): Promise<number>
 }
 
-export function buildApiHandler(configuration: ProviderSettings): ApiHandler {
+export interface FallbackProviderConfig {
+	/** Fallback provider settings (used when primary provider fails) */
+	fallbackProvider?: ProviderSettings
+	/** Fallback behavior configuration */
+	fallbackConfig?: Partial<FallbackConfig>
+}
+
+export function buildApiHandler(configuration: ProviderSettings, fallbackOptions?: FallbackProviderConfig): ApiHandler {
+	const handler = createHandler(configuration)
+
+	if (fallbackOptions?.fallbackProvider) {
+		const fallbackHandler = createHandler(fallbackOptions.fallbackProvider)
+		const primaryModelId = handler.getModel().id
+		const fallbackModelId = fallbackHandler.getModel().id
+
+		const fallbackManager = new ModelFallbackManager(primaryModelId, {
+			...fallbackOptions.fallbackConfig,
+			fallbackModels: [fallbackModelId, ...(fallbackOptions.fallbackConfig?.fallbackModels ?? [])],
+		})
+
+		return new FallbackApiHandler(handler, fallbackHandler, fallbackManager)
+	}
+
+	return handler
+}
+
+function createHandler(configuration: ProviderSettings): ApiHandler {
 	const { apiProvider, ...options } = configuration
 
 	if (apiProvider && isRetiredProvider(apiProvider)) {
@@ -187,5 +214,41 @@ export function buildApiHandler(configuration: ProviderSettings): ApiHandler {
 			return new GlmHandler(options)
 		default:
 			return new AnthropicHandler(options)
+	}
+}
+
+/**
+ * Wrapper handler that delegates to a fallback handler when the primary handler
+ * is in fallback mode. The fallback manager tracks failure/success state.
+ */
+class FallbackApiHandler implements ApiHandler {
+	public readonly fallbackManager: ModelFallbackManager
+
+	constructor(
+		private primaryHandler: ApiHandler,
+		private fallbackHandler: ApiHandler,
+		fallbackManager: ModelFallbackManager,
+	) {
+		this.fallbackManager = fallbackManager
+	}
+
+	private get activeHandler(): ApiHandler {
+		return this.fallbackManager.isInFallbackMode() ? this.fallbackHandler : this.primaryHandler
+	}
+
+	createMessage(
+		systemPrompt: string,
+		messages: Anthropic.Messages.MessageParam[],
+		metadata?: ApiHandlerCreateMessageMetadata,
+	): ApiStream {
+		return this.activeHandler.createMessage(systemPrompt, messages, metadata)
+	}
+
+	getModel(): { id: string; info: ModelInfo } {
+		return this.activeHandler.getModel()
+	}
+
+	countTokens(content: Array<Anthropic.Messages.ContentBlockParam>): Promise<number> {
+		return this.activeHandler.countTokens(content)
 	}
 }

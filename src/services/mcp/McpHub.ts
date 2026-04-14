@@ -1072,6 +1072,61 @@ export class McpHub {
 		}
 	}
 
+	// ── Runtime hot-reload ────────────────────────────────────────────
+
+	/**
+	 * Refresh the tool list for one or all connected MCP servers without
+	 * tearing down the transport/client connections.
+	 *
+	 * Use cases:
+	 *   - A server dynamically registers new tools after initial handshake
+	 *   - The user changes alwaysAllow / disabledTools in config
+	 *   - An external process signals that a server's tool surface changed
+	 *
+	 * After refreshing, the webview is notified so the UI updates.
+	 *
+	 * @param serverName  Optional — refresh only this server. When omitted,
+	 *                    all connected servers are refreshed.
+	 * @returns Map of server names to their refreshed tool counts.
+	 */
+	async refreshTools(serverName?: string): Promise<Map<string, number>> {
+		const result = new Map<string, number>()
+
+		const targets = serverName
+			? this.connections.filter((c) => c.server.name === serverName && c.type === "connected")
+			: this.connections.filter((c) => c.type === "connected")
+
+		if (targets.length === 0) {
+			console.warn(
+				`[McpHub.refreshTools] No connected server(s) found${serverName ? ` for "${serverName}"` : ""}`,
+			)
+			return result
+		}
+
+		await Promise.allSettled(
+			targets.map(async (connection) => {
+				const name = connection.server.name
+				const source = connection.server.source || "global"
+				try {
+					const tools = await this.fetchToolsList(name, source as "global" | "project")
+					connection.server.tools = tools
+					result.set(name, tools.length)
+					console.log(
+						`[McpHub.refreshTools] Refreshed ${tools.length} tool(s) for server "${name}"`,
+					)
+				} catch (error) {
+					console.error(`[McpHub.refreshTools] Failed to refresh tools for "${name}":`, error)
+					result.set(name, -1) // -1 signals failure
+				}
+			}),
+		)
+
+		// Notify the webview so the UI reflects the updated tool lists
+		await this.notifyWebviewOfServerChanges()
+
+		return result
+	}
+
 	async deleteConnection(name: string, source?: "global" | "project"): Promise<void> {
 		// Clean up file watchers for this server
 		this.removeFileWatchersForServer(name)

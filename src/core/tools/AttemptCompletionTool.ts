@@ -9,6 +9,7 @@ import { formatResponse } from "../prompts/responses"
 import { Package } from "../../shared/package"
 import type { ToolUse } from "../../shared/tools"
 import { t } from "../../i18n"
+import type { TaskResult } from "../task/SubTaskOptions"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
@@ -170,10 +171,21 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 
 		pushToolResult("")
 
+		// For forked tasks, build a structured result summary with file info
+		let completionResultSummary = result
+		if (task.isolationLevel === "forked") {
+			const taskResult: TaskResult = {
+				success: true,
+				summary: result,
+				isolationLevel: "forked",
+			}
+			completionResultSummary = `[Forked Sub-task Result]\n${JSON.stringify(taskResult, null, 2)}`
+		}
+
 		await provider.reopenParentFromDelegation({
 			parentTaskId: task.parentTaskId!,
 			childTaskId: task.taskId,
-			completionResultSummary: result,
+			completionResultSummary,
 		})
 
 		return "delegated"

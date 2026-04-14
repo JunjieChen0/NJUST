@@ -27,6 +27,10 @@ type ValidationResult =
 export class UseMcpToolTool extends BaseTool<"use_mcp_tool"> {
 	readonly name = "use_mcp_tool" as const
 
+	override userFacingName(): string {
+		return "Use MCP Tool"
+	}
+
 	async execute(params: UseMcpToolParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { askApproval, handleError, pushToolResult } = callbacks
 

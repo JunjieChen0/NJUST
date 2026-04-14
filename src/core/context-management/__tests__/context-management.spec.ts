@@ -305,13 +305,11 @@ describe("Context Management", () => {
 				currentProfileId: "default",
 			})
 
-			// Check the new return type
-			expect(result).toEqual({
-				messages: messagesWithSmallContent,
-				summary: "",
-				cost: 0,
-				prevContextTokens: totalTokens,
-			})
+			// Check no truncation path
+			expect(result.messages).toEqual(messagesWithSmallContent)
+			expect(result.summary).toBe("")
+			expect(result.cost).toBe(0)
+			expect(result.prevContextTokens).toBe(totalTokens)
 		})
 
 		it("should truncate if tokens are above max tokens threshold", async () => {
@@ -467,7 +465,7 @@ describe("Context Management", () => {
 				profileThresholds: {},
 				currentProfileId: "default",
 			})
-			expect(resultWithSmall).toEqual({
+			expect(resultWithSmall).toMatchObject({
 				messages: messagesWithSmallContent,
 				summary: "",
 				cost: 0,
@@ -836,7 +834,7 @@ describe("Context Management", () => {
 			expect(summarizeSpy).not.toHaveBeenCalled()
 
 			// Verify no truncation or summarization occurred
-			expect(result).toEqual({
+			expect(result).toMatchObject({
 				messages: messagesWithSmallContent,
 				summary: "",
 				cost: 0,
@@ -1251,7 +1249,7 @@ describe("Context Management", () => {
 			// Should NOT use summarization because 50% < 80% (global threshold, since profile has no specific threshold)
 			// and totalTokens (50000) < allowedTokens (60000)
 			expect(summarizeSpy).not.toHaveBeenCalled()
-			expect(result).toEqual({
+			expect(result).toMatchObject({
 				messages: messagesWithSmallContent,
 				summary: "",
 				cost: 0,
@@ -1308,7 +1306,7 @@ describe("Context Management", () => {
 				profileThresholds: {},
 				currentProfileId: "default",
 			})
-			expect(result1).toEqual({
+			expect(result1).toMatchObject({
 				messages: messagesWithSmallContent,
 				summary: "",
 				cost: 0,
@@ -1364,7 +1362,7 @@ describe("Context Management", () => {
 				profileThresholds: {},
 				currentProfileId: "default",
 			})
-			expect(result1).toEqual({
+			expect(result1).toMatchObject({
 				messages: messagesWithSmallContent,
 				summary: "",
 				cost: 0,

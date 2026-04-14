@@ -2,6 +2,7 @@
 
 import { AnthropicHandler } from "../anthropic"
 import { ApiHandlerOptions } from "../../../shared/api"
+import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "../../../core/prompts/system"
 
 // Mock TelemetryService
 vitest.mock("@njust-ai-cj/telemetry", () => ({
@@ -208,6 +209,25 @@ describe("AnthropicHandler", () => {
 
 			const requestOptions = mockCreate.mock.calls[mockCreate.mock.calls.length - 1]?.[1]
 			expect(requestOptions?.headers?.["anthropic-beta"]).toContain("context-1m-2025-08-07")
+		})
+
+		it("splits system prompt by dynamic boundary for cache-friendly blocks", async () => {
+			const prompt = `STATIC${SYSTEM_PROMPT_DYNAMIC_BOUNDARY}DYNAMIC`
+			const stream = handler.createMessage(prompt, [
+				{
+					role: "user",
+					content: [{ type: "text" as const, text: "Hello" }],
+				},
+			])
+
+			for await (const _chunk of stream) {
+				// consume
+			}
+
+			const requestBody = mockCreate.mock.calls[mockCreate.mock.calls.length - 1]?.[0] as any
+			expect(Array.isArray(requestBody.system)).toBe(true)
+			expect(requestBody.system[0]?.text).toBe("STATIC")
+			expect(requestBody.system[1]?.text).toBe("DYNAMIC")
 		})
 	})
 

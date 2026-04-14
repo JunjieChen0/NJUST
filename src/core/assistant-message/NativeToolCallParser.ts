@@ -652,9 +652,11 @@ export class NativeToolCallParser {
 				break
 
 			case "list_files":
-				if (partialArgs.path !== undefined) {
+				if (partialArgs.path !== undefined || partialArgs.recursive !== undefined) {
+					const p = partialArgs.path
+					const pathStr = typeof p === "string" ? p.trim() : ""
 					nativeArgs = {
-						path: partialArgs.path,
+						path: pathStr || ".",
 						recursive: this.coerceOptionalBoolean(partialArgs.recursive),
 					}
 				}
@@ -1020,14 +1022,21 @@ export class NativeToolCallParser {
 					}
 					break
 
-				case "list_files":
-					if (args.path !== undefined) {
-						nativeArgs = {
-							path: args.path,
-							recursive: this.coerceOptionalBoolean(args.recursive),
-						} as NativeArgsFor<TName>
-					}
+				case "list_files": {
+					const rawPath = args.path
+					const pathNorm =
+						typeof rawPath === "string"
+							? rawPath.trim()
+							: typeof rawPath === "number"
+								? String(rawPath)
+								: ""
+					const coercedRec = this.coerceOptionalBoolean(args.recursive)
+					nativeArgs = {
+						path: pathNorm || ".",
+						recursive: coercedRec ?? false,
+					} as NativeArgsFor<TName>
 					break
+				}
 
 				case "new_task":
 					if (args.mode !== undefined && args.message !== undefined) {

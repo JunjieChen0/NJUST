@@ -4,6 +4,21 @@ import type { ClineAsk, ToolProgressStatus, ToolGroup, ToolName, GenerateImagePa
 
 export type ToolResponse = string | Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam>
 
+/**
+ * Generic typed tool result. Opt-in: existing tools continue using ToolResponse.
+ * New tools can return ToolResult<T> and a wrapper in BaseTool.handle() converts to ToolResponse.
+ */
+export interface ToolResult<T = string> {
+	data: T
+	metadata?: {
+		truncated?: boolean
+		storedPath?: string
+		originalSize?: number
+	}
+	/** Optional context modifier, e.g., cd changes the working directory for subsequent tools */
+	contextModifier?: (cwd: string) => string
+}
+
 export type AskApproval = (
 	type: ClineAsk,
 	partialMessage?: string,
@@ -83,6 +98,8 @@ export const toolParamNames = [
 	// read_file legacy format parameter (backward compatibility)
 	"files",
 	"line_ranges",
+	// search_files semantic search parameter
+	"semantic_query",
 ] as const
 
 export type ToolParamName = (typeof toolParamNames)[number]
@@ -113,12 +130,35 @@ export type NativeToolArgs = {
 	generate_image: GenerateImageParams
 	run_slash_command: { command: string; args?: string }
 	skill: { skill: string; args?: string }
-	search_files: { path: string; regex: string; file_pattern?: string | null }
+	search_files: { path: string; regex: string; file_pattern?: string | null; semantic_query?: string | null }
 	switch_mode: { mode_slug: string; reason: string }
 	update_todo_list: { todos: string }
 	use_mcp_tool: { server_name: string; tool_name: string; arguments?: Record<string, unknown> }
 	web_search: { search_query: string; count?: number }
+	web_fetch: { url: string; format?: "text" | "html" | "json" | "markdown"; maxLength?: number }
 	write_to_file: { path: string; content: string }
+	sleep: { seconds: number }
+	tool_search: { query: string }
+	notebook_edit: {
+		path: string
+		action: "insert" | "edit" | "delete"
+		cellIndex: number
+		content?: string
+		cellType?: "code" | "markdown"
+	}
+	send_message: { targetTaskId: string; message: string }
+	grep: { pattern: string; path?: string; include?: string; exclude?: string; contextLines?: number }
+	glob: { pattern: string; path?: string }
+	lsp: { action: string; filePath: string; line?: number; character?: number; symbolName?: string }
+	task_create: { title: string; description?: string; priority?: "high" | "medium" | "low"; dependsOn?: string[] }
+	task_update: { taskId: string; status?: "completed" | "pending" | "in_progress" | "failed"; title?: string; description?: string; priority?: "high" | "medium" | "low" }
+	task_list: { status?: "completed" | "pending" | "in_progress" | "failed"; priority?: "high" | "medium" | "low"; limit?: number }
+	task_get: { taskId: string }
+	task_stop: { taskId: string; reason?: string }
+	task_output: { taskId: string; offset?: number; limit?: number }
+	agent: { task: string; agentType?: string; maxTurns?: number }
+	brief: { content: string; maxLength?: number }
+	config: { action: string; key?: string; value?: unknown }
 	// Add more tools as they are migrated to native protocol
 }
 
@@ -208,7 +248,7 @@ export interface CodebaseSearchToolUse extends ToolUse<"codebase_search"> {
 
 export interface SearchFilesToolUse extends ToolUse<"search_files"> {
 	name: "search_files"
-	params: Partial<Pick<Record<ToolParamName, string>, "path" | "regex" | "file_pattern">>
+	params: Partial<Pick<Record<ToolParamName, string>, "path" | "regex" | "file_pattern" | "semantic_query">>
 }
 
 export interface ListFilesToolUse extends ToolUse<"list_files"> {
@@ -293,26 +333,43 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	skill: "load skill",
 	generate_image: "generate images",
 	web_search: "search the web",
+	web_fetch: "fetch web content",
 	custom_tool: "use custom tools",
+	grep: "grep search",
+	sleep: "sleep/wait",
+	notebook_edit: "edit notebooks",
+	task_create: "create tasks",
+	task_update: "update tasks",
+	task_list: "list tasks",
+	task_get: "get task details",
+	task_stop: "stop tasks",
+	task_output: "read task outputs",
+	tool_search: "search tools",
+	agent: "run sub-agent",
+	send_message: "send messages",
+	glob: "glob file search",
+	lsp: "language server queries",
+	brief: "summarize content",
+	config: "manage configuration",
 } as const
 
 // Define available tool groups.
 export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 	read: {
-		tools: ["read_file", "search_files", "list_files", "codebase_search", "web_search"],
+		tools: ["read_file", "search_files", "list_files", "codebase_search", "web_search", "grep", "glob", "lsp", "tool_search", "task_list", "task_get", "brief"],
 	},
 	edit: {
-		tools: ["apply_diff", "write_to_file", "generate_image"],
+		tools: ["apply_diff", "write_to_file", "generate_image", "notebook_edit", "task_create", "task_update"],
 		customTools: ["edit", "search_replace", "edit_file", "apply_patch"],
 	},
 	command: {
-		tools: ["execute_command", "read_command_output"],
+		tools: ["execute_command", "read_command_output", "sleep", "web_fetch", "config"],
 	},
 	mcp: {
 		tools: ["use_mcp_tool", "access_mcp_resource"],
 	},
 	modes: {
-		tools: ["switch_mode", "new_task"],
+		tools: ["switch_mode", "new_task", "agent", "send_message"],
 		alwaysAvailable: true,
 	},
 }
@@ -341,6 +398,9 @@ export const ALWAYS_AVAILABLE_TOOLS: ToolName[] = [
 export const TOOL_ALIASES: Record<string, ToolName> = {
 	write_file: "write_to_file",
 	search_and_replace: "edit",
+	search_replace: "edit",
+	edit_file: "edit",
+	apply_diff: "apply_patch",
 } as const
 
 export type DiffResult =

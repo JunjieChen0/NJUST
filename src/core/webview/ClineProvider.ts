@@ -72,6 +72,8 @@ import { McpHub } from "../../services/mcp/McpHub"
 import { McpServerManager } from "../../services/mcp/McpServerManager"
 import { ShadowCheckpointService } from "../../services/checkpoints/ShadowCheckpointService"
 import { CodeIndexManager } from "../../services/code-index/manager"
+import { cangjieDiagnosticModeSwitch } from "../../services/cangjie-lsp/cangjieDiagnosticModeSwitch"
+import { NO_TASK_KEY, pruneStaleRegistrations } from "../../services/cangjie-lsp/cangjieGeneratedTestCleanup"
 import type { IndexProgressUpdate } from "../../services/code-index/interfaces/manager"
 import { SkillsManager } from "../../services/skills/SkillsManager"
 
@@ -335,6 +337,22 @@ export class ClineProvider
 			}
 
 			this.taskHistoryStoreInitialized = true
+
+			try {
+				const { filesRemoved, taskEntriesRemoved } = pruneStaleRegistrations((id) => {
+					if (id === NO_TASK_KEY) return false
+					const h = this.taskHistoryStore.get(id)
+					if (!h || h.status === "completed") return false
+					return true
+				})
+				if (filesRemoved > 0) {
+					this.outputChannel.appendLine(
+						`[CangjieTestCleanup] 启动修剪：移除 ${filesRemoved} 个生成测试文件（${taskEntriesRemoved} 个任务桶）。`,
+					)
+				}
+			} catch (e) {
+				this.log(`[CangjieTestCleanup] prune failed: ${e instanceof Error ? e.message : String(e)}`)
+			}
 
 			// Push task history to webview now that it's ready,
 			// so the UI that loaded with an empty list gets updated.
@@ -1285,6 +1303,11 @@ export class ClineProvider
 	 * @param newMode The mode to switch to
 	 */
 	public async handleModeSwitch(newMode: Mode) {
+		const previousMode = (await this.getGlobalState("mode")) as Mode | undefined
+		if (previousMode === "cangjie" && newMode !== "cangjie") {
+			cangjieDiagnosticModeSwitch.clearExtensionCangjieDiagnostics()
+		}
+
 		const task = this.getCurrentTask()
 
 		if (task) {
@@ -1981,6 +2004,7 @@ export class ClineProvider
 			enableCheckpoints,
 			checkpointTimeout,
 			enableWebSearch,
+			enableStreamingToolExecution,
 			webSearchProvider,
 			serpApiEngine,
 			webSearchApiKey,
@@ -2086,6 +2110,7 @@ export class ClineProvider
 			enableCheckpoints: enableCheckpoints ?? true,
 			checkpointTimeout: checkpointTimeout ?? DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
 			enableWebSearch: enableWebSearch ?? false,
+			enableStreamingToolExecution: enableStreamingToolExecution ?? true,
 			webSearchProvider: webSearchProvider ?? "baidu-free",
 			serpApiEngine: serpApiEngine ?? "bing",
 			webSearchApiKey: webSearchApiKey ?? "",
@@ -2251,6 +2276,7 @@ export class ClineProvider
 			enableCheckpoints: stateValues.enableCheckpoints ?? true,
 			checkpointTimeout: stateValues.checkpointTimeout ?? DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
 			enableWebSearch: stateValues.enableWebSearch ?? false,
+			enableStreamingToolExecution: stateValues.enableStreamingToolExecution ?? true,
 			webSearchProvider: stateValues.webSearchProvider ?? "baidu-free",
 			serpApiEngine: stateValues.serpApiEngine ?? "bing",
 			webSearchApiKey: stateValues.webSearchApiKey ?? "",
@@ -2950,8 +2976,10 @@ export class ClineProvider
 		message: string
 		initialTodos: TodoItem[]
 		mode: string
+		isolationLevel?: string
+		forkedContextSummary?: string
 	}): Promise<Task> {
-		const { parentTaskId, message, initialTodos, mode } = params
+		const { parentTaskId, message, initialTodos, mode, isolationLevel, forkedContextSummary } = params
 
 		// Metadata-driven delegation is always enabled
 
@@ -3043,6 +3071,38 @@ export class ClineProvider
 			initialStatus: "active",
 			startTask: false,
 		})
+		// Inherit streaming model snapshot for better prompt-cache/tool-schema reuse continuity.
+		if (parent.cachedStreamingModel) {
+			child.cachedStreamingModel = parent.cachedStreamingModel
+		}
+
+		// Apply forked isolation context if specified
+		let effectiveForkedSummary = forkedContextSummary
+		if (isolationLevel === "forked" && !effectiveForkedSummary) {
+			// Auto-generate context summary from parent when caller (e.g. NewTaskTool)
+			// requests forked isolation but doesn't provide a pre-built summary.
+			try {
+				const { generateParentContextSummary } = await import("../task/SubTaskContextBuilder")
+				const { DEFAULT_FORKED_CONTEXT_CONFIG } = await import("../task/SubTaskOptions")
+				if (parent.apiConversationHistory && parent.apiConversationHistory.length > 0) {
+					effectiveForkedSummary = generateParentContextSummary(
+						parent.apiConversationHistory,
+						DEFAULT_FORKED_CONTEXT_CONFIG.summaryMaxTokens,
+						DEFAULT_FORKED_CONTEXT_CONFIG,
+					)
+				}
+			} catch (e) {
+				this.log(
+					`[delegateParentAndOpenChild] Failed to auto-generate forked context summary: ${
+						(e as Error)?.message ?? String(e)
+					}`,
+				)
+			}
+		}
+		if (isolationLevel === "forked" && effectiveForkedSummary) {
+			child.forkedContextSummary = effectiveForkedSummary
+			child.isolationLevel = "forked"
+		}
 
 		// 5) Persist parent delegation metadata BEFORE the child starts writing.
 		try {

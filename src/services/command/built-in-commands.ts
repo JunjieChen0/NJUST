@@ -464,6 +464,33 @@ Please analyze this codebase and create an AGENTS.md file containing:
 
 Remember: The goal is to create documentation that enables AI assistants to be immediately productive in this codebase, focusing on project-specific knowledge that isn't obvious from the code structure alone.`,
 	},
+
+	compact: {
+		name: "compact",
+		description: "Compress the current conversation to free up context window space",
+		content: `<task>
+Compress and summarize the current conversation history to free up context window space.
+
+This command triggers an intelligent condensation of the conversation, preserving key decisions,
+modified files, discovered patterns, and pending tasks while removing redundant content.
+</task>
+
+<instructions>
+You are being asked to compact/condense the current conversation. Do the following:
+
+1. Acknowledge that compaction has been requested
+2. Summarize the key points of the conversation so far:
+   - What files have been modified and why
+   - What decisions were made
+   - What tasks remain incomplete
+   - Any important patterns or constraints discovered
+3. Note that the system will automatically condense the conversation history after this response
+
+Important: This is a user-initiated compaction request. The condensation engine will handle
+the actual message history compression. Your role is to provide a clear summary of the current
+state so that context is preserved even after compression.
+</instructions>`,
+	},
 }
 
 /**

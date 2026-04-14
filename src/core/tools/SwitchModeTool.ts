@@ -1,4 +1,5 @@
 import delay from "delay"
+import * as vscode from "vscode"
 
 import { Task } from "../task/Task"
 import { ignoreAbortError } from "../../utils/errorHandling"
@@ -58,6 +59,15 @@ export class SwitchModeTool extends BaseTool<"switch_mode"> {
 
 			// Switch the mode using shared handler
 			await task.providerRef.deref()?.handleModeSwitch(mode_slug)
+
+			if (currentMode === "cangjie" && mode_slug !== "cangjie") {
+				const cjEditors = vscode.window.visibleTextEditors.filter((e) => e.document.fileName.endsWith(".cj"))
+				if (cjEditors.length > 0) {
+					void vscode.window.showInformationMessage(
+						`已离开仓颉 Dev 模式；仍有 ${cjEditors.length} 个 .cj 文件处于打开状态。新模式下的编辑权限可能不同，必要时请切回仓颉模式或使用只读工具查看代码。`,
+					)
+				}
+			}
 
 			pushToolResult(
 				`Successfully switched from ${getModeBySlug(currentMode)?.name ?? currentMode} mode to ${

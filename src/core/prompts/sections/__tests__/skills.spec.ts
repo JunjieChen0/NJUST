@@ -1,4 +1,4 @@
-import { getSkillsSection } from "../skills"
+import { getSkillsSection, filterCangjieSkillRoutingRows } from "../skills"
 
 describe("getSkillsSection", () => {
 	it("should emit <available_skills> XML with name, description, and location", async () => {
@@ -23,6 +23,15 @@ describe("getSkillsSection", () => {
 		expect(result).toContain("<description>Extracts text &amp; tables from PDFs</description>")
 		// For filesystem-based agents, location should be the absolute path to SKILL.md
 		expect(result).toContain("<location>/abs/path/pdf-processing/SKILL.md</location>")
+	})
+
+	it("filterCangjieSkillRoutingRows removes rows for undiscovered skills", () => {
+		const md =
+			"| a | **`cangjie-cjpm`** | x |\n| b | **`missing-skill`** | y |\n| c | no-skill-cell | z |\n"
+		const filtered = filterCangjieSkillRoutingRows(md, new Set(["cangjie-cjpm"]))
+		expect(filtered).toContain("cangjie-cjpm")
+		expect(filtered).not.toContain("missing-skill")
+		expect(filtered).toContain("no-skill-cell")
 	})
 
 	it("should return empty string when skillsManager or currentMode is missing", async () => {

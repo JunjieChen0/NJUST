@@ -4,6 +4,10 @@ import { render, screen } from "@/utils/test-utils"
 import RooTips from "../RooTips"
 
 vi.mock("react-i18next", () => ({
+	initReactI18next: {
+		type: "3rdParty",
+		init: () => {},
+	},
 	useTranslation: () => ({
 		t: (key: string) => key, // Simple mock that returns the key
 	}),
@@ -17,6 +21,12 @@ vi.mock("react-i18next", () => ({
 		// Simple mock that renders children or the first component if no children
 		return children || (components && Object.values(components)[0]) || null
 	},
+}))
+
+vi.mock("@src/context/ExtensionStateContext", () => ({
+	useExtensionState: () => ({
+		language: "en",
+	}),
 }))
 
 vi.mock("@vscode/webview-ui-toolkit/react", () => ({
@@ -38,9 +48,11 @@ describe("RooTips Component", () => {
 			render(<RooTips />)
 		})
 
-		test("renders only the top two tips", () => {
-			// Ensure only two tips are present plus the docs link in the Trans component (3 total links)
-			expect(screen.getAllByRole("link")).toHaveLength(3)
+		test("renders all configured tip rows", () => {
+			expect(screen.getByText("chat:rooTips.cangjieToolchain.title: chat:rooTips.cangjieToolchain.description")).toBeInTheDocument()
+			expect(screen.getByText("chat:rooTips.smartDiagnostics.title: chat:rooTips.smartDiagnostics.description")).toBeInTheDocument()
+			expect(screen.getByText("chat:rooTips.syntaxAndSnippets.title: chat:rooTips.syntaxAndSnippets.description")).toBeInTheDocument()
+			expect(screen.getByText("chat:rooTips.docsIntegration.title: chat:rooTips.docsIntegration.description")).toBeInTheDocument()
 		})
 	})
 })

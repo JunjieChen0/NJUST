@@ -2,6 +2,26 @@ import type { SkillsManager } from "../../../services/skills/SkillsManager"
 
 type SkillsManagerLike = Pick<SkillsManager, "getSkillsForMode">
 
+/**
+ * Drop markdown table rows in Cangjie mode custom instructions that cite skills not present in the workspace.
+ * Matches cells like **`skill-name`** in `| ... | ... |` rows.
+ */
+export function filterCangjieSkillRoutingRows(markdown: string, discoveredSkillNames: Set<string>): string {
+	const lines = markdown.split("\n")
+	const out: string[] = []
+	for (const line of lines) {
+		if (line.includes("|") && line.includes("**`")) {
+			const m = line.match(/\*\*`([^`]+)`\*\*/)
+			if (m) {
+				const id = m[1].trim()
+				if (!discoveredSkillNames.has(id)) continue
+			}
+		}
+		out.push(line)
+	}
+	return out.join("\n")
+}
+
 function escapeXml(value: string): string {
 	return value
 		.replace(/&/g, "&amp;")

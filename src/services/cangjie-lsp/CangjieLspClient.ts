@@ -274,11 +274,35 @@ export type CangjieLspStateListener = (state: CangjieLspState, message?: string)
 const MAX_AUTO_RESTARTS = 3
 const RESTART_DELAYS_MS = [2_000, 5_000, 10_000]
 
+function normalizeCwdKey(cwd: string): string {
+	return path.normalize(cwd)
+}
+
+function isFsPathUnderRoot(filePath: string, root: string): boolean {
+	const f = path.normalize(filePath)
+	const r = path.normalize(root)
+	const sep = path.sep
+	if (process.platform === "win32") {
+		const fl = f.toLowerCase()
+		const rl = r.toLowerCase()
+		return fl === rl || fl.startsWith(rl + sep) || fl.startsWith(rl + "/")
+	}
+	return f === r || f.startsWith(r + sep)
+}
+
+/** vscode-languageclient 9.x exposes client-owned diagnostics; typings may omit it. */
+function getLanguageClientDiagnostics(client: LanguageClient): vscode.DiagnosticCollection | undefined {
+	const c = client as unknown as { diagnostics?: vscode.DiagnosticCollection }
+	return c.diagnostics
+}
+
 export class CangjieLspClient {
 	private client: LanguageClient | undefined
 	private readonly _lspOutputChannel: vscode.OutputChannel
 	private configChangeDisposable: vscode.Disposable | undefined
 	private lazyStartDisposable: vscode.Disposable | undefined
+	/** When LSP is disabled: defer formatter/linter/compile-guard until first .cj open. */
+	private lazyCangjieServicesDisposable: vscode.Disposable | undefined
 	private clientStateDisposable: vscode.Disposable | undefined
 	private _state: CangjieLspState = "idle"
 	private stateListeners: CangjieLspStateListener[] = []
@@ -287,6 +311,8 @@ export class CangjieLspClient {
 	private restartTimer: ReturnType<typeof setTimeout> | undefined
 	private firstCompletionLogged = false
 	private firstHoverLogged = false
+	/** After cjpm build success: drop stale LSP Error diagnostics for this root (ms since epoch). */
+	private lastCjpmSuccessAtMsByCwd = new Map<string, number>()
 
 	constructor(private readonly extensionOutputChannel: vscode.OutputChannel) {
 		this._lspOutputChannel = vscode.window.createOutputChannel(LSP_SERVER_NAME)
@@ -317,6 +343,48 @@ export class CangjieLspClient {
 		}
 	}
 
+	private fireOnCangjieActivatedOnce(): void {
+		const cb = this.onCangjieActivatedCallback
+		this.onCangjieActivatedCallback = undefined
+		cb?.()
+	}
+
+	/**
+	 * LSP is off: still trigger the one-shot activation callback when the user opens a .cj file
+	 * (or immediately if one is already open) so cjfmt/cjlint/compile-guard wire up.
+	 */
+	private scheduleCangjieServicesWithoutLsp(): void {
+		this.lazyCangjieServicesDisposable?.dispose()
+		this.lazyCangjieServicesDisposable = undefined
+
+		const hasOpenCangjieFile = vscode.workspace.textDocuments.some(
+			(doc) => doc.languageId === CANGJIE_LANGUAGE_ID || doc.fileName.endsWith(".cj"),
+		)
+
+		if (hasOpenCangjieFile) {
+			this.fireOnCangjieActivatedOnce()
+		} else {
+			this.lazyCangjieServicesDisposable = vscode.workspace.onDidOpenTextDocument((doc) => {
+				if (doc.languageId === CANGJIE_LANGUAGE_ID || doc.fileName.endsWith(".cj")) {
+					this.lazyCangjieServicesDisposable?.dispose()
+					this.lazyCangjieServicesDisposable = undefined
+					this.fireOnCangjieActivatedOnce()
+				}
+			})
+		}
+	}
+
+	private attachCangjieLspConfigListener(): void {
+		this.configChangeDisposable?.dispose()
+		this.configChangeDisposable = vscode.workspace.onDidChangeConfiguration(async (e) => {
+			if (e.affectsConfiguration(`${Package.name}.cangjieLsp`)) {
+				this.extensionOutputChannel.appendLine("[CangjieLSP] Configuration changed, restarting server...")
+				await this.stop()
+				await this.start()
+			}
+		})
+	}
+
 	private setState(state: CangjieLspState, message?: string): void {
 		this._state = state
 		for (const listener of this.stateListeners) {
@@ -335,6 +403,8 @@ export class CangjieLspClient {
 		if (!config.enabled) {
 			this.extensionOutputChannel.appendLine("[CangjieLSP] Cangjie LSP is disabled by configuration.")
 			this.setState("stopped")
+			this.scheduleCangjieServicesWithoutLsp()
+			this.attachCangjieLspConfigListener()
 			return
 		}
 
@@ -356,13 +426,7 @@ export class CangjieLspClient {
 			})
 		}
 
-		this.configChangeDisposable = vscode.workspace.onDidChangeConfiguration(async (e) => {
-			if (e.affectsConfiguration(`${Package.name}.cangjieLsp`)) {
-				this.extensionOutputChannel.appendLine("[CangjieLSP] Configuration changed, restarting server...")
-				await this.stop()
-				await this.start()
-			}
-		})
+		this.attachCangjieLspConfigListener()
 	}
 
 	private findCjpmRoot(): string | undefined {
@@ -390,6 +454,8 @@ export class CangjieLspClient {
 			vscode.window.showWarningMessage(msg)
 			this.extensionOutputChannel.appendLine(`[CangjieLSP] ${msg}`)
 			this.setState("warning", msg)
+			// Still wire cjfmt / cjlint / compile-guard when the language server binary is missing.
+			this.fireOnCangjieActivatedOnce()
 			return
 		}
 
@@ -429,7 +495,6 @@ export class CangjieLspClient {
 			this.extensionOutputChannel.appendLine(`[CangjieLSP] Root package name from cjpm.toml: "${realPackageName}"`)
 		}
 
-		const self = this
 		const baseMiddleware = buildMiddleware()
 		const clientOptions: LanguageClientOptions = {
 			documentSelector: [{ scheme: "file", language: CANGJIE_LANGUAGE_ID }],
@@ -442,31 +507,32 @@ export class CangjieLspClient {
 				fileEvents: vscode.workspace.createFileSystemWatcher("**/*.cj"),
 			},
 			middleware: {
-				handleDiagnostics(uri, diagnostics, next) {
+				handleDiagnostics: (uri, diagnostics, next) => {
 					diagnostics = filterFalsePackageDiagnostics(diagnostics, realPackageName, uri)
+					diagnostics = this.applyLspErrorSuppressAfterCjpmSuccess(uri, diagnostics)
 					next(uri, diagnostics)
 				},
-				provideCompletionItem(document, position, context, token, next) {
+				provideCompletionItem: (document, position, context, token, next) => {
 					const t0 = Date.now()
 					const result = baseMiddleware.provideCompletionItem!(document, position, context, token, next)
-					if (!self.firstCompletionLogged && result) {
+					if (!this.firstCompletionLogged && result) {
 						Promise.resolve(result).then(() => {
-							if (!self.firstCompletionLogged) {
-								self.firstCompletionLogged = true
-								self.extensionOutputChannel.appendLine(`[Perf] First completion response in ${Date.now() - t0}ms`)
+							if (!this.firstCompletionLogged) {
+								this.firstCompletionLogged = true
+								this.extensionOutputChannel.appendLine(`[Perf] First completion response in ${Date.now() - t0}ms`)
 							}
 						}).catch(() => {})
 					}
 					return result
 				},
-				provideHover(document, position, token, next) {
+				provideHover: (document, position, token, next) => {
 					const t0 = Date.now()
 					const result = baseMiddleware.provideHover!(document, position, token, next)
-					if (!self.firstHoverLogged && result) {
+					if (!this.firstHoverLogged && result) {
 						Promise.resolve(result).then(() => {
-							if (!self.firstHoverLogged) {
-								self.firstHoverLogged = true
-								self.extensionOutputChannel.appendLine(`[Perf] First hover response in ${Date.now() - t0}ms`)
+							if (!this.firstHoverLogged) {
+								this.firstHoverLogged = true
+								this.extensionOutputChannel.appendLine(`[Perf] First hover response in ${Date.now() - t0}ms`)
 							}
 						}).catch(() => {})
 					}
@@ -490,8 +556,7 @@ export class CangjieLspClient {
 			this.extensionOutputChannel.appendLine("[CangjieLSP] Server started successfully.")
 			this.setState("running")
 			this.autoRestartCount = 0
-			this.onCangjieActivatedCallback?.()
-			this.onCangjieActivatedCallback = undefined
+			this.fireOnCangjieActivatedOnce()
 
 			this.clientStateDisposable?.dispose()
 			this.clientStateDisposable = this.client.onDidChangeState((e) => {
@@ -518,6 +583,8 @@ export class CangjieLspClient {
 			} else {
 				vscode.window.showErrorMessage(`Failed to start Cangjie Language Server: ${message}`)
 			}
+			// Allow formatter, linter, and compile-guard to work without a running LSP.
+			this.fireOnCangjieActivatedOnce()
 		}
 	}
 
@@ -559,6 +626,8 @@ export class CangjieLspClient {
 		this.configChangeDisposable = undefined
 		this.lazyStartDisposable?.dispose()
 		this.lazyStartDisposable = undefined
+		this.lazyCangjieServicesDisposable?.dispose()
+		this.lazyCangjieServicesDisposable = undefined
 		this.clientStateDisposable?.dispose()
 		this.clientStateDisposable = undefined
 
@@ -585,14 +654,125 @@ export class CangjieLspClient {
 	dispose(): void {
 		if (this.restartTimer) {
 			clearTimeout(this.restartTimer)
+			this.restartTimer = undefined
 		}
-		this._lspOutputChannel.dispose()
 		this.configChangeDisposable?.dispose()
+		this.configChangeDisposable = undefined
 		this.lazyStartDisposable?.dispose()
+		this.lazyStartDisposable = undefined
+		this.lazyCangjieServicesDisposable?.dispose()
+		this.lazyCangjieServicesDisposable = undefined
 		this.clientStateDisposable?.dispose()
+		this.clientStateDisposable = undefined
+
+		if (this.client?.isRunning()) {
+			void this.client.stop().catch(() => {})
+		}
+		this.client = undefined
+
+		try {
+			this._lspOutputChannel.dispose()
+		} catch {
+			// already disposed
+		}
 	}
 
 	isRunning(): boolean {
 		return this.client?.isRunning() ?? false
+	}
+
+	/**
+	 * Record a successful `cjpm build` for `cwd` so optional middleware can suppress stale LSP errors briefly.
+	 */
+	markCjpmBuildSuccess(cwd: string): void {
+		if (!cwd) return
+		this.lastCjpmSuccessAtMsByCwd.set(normalizeCwdKey(cwd), Date.now())
+	}
+
+	/**
+	 * Remove LSP-published diagnostics (stale analysis after cjpm reports success).
+	 * When `cwd` is set, only touches `.cj` files under that cjpm root (open buffers sync; workspace scan async).
+	 */
+	clearPublishedDiagnostics(opts?: { cwd?: string }): void {
+		if (!this.client?.isRunning()) return
+		const coll = getLanguageClientDiagnostics(this.client)
+		if (!coll) return
+		if (!opts?.cwd) {
+			coll.clear()
+			this.extensionOutputChannel.appendLine("[CangjieLSP] Cleared all LSP diagnostics after cjpm success (no cwd).")
+			return
+		}
+		const root = normalizeCwdKey(opts.cwd)
+		let n = 0
+		for (const doc of vscode.workspace.textDocuments) {
+			if (!doc.uri.fsPath.endsWith(".cj")) continue
+			if (!isFsPathUnderRoot(doc.uri.fsPath, root)) continue
+			coll.delete(doc.uri)
+			n++
+		}
+		void this.deleteClosedCjFilesFromLspDiagnostics(root, coll).then((extra) => {
+			if (n + extra > 0) {
+				this.extensionOutputChannel.appendLine(
+					`[CangjieLSP] Cleared LSP diagnostics under ${root} (${n} open + ${extra} closed .cj) after cjpm success.`,
+				)
+			}
+		})
+	}
+
+	private async deleteClosedCjFilesFromLspDiagnostics(
+		root: string,
+		coll: vscode.DiagnosticCollection,
+	): Promise<number> {
+		let extra = 0
+		try {
+			const uris = await vscode.workspace.findFiles(
+				new vscode.RelativePattern(root, "**/*.cj"),
+				"**/target/**",
+				500,
+			)
+			const open = new Set(vscode.workspace.textDocuments.map((d) => d.uri.toString()))
+			for (const uri of uris) {
+				if (!isFsPathUnderRoot(uri.fsPath, root)) continue
+				if (open.has(uri.toString())) continue
+				coll.delete(uri)
+				extra++
+			}
+		} catch {
+			/* ignore */
+		}
+		return extra
+	}
+
+	private findCjpmRootContainingFile(filePath: string): string | undefined {
+		let dir = path.dirname(filePath)
+		for (let i = 0; i < 40; i++) {
+			if (fs.existsSync(path.join(dir, "cjpm.toml"))) return dir
+			const parent = path.dirname(dir)
+			if (parent === dir) break
+			dir = parent
+		}
+		return undefined
+	}
+
+	private suppressLspErrorsAfterCjpmSuccessMs(): number {
+		const v = vscode.workspace.getConfiguration(Package.name).get<number>("cangjieLsp.suppressLspErrorsAfterCjpmSuccessMs", 0)
+		return typeof v === "number" && v > 0 ? v : 0
+	}
+
+	private applyLspErrorSuppressAfterCjpmSuccess(uri: vscode.Uri, diagnostics: vscode.Diagnostic[]): vscode.Diagnostic[] {
+		const windowMs = this.suppressLspErrorsAfterCjpmSuccessMs()
+		if (windowMs <= 0 || diagnostics.length === 0) return diagnostics
+		const proj = this.findCjpmRootContainingFile(uri.fsPath)
+		if (!proj) return diagnostics
+		const t0 = this.lastCjpmSuccessAtMsByCwd.get(normalizeCwdKey(proj))
+		if (t0 === undefined) return diagnostics
+		if (Date.now() - t0 > windowMs) return diagnostics
+		const filtered = diagnostics.filter((d) => d.severity !== vscode.DiagnosticSeverity.Error)
+		if (filtered.length !== diagnostics.length && getConfig().enableLog) {
+			this.extensionOutputChannel.appendLine(
+				`[CangjieLSP] Suppressed ${diagnostics.length - filtered.length} stale LSP error(s) (${uri.fsPath}) within ${windowMs}ms of cjpm success.`,
+			)
+		}
+		return filtered
 	}
 }

@@ -1,14 +1,33 @@
 import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
+import { execFile } from "child_process"
+import { promisify } from "util"
 import { Package } from "../../shared/package"
+
+const execFileAsync = promisify(execFile)
+
+/** Relative key under `Package.name` for the Cangjie compiler path (shared by runCode, macro expand, status bar). */
+export const CJC_CONFIG_KEY = "cangjieLsp.cjcPath"
+
+let homeDetectCache: string | undefined | null = null
+let envBuildCache: { key: string; env: Record<string, string> } | null = null
+
+/** Call when workspace settings that affect SDK paths may have changed. */
+export function invalidateCangjieToolEnvCache(): void {
+	homeDetectCache = null
+	envBuildCache = null
+}
 
 /**
  * Detect CANGJIE_HOME from environment or well-known install locations.
  */
 export function detectCangjieHome(): string | undefined {
+	if (homeDetectCache !== null) return homeDetectCache
+
 	if (process.env.CANGJIE_HOME && fs.existsSync(process.env.CANGJIE_HOME)) {
-		return process.env.CANGJIE_HOME
+		homeDetectCache = process.env.CANGJIE_HOME
+		return homeDetectCache
 	}
 
 	const wellKnownPaths = process.platform === "win32"
@@ -17,10 +36,12 @@ export function detectCangjieHome(): string | undefined {
 
 	for (const p of wellKnownPaths) {
 		if (p && fs.existsSync(path.join(p, "bin"))) {
-			return p
+			homeDetectCache = p
+			return homeDetectCache
 		}
 	}
 
+	homeDetectCache = undefined
 	return undefined
 }
 
@@ -29,8 +50,17 @@ export function detectCangjieHome(): string | undefined {
  * Ensures runtime libraries are on PATH / LD_LIBRARY_PATH.
  */
 export function buildCangjieToolEnv(cangjieHome?: string): Record<string, string> {
-	const home = cangjieHome || detectCangjieHome()
-	if (!home) return { ...process.env } as Record<string, string>
+	const home = cangjieHome ?? detectCangjieHome()
+	const cacheKey = `${home ?? "__nohome__"}|${process.platform}`
+	if (envBuildCache && envBuildCache.key === cacheKey) {
+		return { ...envBuildCache.env }
+	}
+
+	if (!home) {
+		const env = { ...process.env } as Record<string, string>
+		envBuildCache = { key: cacheKey, env }
+		return env
+	}
 
 	const env = { ...process.env } as Record<string, string>
 	env["CANGJIE_HOME"] = home
@@ -61,7 +91,8 @@ export function buildCangjieToolEnv(cangjieHome?: string): Record<string, string
 		}
 	}
 
-	return env
+	envBuildCache = { key: cacheKey, env }
+	return { ...env }
 }
 
 /**
@@ -100,6 +131,166 @@ export function resolveCangjieToolPath(
 	}
 
 	return exeName
+}
+
+export type CangjieToolkitId = "cjc" | "cjpm" | "cjfmt" | "cjlint"
+
+/** cjfmt / cjc / cjpm 各发行版 CLI 略有差异；探测时依次尝试。 */
+function probeTryArgsForTool(id: CangjieToolkitId): string[][] {
+	if (id === "cjlint") {
+		return [["--version"], ["-V"], ["--help"]]
+	}
+	if (id === "cjfmt") {
+		// 多数 Cangjie SDK 中 cjfmt 不支持 `--version`，会误解析为 `--`；优先 -V / -h
+		return [["-V"], ["-h"], ["--help"], ["--version"]]
+	}
+	return [["--version"]]
+}
+
+/**
+ * 当 resolve 回落为裸可执行名时，再按 CANGJIE_HOME 拼绝对路径，避免 Windows 下 PATH/spawn 未命中。
+ */
+function absolutizeSdkToolIfBare(id: CangjieToolkitId, invokedPath: string): string {
+	const hasSep = invokedPath.includes(path.sep) || invokedPath.includes("/") || invokedPath.includes("\\")
+	if (path.isAbsolute(invokedPath) || hasSep) {
+		return invokedPath
+	}
+	const home = detectCangjieHome()
+	if (!home) return invokedPath
+	const exe = process.platform === "win32" ? `${id}.exe` : id
+	for (const rel of ["bin", path.join("tools", "bin")]) {
+		const candidate = path.join(home, rel, exe)
+		if (fs.existsSync(candidate)) return candidate
+	}
+	return invokedPath
+}
+
+export interface CangjieToolProbeResult {
+	id: CangjieToolkitId
+	label: string
+	configKey?: string
+	invokedPath: string
+	ok: boolean
+	versionLine?: string
+	hint?: string
+}
+
+/**
+ * Run version/help probes on each tool; used by **Cangjie: Verify SDK Installation**.
+ */
+export async function probeCangjieToolchain(): Promise<CangjieToolProbeResult[]> {
+	const defs: Array<{ id: CangjieToolkitId; configKey?: string }> = [
+		{ id: "cjc", configKey: CJC_CONFIG_KEY },
+		{ id: "cjpm", configKey: "cangjieTools.cjpmPath" },
+		{ id: "cjfmt", configKey: "cangjieTools.cjfmtPath" },
+		{ id: "cjlint", configKey: "cangjieTools.cjlintPath" },
+	]
+	const env = buildCangjieToolEnv() as NodeJS.ProcessEnv
+	const out: CangjieToolProbeResult[] = []
+
+	for (const { id, configKey } of defs) {
+		const resolved = resolveCangjieToolPath(id, configKey)
+		const configured = configKey
+			? vscode.workspace.getConfiguration(Package.name).get<string>(configKey, "")
+			: ""
+		const looksConfigured = Boolean(configKey && configured.length > 0)
+
+		if (looksConfigured && resolved === undefined) {
+			out.push({
+				id,
+				label: id,
+				configKey,
+				invokedPath: path.resolve(configured),
+				ok: false,
+				hint: `已启用 ${configKey}，但文件不存在`,
+			})
+			continue
+		}
+
+		let invokedPath = resolved ?? (process.platform === "win32" ? `${id}.exe` : id)
+		invokedPath = absolutizeSdkToolIfBare(id, invokedPath)
+		const isConcretePath =
+			path.isAbsolute(invokedPath) ||
+			invokedPath.includes(path.sep) ||
+			invokedPath.includes("/") ||
+			invokedPath.includes("\\")
+
+		if (looksConfigured && isConcretePath && !fs.existsSync(invokedPath)) {
+			out.push({
+				id,
+				label: id,
+				configKey,
+				invokedPath,
+				ok: false,
+				hint: `已启用 ${configKey}，但文件不存在`,
+			})
+			continue
+		}
+
+		try {
+			const tryArgs = probeTryArgsForTool(id)
+			let stdout = ""
+			let lastErr: unknown
+			for (const args of tryArgs) {
+				try {
+					const r = await execFileAsync(invokedPath, args, { timeout: 12_000, env })
+					stdout = [r.stdout, r.stderr].filter((s) => s && String(s).trim()).join("\n")
+					lastErr = undefined
+					break
+				} catch (e) {
+					lastErr = e
+				}
+			}
+			if (lastErr !== undefined) throw lastErr
+			const versionLine = stdout.trim().split("\n").filter((l) => l.trim())[0] ?? ""
+			out.push({
+				id,
+				label: id,
+				configKey,
+				invokedPath,
+				ok: true,
+				versionLine: versionLine || "(no output)",
+			})
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e)
+			out.push({
+				id,
+				label: id,
+				configKey,
+				invokedPath,
+				ok: false,
+				hint: msg.slice(0, 200),
+			})
+		}
+	}
+
+	return out
+}
+
+export function formatCangjieToolchainReport(probes: CangjieToolProbeResult[]): string {
+	const lines = ["=== Cangjie 工具链诊断 ===", `CANGJIE_HOME: ${detectCangjieHome() ?? "(未检测到)"}`, ""]
+	for (const p of probes) {
+		const cfg = p.configKey ? ` [${p.configKey}]` : ""
+		if (p.ok) {
+			lines.push(`✓ ${p.label}${cfg}: ${p.versionLine} (${p.invokedPath})`)
+		} else {
+			lines.push(`✗ ${p.label}${cfg}: ${p.hint ?? "不可用"} (${p.invokedPath})`)
+		}
+	}
+	return lines.join("\n")
+}
+
+/** Short checklist for onboarding toast after SDK path is set. */
+export async function formatCangjieToolchainSummaryLine(): Promise<string | undefined> {
+	const probes = await probeCangjieToolchain()
+	const parts = probes.map((p) => `${p.label}${p.ok ? "✓" : "✗"}`).join(" ")
+	const allOk = probes.every((p) => p.ok)
+	if (!allOk) {
+		const missing = probes.filter((p) => !p.ok).map((p) => p.label)
+		return `Cangjie 工具链: ${parts}\n缺失: ${missing.join(", ")} — 可在命令面板运行「Cangjie: Verify SDK Installation」`
+	}
+	const ver = probes.find((p) => p.id === "cjc")?.versionLine
+	return ver ? `Cangjie SDK 已就绪: ${ver} (${parts})` : `Cangjie SDK 已就绪 (${parts})`
 }
 
 // ---------------------------------------------------------------------------

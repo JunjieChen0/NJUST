@@ -23,8 +23,22 @@ interface ApplyDiffParams {
 	diff: string
 }
 
+/**
+ * @deprecated Use ApplyPatchTool (name: "apply_patch") instead. This tool is retained for
+ * backward compatibility and will be removed in a future version. All calls are handled by
+ * the alias mapping in TOOL_ALIASES: "apply_diff" → "apply_patch".
+ */
 export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 	readonly name = "apply_diff" as const
+	override readonly requiresCheckpoint = true
+
+	override interruptBehavior(): "cancel" | "block" {
+		return "block"
+	}
+
+	override userFacingName(): string {
+		return "Apply Diff"
+	}
 
 	async execute(params: ApplyDiffParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { askApproval, handleError, pushToolResult } = callbacks

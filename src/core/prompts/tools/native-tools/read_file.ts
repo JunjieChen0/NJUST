@@ -62,6 +62,7 @@ export function createReadFileTool(options: ReadFileToolOptions = {}): OpenAI.Ch
 
 	// Build description based on capabilities
 	const descriptionIntro =
+		"**You MUST pass `path` (non-empty string) in every tool call.** Omitting `path` or sending only `{}` will fail. " +
 		"Read a file and return its contents with line numbers for diffing or discussion. IMPORTANT: This tool reads exactly one file per call. If you need multiple files, issue multiple parallel read_file calls."
 
 	const modeDescription =
@@ -111,7 +112,9 @@ export function createReadFileTool(options: ReadFileToolOptions = {}): OpenAI.Ch
 	const properties: Record<string, unknown> = {
 		path: {
 			type: "string",
-			description: "Path to the file to read, relative to the workspace",
+			minLength: 1,
+			description:
+				"REQUIRED non-empty path to the file to read (workspace-relative or absolute). Never omit; copy the exact path from the user message, search results, or system prompt (e.g. bundled CangjieCorpus).",
 		},
 		mode: {
 			type: "string",

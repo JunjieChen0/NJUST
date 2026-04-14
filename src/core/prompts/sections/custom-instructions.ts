@@ -21,6 +21,9 @@ import {
 async function safeReadFile(filePath: string): Promise<string> {
 	try {
 		const content = await fs.readFile(filePath, "utf-8")
+		if (typeof content !== "string") {
+			return ""
+		}
 		return content.trim()
 	} catch (err) {
 		const errorCode = (err as NodeJS.ErrnoException).code
@@ -471,6 +474,15 @@ export async function addCustomInstructions(
 			}
 		}
 
+		// Workspace-root `.roo/rules-${mode}/` (parallel to `.njust_ai/rules-${mode}/`) for hot-reload + mirror layouts.
+		const legacyRooModeDir = path.join(cwd, ".roo", `rules-${mode}`)
+		if (await directoryExists(legacyRooModeDir)) {
+			const files = await readTextFilesFromDirectory(legacyRooModeDir)
+			if (files.length > 0) {
+				modeRules.push(formatDirectoryContent(files, cwd))
+			}
+		}
+
 		// If we found mode-specific rules in .njust_ai/rules-${mode}/ directories, use them
 		if (modeRules.length > 0) {
 			modeRuleContent = "\n" + modeRules.join("\n\n")
@@ -493,7 +505,12 @@ export async function addCustomInstructions(
 
 	// Add language preference if provided
 	if (options.language) {
-		const languageName = isLanguage(options.language) ? LANGUAGES[options.language] : options.language
+		const extraLanguageNames: Record<string, string> = {
+			es: "Español",
+		}
+		const languageName = isLanguage(options.language)
+			? LANGUAGES[options.language]
+			: (extraLanguageNames[options.language] ?? options.language)
 		sections.push(
 			`Language Preference:\nYou should always speak and think in the "${languageName}" (${options.language}) language unless the user gives you instructions below to do otherwise.`,
 		)

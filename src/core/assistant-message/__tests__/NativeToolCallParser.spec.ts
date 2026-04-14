@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach } from "vitest"
 import { NativeToolCallParser } from "../NativeToolCallParser"
 
 describe("NativeToolCallParser", () => {
@@ -289,6 +290,39 @@ describe("NativeToolCallParser", () => {
 						expect(result.usedLegacyFormat).toBeUndefined()
 					}
 				})
+			})
+		})
+
+		describe("list_files tool", () => {
+			it("defaults path to '.' when omitted", () => {
+				const toolCall = {
+					id: "toolu_list_1",
+					name: "list_files" as const,
+					arguments: JSON.stringify({ recursive: false }),
+				}
+				const result = NativeToolCallParser.parseToolCall(toolCall)
+				expect(result).not.toBeNull()
+				expect(result?.type).toBe("tool_use")
+				if (result?.type === "tool_use") {
+					const na = result.nativeArgs as { path: string; recursive: boolean }
+					expect(na.path).toBe(".")
+					expect(na.recursive).toBe(false)
+				}
+			})
+
+			it("defaults path and recursive for empty args", () => {
+				const toolCall = {
+					id: "toolu_list_2",
+					name: "list_files" as const,
+					arguments: "{}",
+				}
+				const result = NativeToolCallParser.parseToolCall(toolCall)
+				expect(result).not.toBeNull()
+				if (result?.type === "tool_use") {
+					const na = result.nativeArgs as { path: string; recursive: boolean }
+					expect(na.path).toBe(".")
+					expect(na.recursive).toBe(false)
+				}
 			})
 		})
 	})

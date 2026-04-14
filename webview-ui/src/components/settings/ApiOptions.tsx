@@ -85,7 +85,6 @@ import {
 	OpenRouter,
 	QwenCode,
 	Requesty,
-	Roo,
 	SambaNova,
 	Unbound,
 	Vertex,

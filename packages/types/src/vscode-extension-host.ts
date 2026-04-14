@@ -15,6 +15,22 @@ import type { ModelRecord, RouterModels } from "./model.js"
 import type { OpenAiCodexRateLimitInfo } from "./providers/openai-codex-rate-limits.js"
 import type { SkillMetadata } from "./skills.js"
 
+export interface TaskMetricsSnapshot {
+	taskId: string
+	latencyMs: number
+	cacheHitRate: number
+	estimatedSavingsPercent: number
+	cacheReadInputTokens: number
+	cacheCreationInputTokens: number
+	inputTokens: number
+	outputTokens: number
+	contextTokens: number
+	contextPercent?: number
+	compactLikelyTriggered?: boolean
+	cacheBreaksTotal?: number
+	cacheBreaksBySource?: Record<string, number>
+}
+
 /**
  * ExtensionMessage
  * Extension -> Webview | CLI
@@ -89,6 +105,7 @@ export interface ExtensionMessage {
 		| "planUpdate"
 		| "transcriptionResult"
 		| "transcriptionError"
+		| "taskMetrics"
 	text?: string
 	/** For fileContent: { path, content, error? } */
 	fileContent?: { path: string; content: string | null; error?: string }
@@ -176,6 +193,7 @@ export interface ExtensionMessage {
 	taskHistoryItem?: HistoryItem
 	/** Matches webview `transcribeAudio` when posting `transcriptionResult` / `transcriptionError` */
 	transcriptionRequestId?: string
+	taskMetrics?: TaskMetricsSnapshot
 }
 
 export interface OpenAiCodexRateLimitsMessage {
@@ -243,6 +261,7 @@ export type ExtensionState = Pick<
 	| "maxGitStatusFiles"
 	| "requestDelaySeconds"
 	| "disabledTools"
+	| "enableStreamingToolExecution"
 > & {
 	lockApiConfigAcrossModes?: boolean
 	version: string

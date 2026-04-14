@@ -1,0 +1,141 @@
+import { Task } from "../task/Task"
+import { ignoreAbortError } from "../../utils/errorHandling"
+import { formatResponse } from "../prompts/responses"
+import { BaseTool, ToolCallbacks } from "./BaseTool"
+import type { ToolUse } from "../../shared/tools"
+import { SubAgentType, AGENT_TYPE_TOOLS } from "../task/SubTaskOptions"
+
+/** Maximum number of concurrently active sub-agents. */
+const MAX_CONCURRENT_AGENTS = 3
+
+interface AgentToolParams {
+	task: string
+	agentType?: SubAgentType
+	maxTurns?: number
+}
+
+export class AgentTool extends BaseTool<"agent"> {
+	readonly name = "agent" as const
+
+	override userFacingName(): string {
+		return "Agent"
+	}
+
+	override get searchHint(): string {
+		return "agent sub-agent spawn delegate fork"
+	}
+
+	async execute(params: AgentToolParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
+		const { task: taskDescription, agentType = "custom", maxTurns } = params
+		const { askApproval, handleError, pushToolResult } = callbacks
+
+		try {
+			// Validate required parameter
+			if (!taskDescription) {
+				task.consecutiveMistakeCount++
+				task.recordToolError("agent")
+				task.didToolFailInCurrentTurn = true
+				pushToolResult(await task.sayAndCreateMissingParamError("agent", "task"))
+				return
+			}
+
+			// Validate agentType
+			const validTypes: SubAgentType[] = ["explore", "implement", "verify", "custom"]
+			if (!validTypes.includes(agentType)) {
+				task.consecutiveMistakeCount++
+				task.recordToolError("agent")
+				task.didToolFailInCurrentTurn = true
+				pushToolResult(
+					formatResponse.toolError(
+						`Invalid agentType: "${agentType}". Must be one of: ${validTypes.join(", ")}`,
+					),
+				)
+				return
+			}
+
+			const provider = task.providerRef.deref()
+
+			if (!provider) {
+				pushToolResult(formatResponse.toolError("Provider reference lost"))
+				return
+			}
+
+			// Concurrency limit: count active children in the task stack
+			const taskStackSize = provider.getTaskStackSize()
+			// The stack includes the current task, so active children = stackSize - 1
+			// (each delegation pushes a child). We check against MAX_CONCURRENT_AGENTS.
+			if (taskStackSize > MAX_CONCURRENT_AGENTS) {
+				pushToolResult(
+					formatResponse.toolError(
+						`Cannot create sub-agent: concurrent agent limit reached (${MAX_CONCURRENT_AGENTS}). ` +
+							`Wait for an existing sub-agent to complete before spawning a new one.`,
+					),
+				)
+				return
+			}
+
+			task.consecutiveMistakeCount = 0
+
+			// Build the agent message with context about its type and constraints
+			const toolSetDescription = agentType !== "custom" ? AGENT_TYPE_TOOLS[agentType].join(", ") : "inherited from parent"
+			const maxTurnsNote = maxTurns ? `\n\nIMPORTANT: You have a maximum of ${maxTurns} conversation turns to complete this task. Be efficient and focused.` : ""
+
+			const agentMessage = [
+				`[Sub-Agent Type: ${agentType}]`,
+				`[Available Tools: ${toolSetDescription}]`,
+				``,
+				taskDescription,
+				maxTurnsNote,
+			].join("\n")
+
+			// Build approval message
+			const toolMessage = JSON.stringify({
+				tool: "agent",
+				agentType,
+				content: taskDescription,
+				maxTurns: maxTurns ?? null,
+			})
+
+			const didApprove = await askApproval("tool", toolMessage)
+
+			if (!didApprove) {
+				return
+			}
+
+			// Delegate using forked isolation level for independent context
+			const child = await (provider as any).delegateParentAndOpenChild({
+				parentTaskId: task.taskId,
+				message: agentMessage,
+				initialTodos: [],
+				mode: (task as any).mode?.slug ?? "code",
+				isolationLevel: "forked",
+			})
+
+			pushToolResult(
+				`Sub-agent (${agentType}) created with task ID ${child.taskId}. ` +
+					`The agent will work independently with forked context isolation.`,
+			)
+			return
+		} catch (error) {
+			await handleError("creating sub-agent", error)
+			return
+		}
+	}
+
+	override async handlePartial(task: Task, block: ToolUse<"agent">): Promise<void> {
+		const taskDesc: string | undefined = block.params.task
+		// agentType is not in ToolParamName, read from nativeArgs
+		const nativeArgs = block.nativeArgs as AgentToolParams | undefined
+		const agentType: string | undefined = nativeArgs?.agentType
+
+		const partialMessage = JSON.stringify({
+			tool: "agent",
+			agentType: agentType ?? "custom",
+			content: taskDesc ?? "",
+		})
+
+		await task.ask("tool", partialMessage, block.partial).catch(ignoreAbortError)
+	}
+}
+
+export const agentTool = new AgentTool()

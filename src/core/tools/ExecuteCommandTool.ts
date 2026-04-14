@@ -11,7 +11,7 @@ import { Task } from "../task/Task"
 
 import { ToolUse, ToolResponse } from "../../shared/tools"
 import { formatResponse } from "../prompts/responses"
-import { enhanceCjcErrorOutput } from "../prompts/sections/cangjie-context"
+import { buildCangjieExecuteCommandErrorAppendix } from "../prompts/sections/cangjie-context"
 import { unescapeHtmlEntities } from "../../utils/text-normalization"
 import { ExitCodeDetails, RooTerminalCallbacks, RooTerminalProcess } from "../../integrations/terminal/types"
 import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"
@@ -23,7 +23,7 @@ import { ignoreAbortError } from "../../utils/errorHandling"
 import { getTaskDirectoryPath } from "../../utils/storage"
 import { normalizeDotSlashCommandForWindowsShell } from "../../utils/hostShellCommand"
 import { BaseTerminal } from "../../integrations/terminal/BaseTerminal"
-import { BaseTool, ToolCallbacks } from "./BaseTool"
+import { BaseTool, ToolCallbacks, type ValidationResult } from "./BaseTool"
 
 class ShellIntegrationError extends Error {}
 
@@ -44,10 +44,18 @@ export function resolveAgentTimeoutMs(timeoutSeconds: number | null | undefined)
 
 export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 	readonly name = "execute_command" as const
+	override readonly maxResultSizeChars = 100_000
+
+	override validateInput(params: ExecuteCommandParams): ValidationResult {
+		if (!params.command || params.command.trim() === "") {
+			return { valid: false, error: "Command is required and cannot be empty." }
+		}
+		return { valid: true }
+	}
 
 	async execute(params: ExecuteCommandParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { command, cwd: customCwd, timeout: timeoutSeconds } = params
-		const { handleError, pushToolResult, askApproval } = callbacks
+		const { handleError, pushToolResult, askApproval, reportProgress } = callbacks
 
 		try {
 			if (!command) {
@@ -58,6 +66,7 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 			}
 
 			const canonicalCommand = unescapeHtmlEntities(command)
+			await reportProgress?.({ icon: "terminal", text: "Preparing command execution" })
 
 			{
 				const earlyState = await task.providerRef.deref()?.getState()
@@ -81,12 +90,14 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 
 			task.consecutiveMistakeCount = 0
 
+			await reportProgress?.({ icon: "terminal", text: "Waiting for command approval" } as any)
 			const didApprove = await askApproval("command", canonicalCommand)
 
 			if (!didApprove) {
 				return
 			}
 
+			await reportProgress?.({ icon: "terminal", text: "Starting command execution" } as any)
 			const executionId = task.lastMessageTs?.toString() ?? Date.now().toString()
 			const provider = await task.providerRef.deref()
 			const providerState = await provider?.getState()
@@ -401,6 +412,11 @@ export async function executeCommandInTerminal(
 	const process = terminal.runCommand(resolvedCommand, callbacks)
 	task.terminalProcess = process
 
+	// Track command execution for persistent shell session metrics
+	if ("commandCount" in terminal) {
+		;(terminal as any).commandCount++
+	}
+
 	// Dual-timeout logic:
 	// - Agent timeout: transitions the command to background (continues running)
 	// - User timeout: aborts the command (kills it)
@@ -532,9 +548,11 @@ export async function executeCommandInTerminal(
 
 		if (exitDetails?.exitCode !== undefined && exitDetails.exitCode !== 0) {
 			const extensionPath = task.providerRef.deref()?.context.extensionPath
-			const cangjieHints = enhanceCjcErrorOutput(result, task.cwd, extensionPath)
-			if (cangjieHints) {
-				formattedResult += cangjieHints
+			if (/\b(cjpm|cjc)\b/i.test(resolvedCommand)) {
+				const appendix = buildCangjieExecuteCommandErrorAppendix(result, task.cwd, extensionPath)
+				if (appendix) {
+					formattedResult += appendix
+				}
 			}
 		}
 

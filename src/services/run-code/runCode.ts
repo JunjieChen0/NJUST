@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
-import { resolveCangjieToolPath, buildCangjieToolEnv } from "../cangjie-lsp/cangjieToolUtils"
+import { resolveCangjieToolPath, buildCangjieToolEnv, CJC_CONFIG_KEY } from "../cangjie-lsp/cangjieToolUtils"
 
 interface RunConfig {
 	command: string
@@ -242,7 +242,7 @@ function buildCangjieConfig(filePath: string): RunConfig {
 		return { command: cmd, cwd: cjpmRoot, env }
 	}
 
-	const cjc = resolveCangjieToolPath("cjc", "cangjieLsp.cjcPath") || "cjc"
+	const cjc = resolveCangjieToolPath("cjc", CJC_CONFIG_KEY) || "cjc"
 	const base = path.basename(filePath, ".cj")
 	const cjFiles = listSourceFiles(fileDir, [".cj"])
 	if (cjFiles.length > 1) {

@@ -5,7 +5,7 @@ import { Package } from "../shared/package"
 
 import { getCodeActionCommand } from "../utils/commands"
 import { EditorUtils } from "../integrations/editor/EditorUtils"
-import { CJC_ERROR_PATTERNS } from "../core/prompts/sections/cangjie-context"
+import { matchCjcErrorPattern } from "../core/prompts/sections/cangjie-context"
 
 export const TITLES: Record<CodeActionName, string> = {
 	EXPLAIN: "Explain with NJUST_AI_CJ",
@@ -21,12 +21,11 @@ export const TITLES: Record<CodeActionName, string> = {
  */
 function enrichCangjieFixData(diagnostics: ReturnType<typeof EditorUtils.createDiagnosticData>[]): typeof diagnostics {
 	return diagnostics.map((d) => {
-		for (const pattern of CJC_ERROR_PATTERNS) {
-			if (pattern.pattern.test(d.message)) {
-				return {
-					...d,
-					message: `${d.message}\n[仓颉修复建议] ${pattern.suggestion}`,
-				}
+		const pattern = matchCjcErrorPattern(d.message)
+		if (pattern) {
+			return {
+				...d,
+				message: `${d.message}\n[仓颉修复建议] ${pattern.suggestion}`,
 			}
 		}
 		return d

@@ -24,6 +24,15 @@ interface ApplyPatchParams {
 
 export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 	readonly name = "apply_patch" as const
+	override readonly requiresCheckpoint = true
+
+	override interruptBehavior(): "cancel" | "block" {
+		return "block"
+	}
+
+	override userFacingName(): string {
+		return "Apply Patch"
+	}
 
 	private static readonly FILE_HEADER_MARKERS = ["*** Add File: ", "*** Delete File: ", "*** Update File: "] as const
 

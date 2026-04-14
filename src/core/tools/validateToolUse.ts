@@ -62,6 +62,7 @@ export function validateToolUse(
 	toolParams?: Record<string, unknown>,
 	experiments?: Record<string, boolean>,
 	includedTools?: string[],
+	allowedTools?: string[],
 ): void {
 	// First, check if the tool name is actually a valid/known tool
 	// This catches completely invalid tool names like "edit_file" that don't exist
@@ -69,6 +70,10 @@ export function validateToolUse(
 		throw new Error(
 			`Unknown tool "${toolName}". This tool does not exist. Please use one of the available tools: ${validToolNames.join(", ")}.`,
 		)
+	}
+
+	if (allowedTools && allowedTools.length > 0 && !allowedTools.includes(toolName)) {
+		throw new Error(`Tool "${toolName}" is not allowed for this delegated agent context.`)
 	}
 
 	// Then check if the tool is allowed for the current mode
@@ -103,6 +108,9 @@ const EDIT_OPERATION_PARAMS = [
 // Markers used in apply_patch format to identify file operations
 const PATCH_FILE_MARKERS = ["*** Add File: ", "*** Delete File: ", "*** Update File: "] as const
 
+// Standard unified diff markers (--- a/path, +++ b/path)
+const UNIFIED_DIFF_MARKERS = ["--- a/", "+++ b/", "--- ", "+++ "] as const
+
 /**
  * Extract file paths from apply_patch content.
  * The patch format uses markers like "*** Add File: path", "*** Delete File: path", "*** Update File: path"
@@ -114,11 +122,25 @@ function extractFilePathsFromPatch(patchContent: string): string[] {
 	const lines = patchContent.split("\n")
 
 	for (const line of lines) {
+		// Check custom patch markers first
 		for (const marker of PATCH_FILE_MARKERS) {
 			if (line.startsWith(marker)) {
 				const path = line.substring(marker.length).trim()
 				if (path) {
 					filePaths.push(path)
+				}
+				break
+			}
+		}
+
+		// Check standard unified diff markers (--- a/path or +++ b/path)
+		for (const marker of UNIFIED_DIFF_MARKERS) {
+			if (line.startsWith(marker)) {
+				// Extract path, handling optional tab-separated timestamp (e.g., "--- a/file.txt\t2024-01-01")
+				let rawPath = line.substring(marker.length).split("\t")[0].trim()
+				// Skip /dev/null entries (used for new/deleted files in unified diff)
+				if (rawPath && rawPath !== "/dev/null") {
+					filePaths.push(rawPath)
 				}
 				break
 			}

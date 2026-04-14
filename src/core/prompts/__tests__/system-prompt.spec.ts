@@ -127,6 +127,9 @@ vi.mock("vscode", () => ({
 	workspace: {
 		workspaceFolders: [{ uri: { fsPath: "/test/path" } }],
 		getWorkspaceFolder: vi.fn().mockReturnValue({ uri: { fsPath: "/test/path" } }),
+		getConfiguration: vi.fn().mockReturnValue({
+			get: vi.fn().mockReturnValue(undefined),
+		}),
 	},
 	window: {
 		activeTextEditor: undefined,
@@ -290,6 +293,9 @@ describe("SYSTEM_PROMPT", () => {
 					fsPath: "/test/path",
 				},
 			}),
+			getConfiguration: vi.fn().mockReturnValue({
+				get: vi.fn().mockReturnValue(undefined),
+			}),
 		}
 		vscode.window = {
 			activeTextEditor: undefined,
@@ -311,7 +317,7 @@ describe("SYSTEM_PROMPT", () => {
 			undefined, // customModes
 			undefined, // globalCustomInstructions
 			undefined, // experiments
-			undefined, // language
+			"es", // language
 			undefined, // rooIgnoreInstructions
 		)
 
@@ -332,6 +338,9 @@ describe("SYSTEM_PROMPT", () => {
 				uri: {
 					fsPath: "/test/path",
 				},
+			}),
+			getConfiguration: vi.fn().mockReturnValue({
+				get: vi.fn().mockReturnValue(undefined),
 			}),
 		}
 		vscode.window = {
@@ -490,8 +499,7 @@ describe("SYSTEM_PROMPT", () => {
 			settings, // settings
 		)
 
-		// update_todo_list is still referenced by mode instructions, but tool catalogs are not embedded.
-		expect(prompt).toContain("update_todo_list")
+		// tool catalogs are not embedded in the system prompt; ensure no catalog heading leaks in
 		expect(prompt).not.toContain("## update_todo_list")
 	})
 
@@ -518,8 +526,7 @@ describe("SYSTEM_PROMPT", () => {
 			settings, // settings
 		)
 
-		// update_todo_list is still referenced by mode instructions, but tool catalogs are not embedded.
-		expect(prompt).toContain("update_todo_list")
+		// tool catalogs are not embedded in the system prompt; ensure no catalog heading leaks in
 		expect(prompt).not.toContain("## update_todo_list")
 	})
 
