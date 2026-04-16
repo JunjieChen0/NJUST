@@ -2,7 +2,7 @@ import type OpenAI from "openai"
 
 import type { McpServer, McpTool } from "@njust-ai-cj/types"
 
-import type { McpHub } from "../../../../../services/mcp/McpHub"
+import type { IMcpHubService } from "../../../../../services/mcp/interfaces/IMcpHubService"
 
 import { getMcpServerTools } from "../mcp_server"
 
@@ -30,7 +30,7 @@ describe("getMcpServerTools", () => {
 		tools,
 	})
 
-	const createMockMcpHub = (servers: McpServer[]): Partial<McpHub> => ({
+	const createMockIMcpHubService = (servers: McpServer[]): Partial<IMcpHubService> => ({
 		getServers: vi.fn().mockReturnValue(servers),
 	})
 
@@ -40,16 +40,16 @@ describe("getMcpServerTools", () => {
 	})
 
 	it("should return empty array when no servers are available", () => {
-		const mockHub = createMockMcpHub([])
-		const result = getMcpServerTools(mockHub as McpHub)
+		const mockHub = createMockIMcpHubService([])
+		const result = getMcpServerTools(mockHub as IMcpHubService)
 		expect(result).toEqual([])
 	})
 
 	it("should generate tool definitions for server tools", () => {
 		const server = createMockServer("testServer", [createMockTool("testTool")])
-		const mockHub = createMockMcpHub([server])
+		const mockHub = createMockIMcpHubService([server])
 
-		const result = getMcpServerTools(mockHub as McpHub)
+		const result = getMcpServerTools(mockHub as IMcpHubService)
 
 		expect(result).toHaveLength(1)
 		expect(result[0].type).toBe("function")
@@ -61,9 +61,9 @@ describe("getMcpServerTools", () => {
 		const enabledTool = createMockTool("enabledTool")
 		const disabledTool = { ...createMockTool("disabledTool"), enabledForPrompt: false }
 		const server = createMockServer("testServer", [enabledTool, disabledTool])
-		const mockHub = createMockMcpHub([server])
+		const mockHub = createMockIMcpHubService([server])
 
-		const result = getMcpServerTools(mockHub as McpHub)
+		const result = getMcpServerTools(mockHub as IMcpHubService)
 
 		expect(result).toHaveLength(1)
 		expect(getFunction(result[0]).name).toBe("mcp--testServer--enabledTool")
@@ -81,11 +81,11 @@ describe("getMcpServerTools", () => {
 			"project",
 		)
 
-		// McpHub.getServers() deduplicates with project servers taking priority
+		// IMcpHubService.getServers() deduplicates with project servers taking priority
 		// This test simulates the deduplicated result (only project server returned)
-		const mockHub = createMockMcpHub([projectServer])
+		const mockHub = createMockIMcpHubService([projectServer])
 
-		const result = getMcpServerTools(mockHub as McpHub)
+		const result = getMcpServerTools(mockHub as IMcpHubService)
 
 		// Should only have one tool (from project server)
 		expect(result).toHaveLength(1)
@@ -100,9 +100,9 @@ describe("getMcpServerTools", () => {
 			createMockTool("tool2"),
 			createMockTool("tool3"),
 		])
-		const mockHub = createMockMcpHub([server])
+		const mockHub = createMockIMcpHubService([server])
 
-		const result = getMcpServerTools(mockHub as McpHub)
+		const result = getMcpServerTools(mockHub as IMcpHubService)
 
 		expect(result).toHaveLength(3)
 		const toolNames = result.map((t) => getFunction(t).name)
@@ -114,9 +114,9 @@ describe("getMcpServerTools", () => {
 	it("should allow tools with same name from different servers", () => {
 		const server1 = createMockServer("server1", [createMockTool("commonTool")])
 		const server2 = createMockServer("server2", [createMockTool("commonTool")])
-		const mockHub = createMockMcpHub([server1, server2])
+		const mockHub = createMockIMcpHubService([server1, server2])
 
-		const result = getMcpServerTools(mockHub as McpHub)
+		const result = getMcpServerTools(mockHub as IMcpHubService)
 
 		expect(result).toHaveLength(2)
 		const toolNames = result.map((t) => getFunction(t).name)
@@ -131,9 +131,9 @@ describe("getMcpServerTools", () => {
 			...createMockServer("undefinedTools", []),
 			tools: undefined,
 		}
-		const mockHub = createMockMcpHub([serverWithTools, serverWithoutTools, serverWithUndefinedTools])
+		const mockHub = createMockIMcpHubService([serverWithTools, serverWithoutTools, serverWithUndefinedTools])
 
-		const result = getMcpServerTools(mockHub as McpHub)
+		const result = getMcpServerTools(mockHub as IMcpHubService)
 
 		expect(result).toHaveLength(1)
 		expect(getFunction(result[0]).name).toBe("mcp--withTools--tool1")
@@ -153,9 +153,9 @@ describe("getMcpServerTools", () => {
 			},
 		}
 		const server = createMockServer("testServer", [toolWithRequired])
-		const mockHub = createMockMcpHub([server])
+		const mockHub = createMockIMcpHubService([server])
 
-		const result = getMcpServerTools(mockHub as McpHub)
+		const result = getMcpServerTools(mockHub as IMcpHubService)
 
 		expect(result).toHaveLength(1)
 		// additionalProperties: false should only be on the root object type, not on primitive types
@@ -182,9 +182,9 @@ describe("getMcpServerTools", () => {
 			},
 		}
 		const server = createMockServer("testServer", [toolWithoutRequired])
-		const mockHub = createMockMcpHub([server])
+		const mockHub = createMockIMcpHubService([server])
 
-		const result = getMcpServerTools(mockHub as McpHub)
+		const result = getMcpServerTools(mockHub as IMcpHubService)
 
 		expect(result).toHaveLength(1)
 		// additionalProperties: false should only be on the root object type, not on primitive types

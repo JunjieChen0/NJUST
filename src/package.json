@@ -3,7 +3,7 @@
 	"displayName": "NJUST_AI_CJ",
 	"description": "AI-powered coding assistant for NJUST",
 	"publisher": "JunjieChen-YuyaoJiang",
-	"version": "2026.4.14",
+	"version": "2026.4.16",
 	"icon": "assets/icons/icon.png",
 	"galleryBanner": {
 		"color": "#617A91",
@@ -794,6 +794,11 @@
 					"default": [],
 					"description": "%commands.deniedCommands.description%"
 				},
+				"njust-ai-cj.saveAllBeforeExecuteCommand": {
+					"type": "boolean",
+					"default": true,
+					"description": "%commands.saveAllBeforeExecuteCommand.description%"
+				},
 				"njust-ai-cj.commandExecutionTimeout": {
 					"type": "number",
 					"default": 0,
@@ -895,6 +900,13 @@
 					"minimum": 1000,
 					"maximum": 120000,
 					"description": "TTL (ms) for the Cangjie Dev L3 full-context cache (mtime-based key). Increase for fewer rebuilds; decrease for fresher prompts."
+				},
+				"njust-ai-cj.cangjieContextTokenBudget": {
+					"type": "number",
+					"default": 0,
+					"minimum": 0,
+					"maximum": 12000,
+					"markdownDescription": "Override the Cangjie Dev dynamic context token budget. When set to a positive value, this takes priority over the automatic model-scaled budget. When 0 (default), the budget is derived from the model's context window (e.g. 2400 for 16k, 4800 for 128k, 6000 for 200k+)."
 				},
 				"njust-ai-cj.cangjieLsp.enabled": {
 					"type": "boolean",

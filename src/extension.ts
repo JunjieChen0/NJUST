@@ -60,7 +60,7 @@ import { cangjieDiagnosticModeSwitch } from "./services/cangjie-lsp/cangjieDiagn
 import { CangjieLintConfig } from "./services/cangjie-lsp/CangjieLintConfig"
 import { CangjieMetricsCollector } from "./services/cangjie-lsp/CangjieMetricsCollector"
 import { migrateSettings } from "./utils/migrateSettings"
-import { autoImportSettings } from "./utils/autoImportSettings"
+import { autoImportSettings } from "./core/config/autoImportSettings"
 import { startupProfiler } from "./utils/profiler"
 import { API } from "./extension/api"
 import { RooToolsMcpServer } from "./services/mcp-server/RooToolsMcpServer"
@@ -470,59 +470,59 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 	)
 
-	// Cangjie symbol index (persistent cross-file index for definition/reference/rename fallback)
-	// Deferred to background with a short delay — non-critical for first interaction.
-	cangjieSymbolIndex = new CangjieSymbolIndex(outputChannel)
-	context.subscriptions.push(cangjieSymbolIndex)
-	setTimeout(() => {
-		void cangjieSymbolIndex?.initialize().catch((err) => {
-			outputChannel.appendLine(
-				`[SymbolIndex] Background initialization error: ${err instanceof Error ? err.message : String(err)}`,
-			)
-		})
-	}, 1000)
+	// Cangjie symbol index + cross-file providers (need a workspace folder; single-file mode has no stable index root)
+	if (vscode.workspace.workspaceFolders?.length) {
+		cangjieSymbolIndex = new CangjieSymbolIndex(outputChannel)
+		context.subscriptions.push(cangjieSymbolIndex)
+		setTimeout(() => {
+			void cangjieSymbolIndex?.initialize().catch((err) => {
+				outputChannel.appendLine(
+					`[SymbolIndex] Background initialization error: ${err instanceof Error ? err.message : String(err)}`,
+				)
+			})
+		}, 1000)
 
-	context.subscriptions.push(
-		vscode.languages.registerDefinitionProvider(
-			{ language: "cangjie", scheme: "file" },
-			new CangjieDefinitionProvider(cangjieSymbolIndex),
-		),
-	)
+		context.subscriptions.push(
+			vscode.languages.registerDefinitionProvider(
+				{ language: "cangjie", scheme: "file" },
+				new CangjieDefinitionProvider(cangjieSymbolIndex),
+			),
+		)
 
-	context.subscriptions.push(
-		vscode.languages.registerReferenceProvider(
-			{ language: "cangjie", scheme: "file" },
-			new CangjieReferenceProvider(cangjieSymbolIndex),
-		),
-	)
+		context.subscriptions.push(
+			vscode.languages.registerReferenceProvider(
+				{ language: "cangjie", scheme: "file" },
+				new CangjieReferenceProvider(cangjieSymbolIndex),
+			),
+		)
 
-	context.subscriptions.push(
-		vscode.languages.registerRenameProvider(
-			{ language: "cangjie", scheme: "file" },
-			new CangjieEnhancedRenameProvider(cangjieSymbolIndex),
-		),
-	)
+		context.subscriptions.push(
+			vscode.languages.registerRenameProvider(
+				{ language: "cangjie", scheme: "file" },
+				new CangjieEnhancedRenameProvider(cangjieSymbolIndex),
+			),
+		)
 
-	// Macro CodeLens + Hover + commands
-	context.subscriptions.push(
-		vscode.languages.registerCodeLensProvider(
-			{ language: "cangjie", scheme: "file" },
-			new CangjieMacroCodeLensProvider(cangjieSymbolIndex),
-		),
-	)
+		context.subscriptions.push(
+			vscode.languages.registerCodeLensProvider(
+				{ language: "cangjie", scheme: "file" },
+				new CangjieMacroCodeLensProvider(cangjieSymbolIndex),
+			),
+		)
 
-	context.subscriptions.push(
-		vscode.languages.registerHoverProvider(
-			{ language: "cangjie", scheme: "file" },
-			new CangjieMacroHoverProvider(cangjieSymbolIndex),
-		),
-	)
+		context.subscriptions.push(
+			vscode.languages.registerHoverProvider(
+				{ language: "cangjie", scheme: "file" },
+				new CangjieMacroHoverProvider(cangjieSymbolIndex),
+			),
+		)
+
+		if (cangjieLspClient && cangjieSymbolIndex) {
+			registerCangjieCommands(context, cangjieLspClient, cangjieSymbolIndex, () => provider.getCurrentTask()?.taskId)
+		}
+	}
 
 	registerMacroCommands(context, outputChannel)
-
-	if (cangjieLspClient && cangjieSymbolIndex) {
-		registerCangjieCommands(context, cangjieLspClient, cangjieSymbolIndex, () => provider.getCurrentTask()?.taskId)
-	}
 
 	registerCodeActions(context)
 	registerTerminalActions(context)
@@ -660,15 +660,15 @@ export async function activate(context: vscode.ExtensionContext) {
 export async function deactivate() {
 	outputChannel.appendLine(`${Package.name} extension deactivated`)
 
+	cangjieLspStatusBar?.dispose()
+	cangjieLspStatusBar = undefined
+
 	if (cangjieLspClient) {
 		await cangjieLspClient.stop()
 		cangjieLspClient.dispose()
 		cangjieLspClient = undefined
 	}
 
-
-	cangjieLspStatusBar?.dispose()
-	cangjieLspStatusBar = undefined
 	cjfmtFormatter?.dispose()
 	cjfmtFormatter = undefined
 	cjlintDiagnostics?.dispose()

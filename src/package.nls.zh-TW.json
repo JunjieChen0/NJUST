@@ -29,6 +29,7 @@
 	"configuration.title": "NJUST_AI_CJ",
 	"commands.allowedCommands.description": "當啟用'始終批准執行操作'時可以自動執行的命令",
 	"commands.deniedCommands.description": "將自動拒絕而無需請求批准的命令前綴。與允許命令衝突時，最長前綴匹配優先。新增 * 拒絕所有命令。",
+	"commands.saveAllBeforeExecuteCommand.description": "在智慧助理執行終端機命令前，儲存工作區內所有未儲存的編輯器（在您核准後，或已自動核准時）。行為與「全部儲存」相同；不會強制儲存未命名緩衝區。",
 	"commands.commandExecutionTimeout.description": "等待命令執行完成的最大時間（秒），逾時前（0 = 無逾時，1-600秒，預設：0秒）",
 	"commands.commandTimeoutAllowlist.description": "從命令執行逾時中排除的命令前綴。符合這些前綴的命令將在沒有逾時限制的情況下執行。",
 	"commands.preventCompletionWithOpenTodos.description": "當待辦事項清單中有未完成的待辦事項時阻止工作完成",

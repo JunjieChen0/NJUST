@@ -1,3 +1,7 @@
+import {
+	MAX_DEFERRED_RUN_ID_LENGTH,
+	MIN_DEFERRED_PROTOCOL_VERSION,
+} from "./deferredConstants"
 import type { DeferredResponse, DeferredToolCall } from "./types"
 
 function pickNonEmptyString(...candidates: unknown[]): string | undefined {
@@ -25,7 +29,7 @@ function parseArgumentsField(raw: unknown): Record<string, unknown> {
 				return parsed as Record<string, unknown>
 			}
 		} catch {
-			return { _raw_arguments: s }
+			return { _arguments_parse_failed: true as const, _raw_arguments: s }
 		}
 	}
 	return {}
@@ -63,6 +67,7 @@ export function parseDeferredToolCallItem(item: unknown): DeferredToolCall | nul
 /**
  * Some servers send `tool_calls` (OpenAI-like) instead of `pending_tools`. Normalize so Task always
  * executes and resumes with matching counts.
+ * When both are present, merge by `call_id` (pending_tools wins on duplicates).
  */
 export function normalizeDeferredResponse(raw: unknown): DeferredResponse {
 	if (!raw || typeof raw !== "object") {
@@ -74,10 +79,42 @@ export function normalizeDeferredResponse(raw: unknown): DeferredResponse {
 		? r.pending_tools.map(parseDeferredToolCallItem).filter((x): x is DeferredToolCall => x !== null)
 		: []
 
-	let pending_tools = fromPending
-	if (pending_tools.length === 0 && Array.isArray(r.tool_calls)) {
-		pending_tools = r.tool_calls.map(parseDeferredToolCallItem).filter((x): x is DeferredToolCall => x !== null)
+	const fromToolCalls = Array.isArray(r.tool_calls)
+		? r.tool_calls.map(parseDeferredToolCallItem).filter((x): x is DeferredToolCall => x !== null)
+		: []
+
+	let pending_tools: DeferredToolCall[]
+	if (fromPending.length > 0 && fromToolCalls.length > 0) {
+		const byId = new Map<string, DeferredToolCall>()
+		for (const t of fromPending) {
+			byId.set(t.call_id, t)
+		}
+		for (const t of fromToolCalls) {
+			if (!byId.has(t.call_id)) {
+				byId.set(t.call_id, t)
+			}
+		}
+		pending_tools = [...byId.values()]
+	} else if (fromPending.length > 0) {
+		pending_tools = fromPending
+	} else {
+		pending_tools = fromToolCalls
 	}
 
-	return { ...r, pending_tools }
+	const runId = pickNonEmptyString(r.run_id, (r as { runId?: unknown }).runId)
+	if (!runId) {
+		throw new Error("Cloud Agent: deferred response missing run_id")
+	}
+	if (runId.length > MAX_DEFERRED_RUN_ID_LENGTH || /[\r\n]/.test(runId)) {
+		throw new Error("Cloud Agent: deferred response has invalid run_id")
+	}
+
+	const protoVer = r.deferred_protocol_version
+	if (protoVer !== undefined && protoVer < MIN_DEFERRED_PROTOCOL_VERSION) {
+		throw new Error(
+			`Cloud Agent: deferred_protocol_version ${protoVer} is below supported minimum ${MIN_DEFERRED_PROTOCOL_VERSION}`,
+		)
+	}
+
+	return { ...r, pending_tools, run_id: runId }
 }

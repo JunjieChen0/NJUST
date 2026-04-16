@@ -65,8 +65,7 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 
 			if (isPathUnderBundledCangjieCorpus(absolutePath, extensionPath)) {
 				toolResultCache.set(cacheKey, result)
-				toolResultCache.set(cacheKey, result)
-			pushToolResult(result)
+				pushToolResult(result)
 				return
 			}
 

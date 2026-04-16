@@ -42,9 +42,21 @@ describe("normalizeDeferredResponse", () => {
 			run_id: "r1",
 			status: "pending",
 			pending_tools: [{ call_id: "x", tool: "read_file", arguments: {} }],
-			tool_calls: [{ id: "y", function: { name: "ignored", arguments: "{}" } }],
+			tool_calls: [{ id: "x", function: { name: "ignored", arguments: "{}" } }],
 		})
 		expect(out.pending_tools).toHaveLength(1)
-		expect(out.pending_tools![0].call_id).toBe("x")
+		expect(out.pending_tools![0].tool).toBe("read_file")
+	})
+
+	it("rejects deferred_protocol_version below supported minimum", () => {
+		expect(() =>
+			normalizeDeferredResponse({ run_id: "r1", status: "done", deferred_protocol_version: 0 }),
+		).toThrow(/deferred_protocol_version/)
+	})
+
+	it("rejects run_id with newlines or excessive length", () => {
+		expect(() =>
+			normalizeDeferredResponse({ run_id: "bad\nid", status: "done" }),
+		).toThrow(/run_id/)
 	})
 })

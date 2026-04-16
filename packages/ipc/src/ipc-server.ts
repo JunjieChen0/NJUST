@@ -9,6 +9,7 @@ import {
 	type NJUST_AI_CJIpcServer,
 	IpcOrigin,
 	IpcMessageType,
+	IPC_PROTOCOL_VERSION,
 	type IpcMessage,
 	ipcMessageSchema,
 } from "@njust-ai-cj/types"
@@ -50,7 +51,7 @@ export class IpcServer extends EventEmitter<IpcServerEvents> implements NJUST_AI
 		this.send(socket, {
 			type: IpcMessageType.Ack,
 			origin: IpcOrigin.Server,
-			data: { clientId, pid: process.pid, ppid: process.ppid },
+			data: { clientId, pid: process.pid, ppid: process.ppid, protocolVersion: IPC_PROTOCOL_VERSION },
 		})
 
 		this.emit(IpcMessageType.Connect, clientId)

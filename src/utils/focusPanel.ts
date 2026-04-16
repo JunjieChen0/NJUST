@@ -1,6 +1,8 @@
 import * as vscode from "vscode"
 import { Package } from "../shared/package"
-import { ClineProvider } from "../core/webview/ClineProvider"
+
+/** Matches {@link ../core/webview/ClineProvider.sideBarId} without importing webview (C.3). */
+const CLINE_SIDEBAR_VIEW_ID = `${Package.name}.SidebarProvider`
 
 /**
  * Focus the active panel (either tab or sidebar)
@@ -22,6 +24,6 @@ export async function focusPanel(
 		panel.reveal(vscode.ViewColumn.Active, false)
 	} else if (panel === sidebarPanel) {
 		// For sidebar panels, focus the sidebar
-		await vscode.commands.executeCommand(`${ClineProvider.sideBarId}.focus`)
+		await vscode.commands.executeCommand(`${CLINE_SIDEBAR_VIEW_ID}.focus`)
 	}
 }

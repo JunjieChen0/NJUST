@@ -474,6 +474,8 @@ export const providerSettingsSchema = z.object({
 	...rooSchema.shape,
 	...vercelAiGatewaySchema.shape,
 	...codebaseIndexProviderSchema.shape,
+	/** When true, requests parallel native tool calls from OpenAI-compatible APIs (default off). */
+	parallelToolCalls: z.boolean().optional(),
 })
 
 export type ProviderSettings = z.infer<typeof providerSettingsSchema>

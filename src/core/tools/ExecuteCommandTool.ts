@@ -24,6 +24,14 @@ import { getTaskDirectoryPath } from "../../utils/storage"
 import { normalizeDotSlashCommandForWindowsShell } from "../../utils/hostShellCommand"
 import { BaseTerminal } from "../../integrations/terminal/BaseTerminal"
 import { BaseTool, ToolCallbacks, type ValidationResult } from "./BaseTool"
+import { recordSecurityMetric } from "../security/metrics"
+import { checkCommandSafety } from "./helpers/commandSafety"
+
+/** Uses {@link checkCommandSafety} so high-risk detection stays aligned with permission classifiers. */
+function isHighRiskShellCommand(command: string): boolean {
+	const { riskLevel } = checkCommandSafety(command)
+	return riskLevel === "forbidden" || riskLevel === "dangerous"
+}
 
 class ShellIntegrationError extends Error {}
 
@@ -90,11 +98,32 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 
 			task.consecutiveMistakeCount = 0
 
+			const safetyCheck = checkCommandSafety(canonicalCommand)
+
+			if (safetyCheck.requiresConfirmation) {
+				console.warn("[Security] execute_command: high-risk pattern; user must approve in UI:", canonicalCommand)
+				recordSecurityMetric("execute_command_high_risk", {
+					cmd: canonicalCommand.slice(0, 240),
+					riskLevel: safetyCheck.riskLevel,
+					reasons: safetyCheck.reasons.slice(0, 5).join(", "),
+				})
+			}
+
 			await reportProgress?.({ icon: "terminal", text: "Waiting for command approval" } as any)
-			const didApprove = await askApproval("command", canonicalCommand)
+			const approvalMessage = safetyCheck.requiresConfirmation
+				? `[High risk] This command may destroy data. Confirm to run:\n${canonicalCommand}\n\nReasons: ${safetyCheck.reasons.join("; ")}`
+				: canonicalCommand
+			const didApprove = await askApproval("command", approvalMessage)
 
 			if (!didApprove) {
 				return
+			}
+
+			const saveAllBeforeExecute = vscode.workspace
+				.getConfiguration(Package.name)
+				.get<boolean>("saveAllBeforeExecuteCommand", true)
+			if (saveAllBeforeExecute) {
+				await vscode.workspace.saveAll(false)
 			}
 
 			await reportProgress?.({ icon: "terminal", text: "Starting command execution" } as any)

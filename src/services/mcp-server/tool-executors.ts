@@ -7,16 +7,30 @@ import { regexSearchFiles } from "../../services/ripgrep"
 import { listFiles } from "../../services/glob/list-files"
 
 /**
- * Ensures a resolved path stays within the workspace boundary.
+ * Ensures a resolved path stays within the workspace boundary (after realpath, to reduce symlink escape).
  * Throws if the path attempts to escape.
  */
-function ensureWithinWorkspace(cwd: string, relPath: string): string {
+async function ensureWithinWorkspace(cwd: string, relPath: string): Promise<string> {
 	const resolved = path.resolve(cwd, relPath)
-	const normalizedCwd = path.resolve(cwd)
-	if (!resolved.startsWith(normalizedCwd + path.sep) && resolved !== normalizedCwd) {
+	let base = path.resolve(cwd)
+	try {
+		base = await fs.realpath(base)
+	} catch {
+		/* use logical cwd if missing */
+	}
+	let target = resolved
+	try {
+		target = await fs.realpath(resolved)
+	} catch {
+		if (!resolved.startsWith(base + path.sep) && resolved !== base) {
+			throw new Error(`Path escapes workspace boundary: ${relPath}`)
+		}
+		return resolved
+	}
+	if (!target.startsWith(base + path.sep) && target !== base) {
 		throw new Error(`Path escapes workspace boundary: ${relPath}`)
 	}
-	return resolved
+	return target
 }
 
 export interface ReadFileParams {
@@ -26,7 +40,7 @@ export interface ReadFileParams {
 }
 
 export async function execReadFile(cwd: string, params: ReadFileParams): Promise<string> {
-	const absPath = ensureWithinWorkspace(cwd, params.path)
+	const absPath = await ensureWithinWorkspace(cwd, params.path)
 
 	if (!(await fileExistsAtPath(absPath))) {
 		throw new Error(`File not found: ${params.path}`)
@@ -55,7 +69,7 @@ export interface WriteFileParams {
 }
 
 export async function execWriteFile(cwd: string, params: WriteFileParams): Promise<string> {
-	const absPath = ensureWithinWorkspace(cwd, params.path)
+	const absPath = await ensureWithinWorkspace(cwd, params.path)
 
 	const isNew = !(await fileExistsAtPath(absPath))
 	if (isNew) {
@@ -73,7 +87,7 @@ export interface ListFilesParams {
 }
 
 export async function execListFiles(cwd: string, params: ListFilesParams): Promise<string> {
-	const absPath = ensureWithinWorkspace(cwd, params.path)
+	const absPath = await ensureWithinWorkspace(cwd, params.path)
 
 	if (!(await fileExistsAtPath(absPath))) {
 		throw new Error(`Directory not found: ${params.path}`)
@@ -98,7 +112,7 @@ export interface SearchFilesParams {
 }
 
 export async function execSearchFiles(cwd: string, params: SearchFilesParams): Promise<string> {
-	const absPath = ensureWithinWorkspace(cwd, params.path)
+	const absPath = await ensureWithinWorkspace(cwd, params.path)
 
 	if (!(await fileExistsAtPath(absPath))) {
 		throw new Error(`Directory not found: ${params.path}`)
@@ -185,7 +199,7 @@ export interface ApplyDiffParams {
 }
 
 export async function execApplyDiff(cwd: string, params: ApplyDiffParams): Promise<string> {
-	const absPath = ensureWithinWorkspace(cwd, params.path)
+	const absPath = await ensureWithinWorkspace(cwd, params.path)
 
 	if (!(await fileExistsAtPath(absPath))) {
 		throw new Error(`File not found: ${params.path}`)

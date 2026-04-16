@@ -8,6 +8,7 @@ interface AutoApprovalToggles {
 	alwaysAllowModeSwitch?: boolean
 	alwaysAllowSubtasks?: boolean
 	alwaysAllowFollowupQuestions?: boolean
+	saveAllBeforeExecuteCommand?: boolean
 }
 
 export function useAutoApprovalState(toggles: AutoApprovalToggles, autoApprovalEnabled?: boolean) {

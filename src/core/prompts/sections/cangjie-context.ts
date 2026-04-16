@@ -51,6 +51,27 @@ import { traceDiagnosticRootCause } from "../../../services/cangjie-lsp/cangjieD
 import { extractCangjieImportPackagePrefixes } from "../../../services/cangjie-lsp/cangjieImportPaths"
 import { mergeStdlibConstraintHintsFromCorpus } from "../../../services/cangjie-lsp/stdlibConstraintHints"
 
+import {
+	normalizeDiagnosticCode as _normalizeDiagnosticCode,
+	resolveCjcPatternForDiagnostic as _resolveCjcPatternForDiagnostic,
+	buildDiagnosticPatternCache as _buildDiagnosticPatternCache,
+	getErrorFixDirectiveForDiagnostic as _getErrorFixDirectiveForDiagnostic,
+} from "./CangjieErrorAnalyzer"
+import {
+	extractImports as _extractImports,
+	mapImportsToDocPaths as _mapImportsToDocPaths,
+	resolveImportedSymbols as _resolveImportedSymbols,
+	resolveImportToDirectory as _resolveImportToDirectory,
+	isNonTrivialImportMapping as _isNonTrivialImportMapping,
+	extractTypeOutlineFromLines as _extractTypeOutlineFromLines,
+	formatSymbolEntries as _formatSymbolEntries,
+} from "./CangjieDependencyResolver"
+import {
+	collectActiveCangjieEditorSnapshot as _collectActiveCangjieEditorSnapshot,
+	getActiveCangjieFileInfo as _getActiveCangjieFileInfo,
+	type StructuredEditingContextPreparse,
+} from "./CangjieSymbolExtractor"
+
 const LEARNED_FIXES_MAX_SECTION_CHARS = 4000
 
 const PACKAGE_DECL_REGEX = /^\s*package\s+([\w.]+)\s*$/m
@@ -76,36 +97,10 @@ const LEARNED_FIX_CATEGORY_LEXICON: Set<string> = (() => {
 	return s
 })()
 
-function normalizeDiagnosticCode(diag: vscode.Diagnostic): string | undefined {
-	const c = diag.code
-	if (c === undefined || c === null) return undefined
-	if (typeof c === "string" || typeof c === "number") return String(c)
-	if (typeof c === "object" && c !== null && "value" in c) {
-		return String((c as { value: string | number }).value)
-	}
-	return undefined
-}
-
-function resolveCjcPatternForDiagnostic(diag: vscode.Diagnostic): CjcErrorPattern | null {
-	const code = normalizeDiagnosticCode(diag)
-	if (code) {
-		const byCode = CJC_DIAGNOSTIC_CODE_MAP.get(code)
-		if (byCode) return byCode
-	}
-	return matchCjcErrorPattern(diag.message)
-}
-
-function buildDiagnosticPatternCache(diags: vscode.Diagnostic[]): Map<vscode.Diagnostic, CjcErrorPattern | null> {
-	const m = new Map<vscode.Diagnostic, CjcErrorPattern | null>()
-	for (const d of diags) m.set(d, resolveCjcPatternForDiagnostic(d))
-	return m
-}
-
-function getErrorFixDirectiveForDiagnostic(diag: vscode.Diagnostic): string {
-	const resolved = resolveCjcPatternForDiagnostic(diag)
-	if (resolved) return resolved.suggestion
-	return getErrorFixDirective(diag.message)
-}
+const normalizeDiagnosticCode = _normalizeDiagnosticCode
+const resolveCjcPatternForDiagnostic = _resolveCjcPatternForDiagnostic
+const buildDiagnosticPatternCache = _buildDiagnosticPatternCache
+const getErrorFixDirectiveForDiagnostic = _getErrorFixDirectiveForDiagnostic
 
 // SYNTAX_PITFALLS and CODE_REVIEW_CHECKLIST have been removed to avoid
 // duplication with the inlined CANGJIE_SYNTAX_REFERENCE and CANGJIE_CODING_RULES
@@ -176,333 +171,22 @@ function editorDocumentCacheKey(uri: vscode.Uri): string {
 	}
 }
 
-/**
- * Extract import statements from Cangjie source code.
- */
-function extractImports(content: string): string[] {
-	return extractCangjieImportPackagePrefixes(content)
-}
+const extractImports = _extractImports
+const isNonTrivialImportMapping = _isNonTrivialImportMapping
+const mapImportsToDocPaths = _mapImportsToDocPaths
 
-/**
- * Map imports to relevant documentation paths and summaries.
- */
-const IMPORT_DOC_MAPPING_MAX_ITEMS = 3
-
-function isNonTrivialImportMapping(prefix: string): boolean {
-	return !(prefix === "std.core" || prefix.startsWith("std.core."))
-}
-
-function mapImportsToDocPaths(imports: string[]): Array<{ prefix: string; summary: string; docPaths: string[] }> {
-	const results: Array<{ prefix: string; summary: string; docPaths: string[] }> = []
-	const seen = new Set<string>()
-
-	for (const imp of imports) {
-		for (const mapping of STDLIB_DOC_MAP) {
-			if (imp.startsWith(mapping.prefix) && !seen.has(mapping.prefix)) {
-				seen.add(mapping.prefix)
-				results.push(mapping)
-			}
-		}
-	}
-
-	const nonTrivial = results.filter((r) => isNonTrivialImportMapping(r.prefix))
-	return nonTrivial.slice(0, IMPORT_DOC_MAPPING_MAX_ITEMS)
-}
-
-/** Single pass over visible editors: imports + symbols section text. */
-function collectActiveCangjieEditorSnapshot(): {
-	imports: string[]
-	symbols: string | null
-	activePreparse?: StructuredEditingContextPreparse
-} {
-	const allImports: string[] = []
-	const MAX_DEFS = 30
-	const fileSymbols: Array<{ fileName: string; defs: CangjieDef[] }> = []
-	let totalDefs = 0
-	const activeEditor = vscode.window.activeTextEditor
-	let activePreparse: StructuredEditingContextPreparse | undefined
-
-	for (const editor of vscode.window.visibleTextEditors) {
-		if (!(editor.document.languageId === "cangjie" || editor.document.fileName.endsWith(".cj"))) {
-			continue
-		}
-		const content = editor.document.getText()
-		const lines = content.split("\n")
-		const importsForDoc = extractImports(content)
-		allImports.push(...importsForDoc)
-		const parsedDefs = parseCangjieDefinitions(content)
-		if (activeEditor && editor.document.uri.toString() === activeEditor.document.uri.toString()) {
-			activePreparse = {
-				content,
-				lines,
-				imports: importsForDoc,
-				defs: parsedDefs,
-			}
-		}
-		const defs = parsedDefs.filter((d: CangjieDef) => d.kind !== "import" && d.kind !== "package")
-		if (defs.length === 0) continue
-		fileSymbols.push({ fileName: path.basename(editor.document.fileName), defs })
-		totalDefs += defs.length
-	}
-
-	const imports = [...new Set(allImports)]
-	if (fileSymbols.length === 0) return { imports, symbols: null, activePreparse }
-
-	const lines: string[] = ["## 当前编辑文件的符号定义\n"]
-	let remaining = MAX_DEFS
-	for (const { fileName, defs } of fileSymbols) {
-		lines.push(`**${fileName}**:`)
-
-		const topLevel = totalDefs > MAX_DEFS
-			? defs.filter((d) => ["class", "struct", "interface", "enum", "extend", "main"].includes(d.kind))
-			: defs
-
-		for (const def of topLevel) {
-			if (remaining <= 0) break
-			const span = def.endLine > def.startLine ? ` (${def.startLine + 1}-${def.endLine + 1} 行)` : ""
-
-			const memberKinds = new Set(["func", "prop", "init", "operator"])
-			const children = defs.filter(
-				(d) =>
-					d !== def &&
-					d.startLine > def.startLine &&
-					d.endLine <= def.endLine &&
-					memberKinds.has(d.kind),
-			)
-
-			if (children.length > 0) {
-				const childNames = children
-					.slice(0, 5)
-					.map((c) => `${c.kind}:${c.name}`)
-					.join(", ")
-				const suffix = children.length > 5 ? ` 等 ${children.length} 个成员` : ""
-				lines.push(`- ${def.kind} ${def.name}${span}: 包含 ${childNames}${suffix}`)
-			} else {
-				lines.push(`- ${def.kind} ${def.name}${span}`)
-			}
-			remaining--
-		}
-
-		if (remaining <= 0) {
-			lines.push(`- …（已省略，共 ${totalDefs} 个定义）`)
-			break
-		}
-	}
-
-	return { imports, symbols: lines.join("\n"), activePreparse }
-}
-
-function getActiveCangjieFileInfo():
-	| { filePath: string; packageName: string | null; cursorLine: number }
-	| null {
-	const editor = vscode.window.activeTextEditor
-	if (!editor || (editor.document.languageId !== "cangjie" && !editor.document.fileName.endsWith(".cj"))) {
-		return null
-	}
-	const content = editor.document.getText()
-	const pkgMatch = content.match(PACKAGE_DECL_REGEX)
-	return {
-		filePath: editor.document.fileName,
-		packageName: pkgMatch?.[1] ?? null,
-		cursorLine: editor.selection.active.line,
-	}
-}
+const collectActiveCangjieEditorSnapshot = _collectActiveCangjieEditorSnapshot
+const getActiveCangjieFileInfo = _getActiveCangjieFileInfo
 
 // ---------------------------------------------------------------------------
 // Cross-file symbol resolution via CangjieSymbolIndex
 // ---------------------------------------------------------------------------
 
-const MAX_IMPORT_SYMBOLS = 60
-const MAX_SYMBOLS_PER_PACKAGE = 15
+const resolveImportedSymbols = _resolveImportedSymbols
+const resolveImportToDirectory = _resolveImportToDirectory
 
-/**
- * Resolve local (non-stdlib) import paths to workspace symbols using
- * CangjieSymbolIndex. For each import like `import mylib.utils.*`, find
- * the corresponding directory under src/ and return its public symbols.
- */
-function resolveImportedSymbols(
-	imports: string[],
-	cwd: string,
-	projectInfo: CjpmProjectInfo | null,
-): string | null {
-	const symbolIndex = CangjieSymbolIndex.getInstance()
-	if (!symbolIndex || symbolIndex.symbolCount === 0) return null
-
-	const localImports = imports.filter((imp) => !imp.startsWith("std."))
-	if (localImports.length === 0) return null
-
-	const rootName = projectInfo?.name || ""
-	const srcDir = projectInfo?.srcDir || "src"
-
-	const sections: string[] = []
-	let totalSymbols = 0
-
-	for (const imp of localImports) {
-		if (totalSymbols >= MAX_IMPORT_SYMBOLS) break
-
-		const dirPath = resolveImportToDirectory(imp, cwd, rootName, srcDir, projectInfo)
-		if (!dirPath) continue
-
-		const symbols = symbolIndex.getSymbolsByDirectory(dirPath)
-		if (symbols.length === 0) continue
-
-		const publicSymbols = symbols.slice(0, MAX_SYMBOLS_PER_PACKAGE)
-		const lines = formatSymbolEntries(publicSymbols, cwd)
-		if (lines.length === 0) continue
-
-		sections.push(`**${imp}** (${path.relative(cwd, dirPath).replace(/\\/g, "/")}/):\n${lines.join("\n")}`)
-		totalSymbols += publicSymbols.length
-	}
-
-	if (sections.length === 0) return null
-
-	return `## 已导入的工作区模块符号\n\n以下是当前文件 import 的本地包中的符号定义，可直接在代码中引用：\n\n${sections.join("\n\n")}`
-}
-
-/**
- * Map an import path like "mylib.utils.http" to the corresponding directory
- * on disk. Tries several strategies:
- *  1. Strip root package name and map remaining segments to src/ subdirs
- *  2. For workspace projects, check if the first segment matches a member name
- */
-function resolveImportToDirectory(
-	importPath: string,
-	cwd: string,
-	rootName: string,
-	srcDir: string,
-	projectInfo: CjpmProjectInfo | null,
-): string | null {
-	const segments = importPath.split(".")
-
-	if (projectInfo?.isWorkspace && projectInfo.members) {
-		const memberMatch = projectInfo.members.find((m) => m.name === segments[0])
-		if (memberMatch) {
-			const memberCwd = path.join(cwd, memberMatch.path)
-			const subPath = segments.slice(1).join(path.sep)
-			const candidate = subPath
-				? path.join(memberCwd, "src", subPath)
-				: path.join(memberCwd, "src")
-			if (fs.existsSync(candidate)) return candidate
-		}
-	}
-
-	if (rootName && segments[0] === rootName) {
-		const subPath = segments.slice(1).join(path.sep)
-		const candidate = subPath
-			? path.join(cwd, srcDir, subPath)
-			: path.join(cwd, srcDir)
-		if (fs.existsSync(candidate)) return candidate
-	}
-
-	const directPath = segments.join(path.sep)
-	const candidate = path.join(cwd, srcDir, directPath)
-	if (fs.existsSync(candidate)) return candidate
-
-	return null
-}
-
-const TYPE_OUTLINE_MAX_LINES = 40
-const TYPE_OUTLINE_MAX_CHARS = 1200
-const MAX_TYPE_OUTLINES_PER_IMPORT_BLOCK = 4
-const TYPE_MEMBER_DISPLAY_MAX = 8
-
-function extractTypeOutlineFromLines(lines: string[], sym: SymbolEntry): string | null {
-	if (!["class", "struct", "interface", "enum"].includes(sym.kind)) return null
-	const from = sym.startLine
-	const to = Math.min(sym.endLine, sym.startLine + TYPE_OUTLINE_MAX_LINES - 1)
-	let slice = lines.slice(from, to + 1).join("\n")
-	slice = slice.replace(/[ \t]+\n/g, "\n").trim()
-	if (slice.length > TYPE_OUTLINE_MAX_CHARS) {
-		return `${slice.slice(0, TYPE_OUTLINE_MAX_CHARS)}…`
-	}
-	return slice
-}
-
-function formatSymbolEntries(symbols: SymbolEntry[], cwd: string): string[] {
-	const lines: string[] = []
-	const grouped = new Map<string, SymbolEntry[]>()
-
-	for (const sym of symbols) {
-		const relFile = path.relative(cwd, sym.filePath).replace(/\\/g, "/")
-		if (!grouped.has(relFile)) grouped.set(relFile, [])
-		grouped.get(relFile)!.push(sym)
-	}
-
-	let outlineBudget = MAX_TYPE_OUTLINES_PER_IMPORT_BLOCK
-	const fileLinesCache = new Map<string, string[]>()
-
-	for (const [file, syms] of grouped) {
-		for (const sym of syms) {
-			const vis =
-				sym.visibility && sym.visibility !== "internal"
-					? `${sym.visibility} `
-					: ""
-			const sig = sym.signature ? `: \`${sym.signature}\`` : ""
-			const tp = sym.typeParams ? ` ${sym.typeParams}` : ""
-			lines.push(`- ${vis}${sym.kind}${tp} **${sym.name}**${sig} _(${file}:${sym.startLine + 1})_`)
-			if (outlineBudget <= 0 || !["class", "struct", "interface", "enum"].includes(sym.kind)) {
-				continue
-			}
-			try {
-				let fileLines = fileLinesCache.get(sym.filePath)
-				if (!fileLines) {
-					const text = readFileUtf8Lru(sym.filePath)
-					if (!text) continue
-					fileLines = text.split("\n")
-					fileLinesCache.set(sym.filePath, fileLines)
-				}
-				const summary = extractTypeMemberSummaries(
-					fileLines,
-					sym.startLine,
-					sym.endLine,
-					TYPE_MEMBER_DISPLAY_MAX + 4,
-				)
-				if (summary.members.length > 0) {
-					outlineBudget--
-					const omitted =
-						summary.totalMatchingLines > TYPE_MEMBER_DISPLAY_MAX
-							? `（共约 ${summary.totalMatchingLines} 个成员样例行，以下分类摘要）`
-							: ""
-					const rows: string[] = []
-					if (summary.properties.length) {
-						rows.push(`    属性/字段: ${summary.properties.slice(0, 6).join(" | ")}`)
-					}
-					if (summary.methods.length) {
-						rows.push(`    方法: ${summary.methods.slice(0, 6).join(" | ")}`)
-					}
-					if (summary.operators.length) {
-						rows.push(`    运算符: ${summary.operators.join(" | ")}`)
-					}
-					if (summary.inits.length) {
-						rows.push(`    构造: ${summary.inits.join(" | ")}`)
-					}
-					if (summary.enumCases.length) {
-						rows.push(`    枚举/分支: ${summary.enumCases.slice(0, 8).join(" | ")}`)
-					}
-					if (rows.length === 0) {
-						const display = summary.members.slice(0, TYPE_MEMBER_DISPLAY_MAX)
-						for (const l of display) rows.push(`    ${l}`)
-					}
-					lines.push(`    - 成员概要${omitted}:\n${rows.join("\n")}`)
-				} else {
-					const outline = extractTypeOutlineFromLines(fileLines, sym)
-					if (outline) {
-						outlineBudget--
-						const indented = outline
-							.split("\n")
-							.map((l) => `      ${l}`)
-							.join("\n")
-						lines.push(`    - 类型头/成员草稿:\n${indented}`)
-					}
-				}
-			} catch {
-				/* skip */
-			}
-		}
-	}
-
-	return lines
-}
+const extractTypeOutlineFromLines = _extractTypeOutlineFromLines
+const formatSymbolEntries = _formatSymbolEntries
 
 // ---------------------------------------------------------------------------
 // Source-level package declaration verification
@@ -1627,7 +1311,75 @@ function learnedPatternTimeWeight(p: LearnedFixPattern): number {
 }
 
 /**
+ * Built-in seed fixes to address cold-start when no project-specific learned-fixes.json exists.
+ * These cover the most frequently encountered Cangjie compilation errors.
+ */
+const BUILTIN_SEED_FIXES: LearnedFixPattern[] = [
+	{
+		errorPattern: "undeclared identifier|未找到符号",
+		fix: "检查是否缺少 import 语句。常见遗漏: import std.collection.* (ArrayList/HashMap), import std.console.* (println), import std.io.* (文件IO)。检查拼写和包可见性(public)。",
+		successCount: 5, failCount: 0,
+	},
+	{
+		errorPattern: "type mismatch|类型不匹配",
+		fix: "检查赋值/传参的类型是否一致。常见: String vs Int64 需显式转换 Int64.parse(str); ?T 需用 ?? 解包; Array<T> 与 ArrayList<T> 不直接兼容需构造。",
+		successCount: 4, failCount: 0,
+	},
+	{
+		errorPattern: "cannot call mut func on.*let|let.*调用.*mut",
+		fix: "将 let 绑定改为 var 绑定。mut 方法只能在 var 绑定的 struct 实例上调用。示例: var counter = Counter() 然后 counter.inc()。",
+		successCount: 5, failCount: 0,
+	},
+	{
+		errorPattern: "recursive struct|struct.*自引用|infinite.*size",
+		fix: "struct 是值类型不能自引用。改用 class（引用类型）或将自引用字段声明为 ?StructName（Option 包装）。",
+		successCount: 3, failCount: 0,
+	},
+	{
+		errorPattern: "non-exhaustive|match.*不穷尽|missing.*case",
+		fix: "match 表达式必须覆盖所有可能分支。添加遗漏的 case 或使用 case _ => 作为兜底。对 enum 类型需要列出所有变体。",
+		successCount: 4, failCount: 0,
+	},
+	{
+		errorPattern: "main.*返回.*void|main.*return type",
+		fix: "main 函数返回类型必须为 Int64，不能省略或使用其他类型。正确签名: main(): Int64 { ... return 0 }",
+		successCount: 3, failCount: 0,
+	},
+	{
+		errorPattern: "package.*不一致|package.*mismatch|package.*directory",
+		fix: "package 声明必须与 src/ 下的目录结构严格对应。例如 src/foo/bar/baz.cj 中应为 package foo.bar。",
+		successCount: 3, failCount: 0,
+	},
+	{
+		errorPattern: "cannot find.*import|import.*not found",
+		fix: "检查 import 路径是否正确。std 标准库用 import std.模块名.* 格式。项目内部包用 import 包名.* 且需在 cjpm.toml 中配置依赖。",
+		successCount: 3, failCount: 0,
+	},
+	{
+		errorPattern: "override.*not open|redef.*override",
+		fix: "override 只能用于 open 修饰的父类方法；非 open 方法需用 redef 而非 override。检查父类方法声明是否有 open 修饰符。",
+		successCount: 2, failCount: 0,
+	},
+	{
+		errorPattern: "interface.*not implement|未实现.*接口",
+		fix: "实现 interface 需要覆盖所有方法。用 class MyClass <: InterfaceName { public func methodName(...): ReturnType { ... } } 语法。",
+		successCount: 2, failCount: 0,
+	},
+	{
+		errorPattern: "HashMap.*Hashable|HashSet.*Hashable",
+		fix: "HashMap 的 Key 类型须实现 Hashable & Equatable<K>。自定义类型用作 Key 需要 extend 实现这两个接口或使用已内置实现的类型(String, Int64 等)。",
+		successCount: 3, failCount: 0,
+	},
+	{
+		errorPattern: "spawn.*capture.*var|并发.*捕获.*可变",
+		fix: "spawn 块内不能直接捕获外部 var 变量。使用 Mutex<T> 包装共享状态，或将值在 spawn 前拷贝到 let 绑定。",
+		successCount: 2, failCount: 0,
+	},
+]
+
+/**
  * Load project-specific error→fix hints from .njust_ai/learned-fixes.json (manual curation).
+ * Falls back to BUILTIN_SEED_FIXES when no project file exists.
  * Prioritizes patterns matching current diagnostics and sorts by empirical success rate.
  */
 function loadLearnedFixesSection(cwd: string, diagnostics: vscode.Diagnostic[]): string | null {
@@ -1639,10 +1391,13 @@ function loadLearnedFixesSection(cwd: string, diagnostics: vscode.Diagnostic[]):
 		if (typeof p.errorPattern !== "string" || typeof p.fix !== "string") continue
 		parsed.push(p)
 	}
-	if (parsed.length === 0) return null
+
+	const useSeedFixes = parsed.length === 0
+	const effective = useSeedFixes ? BUILTIN_SEED_FIXES : parsed
+	if (effective.length === 0) return null
 
 	try {
-		const displayable = parsed.filter((p) => {
+		const displayable = effective.filter((p) => {
 			const rate = learnedPatternSuccessRate(p)
 			return rate >= 0.4 || (p.successCount ?? 0) + (p.failCount ?? 0) < 3
 		})
@@ -1660,7 +1415,10 @@ function loadLearnedFixesSection(cwd: string, diagnostics: vscode.Diagnostic[]):
 		unmatched.sort(rateSort)
 		const ordered = [...matched, ...unmatched]
 
-		const header = `## 本项目常见修复提示（${NJUST_AI_CONFIG_DIR}/${LEARNED_FIXES_FILE}）\n\n`
+		const sourceLabel = useSeedFixes
+			? "内置常见修复提示"
+			: `本项目常见修复提示（${NJUST_AI_CONFIG_DIR}/${LEARNED_FIXES_FILE}）`
+		const header = `## ${sourceLabel}\n\n`
 		const lines: string[] = []
 		let used = header.length
 
@@ -1876,8 +1634,8 @@ function diagnosticToCorpusQuery(d: vscode.Diagnostic): string | null {
  * Derive corpus search queries from current imports and diagnostics.
  * Merges std imports and diagnostics into fewer BM25 queries (typically 1–3) to cut scan cost.
  */
-/** At most 3 BM25 queries: merged imports, merged diagnostics (reduces index scans). */
-const AUTO_CORPUS_QUERY_MAX = 3
+/** At most 5 BM25 queries: merged imports, merged diagnostics (reduces index scans). */
+const AUTO_CORPUS_QUERY_MAX = 5
 const AUTO_CORPUS_QUERY_MAX_LEN = 280
 
 /** Group `std.a.b...` by top module family `std.a` for separate BM25 queries. */
@@ -1926,7 +1684,7 @@ function buildAutoCorpusQueries(imports: string[], diagnostics: vscode.Diagnosti
 		.trim()
 
 	const out: string[] = []
-	for (const q of stdQueries.slice(0, 2)) {
+	for (const q of stdQueries.slice(0, 3)) {
 		if (out.length >= AUTO_CORPUS_QUERY_MAX) break
 		out.push(q)
 	}
@@ -1972,6 +1730,87 @@ const STDLIB_API_SIGNATURE_HINTS: Record<string, string> = {
 	"std.overflow": "防溢出算术",
 }
 
+/**
+ * Parameter-level API signatures for the top-20 highest-misuse stdlib APIs.
+ * These are injected when the corresponding import is detected.
+ * Modules covered here are also exempt from search gate warnings.
+ */
+export const STDLIB_CRITICAL_SIGNATURES: Record<string, string> = {
+	"std.collection": [
+		"class ArrayList<T> { init(); init(capacity: Int64); func append(T): Unit; func get(Int64): T; func set(Int64, T): Unit; prop size: Int64; func remove(Int64): T; func iterator(): Iterator<T> }",
+		"class HashMap<K, V> where K <: Hashable & Equatable<K> { init(); func put(K, V): Unit; func get(K): ?V; func contains(K): Bool; func remove(K): ?V; prop size: Int64 }",
+		"class HashSet<T> where T <: Hashable & Equatable<T> { init(); func put(T): Bool; func contains(T): Bool; func remove(T): Bool; prop size: Int64 }",
+		"class TreeMap<K, V> where K <: Comparable<K> { init(); func put(K, V): Unit; func get(K): ?V; prop size: Int64 }",
+	].join("\n"),
+	"std.io": [
+		"class InputStream { func read(Array<Byte>): Int64; func close(): Unit }",
+		"class OutputStream { func write(Array<Byte>): Unit; func flush(): Unit; func close(): Unit }",
+		"class BufferedReader { init(InputStream); func readLine(): ?String; func close(): Unit }",
+		"class StringReader <: InputStream { init(String) }",
+		"class StringWriter <: OutputStream { init(); func toString(): String }",
+	].join("\n"),
+	"std.fs": [
+		"class File { static func readString(String): String; static func writeString(String, String): Unit; static func exists(String): Bool; static func delete(String): Unit }",
+		"class Path { init(String); func resolve(String): Path; func parent(): ?Path; prop fileName: String; func toString(): String }",
+		"class Directory { static func create(String): Unit; static func listEntries(String): Array<String> }",
+	].join("\n"),
+	"std.sync": [
+		"class Mutex<T> { init(T); func lock(): MutexGuard<T>; func tryLock(): ?MutexGuard<T> }",
+		"class ReentrantMutex { init(); func lock(): Unit; func unlock(): Unit; func tryLock(): Bool }",
+		"class AtomicInt64 { init(Int64); func load(): Int64; func store(Int64): Unit; func fetchAdd(Int64): Int64 }",
+		"class AtomicBool { init(Bool); func load(): Bool; func store(Bool): Unit }",
+		"func synchronized<T>(lock: ReentrantMutex, body: () -> T): T",
+	].join("\n"),
+	"std.regex": [
+		"class Regex { init(String); func matches(String): Bool; func find(String): ?MatchResult; func findAll(String): Array<MatchResult>; func replace(String, String): String }",
+		"class MatchResult { prop value: String; prop start: Int64; prop end: Int64; func group(Int64): ?String }",
+	].join("\n"),
+	"std.console": "func println(String): Unit\nfunc print(String): Unit\nfunc readLine(): String",
+	"std.convert": [
+		"interface ToString { func toString(): String }",
+		"func Int64.parse(String): ?Int64",
+		"func Float64.parse(String): ?Float64",
+		"func Bool.parse(String): ?Bool",
+	].join("\n"),
+	"std.unittest": [
+		"@Test — 标记测试类",
+		"@TestCase — 标记测试方法",
+		"@Assert(condition) — 断言宏",
+		"@Expect(condition) — 非致命断言",
+		"@Timeout(ms: Int64) — 超时限制",
+	].join("\n"),
+	"std.format": [
+		"func format(fmt: String, args: Array<ToString>): String",
+		"字符串插值: \"value = ${expr}\" — expr 须实现 ToString",
+	].join("\n"),
+	"std.random": [
+		"class Random { init(); init(seed: Int64); func nextInt64(): Int64; func nextInt64(bound: Int64): Int64; func nextFloat64(): Float64; func nextBool(): Bool }",
+	].join("\n"),
+	"std.math": [
+		"func abs(Int64): Int64; func abs(Float64): Float64",
+		"func min<T>(T, T): T where T <: Comparable<T>; func max<T>(T, T): T where T <: Comparable<T>",
+		"func sqrt(Float64): Float64; func pow(Float64, Float64): Float64",
+		"const PI: Float64; const E: Float64",
+	].join("\n"),
+	"std.time": [
+		"class DateTime { static func now(): DateTime; func toString(): String; func toTimestamp(): Int64 }",
+		"class Duration { static func fromSeconds(Int64): Duration; static func fromMillis(Int64): Duration; prop totalMillis: Int64 }",
+	].join("\n"),
+	"std.process": [
+		"class Process { static func run(command: String, args: Array<String>): ProcessResult }",
+		"class ProcessResult { prop exitCode: Int64; prop stdout: String; prop stderr: String }",
+	].join("\n"),
+	"std.env": [
+		"func getEnv(String): ?String",
+		"func setEnv(String, String): Unit",
+		"func currentDir(): String",
+	].join("\n"),
+	"std.log": [
+		"class Logger { static func getLogger(name: String): Logger; func info(String): Unit; func warn(String): Unit; func error(String): Unit; func debug(String): Unit }",
+		"enum LogLevel { case DEBUG | INFO | WARN | ERROR }",
+	].join("\n"),
+}
+
 function buildStdlibSignatureHintsSection(
 	imports: string[],
 	docsBase: string | null | undefined,
@@ -1995,7 +1834,20 @@ function buildStdlibSignatureHintsSection(
 		}
 	}
 	if (lines.length === 0) return null
-	return `## 标准库 API 摘要（预置速查）\n\n${lines.join("\n")}\n\n详细签名仍以语料库 libs/ 与 manual/ 为准。`
+
+	// Append detailed critical signatures for matched imports
+	const criticalLines: string[] = []
+	for (const key of matchedKeys) {
+		const sig = STDLIB_CRITICAL_SIGNATURES[key]
+		if (sig) {
+			criticalLines.push(`### ${key} 关键签名\n\`\`\`\n${sig}\n\`\`\``)
+		}
+	}
+	const criticalBlock = criticalLines.length > 0
+		? `\n\n## 标准库关键 API 签名（参数级精度）\n\n${criticalLines.join("\n\n")}`
+		: ""
+
+	return `## 标准库 API 摘要（预置速查）\n\n${lines.join("\n")}\n\n详细签名仍以语料库 libs/ 与 manual/ 为准。${criticalBlock}`
 }
 
 /** Bundled corpus `extra/*.md` — keyword → file for intent-based few-shot (see CangjieCorpus-1.0.0/extra/). */
@@ -2173,6 +2025,70 @@ function buildContextualCodingRules(
 		}
 	}
 
+	// Diagnostic-driven targeted code templates based on actual error categories
+	if (hasErrors && diags.length > 0) {
+		const errorMessages = diags
+			.filter((d) => d.severity === vscode.DiagnosticSeverity.Error)
+			.map((d) => (typeof d.message === "string" ? d.message : ""))
+			.filter(Boolean)
+		const categoriesPresent = new Set<string>()
+		for (const msg of errorMessages) {
+			const pattern = matchCjcErrorPattern(msg)
+			if (pattern) categoriesPresent.add(pattern.category)
+		}
+
+		const diagnosticTemplates: Array<{ categories: string[]; template: string }> = [
+			{
+				categories: ["类型不匹配", "类型转换失败"],
+				template:
+					"### 类型转换速查\n" +
+					"- `Int64 → String`: `\"${value}\"` 或 `value.toString()`\n" +
+					"- `String → Int64`: `Int64.parse(str)` 返回 `?Int64`\n" +
+					"- `Float64 → Int64`: `Int64(floatVal)` (截断)\n" +
+					"- `Array<T> → ArrayList<T>`: `ArrayList<T>(arr)`\n" +
+					"- `?T → T`: `opt ?? defaultVal` 或 `match(opt) { case Some(v) => v; case None => ... }`\n",
+			},
+			{
+				categories: ["未找到符号", "缺少 import"],
+				template:
+					"### 常用 import 路径速查\n" +
+					"- 集合: `import std.collection.*`\n" +
+					"- IO: `import std.io.*` + `import std.fs.*`\n" +
+					"- 控制台: `import std.console.*`\n" +
+					"- 测试: `import std.unittest.*` + `import std.unittest.testmacro.*`\n" +
+					"- 并发: `import std.sync.*`\n" +
+					"- 网络: `import std.net.*`\n" +
+					"- 正则: `import std.regex.*`\n" +
+					"- 格式化: `import std.format.*`\n",
+			},
+			{
+				categories: ["mut 函数限制", "不可变变量赋值"],
+				template:
+					"### let / var / mut 对照\n" +
+					"- `let x = value` — 不可变绑定，不能重新赋值，不能调用 mut 方法\n" +
+					"- `var x = value` — 可变绑定，可重新赋值，可调用 mut 方法\n" +
+					"- `mut func foo()` — 修改 struct 自身字段的方法，调用者必须是 var 绑定\n" +
+					"- **修复**: 将 `let obj = Struct()` 改为 `var obj = Struct()` 后再调用 `obj.mutMethod()`\n",
+			},
+			{
+				categories: ["接口未实现", "接口未实现（精确）"],
+				template:
+					"### interface 实现模板\n" +
+					"```cangjie\ninterface Printable {\n    func display(): String\n}\n" +
+					"class MyClass <: Printable {\n    public func display(): String {\n        return \"MyClass\"\n    }\n}\n```\n",
+			},
+		]
+
+		for (const dt of diagnosticTemplates) {
+			if (dt.categories.some((c) => categoriesPresent.has(c))) {
+				if (budget >= dt.template.length) {
+					parts.push(dt.template)
+					budget -= dt.template.length
+				}
+			}
+		}
+	}
+
 	// Anti-patterns for let/var/mut when editing struct code
 	if (hasActiveCangjieFile) {
 		const antiPatterns =
@@ -2271,8 +2187,17 @@ export function invalidateCangjieL3ContextCache(): void {
 	l3ContextCache = null
 }
 
-/** Default max tokens (~chars/4) for the dynamic Cangjie context block (excluding wrapper lines). */
-export const DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET = 3200
+/**
+ * Default max tokens (~chars/4) for the dynamic Cangjie context block.
+ *
+ * Effective budget is resolved by `resolveCangjieContextTokenBudget` in system.ts:
+ * VS Code config (override) > model-scaled value from
+ * `deriveCangjieContextTokenBudgetFromContextWindow` > this default.
+ *
+ * Small-context models (e.g. 16k window) may receive as low as 2400 tokens;
+ * large-context models (>= 200k) get up to 6000.
+ */
+export const DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET = 4800
 
 /** BM25: at most this many chunks per source file per query (diversifies hits). */
 const CORPUS_BM25_MAX_CHUNKS_PER_PATH = 2
@@ -2509,14 +2434,8 @@ function computeContextCacheKey(cwd: string, diagSummaryHash: number): string {
 	return `${cwd}|${openFiles}|${diagSummaryHash}|ch:${getCompileHistoryRevision(cwd)}`
 }
 
-/** Optional pre-parse from {@link getCangjieContextSection} to avoid duplicate `split` / `extractImports` / `parseCangjieDefinitions`. */
-export type StructuredEditingContextPreparse = {
-	content: string
-	lines: string[]
-	imports: string[]
-	defs: CangjieDef[]
-	diagnosticsByFile?: Map<string, vscode.Diagnostic[]>
-}
+// StructuredEditingContextPreparse is now imported from ./CangjieSymbolExtractor
+export type { StructuredEditingContextPreparse } from "./CangjieSymbolExtractor"
 
 export async function getCangjieContextSection(
 	cwd: string,
@@ -2559,7 +2478,7 @@ export async function getCangjieContextSection(
 			)
 			l1ContextCache = { key: l1Key, value: overview, time: now }
 		}
-		addPrioritized(prioritized, 500, overview)
+		addPrioritized(prioritized, 490, overview)
 	}
 
 	// 0b. package declaration verification + cjpm tree
@@ -2617,9 +2536,9 @@ export async function getCangjieContextSection(
 			}
 			l2ContextCache = { key: l2Key, value: l2Bundle, time: now }
 		}
-		addPrioritized(prioritized, 400, l2Bundle.symbols || undefined)
-		addPrioritized(prioritized, 410, l2Bundle.importedSymbols || undefined)
-		addPrioritized(prioritized, 415, l2Bundle.stdlibHints || undefined)
+		addPrioritized(prioritized, 380, l2Bundle.symbols || undefined)
+		addPrioritized(prioritized, 390, l2Bundle.importedSymbols || undefined)
+		addPrioritized(prioritized, 395, l2Bundle.stdlibHints || undefined)
 		addPrioritized(prioritized, 528, l2Bundle.workspaceSummary || undefined)
 
 		// 1. Import-based documentation context
@@ -2635,7 +2554,7 @@ export async function getCangjieContextSection(
 
 				addPrioritized(
 					prioritized,
-					600,
+					350,
 					`## 当前代码涉及的重要模块映射\n\n当前代码中已引入以下高级模块。若后续编写代码缺乏十足把握，强烈建议立刻使用 \`search_files\`（regex 搜索）检索这些官方库示例：\n\n${importContext}`,
 				)
 			}
@@ -2650,16 +2569,16 @@ export async function getCangjieContextSection(
 			? mapDiagnosticsToDocContext(diagnostics, docsBase, conversionByMessage)
 			: []
 
-	addPrioritized(prioritized, 105, formatCompileHistoryPromptSection(cwd))
+	addPrioritized(prioritized, 95, formatCompileHistoryPromptSection(cwd))
 
 	// 1b. Dynamic coding rules injection (context-aware).
 	addPrioritized(
 		prioritized,
-		700,
+		650,
 		buildContextualCodingRules(imports, projectInfo, rawDiagnostics, errorSections.length > 0) ||
 			undefined,
 	)
-	addPrioritized(prioritized, 900, l2ContextCache?.value.fewShot || undefined)
+	addPrioritized(prioritized, 850, l2ContextCache?.value.fewShot || undefined)
 
 	// 2. Error/diagnostic context (sampled + merged messages for prompt), kept late in final order.
 	let diagnosticSection: string | null = null
@@ -2673,14 +2592,14 @@ export async function getCangjieContextSection(
 		if (aug.length > 0) {
 			diagnosticSection += `\n\n### 辅助定位（根因/类型转换）\n${aug.join("\n")}`
 		}
-		addPrioritized(prioritized, 100, diagnosticSection)
+		addPrioritized(prioritized, 90, diagnosticSection)
 	}
 
 	// 2a. Intent-matched few-shot from bundled corpus extra/
 	if (docsBase && docsExist) {
 		addPrioritized(
 			prioritized,
-			850,
+			750,
 			buildCorpusExtraFewShotSection(docsBase, imports, rawDiagnostics) || undefined,
 		)
 	}
@@ -2709,14 +2628,14 @@ export async function getCangjieContextSection(
 						}
 					}
 				}
-				const top = [...unique.values()].sort((a, b) => b.score - a.score).slice(0, 5).map((x) => x.hit)
+				const top = [...unique.values()].sort((a, b) => b.score - a.score).slice(0, 7).map((x) => x.hit)
 				if (top.length > 0) {
 					const hints = top.map((h) =>
-						`### ${h.heading}\n来源: \`${h.relPath}\` (L${h.startLine})\n\`\`\`\n${h.snippet.slice(0, 600)}\n\`\`\``
+						`### ${h.heading}\n来源: \`${h.relPath}\` (L${h.startLine})\n\`\`\`\n${h.snippet.slice(0, 800)}\n\`\`\``
 					).join("\n\n")
 					addPrioritized(
 						prioritized,
-						800,
+						550,
 						`## 语料库自动检索结果（基于当前 import 与诊断）\n\n${hints}`,
 					)
 				}
@@ -2750,10 +2669,10 @@ export async function getCangjieContextSection(
 		treeSectionPromise,
 	])
 	addPrioritized(prioritized, 525, treeSection || undefined)
-	addPrioritized(prioritized, 200, editingCtx || undefined)
+	addPrioritized(prioritized, 150, editingCtx || undefined)
 
 	// 5. Project-curated learned fixes (optional JSON in .njust_ai/)
-	addPrioritized(prioritized, 300, loadLearnedFixesSection(cwd, rawDiagnostics) || undefined)
+	addPrioritized(prioritized, 250, loadLearnedFixesSection(cwd, rawDiagnostics) || undefined)
 
 	const diagTokensEstimate = diagnosticSection ? estimateContextTokens(diagnosticSection) : 0
 	const packed = packSectionsWithTokenBudget(prioritized, mandatoryFooter, Math.max(500, tokenBudget), {
@@ -2785,7 +2704,7 @@ ${packed.join("\n\n")}
  * Extract file:line:col references from cjc error output and read surrounding
  * source lines to provide richer context for AI-assisted fixes.
  */
-const ERROR_CONTEXT_RADIUS = 8
+const ERROR_CONTEXT_RADIUS = 15
 const ERROR_CONTEXT_MAX_LOCATIONS = 8
 
 function formatSingleErrorLocationBlock(cwd: string, filePart: string, lineStr: string): string | null {
@@ -2810,6 +2729,14 @@ function formatSingleErrorLocationBlock(cwd: string, filePart: string, lineStr: 
 
 		const relPath = path.relative(cwd, filePath).replace(/\\/g, "/")
 		let block = `文件: ${relPath} (第 ${lineNum + 1} 行)\n${snippet}`
+
+		// Include file's import list for context
+		if (filePath.endsWith(".cj")) {
+			const fileImports = extractImports(content)
+			if (fileImports.length > 0) {
+				block += `\n  文件 import: ${fileImports.slice(0, 12).join(", ")}${fileImports.length > 12 ? " …" : ""}`
+			}
+		}
 
 		const symbolIndex = CangjieSymbolIndex.getInstance()
 		if (symbolIndex && filePath.endsWith(".cj")) {
@@ -2964,7 +2891,21 @@ export function buildCangjieExecuteCommandErrorAppendix(
 		return enhanceCjcErrorOutput(output, cwd, extensionPath)
 	}
 
-	return `\n\n<cangjie_error_hints>\n按错误位置就近整理（每段含编译原文、源码上下文与建议）:\n\n${sections.join("\n\n---\n\n")}\n</cangjie_error_hints>`
+	// Repair priority footer: guide the LLM to fix errors in the optimal order
+	const repairPriority =
+		"\n\n**修复优先级建议**: " +
+		"1. import/符号错误（级联根因，修复后其他错误可能消失） → " +
+		"2. 类型不匹配/泛型约束 → " +
+		"3. mut/let 限制 → " +
+		"4. 语法/格式错误"
+
+	// Failure accumulation hint for repeated compile failures
+	const errorCount = blocks.length
+	const failureHint = errorCount > 5
+		? `\n\n⚠ 检测到 ${errorCount} 处错误。建议集中修复最可能是根因的 import/符号问题，而非逐个修复所有错误。修复根因后重新编译，观察剩余错误是否减少。`
+		: ""
+
+	return `\n\n<cangjie_error_hints>\n按错误位置就近整理（每段含编译原文、源码上下文与建议）:\n\n${sections.join("\n\n---\n\n")}${repairPriority}${failureHint}\n</cangjie_error_hints>`
 }
 
 // Error fix directives are now defined in CangjieErrorAnalyzer.ts; re-export here.
@@ -3081,6 +3022,23 @@ export async function buildStructuredEditingContext(pre?: StructuredEditingConte
 			parts.push(
 				`外层作用域: ${outermost.kind} ${outermost.name} (第 ${outermost.startLine + 1}–${outermost.endLine + 1} 行)`,
 			)
+			// Inject type member summaries for enclosing type (up to 8 members)
+			if (["class", "struct", "interface", "enum"].includes(outermost.kind)) {
+				const memberDefs = defs.filter(
+					(d: CangjieDef) =>
+						d.startLine >= outermost.startLine &&
+						d.endLine <= outermost.endLine &&
+						d !== outermost &&
+						(d.kind === "func" || d.kind === "prop" || d.kind === "var" || d.kind === "let"),
+				)
+				if (memberDefs.length > 0) {
+					const memberSummaries = memberDefs.slice(0, 8).map((m: CangjieDef) => {
+						const memberSig = computeCangjieSignature(lines, m)
+						return `  - ${m.kind} ${m.name}: ${memberSig}`
+					})
+					parts.push(`${outermost.kind} ${outermost.name} 的成员:\n${memberSummaries.join("\n")}`)
+				}
+			}
 		}
 		parts.push(`正在编辑: ${innermost.kind} ${innermost.name} (第 ${innermost.startLine + 1} 行)`)
 		parts.push(`签名: ${sig}`)
@@ -3091,9 +3049,9 @@ export async function buildStructuredEditingContext(pre?: StructuredEditingConte
 		parts.push(`光标处 LSP 提示:\n${hover}`)
 	}
 
-	// Nearby code (±5 lines around cursor)
-	const startLine = Math.max(0, cursorLine - 5)
-	const endLine = Math.min(doc.lineCount - 1, cursorLine + 5)
+	// Nearby code (±8 lines around cursor)
+	const startLine = Math.max(0, cursorLine - 8)
+	const endLine = Math.min(doc.lineCount - 1, cursorLine + 8)
 	const nearbyLines: string[] = []
 	for (let i = startLine; i <= endLine; i++) {
 		const marker = i === cursorLine ? " >>>" : "    "
@@ -3114,6 +3072,78 @@ export async function buildStructuredEditingContext(pre?: StructuredEditingConte
 	}
 
 	return `## 当前编辑上下文\n\n${parts.join("\n")}`
+}
+
+/**
+ * After a cjpm/cjc compile failure, automatically search the bundled corpus
+ * for documentation relevant to the error categories detected in the output.
+ * Returns a formatted block to append to the tool_result, or null.
+ */
+export function buildCompileErrorCorpusSearch(
+	compileOutput: string,
+	cwd: string,
+	extensionPath?: string,
+): string | null {
+	const docsBase = resolveCangjieDocsBasePath(extensionPath)
+	if (!docsBase || !fs.existsSync(docsBase)) return null
+
+	try {
+		const corpusIndex = getCorpusSingleton(docsBase)
+		if (!corpusIndex.isAvailable) return null
+
+		const matchedPatterns = getMatchingCjcPatternsByCategory(compileOutput)
+		if (matchedPatterns.length === 0) return null
+
+		const queries = matchedPatterns
+			.slice(0, 4)
+			.map((p) => `${p.category} 修复 示例`)
+
+		const searchOpts = { maxChunksPerPath: 2 }
+		const hitLists = corpusIndex.searchBatch(queries, 8, undefined, searchOpts)
+
+		const unique = new Map<string, { hit: import("../../../services/cangjie-corpus/CangjieCorpusSemanticIndex").SemanticSearchResult; score: number }>()
+		for (let qi = 0; qi < hitLists.length; qi++) {
+			const hits = hitLists[qi]!
+			const maxS = hits.reduce((m, h) => Math.max(m, h.score), 0)
+			for (const h of hits) {
+				const norm = maxS > 0 ? h.score / maxS : 0
+				const key = `${h.relPath}:${h.startLine}`
+				const prev = unique.get(key)
+				if (!prev || prev.score < norm) {
+					unique.set(key, { hit: h, score: norm })
+				}
+			}
+		}
+
+		const top = [...unique.values()]
+			.sort((a, b) => b.score - a.score)
+			.slice(0, 3)
+			.map((x) => x.hit)
+
+		if (top.length === 0) return null
+
+		const COMPILE_CORPUS_MAX_CHARS = 1200
+		let used = 0
+		const snippets: string[] = []
+		for (const h of top) {
+			const snippet = `### ${h.heading}\n来源: \`${h.relPath}\`\n\`\`\`\n${h.snippet.slice(0, 400)}\n\`\`\``
+			if (used + snippet.length > COMPILE_CORPUS_MAX_CHARS) break
+			snippets.push(snippet)
+			used += snippet.length
+		}
+
+		if (snippets.length === 0) return null
+
+		return (
+			`\n\n<cangjie_corpus_for_error>\n` +
+			`## 编译错误相关语料参考（自动检索）\n\n` +
+			`以下文档片段与当前编译错误相关，可参考修复：\n\n` +
+			snippets.join("\n\n") +
+			`\n</cangjie_corpus_for_error>`
+		)
+	} catch {
+		return null
+	}
 }
 
 // Re-export for testing and backward compatibility

@@ -46,14 +46,14 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 			}
 
 			// Get the VSCode setting for requiring todos.
-			const provider = task.providerRef.deref()
+			const host = task.providerRef.deref()
 
-			if (!provider) {
+			if (!host) {
 				pushToolResult(formatResponse.toolError("Provider reference lost"))
 				return
 			}
 
-			const state = await provider.getState()
+			const state = await host.getState()
 
 			// Use Package.name (dynamic at build time) as the VSCode configuration namespace.
 			// Supports multiple extension variants (e.g., stable/nightly) without hardcoded strings.
@@ -114,7 +114,7 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 
 			// Delegate parent and open child as sole active task
 			const isolationLevel = isolation_level === "forked" ? "forked" : "shared"
-			const child = await (provider as any).delegateParentAndOpenChild({
+			const child = await host.delegateParentAndOpenChild({
 				parentTaskId: task.taskId,
 				message: unescapedMessage,
 				initialTodos: todoItems,

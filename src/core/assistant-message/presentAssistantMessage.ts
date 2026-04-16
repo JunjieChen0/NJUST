@@ -20,6 +20,7 @@ import { toolRegistry } from "../tools/ToolRegistry"
 import { AttemptCompletionCallbacks } from "../tools/AttemptCompletionTool"
 import { ReadFileTool } from "../tools/ReadFileTool" // for getReadFileToolDescription
 import { isValidToolName, mergeToolParamsForValidation, validateToolUse } from "../tools/validateToolUse"
+import { validateToolParams } from "../tools/toolParamValidator"
 import { StreamingToolExecutor } from "../tools/StreamingToolExecutor"
 import { dedupeReadonlyToolCalls, partitionToolCalls } from "../tools/toolOrchestration"
 import type { ToolCallbacks } from "../tools/BaseTool"
@@ -56,10 +57,12 @@ async function handleConcurrencySafeToolUse(
 	cline: Task,
 	block: ToolUse,
 	callbacks: ToolCallbacks,
+	abortSignal?: AbortSignal,
 ): Promise<boolean> {
 	const tool = toolRegistry.get(block.name)
 	if (tool && toolRegistry.getConcurrencySafeNames().has(block.name as ToolName)) {
-		await tool.handle(cline, block as ToolUse<any>, callbacks)
+		const merged: ToolCallbacks = abortSignal ? { ...callbacks, abortSignal } : callbacks
+		await tool.handle(cline, block as ToolUse<any>, merged)
 		return true
 	}
 	return false
@@ -346,8 +349,9 @@ export async function presentAssistantMessage(cline: Task) {
 						const runUnique = deduped.uniqueCalls
 						const batches = partitionToolCalls(runUnique, (call) => isConcurrencySafeToolUseBlock(call))
 						let cascadeStop = false
-						const runOne = async (toolBlock: ToolUse) => {
+						const runOne = async (toolBlock: ToolUse, batchSignal?: AbortSignal) => {
 							if (cline.abort || cline.didRejectTool || cascadeStop) return
+							if (batchSignal?.aborted) return
 							const toolCallId = (toolBlock as any).id as string
 							const allowedTools = cline.allowedTools ? Array.from(cline.allowedTools) : undefined
 							if (allowedTools && !allowedTools.includes(toolBlock.name)) {
@@ -418,12 +422,17 @@ export async function presentAssistantMessage(cline: Task) {
 									.ask("tool", JSON.stringify({ tool: "progress", text: status?.text }), true, status)
 									.catch(() => undefined)
 							}
-							await handleConcurrencySafeToolUse(cline, toolBlock, {
-								askApproval,
-								handleError,
-								pushToolResult,
-								reportProgress,
-							})
+							await handleConcurrencySafeToolUse(
+								cline,
+								toolBlock,
+								{
+									askApproval,
+									handleError,
+									pushToolResult,
+									reportProgress,
+								},
+								batchSignal,
+							)
 						}
 
 						for (const batch of batches) {
@@ -441,7 +450,11 @@ export async function presentAssistantMessage(cline: Task) {
 								continue
 							}
 							if (batch.mode === "parallel") {
-								await streamingToolExecutor.runEagerBatch(cline, batch.calls, async (toolBlock) => runOne(toolBlock))
+								await streamingToolExecutor.runEagerBatch(
+									cline,
+									batch.calls,
+									async (toolBlock, signal) => runOne(toolBlock, signal),
+								)
 							} else {
 								await runOne(batch.calls[0])
 							}
@@ -474,8 +487,11 @@ export async function presentAssistantMessage(cline: Task) {
 						return
 					}
 				}
-			} catch {
-				// fall through to original serial path
+			} catch (err) {
+				console.error(
+					"[presentAssistantMessage] Auto-approve eager batch path failed; falling back to serial execution:",
+					err,
+				)
 			}
 			// Native tool calling is the only supported tool calling mechanism.
 			// A tool_use block without an id is invalid and cannot be executed.
@@ -809,6 +825,15 @@ export async function presentAssistantMessage(cline: Task) {
 						includedTools,
 						allowedTools,
 					)
+
+					// Schema-level parameter validation (zod)
+					if (!block.partial) {
+						const merged = mergeToolParamsForValidation(block)
+						const paramCheck = validateToolParams(block.name, merged)
+						if (!paramCheck.valid) {
+							throw new Error(paramCheck.error!)
+						}
+					}
 				} catch (error) {
 					cline.consecutiveMistakeCount++
 					// For validation errors (unknown tool, tool not allowed for mode), we need to:

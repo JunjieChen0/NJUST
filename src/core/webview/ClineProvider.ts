@@ -9,6 +9,7 @@ import axios from "axios"
 import pWaitFor from "p-wait-for"
 import * as vscode from "vscode"
 
+import type { McpServer } from "@njust-ai-cj/types"
 import {
 	type TaskProviderLike,
 	type TaskProviderEvents,
@@ -70,6 +71,7 @@ import WorkspaceTracker from "../../integrations/workspace/WorkspaceTracker"
 
 import { McpHub } from "../../services/mcp/McpHub"
 import { McpServerManager } from "../../services/mcp/McpServerManager"
+import type { IMcpHubService } from "../../services/mcp/interfaces/IMcpHubService"
 import { ShadowCheckpointService } from "../../services/checkpoints/ShadowCheckpointService"
 import { CodeIndexManager } from "../../services/code-index/manager"
 import { cangjieDiagnosticModeSwitch } from "../../services/cangjie-lsp/cangjieDiagnosticModeSwitch"
@@ -94,10 +96,13 @@ import { ContextProxy } from "../config/ContextProxy"
 import { ProviderSettingsManager } from "../config/ProviderSettingsManager"
 import { CustomModesManager } from "../config/CustomModesManager"
 import { Task } from "../task/Task"
+import type { ITaskHost } from "../task/interfaces/ITaskHost"
+import type { IMcpHubClient } from "../../services/mcp/interfaces/IMcpHubClient"
 import { PlanEngine } from "../agent/PlanEngine"
 import { AgentOrchestrator } from "../agent/AgentOrchestrator"
 
 import { webviewMessageHandler } from "./webviewMessageHandler"
+import { WebviewMessageRouter } from "./WebviewMessageRouter"
 import type { ClineMessage, TodoItem } from "@njust-ai-cj/types"
 import { readApiMessages, saveApiMessages, saveTaskMessages, TaskHistoryStore } from "../task-persistence"
 import { readTaskMessages } from "../task-persistence/taskMessages"
@@ -127,7 +132,12 @@ interface PendingEditOperation {
 
 export class ClineProvider
 	extends EventEmitter<TaskProviderEvents>
-	implements vscode.WebviewViewProvider, TelemetryPropertiesProvider, TaskProviderLike
+	implements
+		vscode.WebviewViewProvider,
+		TelemetryPropertiesProvider,
+		TaskProviderLike,
+		ITaskHost,
+		IMcpHubClient
 {
 	// Used in package.json as the view's id. This value cannot be changed due
 	// to how VSCode caches views based on their id, and updating the id would
@@ -137,12 +147,13 @@ export class ClineProvider
 	private static activeInstances: Set<ClineProvider> = new Set()
 	private disposables: vscode.Disposable[] = []
 	private webviewDisposables: vscode.Disposable[] = []
+	private readonly messageRouter: WebviewMessageRouter
 	private view?: vscode.WebviewView | vscode.WebviewPanel
 	private clineStack: Task[] = []
 	private codeIndexStatusSubscription?: vscode.Disposable
 	private codeIndexManager?: CodeIndexManager
 	private _workspaceTracker?: WorkspaceTracker // workSpaceTracker read-only for access outside this class
-	protected mcpHub?: McpHub // Change from private to protected
+	protected mcpHub?: IMcpHubService // Change from private to protected
 	protected skillsManager?: SkillsManager
 	private taskCreationCallback: (task: Task) => void
 	private taskEventListeners: WeakMap<Task, Array<() => void>> = new WeakMap()
@@ -179,6 +190,7 @@ export class ClineProvider
 	) {
 		super()
 		this.currentWorkspacePath = getWorkspacePath()
+		this.messageRouter = new WebviewMessageRouter(this)
 
 		ClineProvider.activeInstances.add(this)
 
@@ -211,7 +223,9 @@ export class ClineProvider
 		McpServerManager.getInstance(this.context, this)
 			.then((hub) => {
 				this.mcpHub = hub
-				this.mcpHub.registerClient()
+				if (this.mcpHub) {
+					this.mcpHub.registerClient()
+				}
 			})
 			.catch((error) => {
 				this.log(`Failed to initialize MCP Hub: ${error}`)
@@ -230,92 +244,85 @@ export class ClineProvider
 		// We do something fairly similar for the IPC-based API.
 		this.taskCreationCallback = (instance: Task) => {
 			this.emit(NJUST_AI_CJEventName.TaskCreated, instance)
-
-			// Create named listener functions so we can remove them later.
-			const onTaskStarted = () => this.emit(NJUST_AI_CJEventName.TaskStarted, instance.taskId)
-			const onTaskCompleted = (taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage) =>
-				this.emit(NJUST_AI_CJEventName.TaskCompleted, taskId, tokenUsage, toolUsage)
-			const onTaskAborted = async () => {
-				this.emit(NJUST_AI_CJEventName.TaskAborted, instance.taskId)
-
-				try {
-					// Only rehydrate on genuine streaming failures.
-					// User-initiated cancels are handled by cancelTask().
-					if (instance.abortReason === "streaming_failed") {
-						// Defensive safeguard: if another path already replaced this instance, skip
-						const current = this.getCurrentTask()
-						if (current && current.instanceId !== instance.instanceId) {
-							this.log(
-								`[onTaskAborted] Skipping rehydrate: current instance ${current.instanceId} != aborted ${instance.instanceId}`,
-							)
-							return
-						}
-
-						const { historyItem } = await this.getTaskWithId(instance.taskId)
-						const rootTask = instance.rootTask
-						const parentTask = instance.parentTask
-						await this.createTaskWithHistoryItem({ ...historyItem, rootTask, parentTask })
-					}
-				} catch (error) {
-					this.log(
-						`[onTaskAborted] Failed to rehydrate after streaming failure: ${
-							error instanceof Error ? error.message : String(error)
-						}`,
-					)
-				}
-			}
-			const onTaskFocused = () => this.emit(NJUST_AI_CJEventName.TaskFocused, instance.taskId)
-			const onTaskUnfocused = () => this.emit(NJUST_AI_CJEventName.TaskUnfocused, instance.taskId)
-			const onTaskActive = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskActive, taskId)
-			const onTaskInteractive = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskInteractive, taskId)
-			const onTaskResumable = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskResumable, taskId)
-			const onTaskIdle = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskIdle, taskId)
-			const onTaskPaused = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskPaused, taskId)
-			const onTaskUnpaused = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskUnpaused, taskId)
-			const onTaskSpawned = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskSpawned, taskId)
-			const onTaskUserMessage = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskUserMessage, taskId)
-			const onTaskTokenUsageUpdated = (taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage) =>
-				this.emit(NJUST_AI_CJEventName.TaskTokenUsageUpdated, taskId, tokenUsage, toolUsage)
-
-			// Attach the listeners.
-			instance.on(NJUST_AI_CJEventName.TaskStarted, onTaskStarted)
-			instance.on(NJUST_AI_CJEventName.TaskCompleted, onTaskCompleted)
-			instance.on(NJUST_AI_CJEventName.TaskAborted, onTaskAborted)
-			instance.on(NJUST_AI_CJEventName.TaskFocused, onTaskFocused)
-			instance.on(NJUST_AI_CJEventName.TaskUnfocused, onTaskUnfocused)
-			instance.on(NJUST_AI_CJEventName.TaskActive, onTaskActive)
-			instance.on(NJUST_AI_CJEventName.TaskInteractive, onTaskInteractive)
-			instance.on(NJUST_AI_CJEventName.TaskResumable, onTaskResumable)
-			instance.on(NJUST_AI_CJEventName.TaskIdle, onTaskIdle)
-			instance.on(NJUST_AI_CJEventName.TaskPaused, onTaskPaused)
-			instance.on(NJUST_AI_CJEventName.TaskUnpaused, onTaskUnpaused)
-			instance.on(NJUST_AI_CJEventName.TaskSpawned, onTaskSpawned)
-			instance.on(NJUST_AI_CJEventName.TaskUserMessage, onTaskUserMessage)
-			instance.on(NJUST_AI_CJEventName.TaskTokenUsageUpdated, onTaskTokenUsageUpdated)
-
-			// Store the cleanup functions for later removal.
-			this.taskEventListeners.set(instance, [
-				() => instance.off(NJUST_AI_CJEventName.TaskStarted, onTaskStarted),
-				() => instance.off(NJUST_AI_CJEventName.TaskCompleted, onTaskCompleted),
-				() => instance.off(NJUST_AI_CJEventName.TaskAborted, onTaskAborted),
-				() => instance.off(NJUST_AI_CJEventName.TaskFocused, onTaskFocused),
-				() => instance.off(NJUST_AI_CJEventName.TaskUnfocused, onTaskUnfocused),
-				() => instance.off(NJUST_AI_CJEventName.TaskActive, onTaskActive),
-				() => instance.off(NJUST_AI_CJEventName.TaskInteractive, onTaskInteractive),
-				() => instance.off(NJUST_AI_CJEventName.TaskResumable, onTaskResumable),
-				() => instance.off(NJUST_AI_CJEventName.TaskIdle, onTaskIdle),
-				() => instance.off(NJUST_AI_CJEventName.TaskUserMessage, onTaskUserMessage),
-				() => instance.off(NJUST_AI_CJEventName.TaskPaused, onTaskPaused),
-				() => instance.off(NJUST_AI_CJEventName.TaskUnpaused, onTaskUnpaused),
-				() => instance.off(NJUST_AI_CJEventName.TaskSpawned, onTaskSpawned),
-				() => instance.off(NJUST_AI_CJEventName.TaskTokenUsageUpdated, onTaskTokenUsageUpdated),
-			])
+			this.bindTaskEventForwarders(instance)
 		}
 	}
 
 	/**
 	 * Initialize the TaskHistoryStore and migrate from globalState if needed.
 	 */
+	private bindTaskEventForwarders(instance: Task): void {
+		const onTaskStarted = () => this.emit(NJUST_AI_CJEventName.TaskStarted, instance.taskId)
+		const onTaskCompleted = (taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage) =>
+			this.emit(NJUST_AI_CJEventName.TaskCompleted, taskId, tokenUsage, toolUsage)
+		const onTaskAborted = async () => {
+			this.emit(NJUST_AI_CJEventName.TaskAborted, instance.taskId)
+			try {
+				if (instance.abortReason === "streaming_failed") {
+					const current = this.getCurrentTask()
+					if (current && current.instanceId !== instance.instanceId) {
+						this.log(
+							`[onTaskAborted] Skipping rehydrate: current instance ${current.instanceId} != aborted ${instance.instanceId}`,
+						)
+						return
+						}
+					const { historyItem } = await this.getTaskWithId(instance.taskId)
+					await this.createTaskWithHistoryItem({ ...historyItem, rootTask: instance.rootTask, parentTask: instance.parentTask })
+				}
+			} catch (error) {
+				this.log(
+					`[onTaskAborted] Failed to rehydrate after streaming failure: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				)
+			}
+		}
+		const onTaskFocused = () => this.emit(NJUST_AI_CJEventName.TaskFocused, instance.taskId)
+		const onTaskUnfocused = () => this.emit(NJUST_AI_CJEventName.TaskUnfocused, instance.taskId)
+		const onTaskActive = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskActive, taskId)
+		const onTaskInteractive = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskInteractive, taskId)
+		const onTaskResumable = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskResumable, taskId)
+		const onTaskIdle = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskIdle, taskId)
+		const onTaskPaused = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskPaused, taskId)
+		const onTaskUnpaused = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskUnpaused, taskId)
+		const onTaskSpawned = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskSpawned, taskId)
+		const onTaskUserMessage = (taskId: string) => this.emit(NJUST_AI_CJEventName.TaskUserMessage, taskId)
+		const onTaskTokenUsageUpdated = (taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage) =>
+			this.emit(NJUST_AI_CJEventName.TaskTokenUsageUpdated, taskId, tokenUsage, toolUsage)
+
+		instance.on(NJUST_AI_CJEventName.TaskStarted, onTaskStarted)
+		instance.on(NJUST_AI_CJEventName.TaskCompleted, onTaskCompleted)
+		instance.on(NJUST_AI_CJEventName.TaskAborted, onTaskAborted)
+		instance.on(NJUST_AI_CJEventName.TaskFocused, onTaskFocused)
+		instance.on(NJUST_AI_CJEventName.TaskUnfocused, onTaskUnfocused)
+		instance.on(NJUST_AI_CJEventName.TaskActive, onTaskActive)
+		instance.on(NJUST_AI_CJEventName.TaskInteractive, onTaskInteractive)
+		instance.on(NJUST_AI_CJEventName.TaskResumable, onTaskResumable)
+		instance.on(NJUST_AI_CJEventName.TaskIdle, onTaskIdle)
+		instance.on(NJUST_AI_CJEventName.TaskPaused, onTaskPaused)
+		instance.on(NJUST_AI_CJEventName.TaskUnpaused, onTaskUnpaused)
+		instance.on(NJUST_AI_CJEventName.TaskSpawned, onTaskSpawned)
+		instance.on(NJUST_AI_CJEventName.TaskUserMessage, onTaskUserMessage)
+		instance.on(NJUST_AI_CJEventName.TaskTokenUsageUpdated, onTaskTokenUsageUpdated)
+
+		this.taskEventListeners.set(instance, [
+			() => instance.off(NJUST_AI_CJEventName.TaskStarted, onTaskStarted),
+			() => instance.off(NJUST_AI_CJEventName.TaskCompleted, onTaskCompleted),
+			() => instance.off(NJUST_AI_CJEventName.TaskAborted, onTaskAborted),
+			() => instance.off(NJUST_AI_CJEventName.TaskFocused, onTaskFocused),
+			() => instance.off(NJUST_AI_CJEventName.TaskUnfocused, onTaskUnfocused),
+			() => instance.off(NJUST_AI_CJEventName.TaskActive, onTaskActive),
+			() => instance.off(NJUST_AI_CJEventName.TaskInteractive, onTaskInteractive),
+			() => instance.off(NJUST_AI_CJEventName.TaskResumable, onTaskResumable),
+			() => instance.off(NJUST_AI_CJEventName.TaskIdle, onTaskIdle),
+			() => instance.off(NJUST_AI_CJEventName.TaskUserMessage, onTaskUserMessage),
+			() => instance.off(NJUST_AI_CJEventName.TaskPaused, onTaskPaused),
+			() => instance.off(NJUST_AI_CJEventName.TaskUnpaused, onTaskUnpaused),
+			() => instance.off(NJUST_AI_CJEventName.TaskSpawned, onTaskSpawned),
+			() => instance.off(NJUST_AI_CJEventName.TaskTokenUsageUpdated, onTaskTokenUsageUpdated),
+		])
+	}
+
 	private async initializeTaskHistoryStore(): Promise<void> {
 		try {
 			await this.taskHistoryStore.initialize()
@@ -609,6 +616,7 @@ export class ClineProvider
 			this.log("Disposed webview")
 		}
 
+		this.messageRouter.dispose()
 		this.clearWebviewResources()
 
 		while (this.disposables.length) {
@@ -747,127 +755,14 @@ export class ClineProvider
 
 	async resolveWebviewView(webviewView: vscode.WebviewView | vscode.WebviewPanel) {
 		this.view = webviewView
-		const inTabMode = "onDidChangeViewState" in webviewView
+		const inTabMode = this.configureWebviewPanelMode(webviewView)
 
-		if (inTabMode) {
-			setPanel(webviewView, "tab")
-		} else if ("onDidChangeVisibility" in webviewView) {
-			setPanel(webviewView, "sidebar")
-		}
-
-		// Initialize out-of-scope variables that need to receive persistent
-		// global state values.
-		this.getState().then(
-			({
-				terminalShellIntegrationTimeout = Terminal.defaultShellIntegrationTimeout,
-				terminalShellIntegrationDisabled = false,
-				terminalCommandDelay = 0,
-				terminalZshClearEolMark = true,
-				terminalZshOhMy = false,
-				terminalZshP10k = false,
-				terminalPowershellCounter = false,
-				terminalZdotdir = false,
-				ttsEnabled,
-				ttsSpeed,
-			}) => {
-				Terminal.setShellIntegrationTimeout(terminalShellIntegrationTimeout)
-				Terminal.setShellIntegrationDisabled(terminalShellIntegrationDisabled)
-				Terminal.setCommandDelay(terminalCommandDelay)
-				Terminal.setTerminalZshClearEolMark(terminalZshClearEolMark)
-				Terminal.setTerminalZshOhMy(terminalZshOhMy)
-				Terminal.setTerminalZshP10k(terminalZshP10k)
-				Terminal.setPowershellCounter(terminalPowershellCounter)
-				Terminal.setTerminalZdotdir(terminalZdotdir)
-				setTtsEnabled(ttsEnabled ?? false)
-				setTtsSpeed(ttsSpeed ?? 1)
-			},
-		)
-
-		// Reset web search to off on each session start
-		await this.contextProxy.setValue("enableWebSearch", false)
-
-		// Set up webview options with proper resource roots
-		const resourceRoots = [this.contextProxy.extensionUri]
-
-		// Add workspace folders to allow access to workspace files
-		if (vscode.workspace.workspaceFolders) {
-			resourceRoots.push(...vscode.workspace.workspaceFolders.map((folder) => folder.uri))
-		}
-
-		webviewView.webview.options = {
-			enableScripts: true,
-			localResourceRoots: resourceRoots,
-		}
-
-		webviewView.webview.html =
-			this.contextProxy.extensionMode === vscode.ExtensionMode.Development
-				? await this.getHMRHtmlContent(webviewView.webview)
-				: await this.getHtmlContent(webviewView.webview)
-
-		// Sets up an event listener to listen for messages passed from the webview view context
-		// and executes code based on the message that is received.
-		this.setWebviewMessageListener(webviewView.webview)
-
-		// Initialize code index status subscription for the current workspace.
+		await this.initializeWebviewRuntimeState()
+		await this.configureWebviewContent(webviewView)
+		this.messageRouter.setWebviewMessageListener(webviewView.webview)
+		this.webviewDisposables.push(...this.messageRouter.getDisposables())
 		this.updateCodeIndexStatusSubscription()
-
-		// Listen for active editor changes to update code index status for the
-		// current workspace.
-		const activeEditorSubscription = vscode.window.onDidChangeActiveTextEditor(() => {
-			// Update subscription when workspace might have changed.
-			this.updateCodeIndexStatusSubscription()
-		})
-		this.webviewDisposables.push(activeEditorSubscription)
-
-		// Listen for when the panel becomes visible.
-		// https://github.com/microsoft/vscode-discussions/discussions/840
-		if ("onDidChangeViewState" in webviewView) {
-			// WebviewView and WebviewPanel have all the same properties except
-			// for this visibility listener panel.
-			const viewStateDisposable = webviewView.onDidChangeViewState(() => {
-				if (this.view?.visible) {
-					this.postMessageToWebview({ type: "action", action: "didBecomeVisible" })
-				}
-			})
-
-			this.webviewDisposables.push(viewStateDisposable)
-		} else if ("onDidChangeVisibility" in webviewView) {
-			// sidebar
-			const visibilityDisposable = webviewView.onDidChangeVisibility(() => {
-				if (this.view?.visible) {
-					this.postMessageToWebview({ type: "action", action: "didBecomeVisible" })
-				}
-			})
-
-			this.webviewDisposables.push(visibilityDisposable)
-		}
-
-		// Listen for when the view is disposed
-		// This happens when the user closes the view or when the view is closed programmatically
-		webviewView.onDidDispose(
-			async () => {
-				if (inTabMode) {
-					this.log("Disposing ClineProvider instance for tab view")
-					await this.dispose()
-				} else {
-					this.log("Clearing webview resources for sidebar view")
-					this.clearWebviewResources()
-					// Reset current workspace manager reference when view is disposed
-					this.codeIndexManager = undefined
-				}
-			},
-			null,
-			this.disposables,
-		)
-
-		// Listen for when color changes
-		const configDisposable = vscode.workspace.onDidChangeConfiguration(async (e) => {
-			if (e && e.affectsConfiguration("workbench.colorTheme")) {
-				// Sends latest theme name to webview
-				await this.postMessageToWebview({ type: "theme", text: JSON.stringify(await getTheme()) })
-			}
-		})
-		this.webviewDisposables.push(configDisposable)
+		this.attachWebviewLifecycleListeners(webviewView, inTabMode)
 
 		// If the extension is starting a new session, clear previous task state.
 		// But don't clear if there's already an active task (e.g., resumed via IPC/bridge).
@@ -877,124 +772,216 @@ export class ClineProvider
 		}
 	}
 
+	private configureWebviewPanelMode(webviewView: vscode.WebviewView | vscode.WebviewPanel): boolean {
+		const inTabMode = "onDidChangeViewState" in webviewView
+		if (inTabMode) {
+			setPanel(webviewView, "tab")
+		} else if ("onDidChangeVisibility" in webviewView) {
+			setPanel(webviewView, "sidebar")
+		}
+		return inTabMode
+	}
+
+	private async initializeWebviewRuntimeState(): Promise<void> {
+		const {
+			terminalShellIntegrationTimeout = Terminal.defaultShellIntegrationTimeout,
+			terminalShellIntegrationDisabled = false,
+			terminalCommandDelay = 0,
+			terminalZshClearEolMark = true,
+			terminalZshOhMy = false,
+			terminalZshP10k = false,
+			terminalPowershellCounter = false,
+			terminalZdotdir = false,
+			ttsEnabled,
+			ttsSpeed,
+		} = await this.getState()
+
+		Terminal.setShellIntegrationTimeout(terminalShellIntegrationTimeout)
+		Terminal.setShellIntegrationDisabled(terminalShellIntegrationDisabled)
+		Terminal.setCommandDelay(terminalCommandDelay)
+		Terminal.setTerminalZshClearEolMark(terminalZshClearEolMark)
+		Terminal.setTerminalZshOhMy(terminalZshOhMy)
+		Terminal.setTerminalZshP10k(terminalZshP10k)
+		Terminal.setPowershellCounter(terminalPowershellCounter)
+		Terminal.setTerminalZdotdir(terminalZdotdir)
+		setTtsEnabled(ttsEnabled ?? false)
+		setTtsSpeed(ttsSpeed ?? 1)
+
+		await this.contextProxy.setValue("enableWebSearch", false)
+	}
+
+	private async configureWebviewContent(webviewView: vscode.WebviewView | vscode.WebviewPanel): Promise<void> {
+		const resourceRoots = [this.contextProxy.extensionUri]
+		if (vscode.workspace.workspaceFolders) {
+			resourceRoots.push(...vscode.workspace.workspaceFolders.map((folder) => folder.uri))
+		}
+
+		webviewView.webview.options = { enableScripts: true, localResourceRoots: resourceRoots }
+		webviewView.webview.html =
+			this.contextProxy.extensionMode === vscode.ExtensionMode.Development
+				? await this.getHMRHtmlContent(webviewView.webview)
+				: await this.getHtmlContent(webviewView.webview)
+	}
+
+	private attachWebviewLifecycleListeners(
+		webviewView: vscode.WebviewView | vscode.WebviewPanel,
+		inTabMode: boolean,
+	): void {
+		const activeEditorSubscription = vscode.window.onDidChangeActiveTextEditor(() => {
+			this.updateCodeIndexStatusSubscription()
+		})
+		this.webviewDisposables.push(activeEditorSubscription)
+
+		if ("onDidChangeViewState" in webviewView) {
+			const viewStateDisposable = webviewView.onDidChangeViewState(() => {
+				if (this.view?.visible) {
+					this.postMessageToWebview({ type: "action", action: "didBecomeVisible" })
+				}
+			})
+			this.webviewDisposables.push(viewStateDisposable)
+		} else if ("onDidChangeVisibility" in webviewView) {
+			const visibilityDisposable = webviewView.onDidChangeVisibility(() => {
+				if (this.view?.visible) {
+					this.postMessageToWebview({ type: "action", action: "didBecomeVisible" })
+				}
+			})
+			this.webviewDisposables.push(visibilityDisposable)
+		}
+
+		webviewView.onDidDispose(
+			async () => {
+				if (inTabMode) {
+					this.log("Disposing ClineProvider instance for tab view")
+					await this.dispose()
+				} else {
+					this.log("Clearing webview resources for sidebar view")
+					this.clearWebviewResources()
+					this.codeIndexManager = undefined
+				}
+			},
+			null,
+			this.disposables,
+		)
+
+		const configDisposable = vscode.workspace.onDidChangeConfiguration(async (e) => {
+			if (e && e.affectsConfiguration("workbench.colorTheme")) {
+				await this.postMessageToWebview({ type: "theme", text: JSON.stringify(await getTheme()) })
+			}
+		})
+		this.webviewDisposables.push(configDisposable)
+	}
+
 	public async createTaskWithHistoryItem(
 		historyItem: HistoryItem & { rootTask?: Task; parentTask?: Task },
 		options?: { startTask?: boolean },
 	) {
 		const isCliRuntime = process.env.ROO_CLI_RUNTIME === "1"
-		// CLI injects runtime provider settings from command flags/env at startup.
-		// Restoring provider profiles from task history can overwrite those
-		// runtime settings with stale/incomplete persisted profiles.
 		const skipProfileRestoreFromHistory = isCliRuntime
-
-		// Check if we're rehydrating the current task to avoid flicker
-		const currentTask = this.getCurrentTask()
-		const isRehydratingCurrentTask = currentTask && currentTask.taskId === historyItem.id
+		const isRehydratingCurrentTask = this.getCurrentTask()?.taskId === historyItem.id
 
 		if (!isRehydratingCurrentTask) {
 			await this.removeClineFromStack()
 		}
 
-		// If the history item has a saved mode, restore it and its associated API configuration.
+		await this.restoreHistoryModeAndProfile(historyItem, skipProfileRestoreFromHistory)
+
+		const task = await this.createTaskInstanceFromHistory(historyItem, options)
+
+		if (isRehydratingCurrentTask) {
+			await this.rehydrateCurrentTaskInPlace(task)
+		} else {
+			await this.addClineToStack(task)
+			this.log(
+				`[createTaskWithHistoryItem] ${task.parentTask ? "child" : "parent"} task ${task.taskId}.${task.instanceId} instantiated`,
+			)
+		}
+
+		await this.applyPendingEditIfPresent(task)
+		return task
+	}
+
+	private async restoreHistoryModeAndProfile(
+		historyItem: HistoryItem & { rootTask?: Task; parentTask?: Task },
+		skipProfileRestoreFromHistory: boolean,
+	): Promise<void> {
 		if (historyItem.mode) {
-			// Validate that the mode still exists
 			const customModes = await this.customModesManager.getCustomModes()
 			const modeExists = getModeBySlug(historyItem.mode, customModes) !== undefined
-
 			if (!modeExists) {
-				// Mode no longer exists, fall back to default mode.
 				this.log(
 					`Mode '${historyItem.mode}' from history no longer exists. Falling back to default mode '${defaultModeSlug}'.`,
 				)
 				historyItem.mode = defaultModeSlug
 			}
-
 			await this.updateGlobalState("mode", historyItem.mode)
-
-			// Load the saved API config for the restored mode if it exists.
-			// Skip mode-based profile activation if historyItem.apiConfigName exists,
-			// since the task's specific provider profile will override it anyway.
 			const lockApiConfigAcrossModes = this.context.workspaceState.get("lockApiConfigAcrossModes", false)
-
 			if (!historyItem.apiConfigName && !lockApiConfigAcrossModes && !skipProfileRestoreFromHistory) {
-				const savedConfigId = await this.providerSettingsManager.getModeConfigId(historyItem.mode)
-				const listApiConfig = await this.providerSettingsManager.listConfig()
-
-				// Update listApiConfigMeta first to ensure UI has latest data.
-				await this.updateGlobalState("listApiConfigMeta", listApiConfig)
-
-				// If this mode has a saved config, use it.
-				if (savedConfigId) {
-					const profile = listApiConfig.find(({ id }) => id === savedConfigId)
-
-					if (profile?.name) {
-						try {
-							// Check if the profile has actual API configuration (not just an id).
-							// In CLI mode, the ProviderSettingsManager may return empty default profiles
-							// that only contain 'id' and 'name' fields. Activating such a profile would
-							// overwrite the CLI's working API configuration with empty settings.
-							const fullProfile = await this.providerSettingsManager.getProfile({ name: profile.name })
-							const hasActualSettings = !!fullProfile.apiProvider
-
-							if (hasActualSettings) {
-								await this.activateProviderProfile({ name: profile.name })
-							} else {
-								// The task will continue with the current/default configuration.
-							}
-						} catch (error) {
-							// Log the error but continue with task restoration.
-							this.log(
-								`Failed to restore API configuration for mode '${historyItem.mode}': ${
-									error instanceof Error ? error.message : String(error)
-								}. Continuing with default configuration.`,
-							)
-							// The task will continue with the current/default configuration.
-						}
-					}
-				}
+				await this.restoreModeBoundProfile(historyItem.mode)
 			}
 		}
 
-		// If the history item has a saved API config name (provider profile), restore it.
-		// This overrides any mode-based config restoration above, because the task's
-		// specific provider profile takes precedence over mode defaults.
 		if (historyItem.apiConfigName && !skipProfileRestoreFromHistory) {
-			const listApiConfig = await this.providerSettingsManager.listConfig()
-			// Keep global state/UI in sync with latest profiles for parity with mode restoration above.
-			await this.updateGlobalState("listApiConfigMeta", listApiConfig)
-			const profile = listApiConfig.find(({ name }) => name === historyItem.apiConfigName)
-
-			if (profile?.name) {
-				try {
-					await this.activateProviderProfile(
-						{ name: profile.name },
-						{ persistModeConfig: false, persistTaskHistory: false },
-					)
-				} catch (error) {
-					// Log the error but continue with task restoration.
-					this.log(
-						`Failed to restore API configuration '${historyItem.apiConfigName}' for task: ${
-							error instanceof Error ? error.message : String(error)
-						}. Continuing with current configuration.`,
-					)
-				}
-			} else {
-				// Profile no longer exists, log warning but continue
-				this.log(
-					`Provider profile '${historyItem.apiConfigName}' from history no longer exists. Using current configuration.`,
-				)
-			}
+			await this.restoreTaskBoundProfile(historyItem.apiConfigName)
 		} else if (historyItem.apiConfigName && skipProfileRestoreFromHistory) {
 			this.log(
 				`Skipping restore of provider profile '${historyItem.apiConfigName}' for task ${historyItem.id} in CLI runtime.`,
 			)
 		}
+	}
 
-		const { apiConfiguration, enableCheckpoints, checkpointTimeout, experiments, cloudUserInfo, taskSyncEnabled } =
-			await this.getState()
+	private async restoreModeBoundProfile(mode: string): Promise<void> {
+		const [savedConfigId, listApiConfig] = await Promise.all([
+			this.providerSettingsManager.getModeConfigId(mode),
+			this.providerSettingsManager.listConfig(),
+		])
+		await this.updateGlobalState("listApiConfigMeta", listApiConfig)
+		if (!savedConfigId) {
+			return
+		}
+		const profile = listApiConfig.find(({ id }) => id === savedConfigId)
+		if (!profile?.name) {
+			return
+		}
+		try {
+			const fullProfile = await this.providerSettingsManager.getProfile({ name: profile.name })
+			if (fullProfile.apiProvider) {
+				await this.activateProviderProfile({ name: profile.name })
+			}
+		} catch (error) {
+			this.log(
+				`Failed to restore API configuration for mode '${mode}': ${
+					error instanceof Error ? error.message : String(error)
+				}. Continuing with default configuration.`,
+			)
+		}
+	}
 
-		const task = new Task({
-			provider: this,
+	private async restoreTaskBoundProfile(apiConfigName: string): Promise<void> {
+		const listApiConfig = await this.providerSettingsManager.listConfig()
+		await this.updateGlobalState("listApiConfigMeta", listApiConfig)
+		const profile = listApiConfig.find(({ name }) => name === apiConfigName)
+		if (!profile?.name) {
+			this.log(`Provider profile '${apiConfigName}' from history no longer exists. Using current configuration.`)
+			return
+		}
+		try {
+			await this.activateProviderProfile({ name: profile.name }, { persistModeConfig: false, persistTaskHistory: false })
+		} catch (error) {
+			this.log(
+				`Failed to restore API configuration '${apiConfigName}' for task: ${
+					error instanceof Error ? error.message : String(error)
+				}. Continuing with current configuration.`,
+			)
+		}
+	}
+
+	private async createTaskInstanceFromHistory(
+		historyItem: HistoryItem & { rootTask?: Task; parentTask?: Task },
+		options?: { startTask?: boolean },
+	): Promise<Task> {
+		const { apiConfiguration, enableCheckpoints, checkpointTimeout, experiments } = await this.getState()
+		return new Task({
+			host: this,
 			apiConfiguration,
 			enableCheckpoints,
 			checkpointTimeout,
@@ -1007,96 +994,60 @@ export class ClineProvider
 			workspacePath: historyItem.workspace,
 			onCreated: this.taskCreationCallback,
 			startTask: options?.startTask ?? true,
-			// Preserve the status from the history item to avoid overwriting it when the task saves messages
 			initialStatus: historyItem.status,
 		})
+	}
 
-		if (isRehydratingCurrentTask) {
-			// Replace the current task in-place to avoid UI flicker
-			const stackIndex = this.clineStack.length - 1
-
-			// Properly dispose of the old task to ensure garbage collection
-			const oldTask = this.clineStack[stackIndex]
-
-			// Abort the old task to stop running processes and mark as abandoned
-			try {
-				await oldTask.abortTask(true)
-			} catch (e) {
-				this.log(
-					`[createTaskWithHistoryItem] abortTask() failed for old task ${oldTask.taskId}.${oldTask.instanceId}: ${e.message}`,
-				)
-			}
-
-			// Remove event listeners from the old task
-			const cleanupFunctions = this.taskEventListeners.get(oldTask)
-			if (cleanupFunctions) {
-				cleanupFunctions.forEach((cleanup) => cleanup())
-				this.taskEventListeners.delete(oldTask)
-			}
-
-			// Replace the task in the stack
-			this.clineStack[stackIndex] = task
-			task.emit(NJUST_AI_CJEventName.TaskFocused)
-
-			// Perform preparation tasks and set up event listeners
-			await this.performPreparationTasks(task)
-
+	private async rehydrateCurrentTaskInPlace(task: Task): Promise<void> {
+		const stackIndex = this.clineStack.length - 1
+		const oldTask = this.clineStack[stackIndex]
+		try {
+			await oldTask.abortTask(true)
+		} catch (e) {
 			this.log(
-				`[createTaskWithHistoryItem] rehydrated task ${task.taskId}.${task.instanceId} in-place (flicker-free)`,
-			)
-		} else {
-			await this.addClineToStack(task)
-
-			this.log(
-				`[createTaskWithHistoryItem] ${task.parentTask ? "child" : "parent"} task ${task.taskId}.${task.instanceId} instantiated`,
+				`[createTaskWithHistoryItem] abortTask() failed for old task ${oldTask.taskId}.${oldTask.instanceId}: ${e.message}`,
 			)
 		}
+		const cleanupFunctions = this.taskEventListeners.get(oldTask)
+		if (cleanupFunctions) {
+			cleanupFunctions.forEach((cleanup) => cleanup())
+			this.taskEventListeners.delete(oldTask)
+		}
+		this.clineStack[stackIndex] = task
+		task.emit(NJUST_AI_CJEventName.TaskFocused)
+		await this.performPreparationTasks(task)
+		this.log(`[createTaskWithHistoryItem] rehydrated task ${task.taskId}.${task.instanceId} in-place (flicker-free)`)
+	}
 
-		// Check if there's a pending edit after checkpoint restoration
+	private async applyPendingEditIfPresent(task: Task): Promise<void> {
 		const operationId = `task-${task.taskId}`
 		const pendingEdit = this.getPendingEditOperation(operationId)
-		if (pendingEdit) {
-			this.clearPendingEditOperation(operationId) // Clear the pending edit
-
-			this.log(`[createTaskWithHistoryItem] Processing pending edit after checkpoint restoration`)
-
-			// Process the pending edit after a short delay to ensure the task is fully initialized
-			setTimeout(async () => {
-				try {
-					// Find the message index in the restored state
-					const { messageIndex, apiConversationHistoryIndex } = (() => {
-						const messageIndex = task.clineMessages.findIndex((msg) => msg.ts === pendingEdit.messageTs)
-						const apiConversationHistoryIndex = task.apiConversationHistory.findIndex(
-							(msg) => msg.ts === pendingEdit.messageTs,
-						)
-						return { messageIndex, apiConversationHistoryIndex }
-					})()
-
-					if (messageIndex !== -1) {
-						// Remove the target message and all subsequent messages
-						await task.overwriteClineMessages(task.clineMessages.slice(0, messageIndex))
-
-						if (apiConversationHistoryIndex !== -1) {
-							await task.overwriteApiConversationHistory(
-								task.apiConversationHistory.slice(0, apiConversationHistoryIndex),
-							)
-						}
-
-						// Process the edited message
-						await task.handleWebviewAskResponse(
-							"messageResponse",
-							pendingEdit.editedContent,
-							pendingEdit.images,
-						)
-					}
-				} catch (error) {
-					this.log(`[createTaskWithHistoryItem] Error processing pending edit: ${error}`)
-				}
-			}, 100) // Small delay to ensure task is fully ready
+		if (!pendingEdit) {
+			return
 		}
 
-		return task
+		this.clearPendingEditOperation(operationId)
+		this.log(`[createTaskWithHistoryItem] Processing pending edit after checkpoint restoration`)
+		setTimeout(async () => {
+			try {
+				const { messageIndex, apiConversationHistoryIndex } = (() => {
+					const messageIndex = task.clineMessages.findIndex((msg) => msg.ts === pendingEdit.messageTs)
+					const apiConversationHistoryIndex = task.apiConversationHistory.findIndex((msg) => msg.ts === pendingEdit.messageTs)
+					return { messageIndex, apiConversationHistoryIndex }
+				})()
+				if (messageIndex !== -1) {
+					await task.overwriteClineMessages(task.clineMessages.slice(0, messageIndex))
+					if (apiConversationHistoryIndex !== -1) {
+						await task.overwriteApiConversationHistory(task.apiConversationHistory.slice(0, apiConversationHistoryIndex))
+					}
+					await task.handleWebviewAskResponse("messageResponse", pendingEdit.editedContent, pendingEdit.images)
+				}
+			} catch (error) {
+				this.log(`[createTaskWithHistoryItem] Error processing pending edit: ${error}`)
+			}
+		}, 100)
 	}
+
 
 	public async postMessageToWebview(message: ExtensionMessage) {
 		if (this._disposed) {
@@ -1286,112 +1237,96 @@ export class ClineProvider
 	}
 
 	/**
-	 * Sets up an event listener to listen for messages passed from the webview context and
-	 * executes code based on the message that is received.
-	 *
-	 * @param webview A reference to the extension webview
-	 */
-	private setWebviewMessageListener(webview: vscode.Webview) {
-		const onReceiveMessage = async (message: WebviewMessage) => webviewMessageHandler(this, message)
-
-		const messageDisposable = webview.onDidReceiveMessage(onReceiveMessage)
-		this.webviewDisposables.push(messageDisposable)
-	}
-
-	/**
 	 * Handle switching to a new mode, including updating the associated API configuration
 	 * @param newMode The mode to switch to
 	 */
 	public async handleModeSwitch(newMode: Mode) {
-		const previousMode = (await this.getGlobalState("mode")) as Mode | undefined
-		if (previousMode === "cangjie" && newMode !== "cangjie") {
-			cangjieDiagnosticModeSwitch.clearExtensionCangjieDiagnostics()
-		}
-
-		const task = this.getCurrentTask()
-
-		if (task) {
-			TelemetryService.instance.captureModeSwitch(task.taskId, newMode)
-			task.emit(NJUST_AI_CJEventName.TaskModeSwitched, task.taskId, newMode)
-
-			try {
-				// Update the task history with the new mode first.
-				const taskHistoryItem =
-					this.taskHistoryStore.get(task.taskId) ??
-					(this.getGlobalState("taskHistory") ?? []).find((item) => item.id === task.taskId)
-
-				if (taskHistoryItem) {
-					await this.updateTaskHistory({ ...taskHistoryItem, mode: newMode })
-				}
-
-				// Only update the task's mode after successful persistence.
-				;(task as any)._taskMode = newMode
-			} catch (error) {
-				// If persistence fails, log the error but don't update the in-memory state.
-				this.log(
-					`Failed to persist mode switch for task ${task.taskId}: ${error instanceof Error ? error.message : String(error)}`,
-				)
-
-				// Optionally, we could emit an event to notify about the failure.
-				// This ensures the in-memory state remains consistent with persisted state.
-				throw error
-			}
-		}
-
+		await this.clearCangjieDiagnosticsIfNeeded(newMode)
+		await this.persistTaskModeSwitch(newMode)
 		await this.updateGlobalState("mode", newMode)
 
 		this.emit(NJUST_AI_CJEventName.ModeChanged, newMode)
 
-		// If workspace lock is on, keep the current API config — don't load mode-specific config
 		const lockApiConfigAcrossModes = this.context.workspaceState.get("lockApiConfigAcrossModes", false)
 		if (lockApiConfigAcrossModes) {
 			await this.postStateToWebview()
 			return
 		}
 
-		// Load the saved API config for the new mode if it exists.
-		const savedConfigId = await this.providerSettingsManager.getModeConfigId(newMode)
-		const listApiConfig = await this.providerSettingsManager.listConfig()
+		await this.syncModeProviderProfile(newMode)
+		await this.postStateToWebview()
+	}
 
-		// Update listApiConfigMeta first to ensure UI has latest data.
-		await this.updateGlobalState("listApiConfigMeta", listApiConfig)
+	private async clearCangjieDiagnosticsIfNeeded(newMode: Mode): Promise<void> {
+		const previousMode = (await this.getGlobalState("mode")) as Mode | undefined
+		if (previousMode === "cangjie" && newMode !== "cangjie") {
+			cangjieDiagnosticModeSwitch.clearExtensionCangjieDiagnostics()
+		}
+	}
 
-		// If this mode has a saved config, use it.
-		if (savedConfigId) {
-			const profile = listApiConfig.find(({ id }) => id === savedConfigId)
-
-			if (profile?.name) {
-				// Check if the profile has actual API configuration (not just an id).
-				// In CLI mode, the ProviderSettingsManager may return empty default profiles
-				// that only contain 'id' and 'name' fields. Activating such a profile would
-				// overwrite the CLI's working API configuration with empty settings.
-				// Skip activation if the profile has no apiProvider set - this indicates
-				// an unconfigured/empty profile.
-				const fullProfile = await this.providerSettingsManager.getProfile({ name: profile.name })
-				const hasActualSettings = !!fullProfile.apiProvider
-
-				if (hasActualSettings) {
-					await this.activateProviderProfile({ name: profile.name })
-				} else {
-					// The task will continue with the current/default configuration.
-				}
-			} else {
-				// The task will continue with the current/default configuration.
-			}
-		} else {
-			// If no saved config for this mode, save current config as default.
-			const currentApiConfigNameAfter = this.getGlobalState("currentApiConfigName")
-
-			if (currentApiConfigNameAfter) {
-				const config = listApiConfig.find((c) => c.name === currentApiConfigNameAfter)
-
-				if (config?.id) {
-					await this.providerSettingsManager.setModeConfig(newMode, config.id)
-				}
-			}
+	private async persistTaskModeSwitch(newMode: Mode): Promise<void> {
+		const task = this.getCurrentTask()
+		if (!task) {
+			return
 		}
 
-		await this.postStateToWebview()
+		TelemetryService.instance.captureModeSwitch(task.taskId, newMode)
+		task.emit(NJUST_AI_CJEventName.TaskModeSwitched, task.taskId, newMode)
+
+		try {
+			const taskHistoryItem =
+				this.taskHistoryStore.get(task.taskId) ??
+				(this.getGlobalState("taskHistory") ?? []).find((item) => item.id === task.taskId)
+
+			if (taskHistoryItem) {
+				await this.updateTaskHistory({ ...taskHistoryItem, mode: newMode })
+			}
+
+			;(task as any)._taskMode = newMode
+		} catch (error) {
+			this.log(
+				`Failed to persist mode switch for task ${task.taskId}: ${error instanceof Error ? error.message : String(error)}`,
+			)
+			throw error
+		}
+	}
+
+	private async syncModeProviderProfile(newMode: Mode): Promise<void> {
+		const [savedConfigId, listApiConfig] = await Promise.all([
+			this.providerSettingsManager.getModeConfigId(newMode),
+			this.providerSettingsManager.listConfig(),
+		])
+
+		await this.updateGlobalState("listApiConfigMeta", listApiConfig)
+
+		if (savedConfigId) {
+			await this.activateModeSavedProfile(newMode, listApiConfig, savedConfigId)
+			return
+		}
+
+		const currentApiConfigNameAfter = this.getGlobalState("currentApiConfigName")
+		if (!currentApiConfigNameAfter) {
+			return
+		}
+
+		const config = listApiConfig.find((c) => c.name === currentApiConfigNameAfter)
+		if (config?.id) {
+			await this.providerSettingsManager.setModeConfig(newMode, config.id)
+		}
+	}
+
+	private async activateModeSavedProfile(newMode: Mode, listApiConfig: ProviderSettingsEntry[], savedConfigId: string): Promise<void> {
+		const profile = listApiConfig.find(({ id }) => id === savedConfigId)
+		if (!profile?.name) {
+			return
+		}
+
+		const fullProfile = await this.providerSettingsManager.getProfile({ name: profile.name })
+		if (!fullProfile.apiProvider) {
+			return
+		}
+
+		await this.activateProviderProfile({ name: profile.name })
 	}
 
 	// Provider Profile Management
@@ -1534,14 +1469,7 @@ export class ClineProvider
 			// Update in-memory state immediately so sticky behavior works even before the task has
 			// been persisted into taskHistory (it will be captured on the next save).
 			task.setTaskApiConfigName(apiConfigName)
-
-			const taskHistoryItem =
-				this.taskHistoryStore.get(task.taskId) ??
-				(this.getGlobalState("taskHistory") ?? []).find((item) => item.id === task.taskId)
-
-			if (taskHistoryItem) {
-				await this.updateTaskHistory({ ...taskHistoryItem, apiConfigName })
-			}
+			await this.persistCurrentTaskProfileName(task.taskId, apiConfigName)
 		} catch (error) {
 			// If persistence fails, log the error but don't fail the profile switch.
 			this.log(
@@ -1549,6 +1477,15 @@ export class ClineProvider
 					error instanceof Error ? error.message : String(error)
 				}`,
 			)
+		}
+	}
+
+	private async persistCurrentTaskProfileName(taskId: string, apiConfigName: string): Promise<void> {
+		const taskHistoryItem =
+			this.taskHistoryStore.get(taskId) ?? (this.getGlobalState("taskHistory") ?? []).find((item) => item.id === taskId)
+
+		if (taskHistoryItem) {
+			await this.updateTaskHistory({ ...taskHistoryItem, apiConfigName })
 		}
 	}
 
@@ -1560,25 +1497,17 @@ export class ClineProvider
 
 		const persistModeConfig = options?.persistModeConfig ?? true
 		const persistTaskHistory = options?.persistTaskHistory ?? true
+		const listApiConfig = await this.providerSettingsManager.listConfig()
 
-		// See `upsertProviderProfile` for a description of what this is doing.
 		await Promise.all([
-			this.contextProxy.setValue("listApiConfigMeta", await this.providerSettingsManager.listConfig()),
+			this.contextProxy.setValue("listApiConfigMeta", listApiConfig),
 			this.contextProxy.setValue("currentApiConfigName", name),
 			this.contextProxy.setProviderSettings(providerSettings),
 		])
 
-		const { mode } = await this.getState()
-
-		if (id && persistModeConfig) {
-			await this.providerSettingsManager.setModeConfig(mode, id)
-		}
-
-		// Change the provider for the current task.
+		await this.persistActivatedProfileModeBinding(id, persistModeConfig)
 		this.updateTaskApiHandlerIfNeeded(providerSettings, { forceRebuild: true })
 
-		// Update the current task's sticky provider profile, unless this activation is
-		// being used purely as a non-persisting restoration (e.g., reopening a task from history).
 		if (persistTaskHistory) {
 			await this.persistStickyProviderProfileToCurrentTask(name)
 		}
@@ -1588,6 +1517,15 @@ export class ClineProvider
 		if (providerSettings.apiProvider) {
 			this.emit(NJUST_AI_CJEventName.ProviderProfileChanged, { name, provider: providerSettings.apiProvider })
 		}
+	}
+
+	private async persistActivatedProfileModeBinding(id: string | undefined, persistModeConfig: boolean): Promise<void> {
+		if (!id || !persistModeConfig) {
+			return
+		}
+
+		const { mode } = await this.getState()
+		await this.providerSettingsManager.setModeConfig(mode, id)
 	}
 
 	async updateCustomInstructions(instructions?: string) {
@@ -1884,37 +1822,20 @@ export class ClineProvider
 
 	async postStateToWebview() {
 		const state = await this.getStateToPostToWebview()
-		this.clineMessagesSeq++
-		state.clineMessagesSeq = this.clineMessagesSeq
 		this.postMessageToWebview({ type: "state", state })
 	}
 
 	/**
 	 * Like postStateToWebview but intentionally omits taskHistory.
-	 *
-	 * Rationale:
-	 * - taskHistory can be large and was being resent on every chat message update.
-	 * - The webview maintains taskHistory in-memory and receives updates via
-	 *   `taskHistoryUpdated` / `taskHistoryItemUpdated`.
 	 */
 	async postStateToWebviewWithoutTaskHistory(): Promise<void> {
 		const state = await this.getStateToPostToWebview()
-		this.clineMessagesSeq++
-		state.clineMessagesSeq = this.clineMessagesSeq
 		const { taskHistory: _omit, ...rest } = state
 		this.postMessageToWebview({ type: "state", state: rest })
 	}
 
 	/**
 	 * Like postStateToWebview but intentionally omits both clineMessages and taskHistory.
-	 *
-	 * Rationale:
-	 * - Cloud event handlers (auth, settings, user-info) and mode changes trigger state pushes
-	 *   that have nothing to do with chat messages. Including clineMessages in these pushes
-	 *   creates race conditions where a stale snapshot of clineMessages (captured during async
-	 *   getStateToPostToWebview) overwrites newer messages the task has streamed in the meantime.
-	 * - This method ensures cloud/mode events only push the state fields they actually affect
-	 *   (cloud auth, org settings, profiles, etc.) without interfering with task message streaming.
 	 */
 	async postStateToWebviewWithoutClineMessages(): Promise<void> {
 		const state = await this.getStateToPostToWebview()
@@ -1924,277 +1845,196 @@ export class ClineProvider
 
 	/**
 	 * Merges allowed commands from global state and workspace configuration
-	 * with proper validation and deduplication
+	 * with proper validation and deduplication.
 	 */
-	private mergeAllowedCommands(globalStateCommands?: string[]): string[] {
-		return this.mergeCommandLists("allowedCommands", "allowed", globalStateCommands)
+	private mergeAllowedCommands(globalStateCommands?: string[], workspaceCommands?: string[]): string[] {
+		return this.mergeCommandLists(globalStateCommands, workspaceCommands, "allowed")
 	}
 
 	/**
 	 * Merges denied commands from global state and workspace configuration
-	 * with proper validation and deduplication
+	 * with proper validation and deduplication.
 	 */
-	private mergeDeniedCommands(globalStateCommands?: string[]): string[] {
-		return this.mergeCommandLists("deniedCommands", "denied", globalStateCommands)
+	private mergeDeniedCommands(globalStateCommands?: string[], workspaceCommands?: string[]): string[] {
+		return this.mergeCommandLists(globalStateCommands, workspaceCommands, "denied")
 	}
 
 	/**
 	 * Common utility for merging command lists from global state and workspace configuration.
-	 * Implements the Command Denylist feature's merging strategy with proper validation.
-	 *
-	 * @param configKey - VSCode workspace configuration key
-	 * @param commandType - Type of commands for error logging
-	 * @param globalStateCommands - Commands from global state
-	 * @returns Merged and deduplicated command list
+	 * Global state takes precedence over workspace configuration.
 	 */
 	private mergeCommandLists(
-		configKey: "allowedCommands" | "deniedCommands",
-		commandType: "allowed" | "denied",
 		globalStateCommands?: string[],
+		workspaceCommands?: string[],
+		commandType?: "allowed" | "denied",
 	): string[] {
 		try {
-			// Validate and sanitize global state commands
-			const validGlobalCommands = Array.isArray(globalStateCommands)
-				? globalStateCommands.filter((cmd) => typeof cmd === "string" && cmd.trim().length > 0)
-				: []
-
-			// Get workspace configuration commands
-			const workspaceCommands = vscode.workspace.getConfiguration(Package.name).get<string[]>(configKey) || []
-
-			// Validate and sanitize workspace commands
-			const validWorkspaceCommands = Array.isArray(workspaceCommands)
-				? workspaceCommands.filter((cmd) => typeof cmd === "string" && cmd.trim().length > 0)
-				: []
-
-			// Combine and deduplicate commands
-			// Global state takes precedence over workspace configuration
-			const mergedCommands = [...new Set([...validGlobalCommands, ...validWorkspaceCommands])]
-
-			return mergedCommands
+			const validGlobalCommands = this.normalizeCommandList(globalStateCommands)
+			const validWorkspaceCommands = this.normalizeCommandList(workspaceCommands)
+			return [...new Set([...validGlobalCommands, ...validWorkspaceCommands])]
 		} catch (error) {
-			console.error(`Error merging ${commandType} commands:`, error)
-			// Return empty array as fallback to prevent crashes
+			if (commandType) {
+				console.error(`Error merging ${commandType} commands:`, error)
+			}
 			return []
 		}
 	}
 
+	private normalizeCommandList(commands?: string[]): string[] {
+		if (!Array.isArray(commands) || commands.length === 0) {
+			return []
+		}
+
+		const normalized: string[] = []
+		for (const cmd of commands) {
+			if (typeof cmd === "string") {
+				const trimmed = cmd.trim()
+				if (trimmed.length > 0) normalized.push(trimmed)
+			}
+		}
+		return normalized
+	}
+
 	async getStateToPostToWebview(): Promise<ExtensionState> {
-		const {
-			apiConfiguration,
-			lastShownAnnouncementId,
-			customInstructions,
-			alwaysAllowReadOnly,
-			alwaysAllowReadOnlyOutsideWorkspace,
-			alwaysAllowWrite,
-			alwaysAllowWriteOutsideWorkspace,
-			alwaysAllowWriteProtected,
-			alwaysAllowExecute,
-			allowedCommands,
-			deniedCommands,
-			alwaysAllowMcp,
-			alwaysAllowModeSwitch,
-			alwaysAllowSubtasks,
-			allowedMaxRequests,
-			allowedMaxCost,
-			autoCondenseContext,
-			autoCondenseContextPercent,
-			soundEnabled,
-			ttsEnabled,
-			ttsSpeed,
-			enableCheckpoints,
-			checkpointTimeout,
-			enableWebSearch,
-			enableStreamingToolExecution,
-			webSearchProvider,
-			serpApiEngine,
-			webSearchApiKey,
-			taskHistory,
-			soundVolume,
-			writeDelayMs,
-			requestDelaySeconds,
-			terminalOutputPreviewSize,
-			terminalShellIntegrationTimeout,
-			terminalShellIntegrationDisabled,
-			terminalCommandDelay,
-			terminalPowershellCounter,
-			terminalZshClearEolMark,
-			terminalZshOhMy,
-			terminalZshP10k,
-			terminalZdotdir,
-			mcpEnabled,
-			currentApiConfigName,
-			listApiConfigMeta,
-			pinnedApiConfigs,
-			mode,
-			customModePrompts,
-			customSupportPrompts,
-			enhancementApiConfigId,
-			autoApprovalEnabled,
-			customModes,
-			experiments,
-			maxOpenTabsContext,
-			maxWorkspaceFiles,
-			disabledTools,
-			showRooIgnoredFiles,
-			enableSubfolderRules,
-			language,
-			fontFamily,
-			maxImageFileSize,
-			maxTotalImageSize,
-			historyPreviewCollapsed,
-			reasoningBlockCollapsed,
-			enterBehavior,
-			cloudUserInfo,
-			cloudIsAuthenticated,
-			sharingEnabled,
-			publicSharingEnabled,
-			organizationAllowList,
-			organizationSettingsVersion,
-			customCondensingPrompt,
-			codebaseIndexConfig,
-			codebaseIndexModels,
-			profileThresholds,
-			alwaysAllowFollowupQuestions,
-			followupAutoApproveTimeoutMs,
-			includeDiagnosticMessages,
-			maxDiagnosticMessages,
-			includeTaskHistoryInEnhance,
-			includeCurrentTime,
-			includeCurrentCost,
-			maxGitStatusFiles,
-			taskSyncEnabled,
-			imageGenerationProvider,
-			openRouterImageApiKey,
-			openRouterImageGenerationSelectedModel,
-			lockApiConfigAcrossModes,
-		} = await this.getState()
+		const state = await this.getState()
+		const commandLists = this.getMergedCommandLists(state.allowedCommands, state.deniedCommands)
+		return await this.buildWebviewState(state, commandLists)
+	}
 
+	private getMergedCommandLists(allowedCommands?: string[], deniedCommands?: string[]): { allowedCommands: string[]; deniedCommands: string[] } {
+		const workspaceConfig = vscode.workspace.getConfiguration(Package.name)
+		return {
+			allowedCommands: this.mergeAllowedCommands(allowedCommands, workspaceConfig.get<string[]>("allowedCommands") || []),
+			deniedCommands: this.mergeDeniedCommands(deniedCommands, workspaceConfig.get<string[]>("deniedCommands") || []),
+		}
+	}
+
+	private async buildWebviewState(
+		state: Awaited<ReturnType<ClineProvider["getState"]>>,
+		commandLists: { allowedCommands: string[]; deniedCommands: string[] },
+	): Promise<ExtensionState> {
+		const { allowedCommands, deniedCommands } = commandLists
 		const cloudOrganizations: any[] = []
-
-		const telemetryKey = process.env.POSTHOG_API_KEY
-		const machineId = vscode.env.machineId
-		const mergedAllowedCommands = this.mergeAllowedCommands(allowedCommands)
-		const mergedDeniedCommands = this.mergeDeniedCommands(deniedCommands)
-		const cwd = this.cwd
+		const workspaceConfig = vscode.workspace.getConfiguration(Package.name)
+		const cloudAgentServerUrl = workspaceConfig.get<string>("cloudAgent.serverUrl", "http://120.79.250.232:8765") ?? "http://120.79.250.232:8765"
+		const debug = workspaceConfig.get<boolean>("debug", false)
 		const currentTask = this.getCurrentTask()
 
 		return {
 			version: this.context.extension?.packageJSON?.version ?? "",
-			apiConfiguration,
-			customInstructions,
-			alwaysAllowReadOnly: alwaysAllowReadOnly ?? false,
-			alwaysAllowReadOnlyOutsideWorkspace: alwaysAllowReadOnlyOutsideWorkspace ?? false,
-			alwaysAllowWrite: alwaysAllowWrite ?? false,
-			alwaysAllowWriteOutsideWorkspace: alwaysAllowWriteOutsideWorkspace ?? false,
-			alwaysAllowWriteProtected: alwaysAllowWriteProtected ?? false,
-			alwaysAllowExecute: alwaysAllowExecute ?? false,
-			alwaysAllowMcp: alwaysAllowMcp ?? false,
-			alwaysAllowModeSwitch: alwaysAllowModeSwitch ?? false,
-			alwaysAllowSubtasks: alwaysAllowSubtasks ?? false,
-			allowedMaxRequests,
-			allowedMaxCost,
-			autoCondenseContext: autoCondenseContext ?? true,
-			autoCondenseContextPercent: autoCondenseContextPercent ?? DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT,
+			apiConfiguration: state.apiConfiguration,
+			customInstructions: state.customInstructions,
+			alwaysAllowReadOnly: state.alwaysAllowReadOnly ?? false,
+			alwaysAllowReadOnlyOutsideWorkspace: state.alwaysAllowReadOnlyOutsideWorkspace ?? false,
+			alwaysAllowWrite: state.alwaysAllowWrite ?? false,
+			alwaysAllowWriteOutsideWorkspace: state.alwaysAllowWriteOutsideWorkspace ?? false,
+			alwaysAllowWriteProtected: state.alwaysAllowWriteProtected ?? false,
+			alwaysAllowExecute: state.alwaysAllowExecute ?? false,
+			alwaysAllowMcp: state.alwaysAllowMcp ?? false,
+			alwaysAllowModeSwitch: state.alwaysAllowModeSwitch ?? false,
+			alwaysAllowSubtasks: state.alwaysAllowSubtasks ?? false,
+			allowedMaxRequests: state.allowedMaxRequests,
+			allowedMaxCost: state.allowedMaxCost,
+			autoCondenseContext: state.autoCondenseContext ?? true,
+			autoCondenseContextPercent: state.autoCondenseContextPercent ?? DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT,
 			uriScheme: vscode.env.uriScheme,
 			currentTaskId: currentTask?.taskId,
 			currentTaskItem: currentTask?.taskId ? this.taskHistoryStore.get(currentTask.taskId) : undefined,
 			clineMessages: currentTask?.clineMessages || [],
 			currentTaskTodos: currentTask?.todoList || [],
 			messageQueue: currentTask?.messageQueueService?.messages,
-			taskHistory: this.taskHistoryStoreInitialized
-				? this.taskHistoryStore.getAll().filter((item: HistoryItem) => item.ts && item.task)
-				: [],
-			soundEnabled: soundEnabled ?? false,
-			ttsEnabled: ttsEnabled ?? false,
-			ttsSpeed: ttsSpeed ?? 1.0,
-			enableCheckpoints: enableCheckpoints ?? true,
-			checkpointTimeout: checkpointTimeout ?? DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
-			enableWebSearch: enableWebSearch ?? false,
-			enableStreamingToolExecution: enableStreamingToolExecution ?? true,
-			webSearchProvider: webSearchProvider ?? "baidu-free",
-			serpApiEngine: serpApiEngine ?? "bing",
-			webSearchApiKey: webSearchApiKey ?? "",
-			shouldShowAnnouncement: lastShownAnnouncementId !== this.latestAnnouncementId,
-			allowedCommands: mergedAllowedCommands,
-			deniedCommands: mergedDeniedCommands,
-			soundVolume: soundVolume ?? 0.5,
-			writeDelayMs: writeDelayMs ?? DEFAULT_WRITE_DELAY_MS,
-			requestDelaySeconds: requestDelaySeconds ?? DEFAULT_REQUEST_DELAY_SECONDS,
-			terminalOutputPreviewSize: terminalOutputPreviewSize ?? DEFAULT_TERMINAL_OUTPUT_PREVIEW_SIZE,
-			terminalShellIntegrationTimeout: terminalShellIntegrationTimeout ?? Terminal.defaultShellIntegrationTimeout,
-			terminalShellIntegrationDisabled: terminalShellIntegrationDisabled ?? true,
-			terminalCommandDelay: terminalCommandDelay ?? 0,
-			terminalPowershellCounter: terminalPowershellCounter ?? false,
-			terminalZshClearEolMark: terminalZshClearEolMark ?? true,
-			terminalZshOhMy: terminalZshOhMy ?? false,
-			terminalZshP10k: terminalZshP10k ?? false,
-			terminalZdotdir: terminalZdotdir ?? false,
-			mcpEnabled: mcpEnabled ?? true,
-			currentApiConfigName: currentApiConfigName ?? "default",
-			listApiConfigMeta: listApiConfigMeta ?? [],
-			pinnedApiConfigs: pinnedApiConfigs ?? {},
-			mode: mode ?? defaultModeSlug,
-			customModePrompts: customModePrompts ?? {},
-			customSupportPrompts: customSupportPrompts ?? {},
-			enhancementApiConfigId,
-			autoApprovalEnabled: autoApprovalEnabled ?? false,
-			customModes,
-			experiments: experiments ?? experimentDefault,
+			taskHistory: this.taskHistoryStoreInitialized ? this.taskHistoryStore.getAll().filter((item: HistoryItem) => item.ts && item.task) : [],
+			soundEnabled: state.soundEnabled ?? false,
+			ttsEnabled: state.ttsEnabled ?? false,
+			ttsSpeed: state.ttsSpeed ?? 1.0,
+			enableCheckpoints: state.enableCheckpoints ?? true,
+			checkpointTimeout: state.checkpointTimeout ?? DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
+			enableWebSearch: state.enableWebSearch ?? false,
+			enableStreamingToolExecution: state.enableStreamingToolExecution ?? true,
+			webSearchProvider: state.webSearchProvider ?? "baidu-free",
+			serpApiEngine: state.serpApiEngine ?? "bing",
+			webSearchApiKey: state.webSearchApiKey ?? "",
+			shouldShowAnnouncement: state.lastShownAnnouncementId !== this.latestAnnouncementId,
+			allowedCommands,
+			deniedCommands,
+			soundVolume: state.soundVolume ?? 0.5,
+			writeDelayMs: state.writeDelayMs ?? DEFAULT_WRITE_DELAY_MS,
+			requestDelaySeconds: state.requestDelaySeconds ?? DEFAULT_REQUEST_DELAY_SECONDS,
+			terminalOutputPreviewSize: state.terminalOutputPreviewSize ?? DEFAULT_TERMINAL_OUTPUT_PREVIEW_SIZE,
+			terminalShellIntegrationTimeout: state.terminalShellIntegrationTimeout ?? Terminal.defaultShellIntegrationTimeout,
+			terminalShellIntegrationDisabled: state.terminalShellIntegrationDisabled ?? true,
+			terminalCommandDelay: state.terminalCommandDelay ?? 0,
+			terminalPowershellCounter: state.terminalPowershellCounter ?? false,
+			terminalZshClearEolMark: state.terminalZshClearEolMark ?? true,
+			terminalZshOhMy: state.terminalZshOhMy ?? false,
+			terminalZshP10k: state.terminalZshP10k ?? false,
+			terminalZdotdir: state.terminalZdotdir ?? false,
+			mcpEnabled: state.mcpEnabled ?? true,
+			currentApiConfigName: state.currentApiConfigName ?? "default",
+			listApiConfigMeta: state.listApiConfigMeta ?? [],
+			pinnedApiConfigs: state.pinnedApiConfigs ?? {},
+			mode: state.mode ?? defaultModeSlug,
+			customModePrompts: state.customModePrompts ?? {},
+			customSupportPrompts: state.customSupportPrompts ?? {},
+			enhancementApiConfigId: state.enhancementApiConfigId,
+			autoApprovalEnabled: state.autoApprovalEnabled ?? false,
+			customModes: state.customModes,
+			experiments: state.experiments ?? experimentDefault,
 			mcpServers: this.mcpHub?.getAllServers() ?? [],
-			maxOpenTabsContext: maxOpenTabsContext ?? DEFAULT_MAX_OPEN_TABS_CONTEXT,
-			maxWorkspaceFiles: maxWorkspaceFiles ?? 200,
-			cwd,
-			disabledTools,
-			showRooIgnoredFiles: showRooIgnoredFiles ?? false,
-			enableSubfolderRules: enableSubfolderRules ?? false,
-			language: language ?? formatLanguage(vscode.env.language),
-			fontFamily: fontFamily ?? "serif",
+			maxOpenTabsContext: state.maxOpenTabsContext ?? DEFAULT_MAX_OPEN_TABS_CONTEXT,
+			maxWorkspaceFiles: state.maxWorkspaceFiles ?? 200,
+			cwd: this.cwd,
+			disabledTools: state.disabledTools,
+			showRooIgnoredFiles: state.showRooIgnoredFiles ?? false,
+			enableSubfolderRules: state.enableSubfolderRules ?? false,
+			language: state.language ?? formatLanguage(vscode.env.language),
+			fontFamily: state.fontFamily ?? "serif",
 			renderContext: this.renderContext,
-			maxImageFileSize: maxImageFileSize ?? 5,
-			maxTotalImageSize: maxTotalImageSize ?? 20,
+			maxImageFileSize: state.maxImageFileSize ?? 5,
+			maxTotalImageSize: state.maxTotalImageSize ?? 20,
 			settingsImportedAt: this.settingsImportedAt,
-			historyPreviewCollapsed: historyPreviewCollapsed ?? false,
-			reasoningBlockCollapsed: reasoningBlockCollapsed ?? true,
-			enterBehavior: enterBehavior ?? "send",
-			cloudUserInfo,
-			cloudIsAuthenticated: cloudIsAuthenticated ?? false,
+			historyPreviewCollapsed: state.historyPreviewCollapsed ?? false,
+			reasoningBlockCollapsed: state.reasoningBlockCollapsed ?? true,
+			enterBehavior: state.enterBehavior ?? "send",
+			cloudUserInfo: state.cloudUserInfo,
+			cloudIsAuthenticated: state.cloudIsAuthenticated ?? false,
 			cloudAuthSkipModel: this.context.globalState.get<boolean>("roo-auth-skip-model") ?? false,
 			cloudOrganizations,
-			sharingEnabled: sharingEnabled ?? false,
-			publicSharingEnabled: publicSharingEnabled ?? false,
-			organizationAllowList,
-			organizationSettingsVersion,
-			customCondensingPrompt,
-			codebaseIndexModels: codebaseIndexModels ?? EMBEDDING_MODEL_PROFILES,
+			sharingEnabled: state.sharingEnabled ?? false,
+			publicSharingEnabled: state.publicSharingEnabled ?? false,
+			organizationAllowList: state.organizationAllowList,
+			organizationSettingsVersion: state.organizationSettingsVersion,
+			customCondensingPrompt: state.customCondensingPrompt,
+			codebaseIndexModels: state.codebaseIndexModels ?? EMBEDDING_MODEL_PROFILES,
 			codebaseIndexConfig: {
-				codebaseIndexEnabled: codebaseIndexConfig?.codebaseIndexEnabled ?? false,
-				codebaseIndexQdrantUrl: codebaseIndexConfig?.codebaseIndexQdrantUrl ?? "http://localhost:6333",
-				codebaseIndexEmbedderProvider: codebaseIndexConfig?.codebaseIndexEmbedderProvider ?? "openai",
-				codebaseIndexEmbedderBaseUrl: codebaseIndexConfig?.codebaseIndexEmbedderBaseUrl ?? "",
-				codebaseIndexEmbedderModelId: codebaseIndexConfig?.codebaseIndexEmbedderModelId ?? "",
-				codebaseIndexEmbedderModelDimension: codebaseIndexConfig?.codebaseIndexEmbedderModelDimension ?? 1536,
-				codebaseIndexOpenAiCompatibleBaseUrl: codebaseIndexConfig?.codebaseIndexOpenAiCompatibleBaseUrl,
-				codebaseIndexSearchMaxResults: codebaseIndexConfig?.codebaseIndexSearchMaxResults,
-				codebaseIndexSearchMinScore: codebaseIndexConfig?.codebaseIndexSearchMinScore,
-				codebaseIndexBedrockRegion: codebaseIndexConfig?.codebaseIndexBedrockRegion,
-				codebaseIndexBedrockProfile: codebaseIndexConfig?.codebaseIndexBedrockProfile,
-				codebaseIndexOpenRouterSpecificProvider: codebaseIndexConfig?.codebaseIndexOpenRouterSpecificProvider,
+				codebaseIndexEnabled: state.codebaseIndexConfig?.codebaseIndexEnabled ?? false,
+				codebaseIndexQdrantUrl: state.codebaseIndexConfig?.codebaseIndexQdrantUrl ?? "http://localhost:6333",
+				codebaseIndexEmbedderProvider: state.codebaseIndexConfig?.codebaseIndexEmbedderProvider ?? "openai",
+				codebaseIndexEmbedderBaseUrl: state.codebaseIndexConfig?.codebaseIndexEmbedderBaseUrl ?? "",
+				codebaseIndexEmbedderModelId: state.codebaseIndexConfig?.codebaseIndexEmbedderModelId ?? "",
+				codebaseIndexEmbedderModelDimension: state.codebaseIndexConfig?.codebaseIndexEmbedderModelDimension ?? 1536,
+				codebaseIndexOpenAiCompatibleBaseUrl: state.codebaseIndexConfig?.codebaseIndexOpenAiCompatibleBaseUrl,
+				codebaseIndexSearchMaxResults: state.codebaseIndexConfig?.codebaseIndexSearchMaxResults,
+				codebaseIndexSearchMinScore: state.codebaseIndexConfig?.codebaseIndexSearchMinScore,
+				codebaseIndexBedrockRegion: state.codebaseIndexConfig?.codebaseIndexBedrockRegion,
+				codebaseIndexBedrockProfile: state.codebaseIndexConfig?.codebaseIndexBedrockProfile,
+				codebaseIndexOpenRouterSpecificProvider: state.codebaseIndexConfig?.codebaseIndexOpenRouterSpecificProvider,
 			},
-			profileThresholds: profileThresholds ?? {},
+			profileThresholds: state.profileThresholds ?? {},
 			hasOpenedModeSelector: this.getGlobalState("hasOpenedModeSelector") ?? false,
-			lockApiConfigAcrossModes: lockApiConfigAcrossModes ?? false,
-			alwaysAllowFollowupQuestions: alwaysAllowFollowupQuestions ?? false,
-			followupAutoApproveTimeoutMs: followupAutoApproveTimeoutMs ?? 60000,
-			includeDiagnosticMessages: includeDiagnosticMessages ?? true,
-			maxDiagnosticMessages: maxDiagnosticMessages ?? 50,
-			includeTaskHistoryInEnhance: includeTaskHistoryInEnhance ?? true,
-			includeCurrentTime: includeCurrentTime ?? true,
-			includeCurrentCost: includeCurrentCost ?? true,
-			maxGitStatusFiles: maxGitStatusFiles ?? 0,
-			taskSyncEnabled,
-			imageGenerationProvider,
-			openRouterImageApiKey,
-			openRouterImageGenerationSelectedModel,
+			lockApiConfigAcrossModes: state.lockApiConfigAcrossModes ?? false,
+			alwaysAllowFollowupQuestions: state.alwaysAllowFollowupQuestions ?? false,
+			followupAutoApproveTimeoutMs: state.followupAutoApproveTimeoutMs ?? 60000,
+			includeDiagnosticMessages: state.includeDiagnosticMessages ?? true,
+			maxDiagnosticMessages: state.maxDiagnosticMessages ?? 50,
+			includeTaskHistoryInEnhance: state.includeTaskHistoryInEnhance ?? true,
+			includeCurrentTime: state.includeCurrentTime ?? true,
+			includeCurrentCost: state.includeCurrentCost ?? true,
+			maxGitStatusFiles: state.maxGitStatusFiles ?? 0,
+			taskSyncEnabled: state.taskSyncEnabled,
+			imageGenerationProvider: state.imageGenerationProvider,
+			openRouterImageApiKey: state.openRouterImageApiKey,
+			openRouterImageGenerationSelectedModel: state.openRouterImageGenerationSelectedModel,
 			openAiCodexIsAuthenticated: await (async () => {
 				try {
 					const { openAiCodexOAuthManager } = await import("../../integrations/openai-codex/oauth")
@@ -2203,8 +2043,9 @@ export class ClineProvider
 					return false
 				}
 			})(),
-			cloudAgentServerUrl: vscode.workspace.getConfiguration(Package.name).get<string>("cloudAgent.serverUrl", "http://120.79.250.232:8765") ?? "http://120.79.250.232:8765",
-			debug: vscode.workspace.getConfiguration(Package.name).get<boolean>("debug", false),
+			cloudAgentServerUrl,
+			debug,
+			saveAllBeforeExecuteCommand: workspaceConfig.get<boolean>("saveAllBeforeExecuteCommand", true),
 		}
 	}
 
@@ -2517,8 +2358,16 @@ export class ClineProvider
 		return this.getCurrentTask()?.clineMessages || []
 	}
 
-	public getMcpHub(): McpHub | undefined {
+	public getMcpHub(): IMcpHubService | undefined {
 		return this.mcpHub
+	}
+
+	async onMcpServersUpdated(mcpServers: McpServer[]): Promise<void> {
+		await this.postMessageToWebview({ type: "mcpServers", mcpServers })
+	}
+
+	getExtensionPackageVersion(): string {
+		return this.context.extension.packageJSON.version ?? "1.0.0"
 	}
 
 	public getSkillsManager(): SkillsManager | undefined {
@@ -2707,7 +2556,7 @@ export class ClineProvider
 		}
 
 		const task = new Task({
-			provider: this,
+			host: this,
 			apiConfiguration,
 			enableCheckpoints,
 			checkpointTimeout,

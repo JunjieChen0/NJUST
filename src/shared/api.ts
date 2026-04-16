@@ -11,6 +11,8 @@ import {
 // ApiHandlerOptions
 // Extend ProviderSettings (minus apiProvider) with handler-specific toggles.
 export type ApiHandlerOptions = Omit<ProviderSettings, "apiProvider"> & {
+	/** Injected by {@link createHandler} in api/index (native tool-call parsing). */
+	toolCallParser?: import("../api/interfaces/IToolCallParser").IToolCallParser
 	/**
 	 * When true and using OpenAI Responses API models that support reasoning summaries,
 	 * include reasoning.summary: "auto" so the API returns summaries (we already parse

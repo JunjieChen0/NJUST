@@ -100,45 +100,49 @@ const App = () => {
 
 	const onMessage = useCallback(
 		(e: MessageEvent) => {
-			const message: ExtensionMessage = e.data
+			try {
+				const message: ExtensionMessage = e.data
 
-			if (message.type === "action" && message.action) {
-				if (message.action === "switchTab" && message.tab) {
-					const targetTab = message.tab as Tab
-					switchTab(targetTab)
-					const targetSection = message.values?.section as string | undefined
-					setCurrentSection(targetSection)
-				} else {
-					const newTab = tabsByMessageAction[message.action]
-					const section = message.values?.section as string | undefined
+				if (message.type === "action" && message.action) {
+					if (message.action === "switchTab" && message.tab) {
+						const targetTab = message.tab as Tab
+						switchTab(targetTab)
+						const targetSection = message.values?.section as string | undefined
+						setCurrentSection(targetSection)
+					} else {
+						const newTab = tabsByMessageAction[message.action]
+						const section = message.values?.section as string | undefined
 
-					if (newTab) {
-						switchTab(newTab)
-						setCurrentSection(section)
+						if (newTab) {
+							switchTab(newTab)
+							setCurrentSection(section)
+						}
 					}
 				}
-			}
 
-			if (message.type === "showDeleteMessageDialog" && message.messageTs) {
-				setDeleteMessageDialogState({
-					isOpen: true,
-					messageTs: message.messageTs,
-					hasCheckpoint: message.hasCheckpoint || false,
-				})
-			}
+				if (message.type === "showDeleteMessageDialog" && message.messageTs) {
+					setDeleteMessageDialogState({
+						isOpen: true,
+						messageTs: message.messageTs,
+						hasCheckpoint: message.hasCheckpoint || false,
+					})
+				}
 
-			if (message.type === "showEditMessageDialog" && message.messageTs && message.text) {
-				setEditMessageDialogState({
-					isOpen: true,
-					messageTs: message.messageTs,
-					text: message.text,
-					hasCheckpoint: message.hasCheckpoint || false,
-					images: message.images || [],
-				})
-			}
+				if (message.type === "showEditMessageDialog" && message.messageTs && message.text) {
+					setEditMessageDialogState({
+						isOpen: true,
+						messageTs: message.messageTs,
+						text: message.text,
+						hasCheckpoint: message.hasCheckpoint || false,
+						images: message.images || [],
+					})
+				}
 
-			if (message.type === "acceptInput") {
-				chatViewRef.current?.acceptInput()
+				if (message.type === "acceptInput") {
+					chatViewRef.current?.acceptInput()
+				}
+			} catch (err) {
+				console.error("[webview App] onMessage handler failed:", err)
 			}
 		},
 		[switchTab],

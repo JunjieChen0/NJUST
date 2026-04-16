@@ -183,6 +183,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		suggestion: "检查 import 语句是否正确，确认 cjpm.toml 中是否声明了依赖包",
 		fixDirective:
 			"检查是否缺少 import 语句或拼写错误。如果是标准库符号，添加正确的 import（如 `import std.collection.*`）",
+		diagnosticCodes: ["E0001", "E0002", "E0433"],
 	},
 	{
 		pattern: /(?:type mismatch|incompatible types|类型不匹配)/i,
@@ -190,6 +191,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/class_and_interface/typecast.md", "manual/source_zh_cn/class_and_interface/subtype.md"],
 		suggestion: "检查赋值和参数的类型是否一致，必要时使用类型转换或泛型约束",
 		fixDirective: "使类型一致：修改变量类型、添加显式类型转换、或调整函数返回类型",
+		diagnosticCodes: ["E0308", "E0309"],
 	},
 	{
 		pattern: /(?:cyclic dependency|循环依赖)/i,
@@ -197,6 +199,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/package/package_overview.md"],
 		suggestion: "使用 `cjpm check` 查看依赖关系图，将共享类型抽取到独立包中打破循环",
 		fixDirective: "将共享类型抽取到独立包中以打破循环依赖",
+		diagnosticCodes: ["E0391"],
 	},
 	{
 		pattern: /(?:immutable|cannot assign|let.*reassign|不可变)/i,
@@ -204,6 +207,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/basic_programming_concepts/expression.md"],
 		suggestion: "将 `let` 改为 `var` 声明，或重新设计为不可变模式",
 		fixDirective: "将 `let` 改为 `var`，或重构为不需要重新赋值的模式",
+		diagnosticCodes: ["E0384"],
 	},
 	{
 		pattern: /(?:mut function|mut.*let|let.*mut)/i,
@@ -211,6 +215,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/struct/mut.md"],
 		suggestion: "let 绑定的 struct 变量不能调用 mut 函数，改用 var 声明",
 		fixDirective: "将 `let` 改为 `var` 以允许调用 mut 方法",
+		diagnosticCodes: ["E0596"],
 	},
 	{
 		pattern: /(?:recursive struct|recursive value type|递归结构体)/i,
@@ -218,6 +223,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/struct/define_struct.md", "manual/source_zh_cn/class_and_interface/class.md"],
 		suggestion: "struct 是值类型不能自引用，改用 class（引用类型）或 Option 包装",
 		fixDirective: "将 struct 改为 class 以支持自引用，或用 ?T (Option) 包装",
+		diagnosticCodes: ["E0072"],
 	},
 	{
 		pattern: /(?:overflow|arithmetic.*overflow)/i,
@@ -225,6 +231,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/error_handle/common_runtime_exceptions.md"],
 		suggestion: "使用 std.overflow 包中的溢出安全运算，或检查边界条件",
 		fixDirective: "使用 std.overflow 安全运算或添加边界检查",
+		diagnosticCodes: ["E0080"],
 	},
 	{
 		pattern: /(?:NoneValueException|unwrap.*None|getOrThrow)/i,
@@ -232,6 +239,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/error_handle/use_option.md", "manual/source_zh_cn/enum_and_pattern_match/option_type.md"],
 		suggestion: "使用 `??` 合并运算符提供默认值，或用 match/if-let 安全解包 Option",
 		fixDirective: "用 ?? 提供默认值，或用 match/if-let 安全解包",
+		diagnosticCodes: ["E0505"],
 	},
 	{
 		pattern: /(?:not implement|missing implementation|未实现接口)/i,
@@ -240,6 +248,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		suggestion: "检查类是否完整实现了所有接口方法，注意方法签名必须完全匹配",
 		fixDirective: "实现缺失的接口方法，确保方法签名完全匹配",
 		priority: 40,
+		diagnosticCodes: ["E0046"],
 	},
 	{
 		pattern: /interpolation|string.*\$|插值|string template/i,
@@ -248,6 +257,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		suggestion: "字符串插值需使用 ${expr}，花括号内只能是表达式",
 		fixDirective: "使用 ${expr} 形式插值，花括号内仅放表达式",
 		priority: 55,
+		diagnosticCodes: ["E0750"],
 	},
 	{
 		pattern: /lambda.*return|closure.*type|cannot infer.*lambda|闭包.*类型/i,
@@ -256,6 +266,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		suggestion: "复杂 Lambda 无法推断时需要显式标注参数和返回类型",
 		fixDirective: "显式标注 Lambda 参数与返回类型",
 		priority: 52,
+		diagnosticCodes: ["E0282", "E0283"],
 	},
 	{
 		pattern: /cannot convert|conversion.*failed|无法转换|as.*failed/i,
@@ -264,6 +275,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		suggestion: "区分 as 安全转换与显式构造/parse，必要时检查类型边界",
 		fixDirective: "区分 as 安全转换与显式构造/parse；必要时显式构造",
 		priority: 48,
+		diagnosticCodes: ["E0605", "E0606"],
 	},
 	{
 		pattern: /unused\s+(?:variable|import|parameter|function)/i,
@@ -272,6 +284,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		suggestion: "移除未使用的变量/导入/参数/函数，或用 `_` 前缀标记",
 		fixDirective: "移除未使用的变量/导入/参数/函数，或用 `_` 前缀标记",
 		priority: 10,
+		diagnosticCodes: ["W0001", "W0611"],
 	},
 	{
 		pattern: /(?:access.*denied|private|protected|not accessible|访问权限)/i,
@@ -280,6 +293,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		suggestion: "检查成员的访问修饰符（public/protected/private/internal），跨包访问需要 public",
 		fixDirective: "检查访问修饰符，跨包使用需要 `public`",
 		priority: 28,
+		diagnosticCodes: ["E0603"],
 	},
 	{
 		pattern: /(?:missing return|no return|缺少返回|return expected)/i,
@@ -287,6 +301,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/function/define_functions.md"],
 		suggestion: "非 Unit 返回类型的函数所有分支必须有 return 语句，或将最后一个表达式作为返回值",
 		fixDirective: "确保函数所有分支都有返回值，或在函数末尾添加返回语句",
+		diagnosticCodes: ["E0317"],
 	},
 	{
 		pattern: /(?:wrong number.*argument|too (?:many|few) argument|参数数量|arity)/i,
@@ -294,6 +309,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/function/call_functions.md"],
 		suggestion: "检查函数调用的参数数量是否与声明匹配，注意命名参数需要用 `name:` 语法",
 		fixDirective: "调整函数调用的参数数量或顺序以匹配函数声明",
+		diagnosticCodes: ["E0061"],
 	},
 	{
 		pattern: /(?:missing import|import.*not found|未导入)/i,
@@ -301,6 +317,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/package/import.md"],
 		suggestion: "添加缺失的 import 语句，如 `import std.collection.*` 或 `import std.io.*`",
 		fixDirective: "添加缺失的 import 语句（如 import std.collection.*）",
+		diagnosticCodes: ["E0432"],
 	},
 	{
 		pattern: /(?:non-exhaustive|not exhaustive|未穷尽|incomplete match)/i,
@@ -308,6 +325,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/enum_and_pattern_match/match.md"],
 		suggestion: "match 表达式必须覆盖所有可能的值，添加缺失的 case 分支或使用 `case _ =>` 通配",
 		fixDirective: "为 match 表达式添加缺失的分支或 `case _ =>` 通配分支",
+		diagnosticCodes: ["E0004"],
 	},
 	{
 		pattern: /(?:constraint.*not satisfied|does not conform|泛型约束|type parameter.*bound)/i,
@@ -316,6 +334,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		suggestion: "检查类型参数是否满足 where 子句中的约束（如 `<: Comparable<T>`），必要时添加约束或换用其他类型",
 		fixDirective: "确保类型参数满足 where 子句中的约束",
 		priority: 45,
+		diagnosticCodes: ["E0277"],
 	},
 	{
 		pattern: /(?:constructor.*argument|init.*parameter|构造.*参数)/i,
@@ -323,6 +342,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/class_and_interface/class.md", "manual/source_zh_cn/struct/create_instance.md"],
 		suggestion: "检查构造函数 init 的参数列表与调用处是否匹配",
 		fixDirective: "核对 init 声明的参数列表与调用处的参数类型和数量",
+		diagnosticCodes: ["E0063"],
 	},
 	{
 		pattern: /(?:duplicate.*definition|redefinition|already defined|重复定义)/i,
@@ -387,6 +407,62 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		docPaths: ["manual/source_zh_cn/basic_programming_concepts/expression.md"],
 		suggestion: "检查括号/花括号是否匹配，语句是否完整。注意仓颉不使用分号结尾（除非同一行多条语句）",
 		fixDirective: "检查括号/花括号匹配，确保语句完整。注意仓颉不使用分号结尾",
+	},
+	{
+		pattern: /(?:invalid.*literal.*suffix|literal.*suffix|unknown.*suffix|字面量.*后缀)/i,
+		category: "字面量后缀错误",
+		docPaths: ["manual/source_zh_cn/basic_programming_concepts/literal.md"],
+		suggestion: "仓颉整数字面量默认为 Int64，浮点为 Float64。不支持自定义字面量后缀。需要其他类型时使用显式构造如 UInt8(42)。",
+		fixDirective: "移除无效的字面量后缀，使用显式类型构造（如 UInt8(42)、Float32(3.14)）",
+		priority: 55,
+	},
+	{
+		pattern: /(?:named.*argument.*required|missing.*argument.*name|positional.*named|命名参数|参数名.*缺失)/i,
+		category: "命名参数遗漏",
+		docPaths: ["manual/source_zh_cn/function/call_functions.md"],
+		suggestion: "某些函数要求使用命名参数（name: value 语法）。检查函数声明确认参数是否需要命名。",
+		fixDirective: "使用命名参数语法 func(paramName: value)，检查函数声明确认参数名",
+		priority: 50,
+	},
+	{
+		pattern: /(?:extend.*visibility|extend.*access|extend.*private|extend.*public|扩展.*可见性|extend.*scope)/i,
+		category: "extend 可见性错误",
+		docPaths: ["manual/source_zh_cn/extension/access_rules.md"],
+		suggestion: "extend 中的方法可见性不能超过被扩展类型本身的可见性。跨包 extend 只能添加 public 方法。",
+		fixDirective: "检查 extend 成员可见性不超过原类型；跨包 extend 只能添加 public 方法",
+		priority: 55,
+	},
+	{
+		pattern: /(?:heterogeneous.*array|mixed.*type.*array|array.*element.*type|数组.*混合.*类型|元素类型不一致)/i,
+		category: "数组混合类型",
+		docPaths: ["manual/source_zh_cn/basic_programming_concepts/expression.md"],
+		suggestion: "仓颉数组要求所有元素同类型。混合类型需使用 enum 或 interface 统一。Array<Any> 不安全，避免使用。",
+		fixDirective: "确保数组元素类型一致，或定义枚举/接口统一类型",
+		priority: 45,
+	},
+	{
+		pattern: /(?:expected.*expression|expression.*expected|expected.*type|type.*expected)/i,
+		category: "缺少表达式或类型",
+		docPaths: ["manual/source_zh_cn/basic_programming_concepts/expression.md"],
+		suggestion: "缺少表达式或类型声明。检查赋值右侧、函数参数或返回类型是否完整。",
+		fixDirective: "补全缺失的表达式或类型声明",
+		priority: 20,
+	},
+	{
+		pattern: /(?:abstract.*instantiate|cannot.*create.*abstract|抽象.*实例化)/i,
+		category: "抽象类实例化",
+		docPaths: ["manual/source_zh_cn/class_and_interface/class.md"],
+		suggestion: "抽象类不能直接实例化。需要创建具体子类或使用工厂方法。",
+		fixDirective: "创建具体子类代替直接实例化抽象类",
+		priority: 45,
+	},
+	{
+		pattern: /(?:expected.*\bUnit\b|return.*in.*Unit|Unit.*return|should.*return.*nothing)/i,
+		category: "Unit 返回值错误",
+		docPaths: ["manual/source_zh_cn/function/define_functions.md"],
+		suggestion: "Unit 返回类型的函数不应有 return 表达式（或写 return 不带值）。如需返回值请修改返回类型声明。",
+		fixDirective: "移除 return 表达式，或修改函数返回类型",
+		priority: 30,
 	},
 ]
 

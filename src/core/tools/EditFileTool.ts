@@ -16,6 +16,12 @@ import { sanitizeUnifiedDiff, computeDiffStats } from "../diff/stats"
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks, type ValidationResult } from "./BaseTool"
+import {
+	cangjiePreflightCheck,
+	buildSearchGateWarning,
+	CRITICAL_SIGNATURE_MODULES,
+	resolveRootPackageName,
+} from "./cangjiePreflightCheck"
 
 interface EditFileParams {
 	file_path: string
@@ -198,6 +204,10 @@ function countRegexMatches(content: string, regex: RegExp): number {
 export class EditFileTool extends BaseTool<"edit_file"> {
 	readonly name = "edit_file" as const
 	override readonly requiresCheckpoint = true
+
+	override interruptBehavior(): "cancel" | "block" {
+		return "block"
+	}
 
 	private didSendPartialToolAsk = false
 	private partialToolAskRelPath: string | undefined
@@ -450,6 +460,39 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 			task.consecutiveMistakeCount = 0
 			task.consecutiveMistakeCountForEditFile.delete(relPath)
 
+			// Cangjie preflight check for .cj files (only in Cangjie mode)
+			let cangjiePostWriteWarnings = ""
+			if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+				const rootPkg = await resolveRootPackageName(task.cwd)
+				const preflight = cangjiePreflightCheck(newContent, relPath, task.cwd, rootPkg)
+				if (!preflight.pass) {
+					task.consecutiveMistakeCount++
+					task.didToolFailInCurrentTurn = true
+					const errorMsg =
+						`仓颉代码预检失败，编辑未应用：\n` +
+						preflight.errors.map((e) => `- ${e}`).join("\n") +
+						`\n\n请修正以上错误后重试。`
+					await finalizePartialToolAskIfNeeded(relPath)
+					task.recordToolError("edit_file", errorMsg)
+					pushToolResult(formatResponse.toolError(errorMsg))
+					return
+				}
+				if (preflight.warnings.length > 0) {
+					cangjiePostWriteWarnings =
+						`\n\n<cangjie_preflight_warnings>\n` +
+						preflight.warnings.map((w) => `- ${w}`).join("\n") +
+						`\n</cangjie_preflight_warnings>`
+				}
+				const searchGate = buildSearchGateWarning(
+					newContent,
+					task.cangjieSearchHistory ?? new Set(),
+					CRITICAL_SIGNATURE_MODULES,
+				)
+				if (searchGate) {
+					cangjiePostWriteWarnings += searchGate
+				}
+			}
+
 			// Initialize diff view
 			task.diffViewProvider.editType = isNewFile ? "create" : "modify"
 			task.diffViewProvider.originalContent = currentContent || ""
@@ -539,7 +582,7 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 				!isNewFile && expected_replacements > 1 ? ` (${expected_replacements} replacements)` : ""
 			const message = await task.diffViewProvider.pushToolWriteResult(task, task.cwd, isNewFile)
 
-			pushToolResult(message + replacementInfo)
+			pushToolResult(message + replacementInfo + cangjiePostWriteWarnings)
 
 			// Record successful tool usage and cleanup
 			task.recordToolUsage("edit_file")

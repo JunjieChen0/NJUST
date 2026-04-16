@@ -1,7 +1,11 @@
 import { ToolDependencyGraph } from "./ToolDependencyGraph"
+import type { AdaptiveConcurrencyController } from "./AdaptiveConcurrencyController"
+import type { ToolCategory, ToolExecutionScheduler } from "../task/ToolExecutionOrchestrator"
 
 export type ConcurrentToolExecutorOptions = {
 	maxConcurrency?: number
+	concurrencyController?: AdaptiveConcurrencyController
+	scheduler?: ToolExecutionScheduler
 }
 
 export type ConcurrentRunContext = {
@@ -12,131 +16,120 @@ export type ConcurrentRunContext = {
 export type AbortStrategy = "failFast" | "continueOnError" | "transitiveAbort"
 
 export type ConcurrentRunOptions = {
-	/** Abort sibling workers when first task fails */
 	failFast?: boolean
-	/** Abort strategy for concurrent execution. Takes precedence over failFast when set. */
 	abortStrategy?: AbortStrategy
-	/**
-	 * Dependency graph for transitiveAbort strategy.
-	 * When a tool fails, only its transitive dependents are aborted.
-	 * If not provided, transitiveAbort falls back to failFast behavior.
-	 */
 	dependencyGraph?: ToolDependencyGraph
-	/**
-	 * Map from item index → tool name, used by transitiveAbort to look up
-	 * dependencies when a task fails.
-	 */
 	itemToolNames?: Map<number, string>
+	itemCategories?: Map<number, ToolCategory>
 }
 
 const DEFAULT_MAX_CONCURRENCY = 10
 
 export class ConcurrentToolExecutor {
 	private readonly maxConcurrency: number
+	private readonly concurrencyController?: AdaptiveConcurrencyController
+	private readonly scheduler?: ToolExecutionScheduler
 
 	constructor(opts?: ConcurrentToolExecutorOptions) {
 		this.maxConcurrency = Math.max(1, opts?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY)
+		this.concurrencyController = opts?.concurrencyController
+		this.scheduler = opts?.scheduler
 	}
 
-	/**
-	 * Resolve the effective abort-on-error behavior from the run options.
-	 * `abortStrategy` takes precedence; `failFast` is used as a backward-compat fallback.
-	 */
-	private resolveAbortOnError(opts?: ConcurrentRunOptions): {
-		shouldAbortOnError: boolean
-		continueOnError: boolean
-		useTransitiveAbort: boolean
-	} {
+	private resolveAbortOnError(opts?: ConcurrentRunOptions) {
 		const strategy = opts?.abortStrategy
-		if (strategy === "continueOnError") {
-			return { shouldAbortOnError: false, continueOnError: true, useTransitiveAbort: false }
-		}
+		if (strategy === "continueOnError") return { shouldAbortOnError: false, continueOnError: true, useTransitiveAbort: false }
 		if (strategy === "transitiveAbort") {
-			// transitiveAbort: selective abort based on dependency graph
-			// Falls back to failFast if no dependency graph is provided
-			const hasGraph = opts?.dependencyGraph && !opts.dependencyGraph.isEmpty()
-			return {
-				shouldAbortOnError: !hasGraph, // failFast fallback if no graph
-				continueOnError: false,
-				useTransitiveAbort: !!hasGraph,
-			}
+			const hasGraph = !!opts?.dependencyGraph && !opts.dependencyGraph.isEmpty()
+			return { shouldAbortOnError: !hasGraph, continueOnError: false, useTransitiveAbort: hasGraph }
 		}
-		if (strategy === "failFast") {
-			return { shouldAbortOnError: true, continueOnError: false, useTransitiveAbort: false }
-		}
-		// Fallback to legacy failFast boolean
-		const failFast = opts?.failFast === true
-		return { shouldAbortOnError: failFast, continueOnError: false, useTransitiveAbort: false }
+		if (strategy === "failFast") return { shouldAbortOnError: true, continueOnError: false, useTransitiveAbort: false }
+		return { shouldAbortOnError: opts?.failFast === true, continueOnError: false, useTransitiveAbort: false }
 	}
 
-	async run<T>(
-		items: T[],
-		fn: (item: T, index: number, ctx: ConcurrentRunContext) => Promise<void>,
-		runOpts?: ConcurrentRunOptions,
-	): Promise<void> {
+	async run<T>(items: T[], fn: (item: T, index: number, ctx: ConcurrentRunContext) => Promise<void>, runOpts?: ConcurrentRunOptions): Promise<void> {
 		if (items.length === 0) return
-		const workers = Math.min(this.maxConcurrency, items.length)
+		const concurrencyLimit = this.concurrencyController?.getEffectiveMaxConcurrency() ?? this.maxConcurrency
+		const workerCount = Math.max(1, Math.min(this.maxConcurrency, concurrencyLimit, items.length))
 		let cursor = 0
 		const errors: { index: number; error: unknown }[] = []
 		const siblingAbortController = new AbortController()
 		const { shouldAbortOnError, continueOnError, useTransitiveAbort } = this.resolveAbortOnError(runOpts)
-
-		// For transitiveAbort: track which specific items should be skipped
 		const abortedIndices = new Set<number>()
+		const itemToolNames = runOpts?.itemToolNames
+		const itemCategories = runOpts?.itemCategories
+		const dependencyGraph = runOpts?.dependencyGraph
+		const workerTasks = new Array<Promise<void>>(workerCount)
+		const itemIndexByToolName = new Map<string, number>()
 
-		await Promise.allSettled(
-			Array.from({ length: workers }).map(async () => {
+		if (useTransitiveAbort && itemToolNames) {
+			for (const [itemIdx, toolName] of itemToolNames.entries()) {
+				if (!itemIndexByToolName.has(toolName)) {
+					itemIndexByToolName.set(toolName, itemIdx)
+				}
+			}
+		}
+
+		const recordDependencyAbort = (failedIndex: number): void => {
+			if (!useTransitiveAbort || !dependencyGraph || !itemToolNames) return
+			const failedToolName = itemToolNames.get(failedIndex)
+			if (!failedToolName) return
+			const dependents = dependencyGraph.getTransitiveDependents(failedToolName)
+			for (const dependentToolName of dependents) {
+				const dependentIndex = itemIndexByToolName.get(dependentToolName)
+				if (dependentIndex !== undefined) {
+					abortedIndices.add(dependentIndex)
+				}
+			}
+		}
+
+		const runItem = async (idx: number): Promise<void> => {
+			if (useTransitiveAbort && abortedIndices.has(idx)) {
+				errors.push({ index: idx, error: new Error("Skipped: dependency failed (transitive abort)") })
+				return
+			}
+
+			const category = itemCategories?.get(idx)
+			if (category && this.scheduler) await this.scheduler.acquire(category)
+			if (category && this.concurrencyController) await this.concurrencyController.acquire(category)
+
+			try {
+				await fn(items[idx], idx, { siblingAbortController, signal: siblingAbortController.signal })
+			} catch (err) {
+				errors.push({ index: idx, error: err })
+				recordDependencyAbort(idx)
+				if (shouldAbortOnError && !siblingAbortController.signal.aborted) {
+					siblingAbortController.abort(err)
+				}
+			} finally {
+				if (category && this.concurrencyController) this.concurrencyController.release(category)
+				if (category && this.scheduler) this.scheduler.release(category)
+			}
+		}
+
+		const nextIndex = (): number => {
+			const idx = cursor
+			cursor += 1
+			return idx
+		}
+
+		for (let workerIndex = 0; workerIndex < workerCount; workerIndex++) {
+			workerTasks[workerIndex] = (async () => {
 				while (true) {
 					if (siblingAbortController.signal.aborted && shouldAbortOnError) return
-					const idx = cursor++
+					const idx = nextIndex()
 					if (idx >= items.length) return
-
-					// TransitiveAbort: skip items whose dependencies have failed
-					if (useTransitiveAbort && abortedIndices.has(idx)) {
-						errors.push({
-							index: idx,
-							error: new Error(`Skipped: dependency failed (transitive abort)`),
-						})
-						continue
-					}
-
-					try {
-						await fn(items[idx], idx, {
-							siblingAbortController,
-							signal: siblingAbortController.signal,
-						})
-					} catch (err) {
-						errors.push({ index: idx, error: err })
-
-						if (useTransitiveAbort && runOpts?.dependencyGraph && runOpts?.itemToolNames) {
-							// Mark transitive dependents for abort
-							const failedToolName = runOpts.itemToolNames.get(idx)
-							if (failedToolName) {
-								const dependents = runOpts.dependencyGraph.getTransitiveDependents(failedToolName)
-								// Find indices of dependent tools
-								for (const [itemIdx, toolName] of runOpts.itemToolNames.entries()) {
-									if (dependents.has(toolName)) {
-										abortedIndices.add(itemIdx)
-									}
-								}
-							}
-						} else if (shouldAbortOnError && !siblingAbortController.signal.aborted) {
-							siblingAbortController.abort(err)
-						}
-						// continueOnError: just collect the error and keep going
-					}
+					await runItem(idx)
 				}
-			}),
-		)
+			})()
+		}
+
+		await Promise.all(workerTasks)
+
 		if (errors.length > 0) {
-			const messages = errors.map(
-				(e) => `[item ${e.index}] ${e.error instanceof Error ? e.error.message : String(e.error)}`,
-			)
+			const messages = errors.map((e) => `[item ${e.index}] ${e.error instanceof Error ? e.error.message : String(e.error)}`)
 			if (continueOnError) {
-				// In continueOnError mode, still throw but include all collected errors
-				throw new Error(
-					`ConcurrentToolExecutor (continueOnError): ${errors.length} task(s) failed:\n${messages.join("\n")}`,
-				)
+				throw new Error(`ConcurrentToolExecutor (continueOnError): ${errors.length} task(s) failed:\n${messages.join("\n")}`)
 			}
 			throw new Error(`ConcurrentToolExecutor: ${errors.length} task(s) failed:\n${messages.join("\n")}`)
 		}

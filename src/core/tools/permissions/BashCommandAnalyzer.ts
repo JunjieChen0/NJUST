@@ -322,17 +322,16 @@ export class StaticPatternClassifier implements ClassifierStrategy {
 	readonly name = "static-pattern"
 	readonly confidence = "high" as const
 
-	async classify(
+	classifySync(
 		toolName: string,
 		input: Record<string, unknown>,
 		_context: ClassifierContext,
-	): Promise<ClassifyResult> {
-		// Only analyze execute_command with a string command
+	): ClassifyResult {
 		if (toolName !== "execute_command" || typeof input.command !== "string") {
 			return {
 				action: "allow",
 				reason: "Not a bash command — no pattern analysis needed",
-				confidence: 0.3, // Low confidence = let other classifiers or rules decide
+				confidence: 0.3,
 			}
 		}
 
@@ -340,9 +339,8 @@ export class StaticPatternClassifier implements ClassifierStrategy {
 
 		return {
 			action: riskToAction(analysis.riskLevel),
-			reason: analysis.reasons.length > 0
-				? analysis.reasons.join("; ")
-				: "No security risks detected",
+			reason:
+				analysis.reasons.length > 0 ? analysis.reasons.join("; ") : "No security risks detected",
 			confidence: riskToConfidence(analysis.riskLevel),
 			metadata: {
 				riskLevel: analysis.riskLevel,
@@ -350,5 +348,13 @@ export class StaticPatternClassifier implements ClassifierStrategy {
 				segments: analysis.segments?.length,
 			},
 		}
+	}
+
+	async classify(
+		toolName: string,
+		input: Record<string, unknown>,
+		context: ClassifierContext,
+	): Promise<ClassifyResult> {
+		return this.classifySync(toolName, input, context)
 	}
 }

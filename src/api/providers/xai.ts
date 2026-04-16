@@ -4,7 +4,6 @@ import OpenAI from "openai"
 import { type XAIModelId, xaiDefaultModelId, xaiModels } from "@njust-ai-cj/types"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 
-import { NativeToolCallParser } from "../../core/assistant-message/NativeToolCallParser"
 import type { ApiHandlerOptions } from "../../shared/api"
 
 import { ApiStream } from "../transform/stream"
@@ -74,7 +73,7 @@ export class XAIHandler extends BaseProvider implements SingleCompletionHandler 
 			...(reasoning && reasoning),
 			tools: this.convertToolsForOpenAI(metadata?.tools),
 			tool_choice: metadata?.tool_choice,
-			parallel_tool_calls: metadata?.parallelToolCalls ?? true,
+			parallel_tool_calls: metadata?.parallelToolCalls ?? false,
 		}
 
 		let stream
@@ -118,7 +117,7 @@ export class XAIHandler extends BaseProvider implements SingleCompletionHandler 
 			// Process finish_reason to emit tool_call_end events
 			// This ensures tool calls are finalized even if the stream doesn't properly close
 			if (finishReason) {
-				const endEvents = NativeToolCallParser.processFinishReason(finishReason)
+				const endEvents = this.options.toolCallParser!.processFinishReason(finishReason)
 				for (const event of endEvents) {
 					yield event
 				}

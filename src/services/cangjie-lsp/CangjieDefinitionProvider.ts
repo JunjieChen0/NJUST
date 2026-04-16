@@ -20,7 +20,7 @@ export class CangjieDefinitionProvider implements vscode.DefinitionProvider {
 		const word = document.getText(wordRange)
 		if (!word || word.length < 2) return undefined
 
-		const defs = this.index.findDefinitions(word)
+		const defs = this.index.findDefinitions(word, document.uri)
 		if (defs.length === 0) return undefined
 
 		return defs.map((d) => new vscode.Location(

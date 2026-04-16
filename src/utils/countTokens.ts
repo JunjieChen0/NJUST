@@ -10,10 +10,31 @@ export type CountTokensOptions = {
 	useWorker?: boolean
 }
 
+export interface TokenCountResult {
+	total: number
+	input?: number
+	output?: number
+	cacheRead?: number
+	cacheCreation?: number
+	strategy: "native" | "tiktoken" | "estimated"
+}
+
 export async function countTokens(
 	content: Anthropic.Messages.ContentBlockParam[],
 	{ useWorker = true }: CountTokensOptions = {},
 ): Promise<number> {
+	const result = await countTokensDetailed(content, { useWorker })
+	return result.total
+}
+
+export async function countTokensDetailed(
+	content: Anthropic.Messages.ContentBlockParam[],
+	{ useWorker = true }: CountTokensOptions = {},
+): Promise<TokenCountResult> {
+	if (content.length === 0) {
+		return { total: 0, strategy: "tiktoken" }
+	}
+
 	// Lazily create the worker pool if it doesn't exist.
 	if (useWorker && typeof pool === "undefined") {
 		pool = workerpool.pool(__dirname + "/workers/countTokens.js", {
@@ -25,7 +46,7 @@ export async function countTokens(
 	// If the worker pool doesn't exist or the caller doesn't want to use it
 	// then, use the non-worker implementation.
 	if (!useWorker || !pool) {
-		return tiktoken(content)
+		return { total: await tiktoken(content), strategy: "tiktoken" }
 	}
 
 	try {
@@ -36,10 +57,10 @@ export async function countTokens(
 			throw new Error(result.error)
 		}
 
-		return result.count
+		return { total: result.count, strategy: "tiktoken" }
 	} catch (error) {
 		pool = null
 		console.error(error)
-		return tiktoken(content)
+		return { total: await tiktoken(content), strategy: "tiktoken" }
 	}
 }

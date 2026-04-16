@@ -4,6 +4,16 @@ import { recordSecurityMetric } from "../../security/metrics"
 import { BashCommandAnalyzer, StaticPatternClassifier, type RiskLevel } from "./BashCommandAnalyzer"
 import type { ClassifierStrategy, ClassifierContext, ClassifyResult, ClassifierChainConfig } from "./ClassifierStrategy"
 
+function summarizeParamsForAudit(toolName: string, params: Record<string, unknown>): string {
+	try {
+		const s = JSON.stringify(params)
+		const body = s.length > 500 ? s.slice(0, 500) + "…" : s
+		return `${toolName}: ${body}`
+	} catch {
+		return `${toolName}: [unserializable params]`
+	}
+}
+
 /**
  * Permission mode controls top-level behavior before rule evaluation.
  *
@@ -79,6 +89,19 @@ function matchToolPattern(pattern: string, toolName: string): boolean {
  *  - Denial tracking with auto-downgrade (configurable threshold)
  *  - Extended rule sources (policySettings for organization-level policies)
  */
+/**
+ * Tools that always require user confirmation even in bypass mode.
+ * These can cause irreversible damage to the workspace or system.
+ */
+const BYPASS_HARDENED_TOOLS = new Set([
+	"execute_command",
+	"write_to_file",
+	"apply_diff",
+	"delete_file",
+	"insert_content",
+	"search_and_replace",
+])
+
 export class PermissionRuleEngine {
 	private rules: PermissionRule[] = []
 	private mode: PermissionMode = "default"
@@ -233,8 +256,21 @@ export class PermissionRuleEngine {
 	evaluate(toolName: string, params: Record<string, unknown>, toolMeta: ToolMetadata): PermissionAction {
 		// Mode short-circuits
 		switch (this.mode) {
-			case "bypass":
+			case "bypass": {
+				const audit = summarizeParamsForAudit(toolName, params)
+				if (toolMeta.isDestructive || BYPASS_HARDENED_TOOLS.has(toolName)) {
+					console.warn(
+						`[Security] Permission mode is "bypass" but tool=${toolName} is hardened: requiring confirmation. params=${audit}`,
+					)
+					recordSecurityMetric("permission_bypass_hardened_ask", { tool: toolName, paramSummary: audit })
+					return "ask"
+				}
+				console.warn(
+					`[Security] Permission mode is "bypass": auto-allowing tool=${toolName} (all permission checks skipped). params=${audit}`,
+				)
+				recordSecurityMetric("permission_bypass_allow", { tool: toolName, paramSummary: audit })
 				return "allow"
+			}
 			case "ask":
 				return "ask"
 			case "auto":
@@ -354,7 +390,15 @@ export class PermissionRuleEngine {
 		toolMeta: ToolMetadata,
 	): PermissionAction | null {
 		switch (this.mode) {
-			case "bypass": return "allow"
+			case "bypass": {
+				const audit = summarizeParamsForAudit(toolName, params)
+				if (toolMeta.isDestructive || BYPASS_HARDENED_TOOLS.has(toolName)) {
+					recordSecurityMetric("permission_bypass_hardened_ask", { tool: toolName, paramSummary: audit })
+					return "ask"
+				}
+				recordSecurityMetric("permission_bypass_allow", { tool: toolName, paramSummary: audit })
+				return "allow"
+			}
 			case "ask": return "ask"
 			case "auto": return toolMeta.isReadOnly ? "allow" : "ask"
 			case "default": break
@@ -395,7 +439,8 @@ export class PermissionRuleEngine {
 
 	/**
 	 * Run classifier chain synchronously (for backward-compat with sync evaluate()).
-	 * Only works reliably with classifiers that resolve immediately (like StaticPatternClassifier).
+	 * Uses classifier.classifySync when implemented (e.g. StaticPatternClassifier);
+	 * async-only classifiers are skipped here — use evaluateAsync() for those.
 	 */
 	private runClassifierChainSync(
 		toolName: string,
@@ -414,10 +459,14 @@ export class PermissionRuleEngine {
 			if (!enabledClassifiers.includes(classifier.name)) continue
 
 			try {
-				// StaticPatternClassifier's async classify() resolves synchronously
-				// because it has no I/O. We exploit this with a sync extraction pattern.
-				let result: ClassifyResult | undefined
-				classifier.classify(toolName, params, context).then((r) => { result = r })
+				if (typeof classifier.classifySync !== "function") {
+					console.warn(
+						`[Permission] classifier ${classifier.name} has no classifySync — skipped in sync path. Use evaluateAsync().`,
+					)
+					continue
+				}
+
+				const result = classifier.classifySync(toolName, params, context)
 
 				if (result && result.confidence >= minConfidenceThreshold) {
 					if (result.action === "deny") {
@@ -433,7 +482,6 @@ export class PermissionRuleEngine {
 						console.log(`[Permission] ask tool=${toolName} classifier=${classifier.name}: ${result.reason}`)
 						return "ask"
 					}
-					// "allow" from a classifier is advisory — don't short-circuit
 				}
 			} catch (err) {
 				console.warn(`[Permission] classifier ${classifier.name} error (ignored):`, err)
@@ -503,8 +551,9 @@ export class PermissionRuleEngine {
 			action: sr.action,
 			toolPattern: sr.toolPattern,
 			priority: sr.priority,
+			source: sr.source,
 		}))
-		this.rules.sort((a, b) => b.priority - a.priority)
+		this.sortRules()
 	}
 
 	async saveToConfig(configPath: string): Promise<void> {
@@ -515,6 +564,7 @@ export class PermissionRuleEngine {
 				action: r.action,
 				toolPattern: r.toolPattern,
 				priority: r.priority,
+				source: r.source,
 			})),
 		}
 		await fs.writeFile(configPath, JSON.stringify(serialized, null, 2), "utf-8")

@@ -1,16 +1,33 @@
-import type { ToolName, ModeConfig, ExperimentId, GroupOptions, GroupEntry } from "@njust-ai-cj/types"
+import type { ToolName, ModeConfig, GroupOptions, GroupEntry } from "@njust-ai-cj/types"
 import { toolNames as validToolNames } from "@njust-ai-cj/types"
 import { customToolRegistry } from "@njust-ai-cj/core"
 
 import { type Mode, FileRestrictionError, getModeBySlug, getGroupName } from "../../shared/modes"
-import { EXPERIMENT_IDS } from "../../shared/experiments"
 import { TOOL_GROUPS, ALWAYS_AVAILABLE_TOOLS, TOOL_ALIASES } from "../../shared/tools"
 
 /**
- * Merge string `params` with typed `nativeArgs` for mode validation (fileRegex, etc.).
+ * Merge `params` with typed `nativeArgs` for mode and schema validation.
  * Some tool blocks only populate `nativeArgs`; validating with empty `params` can skip path checks
  * or mis-classify edit operations in modes with `edit` group options.
+ *
+ * **Important:** Preserve booleans, numbers, and structured values from `nativeArgs`.
+ * Previously, non-string values were `JSON.stringify`d, which turned `false` into the string `"false"`
+ * and `60` into `"60"`, breaking zod validation and tool execution.
  */
+function mergeNativeValueForValidation(value: unknown): unknown {
+	if (value === undefined || value === null) {
+		return value
+	}
+	const t = typeof value
+	if (t === "string" || t === "boolean" || t === "number" || t === "bigint") {
+		return value
+	}
+	if (t === "object") {
+		return value
+	}
+	return String(value)
+}
+
 export function mergeToolParamsForValidation(block: {
 	params?: Record<string, unknown>
 	nativeArgs?: unknown
@@ -25,7 +42,7 @@ export function mergeToolParamsForValidation(block: {
 			if (value === undefined || value === null) {
 				continue
 			}
-			merged[key] = typeof value === "string" ? value : JSON.stringify(value)
+			merged[key] = mergeNativeValueForValidation(value)
 		}
 	}
 	return merged
@@ -206,12 +223,6 @@ export function isToolAllowedForMode(
 	// Check if this is a dynamic MCP tool (mcp_serverName_toolName)
 	// These should be allowed if the mcp group is allowed for the mode
 	const isDynamicMcpTool = tool.startsWith("mcp_")
-
-	if (experiments && Object.values(EXPERIMENT_IDS).includes(tool as ExperimentId)) {
-		if (!experiments[tool]) {
-			return false
-		}
-	}
 
 	const mode = getModeBySlug(modeSlug, customModes)
 

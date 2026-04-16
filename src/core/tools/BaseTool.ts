@@ -67,6 +67,11 @@ export interface ToolCallbacks {
 	pushToolResult: PushToolResult
 	reportProgress?: (status: ToolProgressStatus) => Promise<void>
 	toolCallId?: string
+	/**
+	 * When set (e.g. parallel eager batch), tools should abort promptly if signal is aborted
+	 * (sibling failure or batch cancellation).
+	 */
+	abortSignal?: AbortSignal
 }
 
 /**
@@ -178,7 +183,8 @@ export abstract class BaseTool<TName extends ToolName> {
 	/**
 	 * Execute the tool with typed parameters.
 	 *
-	 * Receives typed parameters from native tool calling via `ToolUse.nativeArgs`.
+	 * Receives typed parameters from native tool calling via `ToolUse.nativeArgs`
+	 * (required at runtime for non-partial blocks; parsers populate this).
 	 *
 	 * @param params - Typed parameters
 	 * @param task - Task instance with state and API access
@@ -457,10 +463,6 @@ export abstract class BaseTool<TName extends ToolName> {
 					const errorMsg = schemaError.errors
 						.map((e) => `${e.path.join(".")}: ${e.message}`)
 						.join("; ")
-					await callbacks.handleError(
-						`Tool input validation failed: ${errorMsg}`,
-						new Error(errorMsg),
-					)
 					callbacks.pushToolResult(
 						formatResponse.toolError(
 							`Invalid tool input: ${errorMsg}. Please check the tool parameters and try again.`,
@@ -578,6 +580,16 @@ export abstract class BaseTool<TName extends ToolName> {
 			}
 			console.log(`[ToolCache] miss tool=${this.name}`)
 			recordSecurityMetric("tool_cache_miss", { tool: this.name })
+		}
+
+		if (callbacks.abortSignal?.aborted) {
+			callbacks.pushToolResult(
+				formatResponse.toolError(
+					"Tool execution was cancelled (parallel batch aborted or sibling tool failed).",
+				),
+			)
+			toolSpan.end("error", { stage: "aborted", aborted: true })
+			return
 		}
 
 		// Capture the last tool result for post-hooks

@@ -180,7 +180,10 @@ export interface ToolUse<TName extends ToolName = ToolName> {
 	// params is a partial record, allowing only some or none of the possible parameters to be used
 	params: Partial<Record<ToolParamName, string>>
 	partial: boolean
-	// nativeArgs is properly typed based on TName if it's in NativeToolArgs, otherwise never
+	/**
+	 * Structured arguments from native tool-calling (provider JSON). When `partial` is false, the
+	 * execution layer expects this to be set; omitting it yields a parse error in `BaseTool.handle`.
+	 */
 	nativeArgs?: TName extends keyof NativeToolArgs ? NativeToolArgs[TName] : never
 	/**
 	 * Flag indicating whether the tool call used a legacy/deprecated format.

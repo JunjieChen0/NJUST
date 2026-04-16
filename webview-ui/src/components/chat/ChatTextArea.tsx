@@ -1,5 +1,4 @@
 import React, { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { useEvent } from "react-use"
 import DynamicTextArea from "react-textarea-autosize"
 import {
 	VolumeX,
@@ -14,8 +13,6 @@ import {
 	AlertTriangle,
 	Mic,
 } from "lucide-react"
-
-import type { ExtensionMessage } from "@njust-ai-cj/types"
 
 import { mentionRegex, mentionRegexGlobal, commandRegexGlobal, unescapeSpaces } from "@roo/context-mentions"
 import { WebviewMessage } from "@roo/WebviewMessage"
@@ -131,6 +128,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const [searchRequestId, setSearchRequestId] = useState<string>("")
 		const [webSearchStatus, setWebSearchStatus] = useState<"idle" | "testing" | "ok" | "error">("idle")
 		const [webSearchError, setWebSearchError] = useState<string>("")
+		const [isTtsPlaying, setIsTtsPlaying] = useState(false)
 
 		// Close dropdown when clicking outside.
 		useEffect(() => {
@@ -231,6 +229,10 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 						setWebSearchStatus("error")
 						setWebSearchError("Failed to parse status")
 					}
+				} else if (message.type === "ttsStart") {
+					setIsTtsPlaying(true)
+				} else if (message.type === "ttsStop") {
+					setIsTtsPlaying(false)
 				}
 			}
 
@@ -959,8 +961,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			],
 		)
 
-		const [isTtsPlaying, setIsTtsPlaying] = useState(false)
-
 		const {
 			supported: voiceInputSupported,
 			isListening: isVoiceListening,
@@ -1009,16 +1009,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			}
 			return parts.join("\n")
 		}, [voiceInputSupported, isVoiceListening, isVoiceTranscribing, voiceInputError, t])
-
-		useEvent("message", (event: MessageEvent) => {
-			const message: ExtensionMessage = event.data
-
-			if (message.type === "ttsStart") {
-				setIsTtsPlaying(true)
-			} else if (message.type === "ttsStop") {
-				setIsTtsPlaying(false)
-			}
-		})
 
 		const placeholderBottomText = `\n(${t("chat:addContext")}${shouldDisableImages ? `, ${t("chat:dragFiles")}` : `, ${t("chat:dragFilesImages")}`})`
 

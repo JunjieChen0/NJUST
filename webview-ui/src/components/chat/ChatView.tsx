@@ -39,7 +39,6 @@ import ChatRow from "./ChatRow"
 import WarningRow from "./WarningRow"
 import { ChatTextArea } from "./ChatTextArea"
 import TaskHeader from "./TaskHeader"
-import SessionMetricsSummary from "./SessionMetricsSummary"
 import ProfileViolationWarning from "./ProfileViolationWarning"
 import { CheckpointWarning } from "./CheckpointWarning"
 import { QueuedMessages } from "./QueuedMessages"
@@ -953,6 +952,11 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 						})
 					}
 					break
+				default:
+					if (import.meta.env.DEV) {
+						console.warn("[ChatView] Unhandled extension message type:", message.type, message)
+					}
+					break
 			}
 			// textAreaRef.current is not explicitly required here since React
 			// guarantees that ref will be stable across re-renders, and we're
@@ -1594,7 +1598,6 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 						handleCondenseContext={handleCondenseContext}
 						todos={latestTodos}
 					/>
-					<SessionMetricsSummary />
 
 					{checkpointWarning && (
 						<div className="px-3">

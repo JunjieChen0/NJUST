@@ -147,7 +147,7 @@ export class UseMcpToolTool extends BaseTool<"use_mcp_tool"> {
 		serverName: string,
 		toolName: string,
 		pushToolResult: (content: string) => void,
-	): Promise<{ isValid: boolean; availableTools?: string[]; resolvedToolName?: string }> {
+	): Promise<{ isValid: boolean; availableTools?: string[]; resolvedToolName?: string; error?: string }> {
 		try {
 			// Get the MCP hub to access server information
 			const provider = task.providerRef.deref()
@@ -245,10 +245,8 @@ export class UseMcpToolTool extends BaseTool<"use_mcp_tool"> {
 			// Tool exists and is enabled - return the original tool name for use with the MCP server
 			return { isValid: true, availableTools: server.tools.map((t) => t.name), resolvedToolName: tool.name }
 		} catch (error) {
-			// If there's an error during validation, log it but don't block the tool execution
-			// The actual tool call might still fail with a proper error
 			console.error("Error validating MCP tool existence:", error)
-			return { isValid: true }
+			return { isValid: false, error: `Validation failed: ${error instanceof Error ? error.message : String(error)}` }
 		}
 	}
 

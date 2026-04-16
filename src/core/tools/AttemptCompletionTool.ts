@@ -144,7 +144,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 			const feedbackText = `<user_message>\n${text}\n</user_message>`
 			pushToolResult(formatResponse.toolResult(feedbackText, images))
 		} catch (error) {
-			await handleError("inspecting site", error as Error)
+			await handleError("completing task", error as Error)
 		}
 	}
 

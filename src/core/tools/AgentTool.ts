@@ -53,15 +53,15 @@ export class AgentTool extends BaseTool<"agent"> {
 				return
 			}
 
-			const provider = task.providerRef.deref()
+			const host = task.providerRef.deref()
 
-			if (!provider) {
+			if (!host) {
 				pushToolResult(formatResponse.toolError("Provider reference lost"))
 				return
 			}
 
 			// Concurrency limit: count active children in the task stack
-			const taskStackSize = provider.getTaskStackSize()
+			const taskStackSize = host.getTaskStackSize()
 			// The stack includes the current task, so active children = stackSize - 1
 			// (each delegation pushes a child). We check against MAX_CONCURRENT_AGENTS.
 			if (taskStackSize > MAX_CONCURRENT_AGENTS) {
@@ -103,11 +103,12 @@ export class AgentTool extends BaseTool<"agent"> {
 			}
 
 			// Delegate using forked isolation level for independent context
-			const child = await (provider as any).delegateParentAndOpenChild({
+			const modeSlug = await task.getTaskMode()
+			const child = await host.delegateParentAndOpenChild({
 				parentTaskId: task.taskId,
 				message: agentMessage,
 				initialTodos: [],
-				mode: (task as any).mode?.slug ?? "code",
+				mode: modeSlug,
 				isolationLevel: "forked",
 			})
 

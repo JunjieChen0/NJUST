@@ -169,7 +169,7 @@ export async function checkAutoApproval({
 			return state.alwaysAllowModeSwitch === true ? { decision: "approve" } : { decision: "ask" }
 		}
 
-		if (["newTask", "finishTask"].includes(tool?.tool)) {
+		if (["newTask", "finishTask", "send_message", "agent"].includes(tool?.tool)) {
 			return state.alwaysAllowSubtasks === true ? { decision: "approve" } : { decision: "ask" }
 		}
 

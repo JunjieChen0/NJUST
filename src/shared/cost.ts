@@ -1,6 +1,68 @@
 import type { ModelInfo } from "@njust-ai-cj/types"
 import type { ServiceTier } from "@njust-ai-cj/types"
 
+/**
+ * Normalize OpenAI-style usage numbers before billing.
+ *
+ * - `input_tokens` / `prompt_tokens` are usually **total** prompt tokens including cache reads/writes,
+ *   but some responses only report the non-cached slice while still emitting `cache_read_input_tokens`.
+ * - When `input_tokens_details` / `prompt_tokens_details` expose `cache_miss_tokens` + `cached_tokens`,
+ *   we prefer that breakdown for the non-cached slice (avoids mis-pricing when totals are inconsistent).
+ */
+export function resolveOpenAiUsageForCost(args: {
+	inputTokensReported: number
+	cacheWriteTokens: number
+	cacheReadTokens: number
+	cacheMissTokensFromDetails?: number
+	cachedTokensFromDetails?: number
+}): {
+	totalInputTokens: number
+	cacheWriteTokens: number
+	cacheReadTokens: number
+	nonCachedInputTokens: number
+} {
+	let cw = Math.max(0, args.cacheWriteTokens || 0)
+	let cr = Math.max(0, args.cacheReadTokens || 0)
+	let total = Math.max(0, args.inputTokensReported || 0)
+
+	const miss = args.cacheMissTokensFromDetails
+	const cachedD = args.cachedTokensFromDetails
+
+	if (typeof miss === "number" && typeof cachedD === "number") {
+		cr = Math.max(cr, cachedD)
+		const sumParts = miss + cachedD + cw
+		if (sumParts > 0) {
+			if (total === 0 || Math.abs(total - sumParts) <= Math.max(2, sumParts * 0.005)) {
+				total = sumParts
+			} else if (total < sumParts - Math.max(2, sumParts * 0.005)) {
+				// Total likely excludes cached portion; reconstruct billable prompt size
+				total = sumParts
+			}
+		}
+		return {
+			totalInputTokens: total,
+			cacheWriteTokens: cw,
+			cacheReadTokens: cr,
+			nonCachedInputTokens: Math.max(0, miss),
+		}
+	}
+
+	// If prompt total is smaller than cache rows alone, input is almost certainly non-cached-only —
+	// expand so base+discount math stays consistent with OpenAI billing.
+	const minTotal = cw + cr
+	if (total < minTotal) {
+		total = minTotal
+	}
+
+	const nonCached = Math.max(0, total - cw - cr)
+	return {
+		totalInputTokens: total,
+		cacheWriteTokens: cw,
+		cacheReadTokens: cr,
+		nonCachedInputTokens: nonCached,
+	}
+}
+
 export interface ApiCostResult {
 	totalInputTokens: number
 	totalOutputTokens: number
@@ -88,29 +150,52 @@ export function calculateApiCostAnthropic(
 	)
 }
 
-// For OpenAI compliant usage, the input tokens count INCLUDES the cached tokens.
+/** Optional refinement for OpenAI-style usage (see {@link resolveOpenAiUsageForCost}). */
+export type OpenAiCostOptions = {
+	serviceTier?: ServiceTier
+	/** When set, refines non-cached vs cache breakdown (prompt_tokens_details / input_tokens_details). */
+	inputTokenDetails?: { cache_miss_tokens?: number; cached_tokens?: number }
+}
+
+function normalizeOpenAiCostOptions(
+	sixth?: ServiceTier | OpenAiCostOptions,
+): OpenAiCostOptions {
+	if (sixth === undefined) {
+		return {}
+	}
+	if (typeof sixth === "object" && sixth !== null) {
+		return sixth as OpenAiCostOptions
+	}
+	return { serviceTier: sixth as ServiceTier }
+}
+
+// For OpenAI compliant usage, the input tokens count usually INCLUDES cached tokens;
+// some responses only report non-cached totals — see resolveOpenAiUsageForCost.
 export function calculateApiCostOpenAI(
 	modelInfo: ModelInfo,
 	inputTokens: number,
 	outputTokens: number,
 	cacheCreationInputTokens?: number,
 	cacheReadInputTokens?: number,
-	serviceTier?: ServiceTier,
+	sixth?: ServiceTier | OpenAiCostOptions,
 ): ApiCostResult {
-	const cacheCreationInputTokensNum = cacheCreationInputTokens || 0
-	const cacheReadInputTokensNum = cacheReadInputTokens || 0
-	const nonCachedInputTokens = Math.max(0, inputTokens - cacheCreationInputTokensNum - cacheReadInputTokensNum)
-	const effectiveModelInfo = applyLongContextPricing(modelInfo, inputTokens, serviceTier)
+	const opt = normalizeOpenAiCostOptions(sixth)
+	const resolved = resolveOpenAiUsageForCost({
+		inputTokensReported: inputTokens,
+		cacheWriteTokens: cacheCreationInputTokens || 0,
+		cacheReadTokens: cacheReadInputTokens || 0,
+		cacheMissTokensFromDetails: opt.inputTokenDetails?.cache_miss_tokens,
+		cachedTokensFromDetails: opt.inputTokenDetails?.cached_tokens,
+	})
+	const effectiveModelInfo = applyLongContextPricing(modelInfo, resolved.totalInputTokens, opt.serviceTier)
 
-	// For OpenAI: inputTokens ALREADY includes all tokens (cached + non-cached)
-	// So we pass the original inputTokens as the total
 	return calculateApiCostInternal(
 		effectiveModelInfo,
-		nonCachedInputTokens,
+		resolved.nonCachedInputTokens,
 		outputTokens,
-		cacheCreationInputTokensNum,
-		cacheReadInputTokensNum,
-		inputTokens,
+		resolved.cacheWriteTokens,
+		resolved.cacheReadTokens,
+		resolved.totalInputTokens,
 		outputTokens,
 	)
 }

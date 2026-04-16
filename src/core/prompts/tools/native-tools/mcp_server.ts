@@ -1,17 +1,17 @@
 import type OpenAI from "openai"
-import { McpHub } from "../../../../services/mcp/McpHub"
+import type { IMcpHubService } from "../../../../services/mcp/interfaces/IMcpHubService"
 import { buildMcpToolName } from "../../../../utils/mcp-name"
 import { normalizeToolSchema, type JsonSchema } from "../../../../utils/json-schema"
 
 /**
  * Dynamically generates native tool definitions for all enabled tools across connected MCP servers.
  * Tools are deduplicated by name to prevent API errors. When the same server exists in both
- * global and project configs, project servers take priority (handled by McpHub.getServers()).
+ * global and project configs, project servers take priority (handled by IMcpHubService.getServers()).
  *
- * @param mcpHub The McpHub instance containing connected servers.
+ * @param mcpHub The IMcpHubService instance containing connected servers.
  * @returns An array of OpenAI.Chat.ChatCompletionTool definitions.
  */
-export function getMcpServerTools(mcpHub?: McpHub): OpenAI.Chat.ChatCompletionTool[] {
+export function getMcpServerTools(mcpHub?: IMcpHubService): OpenAI.Chat.ChatCompletionTool[] {
 	if (!mcpHub) {
 		return []
 	}

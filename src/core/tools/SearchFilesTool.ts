@@ -17,6 +17,7 @@ import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks, type ValidationResult } from "./BaseTool"
 import { toolResultCache } from "./helpers/ToolResultCache"
+import { extractStdModulesFromQuery } from "./cangjiePreflightCheck"
 
 interface SearchFilesParams {
 	path: string
@@ -105,6 +106,13 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 			isOutsideWorkspace,
 		}
 
+		const trackCangjieSearchHistory = () => {
+			if (isUnderCangjieCorpus && task.taskMode === "cangjie") {
+				const stdModules = extractStdModulesFromQuery(regex, semanticQuery)
+				for (const m of stdModules) task.cangjieSearchHistory.add(m)
+			}
+		}
+
 		try {
 			// Semantic search branch: use BM25 index when query targets bundled corpus
 			if (semanticQuery && isUnderCangjieCorpus) {
@@ -133,6 +141,7 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 								.join("\n\n")
 							const result = `Semantic search results for: "${semanticQuery}"\n\n${formatted}`
 							toolResultCache.set(cacheKey, result)
+							trackCangjieSearchHistory()
 							pushToolResult(result)
 							return
 						}
@@ -145,6 +154,7 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 
 			if (isUnderCangjieCorpus) {
 				toolResultCache.set(cacheKey, results)
+				trackCangjieSearchHistory()
 				pushToolResult(results)
 				return
 			}

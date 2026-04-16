@@ -61,7 +61,7 @@ describe("OpenAiHandler native tools", () => {
 						function: expect.objectContaining({ name: "test_tool" }),
 					}),
 				]),
-				parallel_tool_calls: true,
+				parallel_tool_calls: false,
 			}),
 			expect.anything(),
 		)

@@ -132,7 +132,7 @@ vi.mock("../utils/migrateSettings", () => ({
 	migrateSettings: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock("../utils/autoImportSettings", () => ({
+vi.mock("../core/config/autoImportSettings", () => ({
 	autoImportSettings: vi.fn().mockResolvedValue(undefined),
 }))
 

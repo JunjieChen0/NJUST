@@ -9,6 +9,7 @@
  * REST（插件实际调用）：
  *   - GET  /health     → 200 JSON { "status": "ok" }
  *   - POST /v1/run     → 请求体 { goal, session_id, workspace_path?, images? }，响应 CloudRunResponse（含示例 workspace_ops）
+ *   - POST /v1/run/deferred/start|resume|abort、POST /v1/run/compile → 与扩展 deferred/compile 协议对齐（本 mock 为极简成功响应）
  *     本地写盘默认在开启 njust-ai-cj.cloudAgent.applyRemoteWorkspaceOps 时生效（默认为 true）；见 AGENTS.md
  *
  * MCP Streamable HTTP（可选，其他客户端）：
@@ -198,6 +199,22 @@ function handleHealth(req, res) {
  * @param {import("http").IncomingMessage} req
  * @param {import("http").ServerResponse} res
  */
+function checkRestAuth(req, res) {
+	const apiKey = req.headers["x-api-key"]
+	if (apiKey && apiKey !== MOCK_EXPECTED_API_KEY) {
+		res.writeHead(401, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Invalid X-API-Key" }))
+		return false
+	}
+	const deviceToken = req.headers["x-device-token"]
+	if (!deviceToken || String(deviceToken).trim() === "") {
+		res.writeHead(401, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Missing X-Device-Token" }))
+		return false
+	}
+	return true
+}
+
 async function handleV1Run(req, res) {
 	if (req.method !== "POST") {
 		res.writeHead(405, { "Content-Type": "application/json" })
@@ -205,17 +222,7 @@ async function handleV1Run(req, res) {
 		return
 	}
 
-	const apiKey = req.headers["x-api-key"]
-	if (apiKey && apiKey !== MOCK_EXPECTED_API_KEY) {
-		res.writeHead(401, { "Content-Type": "application/json" })
-		res.end(JSON.stringify({ error: "Invalid X-API-Key" }))
-		return
-	}
-
-	const deviceToken = req.headers["x-device-token"]
-	if (!deviceToken || String(deviceToken).trim() === "") {
-		res.writeHead(401, { "Content-Type": "application/json" })
-		res.end(JSON.stringify({ error: "Missing X-Device-Token" }))
+	if (!checkRestAuth(req, res)) {
 		return
 	}
 
@@ -274,6 +281,121 @@ async function handleV1Run(req, res) {
 	res.end(JSON.stringify(payload))
 }
 
+async function handleDeferredAbort(req, res) {
+	if (req.method !== "POST") {
+		res.writeHead(405, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Method not allowed" }))
+		return
+	}
+	if (!checkRestAuth(req, res)) {
+		return
+	}
+	let body
+	try {
+		body = await parseBody(req)
+	} catch {
+		res.writeHead(400, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Invalid JSON body" }))
+		return
+	}
+	log("REST", `POST /v1/run/deferred/abort session=${body?.session_id ?? ""} run_id=${body?.run_id ?? "(none)"}`)
+	res.writeHead(200, { "Content-Type": "application/json" })
+	res.end(JSON.stringify({ ok: true, aborted: true }))
+}
+
+async function handleDeferredStart(req, res) {
+	if (req.method !== "POST") {
+		res.writeHead(405, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Method not allowed" }))
+		return
+	}
+	if (!checkRestAuth(req, res)) {
+		return
+	}
+	let body
+	try {
+		body = await parseBody(req)
+	} catch {
+		res.writeHead(400, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Invalid JSON body" }))
+		return
+	}
+	const goal = body?.goal ?? ""
+	const sessionId = body?.session_id ?? ""
+	log("REST", `POST /v1/run/deferred/start session=${sessionId} goal=${String(goal).slice(0, 80)}…`)
+	const runId = randomUUID()
+	const payload = {
+		run_id: runId,
+		status: "done",
+		deferred_protocol_version: 1,
+		server_revision: "mock-v1",
+		ok: true,
+		text: "Mock deferred/start completed immediately (no pending tools).",
+		tokens_in: 1,
+		tokens_out: 2,
+		cost: 0,
+	}
+	res.writeHead(200, { "Content-Type": "application/json" })
+	res.end(JSON.stringify(payload))
+}
+
+async function handleDeferredResume(req, res) {
+	if (req.method !== "POST") {
+		res.writeHead(405, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Method not allowed" }))
+		return
+	}
+	if (!checkRestAuth(req, res)) {
+		return
+	}
+	let body
+	try {
+		body = await parseBody(req)
+	} catch {
+		res.writeHead(400, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Invalid JSON body" }))
+		return
+	}
+	const runId = body?.run_id ?? randomUUID()
+	const sessionId = body?.session_id ?? ""
+	log("REST", `POST /v1/run/deferred/resume session=${sessionId} run_id=${runId}`)
+	const payload = {
+		run_id: runId,
+		status: "done",
+		deferred_protocol_version: 1,
+		server_revision: "mock-v1",
+		ok: true,
+		text: "Mock deferred/resume completed immediately.",
+		tokens_in: 0,
+		tokens_out: 0,
+		cost: 0,
+	}
+	res.writeHead(200, { "Content-Type": "application/json" })
+	res.end(JSON.stringify(payload))
+}
+
+async function handleV1RunCompile(req, res) {
+	if (req.method !== "POST") {
+		res.writeHead(405, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Method not allowed" }))
+		return
+	}
+	if (!checkRestAuth(req, res)) {
+		return
+	}
+	let body
+	try {
+		body = await parseBody(req)
+	} catch {
+		res.writeHead(400, { "Content-Type": "application/json" })
+		res.end(JSON.stringify({ error: "Invalid JSON body" }))
+		return
+	}
+	log("REST", `POST /v1/run/compile session=${body?.session_id ?? ""}`)
+	res.writeHead(200, { "Content-Type": "application/json" })
+	res.end(JSON.stringify({ success: true, output: "" }))
+}
+
 const httpServer = http.createServer(async (req, res) => {
 	res.setHeader("Access-Control-Allow-Origin", "*")
 	res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
@@ -301,9 +423,33 @@ const httpServer = http.createServer(async (req, res) => {
 		return
 	}
 
+	if (url.pathname === "/v1/run/deferred/abort") {
+		await handleDeferredAbort(req, res)
+		return
+	}
+
+	if (url.pathname === "/v1/run/deferred/start") {
+		await handleDeferredStart(req, res)
+		return
+	}
+
+	if (url.pathname === "/v1/run/deferred/resume") {
+		await handleDeferredResume(req, res)
+		return
+	}
+
+	if (url.pathname === "/v1/run/compile") {
+		await handleV1RunCompile(req, res)
+		return
+	}
+
 	if (url.pathname !== "/mcp") {
 		res.writeHead(404, { "Content-Type": "application/json" })
-		res.end(JSON.stringify({ error: "Not found. Use /health, /v1/run, or /mcp" }))
+		res.end(
+			JSON.stringify({
+				error: "Not found. Use /health, /v1/run, /v1/run/deferred/*, /v1/run/compile, or /mcp",
+			}),
+		)
 		return
 	}
 
@@ -386,6 +532,8 @@ httpServer.listen(PORT, "127.0.0.1", () => {
 	console.log("=".repeat(60))
 	console.log(`  REST:  GET http://127.0.0.1:${PORT}/health`)
 	console.log(`         POST http://127.0.0.1:${PORT}/v1/run`)
+	console.log(`         POST http://127.0.0.1:${PORT}/v1/run/deferred/start|resume|abort`)
+	console.log(`         POST http://127.0.0.1:${PORT}/v1/run/compile`)
 	console.log(`  MCP:   POST http://127.0.0.1:${PORT}/mcp`)
 	console.log("")
 	console.log(`  Set njust-ai-cj.cloudAgent.serverUrl to http://127.0.0.1:${PORT}`)

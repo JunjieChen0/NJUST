@@ -309,6 +309,8 @@ export class CangjieLspClient {
 	private onCangjieActivatedCallback: (() => void) | undefined
 	private autoRestartCount = 0
 	private restartTimer: ReturnType<typeof setTimeout> | undefined
+	/** Serialize config-driven stop→start so rapid settings changes do not overlap. */
+	private configRestartChain: Promise<void> = Promise.resolve()
 	private firstCompletionLogged = false
 	private firstHoverLogged = false
 	/** After cjpm build success: drop stale LSP Error diagnostics for this root (ms since epoch). */
@@ -376,12 +378,20 @@ export class CangjieLspClient {
 
 	private attachCangjieLspConfigListener(): void {
 		this.configChangeDisposable?.dispose()
-		this.configChangeDisposable = vscode.workspace.onDidChangeConfiguration(async (e) => {
-			if (e.affectsConfiguration(`${Package.name}.cangjieLsp`)) {
-				this.extensionOutputChannel.appendLine("[CangjieLSP] Configuration changed, restarting server...")
-				await this.stop()
-				await this.start()
+		this.configChangeDisposable = vscode.workspace.onDidChangeConfiguration((e) => {
+			if (!e.affectsConfiguration(`${Package.name}.cangjieLsp`)) {
+				return
 			}
+			this.extensionOutputChannel.appendLine("[CangjieLSP] Configuration changed, restarting server...")
+			this.configRestartChain = this.configRestartChain
+				.then(async () => {
+					await this.stop()
+					await this.start()
+				})
+				.catch((err) => {
+					const msg = err instanceof Error ? err.message : String(err)
+					this.extensionOutputChannel.appendLine(`[CangjieLSP] Config restart failed: ${msg}`)
+				})
 		})
 	}
 
@@ -548,6 +558,17 @@ export class CangjieLspClient {
 			clientOptions,
 		)
 
+		// Register before start() so a crash/stop between start resolving and this listener cannot be missed.
+		this.clientStateDisposable?.dispose()
+		this.clientStateDisposable = this.client.onDidChangeState((e) => {
+			if (e.newState === 1 /* Stopped */ && this._state === "running") {
+				this.extensionOutputChannel.appendLine("[CangjieLSP] Server process stopped unexpectedly.")
+				this.setState("error", "Server stopped unexpectedly")
+				this.client = undefined
+				this.scheduleAutoRestart()
+			}
+		})
+
 		const startTime = Date.now()
 		try {
 			await this.client.start()
@@ -557,16 +578,6 @@ export class CangjieLspClient {
 			this.setState("running")
 			this.autoRestartCount = 0
 			this.fireOnCangjieActivatedOnce()
-
-			this.clientStateDisposable?.dispose()
-			this.clientStateDisposable = this.client.onDidChangeState((e) => {
-				if (e.newState === 1 /* Stopped */ && this._state === "running") {
-					this.extensionOutputChannel.appendLine("[CangjieLSP] Server process stopped unexpectedly.")
-					this.setState("error", "Server stopped unexpectedly")
-					this.client = undefined
-					this.scheduleAutoRestart()
-				}
-			})
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			this.extensionOutputChannel.appendLine(`[CangjieLSP] Failed to start server: ${message}`)

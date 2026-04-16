@@ -343,12 +343,8 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 			"| 技能评估、通用框架搭建或学习规划 | **`skills-enhancement-plan`** | 规划与学习框架 |\n\n" +
 			"**路由优先级**：若不是探讨以上具体的构建流或学习体系，则回落到默认，不试图去匹配针对具体 API 或语法的 skill。因为 API 和语法细节全部交由 `CangjieCorpus` 进行主动搜寻。\n\n" +
 			"---\n\n" +
-			"## 仓颉语法与常见陷阱（引用，勿与注入规则重复背诵）\n\n" +
-			"**权威来源**：系统提示中动态注入的 **仓颉语法速查**（`CANGJIE_SYNTAX_REFERENCE`）与 **CangjieCorpus** 内置语料路径；完整的类型、泛型、`prop`、`extend`、运算符与 `Resource/try` 等均以该速查与 `manual/`、`libs/` 为准。此处仅列**工程向**高频提醒，避免与本模式已注入的长篇规则重复占用 token。\n\n" +
-			"- **入口**：`main(): Int64`；**值语义**：struct 优先、不可自引用；**let / var / mut**：let 不调用 mut 方法时需改用 var。\n" +
-			"- **控制流**：match 穷尽（可用 `case _ =>`）；**并发**：spawn 捕获与 Mutex/Atomic。\n" +
-			"- **API 习惯**：命名参数须 `name:`；HashMap/HashSet 的 K 约束以语料为准。\n\n" +
-			"细化与边缘规则（`!` 实参、`override`/`redef`、字面量后缀等）一律 **查语料或诊断映射**，勿仅靠记忆。\n\n" +
+			"## 仓颉语法提要\n\n" +
+			"语法细节以系统提示动态注入的 **仓颉语法速查** 和 **CangjieCorpus** 为准，此处仅列核心约束：入口 `main(): Int64`；struct 优先值语义且不可自引用；`let` 不可调 `mut` 方法需改 `var`；match 须穷尽。其余（泛型、`extend`、`!`、字面量后缀等）一律**查语料**。\n\n" +
 			"---\n\n" +
 			"## 主动式语料检索（与动态上下文配合）\n\n" +
 			"系统提示中会给出**内置 CangjieCorpus 的绝对路径**。使用 std/ohos 等 API 前，必须用 `search_files` / `read_file` 且 `path` 为该绝对路径或其子目录；动笔前检索签名与示例，报错后在 `manual/source_zh_cn/`、`libs/` 下检索再改代码。\n\n" +

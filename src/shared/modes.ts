@@ -9,8 +9,7 @@ import {
 	DEFAULT_MODES,
 } from "@njust-ai-cj/types"
 
-import { addCustomInstructions } from "../core/prompts/sections/custom-instructions"
-
+import { DEFAULT_MODE_SLUG } from "./mode-constants"
 import { TOOL_GROUPS, ALWAYS_AVAILABLE_TOOLS } from "./tools"
 
 export type Mode = string
@@ -44,8 +43,14 @@ export function getToolsForMode(groups: readonly GroupEntry[]): string[] {
 // Main modes configuration as an ordered array
 export const modes = DEFAULT_MODES
 
-// Export the default mode slug
-export const defaultModeSlug = modes[0].slug
+if (modes[0]?.slug !== DEFAULT_MODE_SLUG) {
+	throw new Error(
+		`[modes] DEFAULT_MODE_SLUG "${DEFAULT_MODE_SLUG}" does not match DEFAULT_MODES[0].slug "${String(modes[0]?.slug)}" — update src/shared/mode-constants.ts`,
+	)
+}
+
+// Export the default mode slug (same as DEFAULT_MODES[0].slug)
+export const defaultModeSlug = DEFAULT_MODE_SLUG
 
 // Helper functions
 export function getModeBySlug(slug: string, customModes?: ModeConfig[]): ModeConfig | undefined {
@@ -170,50 +175,6 @@ export async function getAllModesWithPrompts(context: vscode.ExtensionContext): 
 		customInstructions: customModePrompts[mode.slug]?.customInstructions ?? mode.customInstructions,
 		// description is not overridable via customModePrompts, so we keep the original
 	}))
-}
-
-// Helper function to get complete mode details with all overrides
-export async function getFullModeDetails(
-	modeSlug: string,
-	customModes?: ModeConfig[],
-	customModePrompts?: CustomModePrompts,
-	options?: {
-		cwd?: string
-		globalCustomInstructions?: string
-		language?: string
-	},
-): Promise<ModeConfig> {
-	// First get the base mode config from custom modes or built-in modes
-	const baseMode = getModeBySlug(modeSlug, customModes) || modes.find((m) => m.slug === modeSlug) || modes[0]
-
-	// Check for any prompt component overrides
-	const promptComponent = customModePrompts?.[modeSlug]
-
-	// Get the base custom instructions
-	const baseCustomInstructions = promptComponent?.customInstructions || baseMode.customInstructions || ""
-	const baseWhenToUse = promptComponent?.whenToUse || baseMode.whenToUse || ""
-	const baseDescription = promptComponent?.description || baseMode.description || ""
-
-	// If we have cwd, load and combine all custom instructions
-	let fullCustomInstructions = baseCustomInstructions
-	if (options?.cwd) {
-		fullCustomInstructions = await addCustomInstructions(
-			baseCustomInstructions,
-			options.globalCustomInstructions || "",
-			options.cwd,
-			modeSlug,
-			{ language: options.language },
-		)
-	}
-
-	// Return mode with any overrides applied
-	return {
-		...baseMode,
-		roleDefinition: promptComponent?.roleDefinition || baseMode.roleDefinition,
-		whenToUse: baseWhenToUse,
-		description: baseDescription,
-		customInstructions: fullCustomInstructions,
-	}
 }
 
 // Helper function to safely get role definition

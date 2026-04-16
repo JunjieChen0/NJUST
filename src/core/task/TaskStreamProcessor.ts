@@ -12,6 +12,7 @@ import {
 } from "@njust-ai-cj/types"
 
 import type { ApiHandlerCreateMessageMetadata } from "../../api"
+import { resolveParallelNativeToolCalls } from "../../shared/parallelToolCalls"
 import { calculateApiCostAnthropic, calculateApiCostOpenAI } from "../../shared/cost"
 import { getModelMaxOutputTokens } from "../../shared/api"
 
@@ -335,7 +336,7 @@ export class TaskStreamProcessor {
 				? {
 						tools: allTools,
 						tool_choice: "auto",
-						parallelToolCalls: true,
+						parallelToolCalls: resolveParallelNativeToolCalls(apiConfiguration),
 					}
 				: {}),
 		}

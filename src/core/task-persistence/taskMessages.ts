@@ -52,5 +52,6 @@ export type SaveTaskMessagesOptions = {
 export async function saveTaskMessages({ messages, taskId, globalStoragePath }: SaveTaskMessagesOptions) {
 	const taskDir = await getTaskDirectoryPath(globalStoragePath, taskId)
 	const filePath = path.join(taskDir, GlobalFileNames.uiMessages)
+	// safeWriteJson: temp file + rename under lock (crash-safe).
 	await safeWriteJson(filePath, messages)
 }

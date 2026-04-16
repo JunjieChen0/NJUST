@@ -13,5 +13,9 @@ export function isReadOnlyToolAction(tool: ClineSayTool): boolean {
 		"searchFiles",
 		"codebaseSearch",
 		"runSlashCommand",
+		"readCommandOutput",
+		"web_search",
+		"web_fetch",
+		"lsp",
 	].includes(tool.tool)
 }

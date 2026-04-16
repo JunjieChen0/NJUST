@@ -28,9 +28,11 @@ interface HistoryIndex {
  * Cross-process safety comes from `safeWriteJson`'s `proper-lockfile`
  * on per-task file writes. Within a single extension host process,
  * an in-process write lock serializes mutations.
- */
-/**
- * Options for TaskHistoryStore constructor.
+ *
+ * **Invariants (S-5):** Per-task JSON under `tasks/<id>/` is the source of truth.
+ * `_index.json` is a derived cache; `upsert`/`delete`/`reconcile` update the Map then
+ * schedule index writes. The in-memory `cache` is bounded by {@link TaskHistoryStore.MAX_CACHED_TASKS}
+ * (LRU by access via `get`); evictions drop only memory — disk files are unchanged.
  */
 export interface TaskHistoryStoreOptions {
 	/**
@@ -42,6 +44,9 @@ export interface TaskHistoryStoreOptions {
 }
 
 export class TaskHistoryStore {
+	/** Upper bound on in-memory task entries (disk remains authoritative). */
+	static readonly MAX_CACHED_TASKS = 2000
+
 	private readonly globalStoragePath: string
 	private readonly onWrite?: (items: HistoryItem[]) => Promise<void>
 	private cache: Map<string, HistoryItem> = new Map()
@@ -132,7 +137,12 @@ export class TaskHistoryStore {
 	 * Get a single history item by task ID.
 	 */
 	get(taskId: string): HistoryItem | undefined {
-		return this.cache.get(taskId)
+		const v = this.cache.get(taskId)
+		if (v !== undefined) {
+			this.cache.delete(taskId)
+			this.cache.set(taskId, v)
+		}
+		return v
 	}
 
 	/**
@@ -169,6 +179,7 @@ export class TaskHistoryStore {
 
 			// Update in-memory cache
 			this.cache.set(merged.id, merged)
+			this.trimCacheToMaxSize()
 
 			// Schedule debounced index write
 			this.scheduleIndexWrite()
@@ -284,6 +295,7 @@ export class TaskHistoryStore {
 			}
 
 			if (changed) {
+				this.trimCacheToMaxSize()
 				this.scheduleIndexWrite()
 			}
 		})
@@ -299,6 +311,7 @@ export class TaskHistoryStore {
 			const item = await this.readTaskFile(taskId)
 			if (item) {
 				this.cache.set(taskId, item)
+				this.trimCacheToMaxSize()
 			} else {
 				this.cache.delete(taskId)
 			}
@@ -352,6 +365,7 @@ export class TaskHistoryStore {
 				// File doesn't exist, write it
 				await safeWriteJson(filePath, item)
 				this.cache.set(item.id, item)
+				this.trimCacheToMaxSize()
 			}
 		}
 
@@ -360,6 +374,16 @@ export class TaskHistoryStore {
 	}
 
 	// ────────────────────────────── Private: Index management ──────────────────────────────
+
+	private trimCacheToMaxSize(): void {
+		while (this.cache.size > TaskHistoryStore.MAX_CACHED_TASKS) {
+			const oldest = this.cache.keys().next().value as string | undefined
+			if (oldest === undefined) {
+				break
+			}
+			this.cache.delete(oldest)
+		}
+	}
 
 	/**
 	 * Load the `_index.json` file into the in-memory cache.
@@ -377,6 +401,7 @@ export class TaskHistoryStore {
 						this.cache.set(entry.id, entry)
 					}
 				}
+				this.trimCacheToMaxSize()
 			}
 		} catch {
 			// Index doesn't exist or is corrupted; cache stays empty.

@@ -338,6 +338,9 @@ export type ExtensionState = Pick<
 	 * (captured during async getStateToPostToWebview) from overwriting newer messages.
 	 */
 	clineMessagesSeq?: number
+
+	/** Mirrored from VS Code setting `njust-ai-cj.saveAllBeforeExecuteCommand` (not persisted in global state). */
+	saveAllBeforeExecuteCommand?: boolean
 }
 
 export interface Command {
@@ -714,11 +717,16 @@ export interface ClineSayTool {
 		| "switchMode"
 		| "newTask"
 		| "finishTask"
+		| "send_message"
+		| "agent"
 		| "generateImage"
 		| "imageGenerated"
 		| "runSlashCommand"
 		| "updateTodoList"
 		| "skill"
+		| "web_search"
+		| "web_fetch"
+		| "lsp"
 	path?: string
 	// For readCommandOutput
 	readStart?: number

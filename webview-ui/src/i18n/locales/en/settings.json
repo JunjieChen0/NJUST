@@ -337,6 +337,10 @@
 			"description": "Automatically select the first suggested answer for follow-up questions after the configured timeout",
 			"timeoutLabel": "Time to wait before auto-selecting the first answer"
 		},
+		"saveFiles": {
+			"label": "Save files",
+			"description": "Before the agent runs a terminal command (after approval), save all dirty editors in the workspace, same as Save All. Does not force saving untitled buffers."
+		},
 		"execute": {
 			"label": "Execute",
 			"description": "Automatically execute allowed terminal commands without requiring approval",

@@ -2,9 +2,39 @@
 
 import type { ModelInfo } from "@njust-ai-cj/types"
 
-import { calculateApiCostAnthropic, calculateApiCostOpenAI } from "../../shared/cost"
+import {
+	calculateApiCostAnthropic,
+	calculateApiCostOpenAI,
+	resolveOpenAiUsageForCost,
+} from "../../shared/cost"
 
 describe("Cost Utility", () => {
+	describe("resolveOpenAiUsageForCost", () => {
+		it("should prefer cache_miss_tokens from details for non-cached billing slice", () => {
+			const r = resolveOpenAiUsageForCost({
+				inputTokensReported: 100,
+				cacheWriteTokens: 20,
+				cacheReadTokens: 30,
+				cacheMissTokensFromDetails: 50,
+				cachedTokensFromDetails: 30,
+			})
+			expect(r.totalInputTokens).toBe(100)
+			expect(r.nonCachedInputTokens).toBe(50)
+			expect(r.cacheReadTokens).toBe(30)
+			expect(r.cacheWriteTokens).toBe(20)
+		})
+
+		it("should expand total when prompt_tokens under-report vs cache rows", () => {
+			const r = resolveOpenAiUsageForCost({
+				inputTokensReported: 1000,
+				cacheWriteTokens: 0,
+				cacheReadTokens: 8000,
+			})
+			expect(r.totalInputTokens).toBe(9000)
+			expect(r.nonCachedInputTokens).toBe(1000)
+		})
+	})
+
 	describe("calculateApiCostAnthropic", () => {
 		const mockModelInfo: ModelInfo = {
 			maxTokens: 8192,
@@ -269,6 +299,14 @@ describe("Cost Utility", () => {
 			// Cache reads: (0.5 / 1_000_000) * 100000 = 0.05
 			// Total: 0.9 + 0.0225 + 0.2 + 0.05 = 1.1725
 			expect(result.totalCost).toBeCloseTo(1.1725, 6)
+		})
+
+		it("should expand prompt total when reported input is smaller than cache rows alone (non-cached-only totals)", () => {
+			const result = calculateApiCostOpenAI(mockModelInfo, 1000, 500, 0, 8000)
+			// total expands to 9000, base charged on 1000
+			expect(result.totalInputTokens).toBe(9000)
+			// (3/1e6)*1000 + (15/1e6)*500 + (0.3/1e6)*8000
+			expect(result.totalCost).toBeCloseTo(0.003 + 0.0075 + 0.0024, 6)
 		})
 
 		it("should skip long-context pricing for service tiers outside the allowed list", () => {

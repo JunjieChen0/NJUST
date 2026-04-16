@@ -31,7 +31,8 @@ import {
 
 import { t } from "../../i18n"
 
-import { ClineProvider } from "../../core/webview/ClineProvider"
+import type { IMcpHubClient } from "./interfaces/IMcpHubClient"
+import type { IMcpHubService } from "./interfaces/IMcpHubService"
 
 import { GlobalFileNames } from "../../shared/globalFileNames"
 
@@ -148,8 +149,8 @@ const McpSettingsSchema = z.object({
 	mcpServers: z.record(ServerConfigSchema),
 })
 
-export class McpHub {
-	private providerRef: WeakRef<ClineProvider>
+export class McpHub implements IMcpHubService {
+	private providerRef: WeakRef<IMcpHubClient>
 	private disposables: vscode.Disposable[] = []
 	private settingsWatcher?: vscode.FileSystemWatcher
 	private fileWatchers: Map<string, FSWatcher[]> = new Map()
@@ -164,7 +165,7 @@ export class McpHub {
 	private sanitizedNameRegistry: Map<string, string> = new Map()
 	private initializationPromise: Promise<void>
 
-	constructor(provider: ClineProvider) {
+	constructor(provider: IMcpHubClient) {
 		this.providerRef = new WeakRef(provider)
 		this.watchMcpSettingsFile()
 		this.watchProjectMcpFile().catch(console.error)
@@ -689,7 +690,7 @@ export class McpHub {
 			const client = new Client(
 				{
 					name: "NJUST_AI_CJ",
-					version: this.providerRef.deref()?.context.extension?.packageJSON?.version ?? "1.0.0",
+					version: this.providerRef.deref()?.getExtensionPackageVersion() ?? "1.0.0",
 				},
 				{
 					capabilities: {},
@@ -1461,20 +1462,15 @@ export class McpHub {
 		})
 
 		// Send sorted servers to webview
-		const targetProvider: ClineProvider | undefined = this.providerRef.deref()
+		const targetClient = this.providerRef.deref()
 
-		if (targetProvider) {
+		if (targetClient) {
 			const serversToSend = sortedConnections.map((connection) => connection.server)
 
-			const message = {
-				type: "mcpServers" as const,
-				mcpServers: serversToSend,
-			}
-
 			try {
-				await targetProvider.postMessageToWebview(message)
+				await targetClient.onMcpServersUpdated(serversToSend)
 			} catch (error) {
-				console.error("[McpHub] Error calling targetProvider.postMessageToWebview:", error)
+				console.error("[McpHub] Error calling onMcpServersUpdated:", error)
 			}
 		} else {
 			console.error(

@@ -6,7 +6,7 @@ import type OpenAI from "openai"
 import type { ProviderSettings, ModeConfig, ModelInfo } from "@njust-ai-cj/types"
 import { customToolRegistry, formatNative } from "@njust-ai-cj/core"
 
-import type { ClineProvider } from "../webview/ClineProvider"
+import type { ITaskHost } from "./interfaces/ITaskHost"
 import { getRooDirectoriesForCwd } from "../../services/roo-config/index.js"
 
 import { getNativeTools, getMcpServerTools } from "../prompts/tools/native-tools"
@@ -18,7 +18,7 @@ import {
 import { globalToolSchemaCache } from "../tools/toolSchemaCache"
 
 interface BuildToolsOptions {
-	provider: ClineProvider
+	provider: ITaskHost
 	cwd: string
 	mode: string | undefined
 	customModes: ModeConfig[] | undefined

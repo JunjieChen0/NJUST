@@ -38,6 +38,7 @@ export const AutoApproveDropdown = ({ disabled = false, triggerClassName = "" }:
 		setAlwaysAllowModeSwitch,
 		setAlwaysAllowSubtasks,
 		setAlwaysAllowFollowupQuestions,
+		setSaveAllBeforeExecuteCommand,
 	} = useExtensionState()
 
 	const toggles = useAutoApprovalToggles()
@@ -85,6 +86,7 @@ export const AutoApproveDropdown = ({ disabled = false, triggerClassName = "" }:
 			setAlwaysAllowModeSwitch,
 			setAlwaysAllowSubtasks,
 			setAlwaysAllowFollowupQuestions,
+			setSaveAllBeforeExecuteCommand,
 			setAutoApprovalEnabled,
 		],
 	)

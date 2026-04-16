@@ -12,8 +12,6 @@ import {
 } from "@njust-ai-cj/types"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 
-import { NativeToolCallParser } from "../../core/assistant-message/NativeToolCallParser"
-
 import type { ApiHandlerOptions } from "../../shared/api"
 
 import {
@@ -478,7 +476,7 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 			// Process finish_reason to emit tool_call_end events
 			// This ensures tool calls are finalized even if the stream doesn't properly close
 			if (finishReason) {
-				const endEvents = NativeToolCallParser.processFinishReason(finishReason)
+				const endEvents = this.options.toolCallParser!.processFinishReason(finishReason)
 				for (const event of endEvents) {
 					yield event
 				}

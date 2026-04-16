@@ -21,7 +21,7 @@ export class CangjieReferenceProvider implements vscode.ReferenceProvider {
 		const word = document.getText(wordRange)
 		if (!word || word.length < 2) return undefined
 
-		const refs = this.index.findReferences(word)
+		const refs = this.index.findReferences(word, document.uri)
 		if (refs.length === 0) return undefined
 
 		const locations = refs.map((r) => new vscode.Location(
@@ -30,7 +30,7 @@ export class CangjieReferenceProvider implements vscode.ReferenceProvider {
 		))
 
 		if (!context.includeDeclaration) {
-			const defs = this.index.findDefinitions(word)
+			const defs = this.index.findDefinitions(word, document.uri)
 			const defKeys = new Set(defs.map((d) => `${d.filePath}:${d.startLine}`))
 			return locations.filter((loc) => !defKeys.has(`${loc.uri.fsPath}:${loc.range.start.line}`))
 		}

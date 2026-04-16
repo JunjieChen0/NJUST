@@ -660,6 +660,7 @@ describe("newTaskTool delegation flow", () => {
 			message: "Do something",
 			initialTodos: [],
 			mode: "code",
+			isolationLevel: "shared",
 		})
 
 		// Assert: legacy path not used

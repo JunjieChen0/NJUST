@@ -56,7 +56,7 @@ const TaskHeader = ({
 	todos,
 }: TaskHeaderProps) => {
 	const { t } = useTranslation()
-	const { apiConfiguration, currentTaskItem, clineMessages: _clineMessages, latestTaskMetrics, taskMetricsHistory } = useExtensionState()
+	const { apiConfiguration, currentTaskItem, clineMessages: _clineMessages } = useExtensionState()
 	const { id: modelId, info: model } = useSelectedModel(apiConfiguration)
 	const [isTaskExpanded, setIsTaskExpanded] = useState(false)
 
@@ -78,38 +78,6 @@ const TaskHeader = ({
 	)
 	const reservedForOutput = maxTokens || 0
 
-	const currentTaskMetricsHistory = (taskMetricsHistory ?? []).filter((m) => m.taskId === currentTaskItem?.id)
-	const metricsSummary = (() => {
-		if (currentTaskMetricsHistory.length === 0) return undefined
-		const n = currentTaskMetricsHistory.length
-		const avgCacheHitRate =
-			currentTaskMetricsHistory.reduce((sum, m) => sum + m.cacheHitRate, 0) / n
-		const avgSavings =
-			currentTaskMetricsHistory.reduce((sum, m) => sum + m.estimatedSavingsPercent, 0) / n
-		const avgLatencyMs =
-			currentTaskMetricsHistory.reduce((sum, m) => sum + m.latencyMs, 0) / n
-		const totalInput = currentTaskMetricsHistory.reduce((sum, m) => sum + m.inputTokens, 0)
-		const totalOutput = currentTaskMetricsHistory.reduce((sum, m) => sum + m.outputTokens, 0)
-		return {
-			avgCacheHitRate,
-			avgSavings,
-			avgLatencyMs,
-			totalInput,
-			totalOutput,
-			samples: n,
-		}
-	})()
-	const sparklinePath = (() => {
-		if (currentTaskMetricsHistory.length < 2) return ""
-		const values = currentTaskMetricsHistory.slice(-12).map((m) => Math.max(0, Math.min(100, m.cacheHitRate * 100)))
-		const width = 72
-		const height = 14
-		const step = values.length > 1 ? width / (values.length - 1) : width
-		return values
-			.map((v, i) => `${i === 0 ? "M" : "L"}${(i * step).toFixed(1)},${(height - (v / 100) * height).toFixed(1)}`)
-			.join(" ")
-	})()
-
 	const condenseButton = (
 		<LucideIconButton
 			title={t("chat:task.condenseContext")}
@@ -129,8 +97,6 @@ const TaskHeader = ({
 			vscode.postMessage({ type: "showTaskWithId", text: parentTaskId })
 		}
 	}
-
-	const showMetricsCard = latestTaskMetrics?.taskId === currentTaskItem?.id
 
 	return (
 		<div className="group pt-2 pb-0 px-3">
@@ -206,20 +172,11 @@ const TaskHeader = ({
 						</div>
 					</div>
 				</div>
-				{showMetricsCard && latestTaskMetrics && (
-					<div
-						className="flex items-center gap-3 text-xs px-2 py-1 rounded-md bg-vscode-editor-background border border-vscode-panel-border"
-						onClick={(e) => e.stopPropagation()}>
-						<span>Cache hit: {(latestTaskMetrics.cacheHitRate * 100).toFixed(1)}%</span>
-						<span>Saved: {latestTaskMetrics.estimatedSavingsPercent.toFixed(1)}%</span>
-						<span>Latency: {latestTaskMetrics.latencyMs}ms</span>
-					</div>
-				)}
 				{!isTaskExpanded && contextWindow > 0 && (
 					<div
-						className="flex items-center justify-between text-sm text-muted-foreground/70"
+						className="flex items-center justify-between text-sm text-muted-foreground/70 w-full"
 						onClick={(e) => e.stopPropagation()}>
-						<div className="flex items-center gap-2">
+						<div className="flex items-center justify-between w-full min-w-0 gap-3">
 							<StandardTooltip
 								content={(() => {
 									const availableSpace = contextWindow - (contextTokens || 0) - reservedForOutput
@@ -280,36 +237,8 @@ const TaskHeader = ({
 									})()}
 								</span>
 							</StandardTooltip>
-							{showMetricsCard && latestTaskMetrics && (
-								<>
-									<span>·</span>
-									<span title="Prompt cache hit rate">Cache {Math.round(latestTaskMetrics.cacheHitRate * 100)}%</span>
-									<span title="Estimated cache savings">Saved {latestTaskMetrics.estimatedSavingsPercent.toFixed(1)}%</span>
-									<span title="Latest request latency">{latestTaskMetrics.latencyMs}ms</span>
-									{typeof latestTaskMetrics.contextPercent === "number" && (
-										<span title="Current context window usage">Ctx {latestTaskMetrics.contextPercent.toFixed(0)}%</span>
-									)}
-									{typeof latestTaskMetrics.compactLikelyTriggered === "boolean" && latestTaskMetrics.compactLikelyTriggered && (
-										<span title="Context manager likely to compact soon">Compact↑</span>
-									)}
-									{sparklinePath && (
-										<svg width="72" height="14" viewBox="0 0 72 14" aria-label="cache-hit-rate-trend">
-											<path d={sparklinePath} fill="none" stroke="currentColor" strokeWidth="1.25" />
-										</svg>
-									)}
-									{metricsSummary && (
-										<>
-											<span title={`samples=${metricsSummary.samples}`}>AvgCache {Math.round(metricsSummary.avgCacheHitRate * 100)}%</span>
-											<span title="Average estimated cache savings">AvgSaved {metricsSummary.avgSavings.toFixed(1)}%</span>
-											<span title="Average request latency">AvgLatency {Math.round(metricsSummary.avgLatencyMs)}ms</span>
-										</>
-									)}
-								</>
-							)}
 							{!!totalCost && (
-								<>
-									<span>·</span>
-									<StandardTooltip
+								<StandardTooltip
 										content={
 											hasSubtasks ? (
 												<div>
@@ -329,7 +258,7 @@ const TaskHeader = ({
 										side="top"
 										sideOffset={8}>
 										<>
-											<span>
+											<span className="shrink-0 tabular-nums">
 												${(aggregatedCost ?? totalCost).toFixed(2)}
 												{hasSubtasks && (
 													<span
@@ -341,7 +270,6 @@ const TaskHeader = ({
 											</span>
 										</>
 									</StandardTooltip>
-								</>
 							)}
 						</div>
 					</div>

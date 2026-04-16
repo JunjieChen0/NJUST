@@ -18,7 +18,7 @@ describe("Task.startSubtask() metadata-driven delegation", () => {
 		// Create a minimal Task-like instance with only fields used by startSubtask
 		const parent = Object.create(Task.prototype) as Task
 		;(parent as any).taskId = "parent-1"
-		;(parent as any).providerRef = { deref: () => provider }
+		;(parent as any).hostRef = { deref: () => provider }
 		;(parent as any).emit = vi.fn()
 
 		const child = await (Task.prototype as any).startSubtask.call(parent, "Do something", [], "code")
@@ -28,6 +28,8 @@ describe("Task.startSubtask() metadata-driven delegation", () => {
 			message: "Do something",
 			initialTodos: [],
 			mode: "code",
+			isolationLevel: "shared",
+			forkedContextSummary: undefined,
 		})
 		expect(child.taskId).toBe("child-1")
 

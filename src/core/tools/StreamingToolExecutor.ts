@@ -2,6 +2,8 @@ import type { ToolUse } from "../../shared/tools"
 import type { Task } from "../task/Task"
 import { ConcurrentToolExecutor } from "./ConcurrentToolExecutor"
 import { toolRegistry } from "./ToolRegistry"
+import { classifyToolCategory, ToolExecutionScheduler } from "../task/ToolExecutionOrchestrator"
+import type { AdaptiveConcurrencyController } from "./AdaptiveConcurrencyController"
 
 export type EagerToolDecision = "eager" | "deferred"
 
@@ -32,8 +34,12 @@ export class StreamingToolExecutor {
 	private readonly executor: ConcurrentToolExecutor
 	private withheldResults: WithheldToolResult[] = []
 
-	constructor(maxConcurrency = 10) {
-		this.executor = new ConcurrentToolExecutor({ maxConcurrency })
+	constructor(
+		maxConcurrency = 10,
+		concurrencyController?: AdaptiveConcurrencyController,
+		scheduler?: ToolExecutionScheduler,
+	) {
+		this.executor = new ConcurrentToolExecutor({ maxConcurrency, concurrencyController, scheduler })
 	}
 
 	/**
@@ -60,17 +66,23 @@ export class StreamingToolExecutor {
 		if (!this.isPartialArgsStable(toolUse)) return "deferred"
 		const tool = toolRegistry.get(toolUse.name)
 		if (!tool) return "deferred"
-		return tool.getEagerExecutionDecision((toolUse.nativeArgs ?? {}) as any)
+		return tool.getEagerExecutionDecision(
+			(toolUse.nativeArgs ?? {}) as Parameters<typeof tool.getEagerExecutionDecision>[0],
+		)
 	}
 
 	async runEagerBatch(task: Task, batch: ToolUse[], runOne: (toolUse: ToolUse, signal: AbortSignal) => Promise<void>): Promise<void> {
+		const itemCategories = new Map<number, ReturnType<typeof classifyToolCategory>>()
+		batch.forEach((toolUse, index) => {
+			itemCategories.set(index, classifyToolCategory(toolUse.name, false))
+		})
 		await this.executor.run(
 			batch,
 			async (toolUse, _index, ctx) => {
 				if (task.abort || task.didRejectTool || ctx.signal.aborted) return
 				await runOne(toolUse, ctx.signal)
 			},
-			{ failFast: true },
+			{ failFast: true, itemCategories },
 		)
 	}
 

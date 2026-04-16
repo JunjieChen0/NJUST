@@ -4,10 +4,21 @@ import { describe, it, expect, vi } from "vitest"
 import { NJUST_AI_CJEventName } from "@njust-ai-cj/types"
 import { ClineProvider } from "../core/webview/ClineProvider"
 
+/** Minimal parent task surface used by delegateParentAndOpenChild (flush + lineage). */
+function createDelegationParentStub(overrides: { taskId?: string } = {}) {
+	const taskId = overrides.taskId ?? "parent-1"
+	return {
+		taskId,
+		emit: vi.fn(),
+		flushPendingToolResultsToHistory: vi.fn().mockResolvedValue(true),
+		retrySaveApiConversationHistory: vi.fn().mockResolvedValue(true),
+	}
+}
+
 describe("ClineProvider.delegateParentAndOpenChild()", () => {
 	it("persists parent delegation metadata and emits TaskDelegated", async () => {
 		const providerEmit = vi.fn()
-		const parentTask = { taskId: "parent-1", emit: vi.fn() } as any
+		const parentTask = createDelegationParentStub()
 
 		const childStart = vi.fn()
 		const updateTaskHistory = vi.fn()
@@ -57,7 +68,10 @@ describe("ClineProvider.delegateParentAndOpenChild()", () => {
 			mode: "code",
 		}
 
-		const child = await (ClineProvider.prototype as any).delegateParentAndOpenChild.call(provider, params)
+		const child = await ClineProvider.prototype.delegateParentAndOpenChild.call(
+			provider,
+			params,
+		)
 
 		expect(child.taskId).toBe("child-1")
 
@@ -98,7 +112,7 @@ describe("ClineProvider.delegateParentAndOpenChild()", () => {
 	it("calls child.start() only after parent metadata is persisted (no race condition)", async () => {
 		const callOrder: string[] = []
 
-		const parentTask = { taskId: "parent-1", emit: vi.fn() } as any
+		const parentTask = createDelegationParentStub()
 		const childStart = vi.fn(() => callOrder.push("child.start"))
 
 		const updateTaskHistory = vi.fn(async () => {
@@ -132,7 +146,7 @@ describe("ClineProvider.delegateParentAndOpenChild()", () => {
 			log: vi.fn(),
 		} as unknown as ClineProvider
 
-		await (ClineProvider.prototype as any).delegateParentAndOpenChild.call(provider, {
+		await ClineProvider.prototype.delegateParentAndOpenChild.call(provider, {
 			parentTaskId: "parent-1",
 			message: "Do something",
 			initialTodos: [],

@@ -4,7 +4,7 @@ import { getModeBySlug, getToolsForMode } from "../../../shared/modes"
 import { TOOL_GROUPS, ALWAYS_AVAILABLE_TOOLS, TOOL_ALIASES } from "../../../shared/tools"
 import { defaultModeSlug } from "../../../shared/modes"
 import type { CodeIndexManager } from "../../../services/code-index/manager"
-import type { McpHub } from "../../../services/mcp/McpHub"
+import type { IMcpHubService } from "../../../services/mcp/interfaces/IMcpHubService"
 import { isToolAllowedForMode } from "../../../core/tools/validateToolUse"
 
 /**
@@ -229,7 +229,7 @@ export function filterNativeToolsForMode(
 	experiments: Record<string, boolean> | undefined,
 	codeIndexManager?: CodeIndexManager,
 	settings?: Record<string, any>,
-	mcpHub?: McpHub,
+	mcpHub?: IMcpHubService,
 ): OpenAI.Chat.ChatCompletionTool[] {
 	// Get mode configuration and all tools for this mode
 	const modeSlug = mode ?? defaultModeSlug
@@ -332,7 +332,7 @@ export function filterNativeToolsForMode(
 /**
  * Helper function to check if any MCP server has resources available
  */
-function hasAnyMcpResources(mcpHub: McpHub): boolean {
+function hasAnyMcpResources(mcpHub: IMcpHubService): boolean {
 	const servers = mcpHub.getServers()
 	return servers.some((server) => server.resources && server.resources.length > 0)
 }

@@ -137,6 +137,8 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 	private indexPath: string | undefined
 	private dirty = false
 	private flushTimer: ReturnType<typeof setTimeout> | undefined
+	private readonly reindexDebounceMs = 400
+	private reindexTimers = new Map<string, ReturnType<typeof setTimeout>>()
 	private indexing = false
 	/** mtime-scored raw lines for hot-path reference scans */
 	private readFileCache = new Map<string, { mtime: number; lines: string[] }>()
@@ -149,6 +151,9 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 	/** Normalized `from|to` primitive keys → short hint for prompt augmentation */
 	private conversionEdgeMap = new Map<string, string>()
 
+	/** Workspace folder chosen at `initialize` (metadata for multi-root). */
+	private _indexedWorkspaceRootFsPath: string | undefined
+
 	constructor(private readonly outputChannel: vscode.OutputChannel) {
 		CangjieSymbolIndex.instance = this
 	}
@@ -157,11 +162,53 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		return CangjieSymbolIndex.instance
 	}
 
+	/**
+	 * Prefer the active editor's workspace folder when it contains `cjpm.toml`,
+	 * otherwise the first folder with `cjpm.toml`, else the first folder (aligns
+	 * index primary root with where the user is editing).
+	 */
+	private pickIndexRootFolder(): vscode.WorkspaceFolder | undefined {
+		const folders = vscode.workspace.workspaceFolders
+		if (!folders?.length) {
+			return undefined
+		}
+		const activeUri = vscode.window.activeTextEditor?.document.uri
+		const activeFolder = activeUri ? vscode.workspace.getWorkspaceFolder(activeUri) : undefined
+		if (activeFolder && fs.existsSync(path.join(activeFolder.uri.fsPath, "cjpm.toml"))) {
+			return activeFolder
+		}
+		for (const folder of folders) {
+			if (fs.existsSync(path.join(folder.uri.fsPath, "cjpm.toml"))) {
+				return folder
+			}
+		}
+		return folders[0]
+	}
+
+	private static pathUnderWorkspaceFolder(filePath: string, scopeUri: vscode.Uri): boolean {
+		const folder = vscode.workspace.getWorkspaceFolder(scopeUri)
+		if (!folder) {
+			return true
+		}
+		const root = path.normalize(folder.uri.fsPath)
+		const fp = path.normalize(filePath)
+		const sep = path.sep
+		return fp === root || fp.startsWith(root + sep)
+	}
+
+	private filterSymbolsByScope<T extends { filePath: string }>(items: T[], scopeUri?: vscode.Uri): T[] {
+		if (!scopeUri) {
+			return items
+		}
+		return items.filter((x) => CangjieSymbolIndex.pathUnderWorkspaceFolder(x.filePath, scopeUri))
+	}
+
 	async initialize(): Promise<void> {
-		const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+		const workspaceFolder = this.pickIndexRootFolder()
 		if (!workspaceFolder) return
 
 		const root = workspaceFolder.uri.fsPath
+		this._indexedWorkspaceRootFsPath = root
 		const indexDir = path.join(root, INDEX_DIR)
 		this.indexPath = path.join(indexDir, INDEX_FILE)
 
@@ -170,9 +217,17 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		this.watcher = vscode.workspace.createFileSystemWatcher("**/*.cj")
 		this.disposables.push(this.watcher)
 
-		this.watcher.onDidChange((uri) => void this.reindexFile(uri.fsPath))
-		this.watcher.onDidCreate((uri) => void this.reindexFile(uri.fsPath))
-		this.watcher.onDidDelete((uri) => this.removeFile(uri.fsPath))
+		this.watcher.onDidChange((uri) => this.scheduleReindex(uri.fsPath))
+		this.watcher.onDidCreate((uri) => this.scheduleReindex(uri.fsPath))
+		this.watcher.onDidDelete((uri) => {
+			const p = uri.fsPath
+			const t = this.reindexTimers.get(p)
+			if (t) {
+				clearTimeout(t)
+				this.reindexTimers.delete(p)
+			}
+			this.removeFile(p)
+		})
 
 		await this.fullIndex(root)
 	}
@@ -457,6 +512,20 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		return vscode.workspace.getConfiguration(Package.name).get<boolean>("cangjieTools.useCjcAstForIndex", false)
 	}
 
+	private scheduleReindex(filePath: string): void {
+		const prev = this.reindexTimers.get(filePath)
+		if (prev) {
+			clearTimeout(prev)
+		}
+		this.reindexTimers.set(
+			filePath,
+			setTimeout(() => {
+				this.reindexTimers.delete(filePath)
+				void this.reindexFile(filePath)
+			}, this.reindexDebounceMs),
+		)
+	}
+
 	async reindexFile(filePath: string): Promise<void> {
 		if (!filePath.endsWith(".cj")) return
 
@@ -550,16 +619,18 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 
 	// ── Query APIs ──
 
-	findDefinitions(name: string): SymbolEntry[] {
-		return this.nameIndex.get(name) ?? []
+	findDefinitions(name: string, scopeUri?: vscode.Uri): SymbolEntry[] {
+		const raw = this.nameIndex.get(name) ?? []
+		return this.filterSymbolsByScope(raw, scopeUri)
 	}
 
-	findDefinitionsByKind(name: string, kind: CangjieDefKind): SymbolEntry[] {
-		return this.findDefinitions(name).filter((s) => s.kind === kind)
+	findDefinitionsByKind(name: string, kind: CangjieDefKind, scopeUri?: vscode.Uri): SymbolEntry[] {
+		return this.findDefinitions(name, scopeUri).filter((s) => s.kind === kind)
 	}
 
-	findReferences(name: string): ReferenceEntry[] {
-		return this.referenceIndex.get(name) ?? []
+	findReferences(name: string, scopeUri?: vscode.Uri): ReferenceEntry[] {
+		const raw = this.referenceIndex.get(name) ?? []
+		return this.filterSymbolsByScope(raw, scopeUri)
 	}
 
 	findSymbolsByPrefix(prefix: string, limit = 50): SymbolEntry[] {
@@ -696,6 +767,10 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		if (this.flushTimer) {
 			clearTimeout(this.flushTimer)
 		}
+		for (const t of this.reindexTimers.values()) {
+			clearTimeout(t)
+		}
+		this.reindexTimers.clear()
 		this.saveToDisk()
 		this.disposables.forEach((d) => d.dispose())
 		if (CangjieSymbolIndex.instance === this) {

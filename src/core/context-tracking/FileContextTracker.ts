@@ -7,7 +7,7 @@ import { fileExistsAtPath } from "../../utils/fs"
 import fs from "fs/promises"
 import { ContextProxy } from "../config/ContextProxy"
 import type { FileMetadataEntry, RecordSource, TaskMetadata } from "./FileContextTrackerTypes"
-import { ClineProvider } from "../webview/ClineProvider"
+import type { ITaskHost } from "../task/interfaces/ITaskHost"
 
 // This class is responsible for tracking file operations that may result in stale context.
 // If a user modifies a file outside of Roo, the context may become stale and need to be updated.
@@ -22,7 +22,7 @@ import { ClineProvider } from "../webview/ClineProvider"
 // If a file is modified outside of Roo, we detect and track this change to prevent stale context.
 export class FileContextTracker {
 	readonly taskId: string
-	private providerRef: WeakRef<ClineProvider>
+	private providerRef: WeakRef<ITaskHost>
 
 	// File tracking and watching
 	private fileWatchers = new Map<string, vscode.FileSystemWatcher>()
@@ -30,7 +30,7 @@ export class FileContextTracker {
 	private recentlyEditedByRoo = new Set<string>()
 	private checkpointPossibleFiles = new Set<string>()
 
-	constructor(provider: ClineProvider, taskId: string) {
+	constructor(provider: ITaskHost, taskId: string) {
 		this.providerRef = new WeakRef(provider)
 		this.taskId = taskId
 	}

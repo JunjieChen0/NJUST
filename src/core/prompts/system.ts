@@ -7,7 +7,7 @@ import { Mode, modes, defaultModeSlug, getModeBySlug, getGroupName, getModeSelec
 import { DiffStrategy } from "../../shared/tools"
 import { isEmpty } from "../../utils/object"
 
-import { McpHub } from "../../services/mcp/McpHub"
+import type { IMcpHubService } from "../../services/mcp/interfaces/IMcpHubService"
 import { CodeIndexManager } from "../../services/code-index/manager"
 import { SkillsManager } from "../../services/skills/SkillsManager"
 
@@ -35,7 +35,27 @@ import type { SectionBudget } from "./tokenBudget"
 
 export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = "\n\n====\n\nSYSTEM_PROMPT_DYNAMIC_BOUNDARY\n\n====\n\n"
 
-/** Scale Cangjie context budget from the active model context window (Task passes via settings). */
+/**
+ * Scale Cangjie dynamic context token budget based on the active model's context window.
+ *
+ * Called by TaskRequestBuilder and passed as `settings.cangjieContextTokenBudget`.
+ * Models with larger context windows get more room for Cangjie-specific context
+ * (diagnostics, corpus snippets, editing context, etc.); smaller windows are
+ * automatically compressed to protect essential diagnostic sections.
+ *
+ * Mapping:
+ * - >= 200k tokens → 6000
+ * - >= 100k tokens → 4500
+ * - >= 64k  tokens → 3800
+ * - >= 32k  tokens → 3000
+ * - >= 16k  tokens → 2400
+ * - < 16k  tokens → max(800, min(DEFAULT, floor(window * 0.08)))
+ * - unknown / < 4096 → DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET (4800)
+ *
+ * The result of this function is *not* the final budget — it feeds into
+ * `resolveCangjieContextTokenBudget`, which allows the user's VS Code
+ * `cangjieContextTokenBudget` setting to override it.
+ */
 export function deriveCangjieContextTokenBudgetFromContextWindow(contextWindow: number | undefined): number {
 	const fallback = DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET
 	if (contextWindow === undefined || contextWindow <= 0 || contextWindow < 4096) {
@@ -49,6 +69,18 @@ export function deriveCangjieContextTokenBudgetFromContextWindow(contextWindow: 
 	return Math.max(800, Math.min(fallback, Math.floor(contextWindow * 0.08)))
 }
 
+/**
+ * Resolve the effective Cangjie context token budget with the following priority:
+ *
+ * 1. VS Code setting `njust-ai-cj.cangjieContextTokenBudget` — explicit user override
+ * 2. `settings.cangjieContextTokenBudget` — model-scaled value from
+ *    `deriveCangjieContextTokenBudgetFromContextWindow`
+ * 3. `DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET` (4800) — hardcoded fallback
+ *
+ * This means small-context models will automatically receive a compressed
+ * Cangjie block (e.g. 2400 tokens at 16k context), but a user who sets the
+ * VS Code config can force any budget regardless of model size.
+ */
 function resolveCangjieContextTokenBudget(settings?: SystemPromptSettings): number {
 	const fromConfig = vscode.workspace.getConfiguration(Package.name).get<number>("cangjieContextTokenBudget")
 	if (typeof fromConfig === "number" && fromConfig > 0) {
@@ -82,12 +114,55 @@ export type SystemPromptParts = {
 	perToolHashes?: Record<string, string>
 }
 
+/**
+ * Consolidated config object for system prompt generation.
+ * Replaces the 13+ positional parameters on generatePrompt / SYSTEM_PROMPT / SYSTEM_PROMPT_PARTS.
+ */
+export interface SystemPromptConfig {
+	context: vscode.ExtensionContext
+	cwd: string
+	supportsComputerUse: boolean
+	mode: Mode
+	mcpHub?: IMcpHubService
+	diffStrategy?: DiffStrategy
+	promptComponent?: PromptComponent
+	customModeConfigs?: ModeConfig[]
+	globalCustomInstructions?: string
+	experiments?: Record<string, boolean>
+	language?: string
+	rooIgnoreInstructions?: string
+	settings?: SystemPromptSettings
+	todoList?: TodoItem[]
+	modelId?: string
+	skillsManager?: SkillsManager
+}
+
+async function generatePrompt(cfg: SystemPromptConfig): Promise<SystemPromptParts>
+/** @deprecated Use the config-object overload. */
 async function generatePrompt(
 	context: vscode.ExtensionContext,
 	cwd: string,
 	supportsComputerUse: boolean,
 	mode: Mode,
-	mcpHub?: McpHub,
+	mcpHub?: IMcpHubService,
+	diffStrategy?: DiffStrategy,
+	promptComponent?: PromptComponent,
+	customModeConfigs?: ModeConfig[],
+	globalCustomInstructions?: string,
+	experiments?: Record<string, boolean>,
+	language?: string,
+	rooIgnoreInstructions?: string,
+	settings?: SystemPromptSettings,
+	todoList?: TodoItem[],
+	modelId?: string,
+	skillsManager?: SkillsManager,
+): Promise<SystemPromptParts>
+async function generatePrompt(
+	contextOrCfg: vscode.ExtensionContext | SystemPromptConfig,
+	cwd?: string,
+	supportsComputerUse?: boolean,
+	mode?: Mode,
+	mcpHub?: IMcpHubService,
 	diffStrategy?: DiffStrategy,
 	promptComponent?: PromptComponent,
 	customModeConfigs?: ModeConfig[],
@@ -100,6 +175,48 @@ async function generatePrompt(
 	modelId?: string,
 	skillsManager?: SkillsManager,
 ): Promise<SystemPromptParts> {
+	const cfg: SystemPromptConfig =
+		"context" in contextOrCfg && "cwd" in contextOrCfg && "mode" in contextOrCfg
+			? (contextOrCfg as SystemPromptConfig)
+			: {
+					context: contextOrCfg as vscode.ExtensionContext,
+					cwd: cwd!,
+					supportsComputerUse: supportsComputerUse!,
+					mode: mode!,
+					mcpHub,
+					diffStrategy,
+					promptComponent,
+					customModeConfigs,
+					globalCustomInstructions,
+					experiments,
+					language,
+					rooIgnoreInstructions,
+					settings,
+					todoList,
+					modelId,
+					skillsManager,
+				}
+	return generatePromptImpl(cfg)
+}
+
+async function generatePromptImpl(cfg: SystemPromptConfig): Promise<SystemPromptParts> {
+	const {
+		context,
+		cwd,
+		supportsComputerUse,
+		mode,
+		mcpHub,
+		diffStrategy,
+		promptComponent,
+		customModeConfigs,
+		globalCustomInstructions,
+		experiments,
+		language,
+		rooIgnoreInstructions,
+		settings,
+		skillsManager,
+		modelId: _modelId,
+	} = cfg
 	if (!context) {
 		throw new Error("Extension context is required for generating system prompt")
 	}
@@ -264,11 +381,12 @@ HOW TO USE:
 	return { staticPart: budgeted.staticPart, dynamicPart: budgeted.dynamicPart, fullPrompt, perToolHashes }
 }
 
-export const SYSTEM_PROMPT_PARTS = async (
+/** Helper: resolve config from positional params (shared by SYSTEM_PROMPT_PARTS / SYSTEM_PROMPT). */
+function positionalToConfig(
 	context: vscode.ExtensionContext,
 	cwd: string,
 	supportsComputerUse: boolean,
-	mcpHub?: McpHub,
+	mcpHub?: IMcpHubService,
 	diffStrategy?: DiffStrategy,
 	mode: Mode = defaultModeSlug,
 	customModePrompts?: CustomModePrompts,
@@ -281,26 +399,18 @@ export const SYSTEM_PROMPT_PARTS = async (
 	todoList?: TodoItem[],
 	modelId?: string,
 	skillsManager?: SkillsManager,
-): Promise<SystemPromptParts> => {
-	if (!context) {
-		throw new Error("Extension context is required for generating system prompt")
-	}
-
-	// Check if it's a custom mode
+): SystemPromptConfig {
 	const promptComponent = getPromptComponent(customModePrompts, mode)
-
-	// Get full mode config from custom modes or fall back to built-in modes
 	const currentMode = getModeBySlug(mode, customModes) || modes.find((m) => m.slug === mode) || modes[0]
-
-	return generatePrompt(
+	return {
 		context,
 		cwd,
 		supportsComputerUse,
-		currentMode.slug,
+		mode: currentMode.slug,
 		mcpHub,
 		diffStrategy,
 		promptComponent,
-		customModes,
+		customModeConfigs: customModes,
 		globalCustomInstructions,
 		experiments,
 		language,
@@ -309,16 +419,18 @@ export const SYSTEM_PROMPT_PARTS = async (
 		todoList,
 		modelId,
 		skillsManager,
-	)
+	}
 }
 
-export const SYSTEM_PROMPT = async (
+export async function SYSTEM_PROMPT_PARTS(cfg: SystemPromptConfig): Promise<SystemPromptParts>
+/** @deprecated Use the config-object overload. */
+export async function SYSTEM_PROMPT_PARTS(
 	context: vscode.ExtensionContext,
 	cwd: string,
 	supportsComputerUse: boolean,
-	mcpHub?: McpHub,
+	mcpHub?: IMcpHubService,
 	diffStrategy?: DiffStrategy,
-	mode: Mode = defaultModeSlug,
+	mode?: Mode,
 	customModePrompts?: CustomModePrompts,
 	customModes?: ModeConfig[],
 	globalCustomInstructions?: string,
@@ -329,24 +441,82 @@ export const SYSTEM_PROMPT = async (
 	todoList?: TodoItem[],
 	modelId?: string,
 	skillsManager?: SkillsManager,
-): Promise<string> => {
+): Promise<SystemPromptParts>
+export async function SYSTEM_PROMPT_PARTS(
+	contextOrCfg: vscode.ExtensionContext | SystemPromptConfig,
+	cwd?: string,
+	supportsComputerUse?: boolean,
+	mcpHub?: IMcpHubService,
+	diffStrategy?: DiffStrategy,
+	mode?: Mode,
+	customModePrompts?: CustomModePrompts,
+	customModes?: ModeConfig[],
+	globalCustomInstructions?: string,
+	experiments?: Record<string, boolean>,
+	language?: string,
+	rooIgnoreInstructions?: string,
+	settings?: SystemPromptSettings,
+	todoList?: TodoItem[],
+	modelId?: string,
+	skillsManager?: SkillsManager,
+): Promise<SystemPromptParts> {
+	if ("context" in contextOrCfg && "cwd" in contextOrCfg && "mode" in contextOrCfg) {
+		return generatePrompt(contextOrCfg as SystemPromptConfig)
+	}
+	const cfg = positionalToConfig(
+		contextOrCfg as vscode.ExtensionContext,
+		cwd!, supportsComputerUse!, mcpHub, diffStrategy,
+		mode, customModePrompts, customModes, globalCustomInstructions,
+		experiments, language, rooIgnoreInstructions, settings,
+		todoList, modelId, skillsManager,
+	)
+	return generatePrompt(cfg)
+}
+
+export async function SYSTEM_PROMPT(cfg: SystemPromptConfig): Promise<string>
+/** @deprecated Use the config-object overload. */
+export async function SYSTEM_PROMPT(
+	context: vscode.ExtensionContext,
+	cwd: string,
+	supportsComputerUse: boolean,
+	mcpHub?: IMcpHubService,
+	diffStrategy?: DiffStrategy,
+	mode?: Mode,
+	customModePrompts?: CustomModePrompts,
+	customModes?: ModeConfig[],
+	globalCustomInstructions?: string,
+	experiments?: Record<string, boolean>,
+	language?: string,
+	rooIgnoreInstructions?: string,
+	settings?: SystemPromptSettings,
+	todoList?: TodoItem[],
+	modelId?: string,
+	skillsManager?: SkillsManager,
+): Promise<string>
+export async function SYSTEM_PROMPT(
+	contextOrCfg: vscode.ExtensionContext | SystemPromptConfig,
+	cwd?: string,
+	supportsComputerUse?: boolean,
+	mcpHub?: IMcpHubService,
+	diffStrategy?: DiffStrategy,
+	mode?: Mode,
+	customModePrompts?: CustomModePrompts,
+	customModes?: ModeConfig[],
+	globalCustomInstructions?: string,
+	experiments?: Record<string, boolean>,
+	language?: string,
+	rooIgnoreInstructions?: string,
+	settings?: SystemPromptSettings,
+	todoList?: TodoItem[],
+	modelId?: string,
+	skillsManager?: SkillsManager,
+): Promise<string> {
 	const parts = await SYSTEM_PROMPT_PARTS(
-		context,
-		cwd,
-		supportsComputerUse,
-		mcpHub,
-		diffStrategy,
-		mode,
-		customModePrompts,
-		customModes,
-		globalCustomInstructions,
-		experiments,
-		language,
-		rooIgnoreInstructions,
-		settings,
-		todoList,
-		modelId,
-		skillsManager,
+		contextOrCfg as any,
+		cwd as any, supportsComputerUse as any, mcpHub, diffStrategy,
+		mode, customModePrompts, customModes, globalCustomInstructions,
+		experiments, language, rooIgnoreInstructions, settings,
+		todoList, modelId, skillsManager,
 	)
 	return parts.fullPrompt
 }

@@ -4,7 +4,7 @@ import type { ModelInfo } from "@njust-ai-cj/types"
 
 import type { ApiHandler, ApiHandlerCreateMessageMetadata } from "../index"
 import { ApiStream } from "../transform/stream"
-import { countTokens } from "../../utils/countTokens"
+import { countTokens, countTokensDetailed, type TokenCountResult } from "../../utils/countTokens"
 import { isMcpTool } from "../../utils/mcp-name"
 
 /**
@@ -105,18 +105,42 @@ export abstract class BaseProvider implements ApiHandler {
 		return result
 	}
 
+	protected hasNativeTokenCounting(): boolean {
+		return false
+	}
+
 	/**
-	 * Default token counting implementation using tiktoken.
-	 * Providers can override this to use their native token counting endpoints.
-	 *
-	 * @param content The content to count tokens for
-	 * @returns A promise resolving to the token count
+	 * Override when {@link hasNativeTokenCounting} is true; return undefined to fall back to tiktoken.
+	 */
+	protected async countTokensNative(
+		_content: Anthropic.Messages.ContentBlockParam[],
+	): Promise<number | TokenCountResult | undefined> {
+		return undefined
+	}
+
+	/**
+	 * Default token counting using tiktoken; providers may override {@link hasNativeTokenCounting}.
 	 */
 	async countTokens(content: Anthropic.Messages.ContentBlockParam[]): Promise<number> {
+		const result = await this.countTokensDetailed(content)
+		return result.total
+	}
+
+	async countTokensDetailed(content: Anthropic.Messages.ContentBlockParam[]): Promise<TokenCountResult> {
 		if (content.length === 0) {
-			return 0
+			return { total: 0, strategy: "tiktoken" }
 		}
 
-		return countTokens(content, { useWorker: true })
+		if (this.hasNativeTokenCounting()) {
+			const native = await this.countTokensNative(content)
+			if (native !== undefined) {
+				if (typeof native === "number") {
+					return { total: native, strategy: "native" }
+				}
+				return native
+			}
+		}
+
+		return countTokensDetailed(content, { useWorker: true })
 	}
 }

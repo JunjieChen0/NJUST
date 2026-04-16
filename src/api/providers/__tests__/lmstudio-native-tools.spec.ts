@@ -82,9 +82,9 @@ describe("LmStudioHandler Native Tools", () => {
 					]),
 				}),
 			)
-			// parallel_tool_calls should be true by default when not explicitly set
+			// parallel_tool_calls defaults off unless metadata enables it
 			const callArgs = mockCreate.mock.calls[0][0]
-			expect(callArgs).toHaveProperty("parallel_tool_calls", true)
+			expect(callArgs).toHaveProperty("parallel_tool_calls", false)
 		})
 
 		it("should include tool_choice when provided", async () => {
@@ -128,8 +128,7 @@ describe("LmStudioHandler Native Tools", () => {
 			// Tools are now always present (minimum 6 from ALWAYS_AVAILABLE_TOOLS)
 			expect(callArgs).toHaveProperty("tools")
 			expect(callArgs).toHaveProperty("tool_choice")
-			// parallel_tool_calls should be true by default when not explicitly set
-			expect(callArgs).toHaveProperty("parallel_tool_calls", true)
+			expect(callArgs).toHaveProperty("parallel_tool_calls", false)
 		})
 
 		it("should yield tool_call_partial chunks during streaming", async () => {

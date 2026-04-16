@@ -6,7 +6,6 @@ import { type ModelInfo, openAiModelInfoSaneDefaults, LMSTUDIO_DEFAULT_TEMPERATU
 
 import type { ApiHandlerOptions } from "../../shared/api"
 
-import { NativeToolCallParser } from "../../core/assistant-message/NativeToolCallParser"
 import { TagMatcher } from "../../utils/tag-matcher"
 
 import { convertToOpenAiMessages } from "../transform/openai-format"
@@ -90,7 +89,7 @@ export class LmStudioHandler extends BaseProvider implements SingleCompletionHan
 				stream: true,
 				tools: this.convertToolsForOpenAI(metadata?.tools),
 				tool_choice: metadata?.tool_choice,
-				parallel_tool_calls: metadata?.parallelToolCalls ?? true,
+				parallel_tool_calls: metadata?.parallelToolCalls ?? false,
 			}
 
 			if (this.options.lmStudioSpeculativeDecodingEnabled && this.options.lmStudioDraftModelId) {
@@ -139,7 +138,7 @@ export class LmStudioHandler extends BaseProvider implements SingleCompletionHan
 
 				// Process finish_reason to emit tool_call_end events
 				if (finishReason) {
-					const endEvents = NativeToolCallParser.processFinishReason(finishReason)
+					const endEvents = this.options.toolCallParser!.processFinishReason(finishReason)
 					for (const event of endEvents) {
 						yield event
 					}

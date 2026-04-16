@@ -82,6 +82,9 @@ export class IpcClient extends EventEmitter<IpcClientEvents> {
 				case IpcMessageType.TaskEvent:
 					this.emit(IpcMessageType.TaskEvent, payload.data)
 					break
+				case IpcMessageType.ServerError:
+					this.emit(IpcMessageType.ServerError, payload.data)
+					break
 			}
 		}
 	}

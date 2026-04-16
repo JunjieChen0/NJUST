@@ -11,6 +11,7 @@
 
 import { ApiProviderError } from "@njust-ai-cj/types"
 import i18n from "../../../i18n/setup"
+import { redactApiSecrets } from "../../../utils/redactApiSecrets"
 
 /**
  * Handles API provider errors and transforms them into user-friendly messages
@@ -49,13 +50,14 @@ export function handleProviderError(
 
 	if (error instanceof Error) {
 		const anyErr = error as any
-		const msg = anyErr?.error?.metadata?.raw || error.message || ""
+		const rawMsg = anyErr?.error?.metadata?.raw || error.message || ""
+		const msg = redactApiSecrets(String(rawMsg))
 
 		// Log the original error details for debugging
 		console.error(`[${providerName}] API error:`, {
 			message: msg,
 			name: error.name,
-			stack: error.stack,
+			stack: error.stack ? redactApiSecrets(error.stack) : undefined,
 			status: anyErr.status,
 		})
 
@@ -67,9 +69,10 @@ export function handleProviderError(
 			wrapped = new ApiProviderError(i18n.t("common:errors.api.invalidKeyInvalidChars"))
 		} else {
 			// Apply custom transformer if provided, otherwise use default format
+			const safeMsg = msg
 			const finalMessage = options?.messageTransformer
-				? options.messageTransformer(msg)
-				: `${providerName} ${messagePrefix} error: ${msg}`
+				? redactApiSecrets(options.messageTransformer(safeMsg))
+				: redactApiSecrets(`${providerName} ${messagePrefix} error: ${safeMsg}`)
 			wrapped = new ApiProviderError(finalMessage)
 		}
 
@@ -89,13 +92,22 @@ export function handleProviderError(
 		if (anyErr.$metadata !== undefined) {
 			wrapped.$metadata = anyErr.$metadata
 		}
+		// Preserve headers / retryAfter so ApiRetryExecutor can honour Retry-After
+		if (anyErr.headers !== undefined) {
+			;(wrapped as any).headers = anyErr.headers
+		}
+		if (typeof anyErr.retryAfter === "number") {
+			;(wrapped as any).retryAfter = anyErr.retryAfter
+		}
 
 		return wrapped
 	}
 
 	// Non-Error: wrap with provider-specific prefix
-	console.error(`[${providerName}] Non-Error exception:`, error)
-	const wrapped = new ApiProviderError(`${providerName} ${messagePrefix} error: ${String(error)}`)
+	console.error(`[${providerName}] Non-Error exception:`, redactApiSecrets(String(error)))
+	const wrapped = new ApiProviderError(
+		redactApiSecrets(`${providerName} ${messagePrefix} error: ${String(error)}`),
+	)
 
 	// Also try to preserve status for non-Error exceptions (e.g., plain objects with status)
 	const anyErr = error as any

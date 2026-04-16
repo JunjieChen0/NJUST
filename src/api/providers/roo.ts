@@ -3,7 +3,6 @@ import OpenAI from "openai"
 
 import { rooDefaultModelId, getApiProtocol, type ImageGenerationApiMethod } from "@njust-ai-cj/types"
 
-import { NativeToolCallParser } from "../../core/assistant-message/NativeToolCallParser"
 
 import { Package } from "../../shared/package"
 import type { ApiHandlerOptions } from "../../shared/api"
@@ -274,7 +273,7 @@ export class RooHandler extends BaseOpenAiCompatibleProvider<string> {
 				}
 
 				if (finishReason) {
-					const endEvents = NativeToolCallParser.processFinishReason(finishReason)
+					const endEvents = this.options.toolCallParser!.processFinishReason(finishReason)
 					for (const event of endEvents) {
 						yield event
 					}

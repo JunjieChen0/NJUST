@@ -11,8 +11,9 @@ import { Package } from "../../shared/package"
 import { defaultModeSlug } from "../../shared/modes"
 
 import type { ApiHandlerCreateMessageMetadata } from "../../api"
+import { resolveParallelNativeToolCalls } from "../../shared/parallelToolCalls"
 
-import { McpHub } from "../../services/mcp/McpHub"
+import type { IMcpHubService } from "../../services/mcp/interfaces/IMcpHubService"
 import { McpServerManager } from "../../services/mcp/McpServerManager"
 
 import {
@@ -73,7 +74,7 @@ export class TaskRequestBuilder {
 	 */
 	async getSystemPromptParts(): Promise<SystemPromptParts> {
 		const { mcpEnabled } = (await this.task.providerRef.deref()?.getState()) ?? {}
-		let mcpHub: McpHub | undefined
+		let mcpHub: IMcpHubService | undefined
 		if (mcpEnabled ?? true) {
 			const provider = this.task.providerRef.deref()
 
@@ -242,7 +243,7 @@ export class TaskRequestBuilder {
 				? {
 						tools: allTools,
 						tool_choice: "auto",
-						parallelToolCalls: true,
+						parallelToolCalls: resolveParallelNativeToolCalls(apiConfiguration),
 					}
 				: {}),
 		}

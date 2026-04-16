@@ -96,7 +96,7 @@ export class DoubaoHandler extends OpenAiHandler {
 			...(isThinkingModel && { thinking_type: "enabled" }),
 			tools: this.convertToolsForOpenAI(metadata?.tools),
 			tool_choice: metadata?.tool_choice,
-			parallel_tool_calls: metadata?.parallelToolCalls ?? true,
+			parallel_tool_calls: metadata?.parallelToolCalls ?? false,
 		}
 
 		this.addMaxTokensIfNeeded(requestOptions, modelInfo)

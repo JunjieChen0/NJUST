@@ -20,6 +20,12 @@ import { convertNewFileToUnifiedDiff, computeDiffStats, sanitizeUnifiedDiff } fr
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
+import {
+	cangjiePreflightCheck,
+	buildSearchGateWarning,
+	CRITICAL_SIGNATURE_MODULES,
+	resolveRootPackageName,
+} from "./cangjiePreflightCheck"
 
 interface WriteToFileParams {
 	path: string
@@ -104,6 +110,40 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 			newContent = unescapeHtmlEntities(newContent)
 		}
 
+		// Cangjie preflight check: validate .cj files before writing (only in Cangjie mode)
+		let cangjiePostWriteWarnings = ""
+		if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+			const rootPkg = await resolveRootPackageName(task.cwd)
+			const preflight = cangjiePreflightCheck(newContent, relPath, task.cwd, rootPkg)
+			if (!preflight.pass) {
+				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
+				const errorMsg =
+					`仓颉代码预检失败，文件未写入：\n` +
+					preflight.errors.map((e) => `- ${e}`).join("\n") +
+					`\n\n请修正以上错误后重试。`
+				task.recordToolError("write_to_file", errorMsg)
+				pushToolResult(formatResponse.toolError(errorMsg))
+				await task.diffViewProvider.reset()
+				return
+			}
+			if (preflight.warnings.length > 0) {
+				cangjiePostWriteWarnings =
+					`\n\n<cangjie_preflight_warnings>\n` +
+					preflight.warnings.map((w) => `- ${w}`).join("\n") +
+					`\n</cangjie_preflight_warnings>`
+			}
+			// Search gate: warn if std modules were used without prior search
+			const searchGate = buildSearchGateWarning(
+				newContent,
+				task.cangjieSearchHistory ?? new Set(),
+				CRITICAL_SIGNATURE_MODULES,
+			)
+			if (searchGate) {
+				cangjiePostWriteWarnings += searchGate
+			}
+		}
+
 		const fullPath = relPath ? path.resolve(task.cwd, relPath) : ""
 		const isOutsideWorkspace = isPathOutsideWorkspace(fullPath)
 
@@ -149,6 +189,7 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 				const didApprove = await askApproval("tool", completeMessage, undefined, isWriteProtected)
 
 				if (!didApprove) {
+					await task.diffViewProvider.reset()
 					return
 				}
 
@@ -196,7 +237,7 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 
 			const message = await task.diffViewProvider.pushToolWriteResult(task, task.cwd, !fileExists)
 
-			pushToolResult(message)
+			pushToolResult(message + cangjiePostWriteWarnings)
 
 			await task.diffViewProvider.reset()
 			this.resetPartialState()

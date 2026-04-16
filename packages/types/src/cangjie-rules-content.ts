@@ -422,20 +422,9 @@ let result = future.get()
 
 ---
 
-## 3. 常见编译错误处理
+## 3. 常见反例与推荐写法（对照）
 
-| 错误类型 | 常见原因 | 解决方案 |
-|----------|----------|----------|
-| 未找到符号 | 缺少 import 或包依赖 | 检查 import 语句和 cjpm.toml 依赖 |
-| 类型不匹配 | 赋值或传参类型错误 | 检查类型声明和转换 |
-| 循环依赖 | 包之间互相引用 | 使用 \`cjpm check\` 查看依赖关系，重构 |
-| let 变量赋值 | 尝试修改不可变变量 | 改用 \`var\` 声明 |
-| mut 函数限制 | let 变量调用 mut 函数 | 改用 \`var\` 声明变量 |
-| 递归结构体 | struct 直接或间接自引用 | 改用 class（引用类型）或 Option 包装 |
-
-## 4. 常见反例与推荐写法（对照）
-
-### 4.1 mut 方法与 let 绑定
+### 3.1 mut 方法与 let 绑定
 
 ❌ 在 \`let\` 绑定的 struct 上调用 \`mut\` 方法（编译器会拒绝）。
 
@@ -454,7 +443,7 @@ var c = Counter()
 c.inc()
 \`\`\`
 
-### 4.2 struct 自引用
+### 3.2 struct 自引用
 
 ❌ struct 字段直接或间接指向自身类型（值类型不能自引用）。
 
@@ -468,7 +457,7 @@ struct Node { let next: Node }  // 错误
 class Node { let next: ?Node = None }
 \`\`\`
 
-### 4.3 match 穷尽性
+### 3.3 match 穷尽性
 
 ❌ 遗漏枚举分支导致非穷尽 match。
 
@@ -479,7 +468,7 @@ match (c) { case Red => 0 case Blue => 1 }  // 缺 Green
 
 ✅ 补全所有 case，或增加 \`case _ =>\` 作为兜底。
 
-### 4.4 Option 粗暴解包
+### 3.4 Option 粗暴解包
 
 ❌ 对可能为 \`None\` 的值直接 \`unwrap\` 或未处理就使用。
 

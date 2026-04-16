@@ -14,6 +14,24 @@ export default defineConfig({
 		testTimeout: 20_000,
 		hookTimeout: 20_000,
 		onConsoleLog,
+		coverage: {
+			provider: "v8",
+			reportsDirectory: "../coverage/src",
+			include: [
+				"core/context-management/**",
+				"core/condense/**",
+				"core/tools/**",
+				"core/task/CloudAgentOrchestrator.ts",
+				"api/retry/**",
+				"services/cloud-agent/**",
+			],
+			thresholds: {
+				lines: 40,
+				functions: 40,
+				branches: 30,
+				statements: 40,
+			},
+		},
 	},
 	resolve: {
 		alias: {

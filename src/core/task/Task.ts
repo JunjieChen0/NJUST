@@ -69,6 +69,7 @@ import { combineCommandSequences } from "../../shared/combineCommandSequences"
 import { t } from "../../i18n"
 import { getApiMetrics, hasTokenUsageChanged, hasToolUsageChanged } from "../../shared/getApiMetrics"
 import { ClineAskResponse } from "../../shared/WebviewMessage"
+import { DEFAULT_MODE_SLUG } from "../../shared/mode-constants"
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
 import { DiffStrategy, type ToolUse, type ToolParamName, toolParamNames } from "../../shared/tools"
 import { getModelMaxOutputTokens } from "../../shared/api"
@@ -88,24 +89,10 @@ import { OutputInterceptor } from "../../integrations/terminal/OutputInterceptor
 // utils
 import { calculateApiCostAnthropic, calculateApiCostOpenAI } from "../../shared/cost"
 import { getWorkspacePath } from "../../utils/path"
-import {
-	applyCloudWorkspaceOps,
-	applySingleCloudWorkspaceOp,
-} from "../../services/cloud-agent/applyCloudWorkspaceOps"
-import { buildCloudWorkspaceOpToolMessage } from "../../services/cloud-agent/buildCloudWorkspaceOpToolMessage"
-import { CloudAgentClient } from "../../services/cloud-agent/CloudAgentClient"
-import { executeDeferredToolCall } from "../../services/cloud-agent/executeDeferredToolCall"
-import { parseWorkspaceOps } from "../../services/cloud-agent/parseWorkspaceOps"
-import type {
-	CloudAgentCallbacks,
-	CloudCompileResult,
-	CloudRunResult,
-	DeferredResponse,
-	DeferredToolResult,
-	WorkspaceOp,
-} from "../../services/cloud-agent/types"
+import { CloudAgentOrchestrator, type ICloudAgentHost } from "./CloudAgentOrchestrator"
 import { sanitizeToolUseId } from "../../utils/tool-id"
 import { getTaskDirectoryPath } from "../../utils/storage"
+import { tokenCountCache } from "../../utils/tokenCountCache"
 import { globalCacheMetrics } from "../../utils/cacheMetrics"
 import { globalQueryProfiler } from "../../utils/queryProfiler"
 import { globalPromptCacheBreakDetector } from "../prompts/promptCacheBreakDetection"
@@ -125,10 +112,12 @@ import { allowRooIgnorePathAccess, RooIgnoreController } from "../ignore/RooIgno
 import { RooProtectedController } from "../protect/RooProtectedController"
 import { type AssistantMessageContent, presentAssistantMessage } from "../assistant-message"
 import { NativeToolCallParser } from "../assistant-message/NativeToolCallParser"
-import { StreamingToolExecutor } from "../tools/StreamingToolExecutor"
+import { ToolExecutionContext } from "./ToolExecutionContext"
 import { manageContext, willManageContext } from "../context-management"
 import { TokenGrowthTracker } from "../context-management/tokenGrowthTracker"
-import { ClineProvider } from "../webview/ClineProvider"
+import { taskEventBus, type TaskEventBus } from "../events/TaskEventBus"
+import type { ITaskHost } from "./interfaces/ITaskHost"
+import type { ITaskUINotifier } from "./interfaces/ITaskUINotifier"
 import { MultiSearchReplaceDiffStrategy } from "../diff/strategies/multi-search-replace"
 import {
 	type ApiMessage,
@@ -165,13 +154,21 @@ import { generateParentContextSummary } from "./SubTaskContextBuilder"
 import { AGENT_TYPE_CONTEXT_BUDGET } from "./SubTaskOptions"
 import type { IsolationLevel, ForkedContextConfig } from "./SubTaskOptions"
 import { DEFAULT_FORKED_CONTEXT_CONFIG } from "./SubTaskOptions"
+import { TaskMessageManager, type TaskMessageContext } from "./TaskMessageManager"
+import { TaskToolHandler } from "./TaskToolHandler"
+import { TaskExecutor } from "./TaskExecutor"
+import { TaskLifecycleHandler } from "./TaskLifecycleHandler"
 
 const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
 const DEFAULT_USAGE_COLLECTION_TIMEOUT_MS = 5000 // 5 seconds
 const FORCED_CONTEXT_REDUCTION_PERCENT = 75 // Keep 75% of context (remove 25%) on context window errors
 
 export interface TaskOptions extends CreateTaskOptions {
-	provider: ClineProvider
+	host?: ITaskHost
+	/** @deprecated Use {@link host}. Accepted for backward compatibility with tests/call sites. */
+	provider?: ITaskHost
+	/** Optional override; defaults to shared {@link taskEventBus}. */
+	eventBus?: TaskEventBus
 	apiConfiguration: ProviderSettings
 	enableCheckpoints?: boolean
 	checkpointTimeout?: number
@@ -312,7 +309,25 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 */
 	private taskApiConfigReady: Promise<void>
 
-	providerRef: WeakRef<ClineProvider>
+	hostRef: WeakRef<ITaskHost>
+	private readonly eventBus: TaskEventBus
+
+	/** @deprecated Use hostRef (same WeakRef). Presents Task host for legacy call sites. */
+	get providerRef(): WeakRef<ITaskHost> {
+		return this.hostRef
+	}
+
+	/** Narrow accessor: returns only the UI notification facet of the host. */
+	private get notifier(): ITaskUINotifier | undefined {
+		return this.hostRef.deref()
+	}
+
+	/** Emit a UI state refresh. Fires event bus + calls host notifier. */
+	protected async refreshWebviewState(): Promise<void> {
+		this.eventBus.emit("task:tokens-updated", { taskId: this.taskId })
+		await this.notifier?.postStateToWebviewWithoutTaskHistory()
+	}
+
 	readonly globalStoragePath: string
 	abort: boolean = false
 	private persistentRetryHandler?: PersistentRetryManager
@@ -366,6 +381,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	diffViewProvider: DiffViewProvider
 	diffStrategy?: DiffStrategy
 	didEditFile: boolean = false
+
+	/** Std library module names observed via `search_files` on bundled Cangjie corpus (cangjie mode). Used for write/edit search-gate warnings. */
+	cangjieSearchHistory: Set<string> = new Set()
 
 	// LLM Messages & Chat Messages
 	apiConversationHistory: ApiMessage[] = []
@@ -454,9 +472,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// Native tool call streaming state (track which index each tool is at)
 	private streamingToolCallIndices: Map<string, number> = new Map()
-	private readonly streamingToolExecutor = new StreamingToolExecutor(
-		Math.max(1, Number(process.env.ROO_MAX_TOOL_CONCURRENCY ?? 10) || 10),
-	)
+	readonly toolExecution = new ToolExecutionContext(Math.max(1, Number(process.env.ROO_MAX_TOOL_CONCURRENCY ?? 10) || 10))
 	private requestCacheReadWindow: number[] = []
 	private requestInputTokensWindow: number[] = []
 	private readonly tokenGrowthTracker = new TokenGrowthTracker({ maxWindowSize: 6, emaAlpha: 0.4 })
@@ -492,6 +508,54 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private _messageManager?: MessageManager
 	private readonly stateMachine = new TaskStateMachine()
 
+	// Extracted sub-modules (Task 7 decomposition)
+	private _taskMessageManager?: TaskMessageManager
+	private _taskToolHandler?: TaskToolHandler
+	private _executor?: TaskExecutor
+	private _lifecycleHandler?: TaskLifecycleHandler
+
+	/** @internal Persistence/CRUD operations on messages — delegates to TaskMessageManager. */
+	private get msgMgr(): TaskMessageManager {
+		if (!this._taskMessageManager) {
+			this._taskMessageManager = new TaskMessageManager(this as unknown as TaskMessageContext)
+		}
+		return this._taskMessageManager
+	}
+
+	/** @internal Tool result accumulation — delegates to TaskToolHandler. */
+	private get toolHandler(): TaskToolHandler {
+		if (!this._taskToolHandler) {
+			this._taskToolHandler = new TaskToolHandler(this)
+		}
+		return this._taskToolHandler
+	}
+
+	/** @internal API request loop — delegates to TaskExecutor. */
+	private get executor(): TaskExecutor {
+		if (!this._executor) {
+			this._executor = new TaskExecutor(this as any)
+		}
+		return this._executor
+	}
+
+	/** @internal Lifecycle operations — delegates to TaskLifecycleHandler. */
+	private get lifecycleHandler(): TaskLifecycleHandler {
+		if (!this._lifecycleHandler) {
+			this._lifecycleHandler = new TaskLifecycleHandler(this as any)
+		}
+		return this._lifecycleHandler
+	}
+
+	/** Accessor for the static lastGlobalApiRequestTime (used by TaskExecutor). */
+	public setLastGlobalApiRequestTime(time: number): void {
+		Task.lastGlobalApiRequestTime = time
+	}
+
+	/** Accessor for the static lastGlobalApiRequestTime (used by TaskExecutor). */
+	public getLastGlobalApiRequestTimeValue(): number | undefined {
+		return Task.lastGlobalApiRequestTime
+	}
+
 	public get taskState(): TaskState {
 		return this.stateMachine.state
 	}
@@ -501,7 +565,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	constructor({
+		host: hostOption,
 		provider,
+		eventBus: injectedEventBus,
 		apiConfiguration,
 		enableCheckpoints = true,
 		checkpointTimeout = DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
@@ -521,6 +587,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		initialStatus,
 	}: TaskOptions) {
 		super()
+
+		const host = hostOption ?? provider
+		if (!host) {
+			throw new Error("Task requires host (or legacy provider) option")
+		}
+
+		this.eventBus = injectedEventBus ?? taskEventBus
 
 		if (startTask && !task && !images && !historyItem) {
 			throw new Error("Either historyItem or task/images must be provided")
@@ -560,7 +633,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 		this.rooIgnoreController = new RooIgnoreController(this.cwd)
 		this.rooProtectedController = new RooProtectedController(this.cwd)
-		this.fileContextTracker = new FileContextTracker(provider, this.taskId)
+		this.fileContextTracker = new FileContextTracker(host, this.taskId)
 
 		this.rooIgnoreController.initialize().catch((error) => {
 			console.error("Failed to initialize RooIgnoreController:", error)
@@ -571,8 +644,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.autoApprovalHandler = new AutoApprovalHandler()
 
 		this.consecutiveMistakeLimit = consecutiveMistakeLimit ?? DEFAULT_CONSECUTIVE_MISTAKE_LIMIT
-		this.providerRef = new WeakRef(provider)
-		this.globalStoragePath = provider.context.globalStorageUri.fsPath
+		this.hostRef = new WeakRef(host)
+		this.globalStoragePath = host.context.globalStorageUri.fsPath
 		this.diffViewProvider = new DiffViewProvider(this.cwd, this)
 		this.enableCheckpoints = enableCheckpoints
 		this.checkpointTimeout = checkpointTimeout
@@ -599,8 +672,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			// For new tasks, don't set the mode/apiConfigName yet - wait for async initialization.
 			this._taskMode = undefined
 			this._taskApiConfigName = undefined
-			this.taskModeReady = this.initializeTaskMode(provider)
-			this.taskApiConfigReady = this.initializeTaskApiConfigName(provider)
+			this.taskModeReady = this.initializeTaskMode(host)
+			this.taskApiConfigReady = this.initializeTaskApiConfigName(host)
 		}
 
 		this.assistantMessageParser = undefined
@@ -610,18 +683,19 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.messageQueueStateChangedHandler = () => {
 			this.emit(NJUST_AI_CJEventName.TaskUserMessage, this.taskId)
 			this.emit(NJUST_AI_CJEventName.QueuedMessagesUpdated, this.taskId, this.messageQueueService.messages)
-			this.providerRef.deref()?.postStateToWebviewWithoutTaskHistory()
+			void this.refreshWebviewState()
 		}
 
 		this.messageQueueService.on("stateChanged", this.messageQueueStateChangedHandler)
 
 		// Listen for provider profile changes to update parser state
-		this.setupProviderProfileChangeListener(provider)
+		this.setupProviderProfileChangeListener(host)
 
 		// Set up diff strategy
 		this.diffStrategy = new MultiSearchReplaceDiffStrategy()
 
 		this.toolRepetitionDetector = new ToolRepetitionDetector(this.consecutiveMistakeLimit)
+		this.toolExecution.enableAdaptiveTuning()
 
 		// Initialize todo list if provided
 		if (initialTodos && initialTodos.length > 0) {
@@ -685,16 +759,16 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 * @param provider - The ClineProvider instance to fetch state from
 	 * @returns Promise that resolves when initialization is complete
 	 */
-	private async initializeTaskMode(provider: ClineProvider): Promise<void> {
+	private async initializeTaskMode(host: ITaskHost): Promise<void> {
 		try {
-			const state = await provider.getState()
+			const state = await host.getState()
 			this._taskMode = state?.mode || defaultModeSlug
 		} catch (error) {
 			// If there's an error getting state, use the default mode
 			this._taskMode = defaultModeSlug
 			// Use the provider's log method for better error visibility
 			const errorMessage = `Failed to initialize task mode: ${error instanceof Error ? error.message : String(error)}`
-			provider.log(errorMessage)
+			host.log(errorMessage)
 		}
 	}
 
@@ -719,9 +793,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 * @param provider - The ClineProvider instance to fetch state from
 	 * @returns Promise that resolves when initialization is complete
 	 */
-	private async initializeTaskApiConfigName(provider: ClineProvider): Promise<void> {
+	private async initializeTaskApiConfigName(host: ITaskHost): Promise<void> {
 		try {
-			const state = await provider.getState()
+			const state = await host.getState()
 
 			// Avoid clobbering a newer value that may have been set while awaiting provider state
 			// (e.g., user switches provider profile immediately after task creation).
@@ -735,7 +809,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			}
 			// Use the provider's log method for better error visibility
 			const errorMessage = `Failed to initialize task API config name: ${error instanceof Error ? error.message : String(error)}`
-			provider.log(errorMessage)
+			host.log(errorMessage)
 		}
 	}
 
@@ -745,15 +819,17 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 * @private
 	 * @param provider - The ClineProvider instance to listen to
 	 */
-	private setupProviderProfileChangeListener(provider: ClineProvider): void {
+	private setupProviderProfileChangeListener(host: ITaskHost): void {
 		// Only set up listener if provider has the on method (may not exist in test mocks)
-		if (typeof provider.on !== "function") {
+		if (typeof host.on !== "function") {
 			return
 		}
 
 		this.providerProfileChangeListener = async () => {
+			// Abort fetch before awaiting provider state so the in-flight stream stops immediately.
+			this.cancelCurrentRequest()
 			try {
-				const newState = await provider.getState()
+				const newState = await host.getState()
 				if (newState?.apiConfiguration) {
 					this.updateApiConfiguration(newState.apiConfiguration)
 				}
@@ -765,7 +841,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			}
 		}
 
-		provider.on(NJUST_AI_CJEventName.ProviderProfileChanged, this.providerProfileChangeListener)
+		host.on(NJUST_AI_CJEventName.ProviderProfileChanged, this.providerProfileChangeListener)
 	}
 
 	/**
@@ -1242,7 +1318,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	private async addToClineMessages(message: ClineMessage) {
 		this.clineMessages.push(message)
-		const provider = this.providerRef.deref()
+		const provider = this.hostRef.deref()
 		// Avoid resending large, mostly-static fields (notably taskHistory) on every chat message update.
 		// taskHistory is maintained in-memory in the webview and updated via taskHistoryItemUpdated.
 		await provider?.postStateToWebviewWithoutTaskHistory()
@@ -1259,7 +1335,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	private async updateClineMessage(message: ClineMessage) {
-		const provider = this.providerRef.deref()
+		const provider = this.hostRef.deref()
 		await provider?.postMessageToWebview({ type: "messageUpdated", clineMessage: message })
 		this.emit(NJUST_AI_CJEventName.Message, { action: "updated", message })
 		// Cloud service disabled - no message capture
@@ -1297,7 +1373,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			// - Final state is emitted when updates stop (trailing: true)
 			this.debouncedEmitTokenUsage(tokenUsage, this.toolUsage)
 
-			await this.providerRef.deref()?.updateTaskHistory(historyItem)
+			await this.notifier?.updateTaskHistory(historyItem)
 			return true
 		} catch (error) {
 			console.error("Failed to save Roo messages:", error)
@@ -1418,7 +1494,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		let timeouts: NodeJS.Timeout[] = []
 
 		// Automatically approve if the ask according to the user's settings.
-		const provider = this.providerRef.deref()
+		const provider = this.hostRef.deref()
 		const state = provider ? await provider.getState() : undefined
 		const approval = await checkAutoApproval({ state: state as any, ask: type, text, isProtected })
 
@@ -1629,12 +1705,42 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	/**
 	 * Updates the API configuration and rebuilds the API handler.
-	 * There is no tool-protocol switching or tool parser swapping.
+	 * Cancels any in-flight request and resets streaming/parser/token-cache state so
+	 * mixed dimensions cannot leak across profiles or models.
 	 *
 	 * @param newApiConfiguration - The new API configuration to use
 	 */
 	public updateApiConfiguration(newApiConfiguration: ProviderSettings): void {
-		// Update the configuration and rebuild the API handler
+		this.cancelCurrentRequest()
+		try {
+			NativeToolCallParser.clearAllStreamingToolCalls()
+			NativeToolCallParser.clearRawChunkState()
+		} catch {
+			// non-fatal
+		}
+		this.debouncedEmitTokenUsage.cancel()
+
+		this.isWaitingForFirstChunk = false
+		this.isStreaming = false
+		this.currentStreamingContentIndex = 0
+		this.currentStreamingDidCheckpoint = false
+		this.assistantMessageContent = []
+		this.presentAssistantMessageLocked = false
+		this.presentAssistantMessageHasPendingUpdates = false
+		this.didCompleteReadingStream = false
+		this.userMessageContent = []
+		this.userMessageContentReady = false
+		this.didRejectTool = false
+		this.didAlreadyUseTool = false
+		this.didToolFailInCurrentTurn = false
+		this.assistantMessageSavedToHistory = false
+		this.streamingToolCallIndices.clear()
+		this.cachedStreamingModel = undefined
+		this.tokenUsageSnapshot = undefined
+		this.tokenUsageSnapshotAt = undefined
+		this.toolUsageSnapshot = undefined
+		tokenCountCache.clear()
+
 		this.apiConfiguration = newApiConfiguration
 		this.api = buildApiHandler(this.apiConfiguration)
 	}
@@ -1653,7 +1759,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				return
 			}
 
-			const provider = this.providerRef.deref()
+			const provider = this.hostRef.deref()
 
 			if (provider) {
 				if (mode) {
@@ -1837,7 +1943,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 */
 	private async getEnabledMcpToolsCount(): Promise<{ enabledToolCount: number; enabledServerCount: number }> {
 		try {
-			const provider = this.providerRef.deref()
+			const provider = this.hostRef.deref()
 			if (!provider) {
 				return { enabledToolCount: 0, enabledServerCount: 0 }
 			}
@@ -1885,315 +1991,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	private async startTask(task?: string, images?: string[]): Promise<void> {
-		try {
-			// `conversationHistory` (for API) and `clineMessages` (for webview)
-			// need to be in sync.
-			// If the extension process were killed, then on restart the
-			// `clineMessages` might not be empty, so we need to set it to [] when
-			// we create a new Cline client (otherwise webview would show stale
-			// messages from previous session).
-			this.clineMessages = []
-			this.apiConversationHistory = []
-
-			// The todo list is already set in the constructor if initialTodos were provided
-			// No need to add any messages - the todoList property is already set
-
-			await this.providerRef.deref()?.postStateToWebviewWithoutTaskHistory()
-
-			await this.say("text", task, images)
-
-			// Check for too many MCP tools and warn the user
-			const { enabledToolCount, enabledServerCount } = await this.getEnabledMcpToolsCount()
-			if (enabledToolCount > MAX_MCP_TOOLS_THRESHOLD) {
-				await this.say(
-					"too_many_tools_warning",
-					JSON.stringify({
-						toolCount: enabledToolCount,
-						serverCount: enabledServerCount,
-						threshold: MAX_MCP_TOOLS_THRESHOLD,
-					}),
-					undefined,
-					undefined,
-					undefined,
-					undefined,
-					{ isNonInteractive: true },
-				)
-			}
-			this.isInitialized = true
-
-			const mode = await this.getTaskMode()
-
-			if (mode === "cloud-agent") {
-				await this.initiateCloudAgentLoop(task ?? "", images).catch((error) => {
-					if (this.abandoned === true || this.abortReason === "user_cancelled") {
-						return
-					}
-					throw error
-				})
-			} else {
-				const imageBlocks: Anthropic.ImageBlockParam[] = formatResponse.imageBlocks(images)
-
-				// Task starting
-				await this.initiateTaskLoop([
-					{
-						type: "text",
-						text: `<user_message>\n${task}\n</user_message>`,
-					},
-					...imageBlocks,
-				]).catch((error) => {
-					// Swallow loop rejection when the task was intentionally abandoned/aborted
-					// during delegation or user cancellation to prevent unhandled rejections.
-					if (this.abandoned === true || this.abortReason === "user_cancelled") {
-						return
-					}
-					throw error
-				})
-			}
-		} catch (error) {
-			// In tests and some UX flows, tasks can be aborted while `startTask` is still
-			// initializing. Treat abort/abandon as expected and avoid unhandled rejections.
-			if (this.abandoned === true || this.abort === true || this.abortReason === "user_cancelled") {
-				return
-			}
-			throw error
-		}
+		return this.lifecycleHandler.startTask(task, images)
 	}
 
 	private async resumeTaskFromHistory() {
-		try {
-			const modifiedClineMessages = await this.getSavedClineMessages()
-
-			// Remove any resume messages that may have been added before.
-			const lastRelevantMessageIndex = findLastIndex(
-				modifiedClineMessages,
-				(m) => !(m.ask === "resume_task" || m.ask === "resume_completed_task"),
-			)
-
-			if (lastRelevantMessageIndex !== -1) {
-				modifiedClineMessages.splice(lastRelevantMessageIndex + 1)
-			}
-
-			// Remove any trailing reasoning-only UI messages that were not part of the persisted API conversation
-			while (modifiedClineMessages.length > 0) {
-				const last = modifiedClineMessages[modifiedClineMessages.length - 1]
-				if (last.type === "say" && last.say === "reasoning") {
-					modifiedClineMessages.pop()
-				} else {
-					break
-				}
-			}
-
-			// Since we don't use `api_req_finished` anymore, we need to check if the
-			// last `api_req_started` has a cost value, if it doesn't and no
-			// cancellation reason to present, then we remove it since it indicates
-			// an api request without any partial content streamed.
-			const lastApiReqStartedIndex = findLastIndex(
-				modifiedClineMessages,
-				(m) => m.type === "say" && m.say === "api_req_started",
-			)
-
-			if (lastApiReqStartedIndex !== -1) {
-				const lastApiReqStarted = modifiedClineMessages[lastApiReqStartedIndex]
-				const { cost, cancelReason }: ClineApiReqInfo = JSON.parse(lastApiReqStarted.text || "{}")
-
-				if (cost === undefined && cancelReason === undefined) {
-					modifiedClineMessages.splice(lastApiReqStartedIndex, 1)
-				}
-			}
-
-			await this.overwriteClineMessages(modifiedClineMessages)
-			this.clineMessages = await this.getSavedClineMessages()
-
-			// Now present the cline messages to the user and ask if they want to
-			// resume (NOTE: we ran into a bug before where the
-			// apiConversationHistory wouldn't be initialized when opening a old
-			// task, and it was because we were waiting for resume).
-			// This is important in case the user deletes messages without resuming
-			// the task first.
-			this.apiConversationHistory = await this.getSavedApiConversationHistory()
-			
-			// Reset circuit breaker state so resumed tasks don't immediately degrade
-			// to truncation mode due to failures from a prior session.
-			this.errorRecovery.resetCompactFailure()
-			
-			const lastClineMessage = this.clineMessages
-				.slice()
-				.reverse()
-				.find((m) => !(m.ask === "resume_task" || m.ask === "resume_completed_task")) // Could be multiple resume tasks.
-
-			let askType: ClineAsk
-			if (lastClineMessage?.ask === "completion_result") {
-				askType = "resume_completed_task"
-			} else {
-				askType = "resume_task"
-			}
-
-			this.isInitialized = true
-
-			const { response, text, images } = await this.ask(askType) // Calls `postStateToWebview`.
-
-			let responseText: string | undefined
-			let responseImages: string[] | undefined
-
-			if (response === "messageResponse") {
-				await this.say("user_feedback", text, images)
-				responseText = text
-				responseImages = images
-			}
-
-			// Make sure that the api conversation history can be resumed by the API,
-			// even if it goes out of sync with cline messages.
-			let existingApiConversationHistory: ApiMessage[] = await this.getSavedApiConversationHistory()
-
-			// Tool blocks are always preserved; native tool calling only.
-
-			// if the last message is an assistant message, we need to check if there's tool use since every tool use has to have a tool response
-			// if there's no tool use and only a text block, then we can just add a user message
-			// (note this isn't relevant anymore since we use custom tool prompts instead of tool use blocks, but this is here for legacy purposes in case users resume old tasks)
-
-			// if the last message is a user message, we can need to get the assistant message before it to see if it made tool calls, and if so, fill in the remaining tool responses with 'interrupted'
-
-			let modifiedOldUserContent: Anthropic.Messages.ContentBlockParam[] // either the last message if its user message, or the user message before the last (assistant) message
-			let modifiedApiConversationHistory: ApiMessage[] // need to remove the last user message to replace with new modified user message
-			if (existingApiConversationHistory.length > 0) {
-				const lastMessage = existingApiConversationHistory[existingApiConversationHistory.length - 1]
-
-				if (lastMessage.isSummary) {
-					// IMPORTANT: If the last message is a condensation summary, we must preserve it
-					// intact. The summary message carries critical metadata (isSummary, condenseId)
-					// that getEffectiveApiHistory() uses to filter out condensed messages.
-					// Removing or merging it would destroy this metadata, causing all condensed
-					// messages to become "orphaned" and restored to active status — effectively
-					// undoing the condensation and sending the full history to the API.
-					// See: https://github.com/NJUST-AI/NJUST_AI_CJ/issues/11487
-					modifiedApiConversationHistory = [...existingApiConversationHistory]
-					modifiedOldUserContent = []
-				} else if (lastMessage.role === "assistant") {
-					const content = Array.isArray(lastMessage.content)
-						? lastMessage.content
-						: [{ type: "text", text: lastMessage.content }]
-					const hasToolUse = content.some((block) => block.type === "tool_use")
-
-					if (hasToolUse) {
-						const toolUseBlocks = content.filter(
-							(block) => block.type === "tool_use",
-						) as Anthropic.Messages.ToolUseBlock[]
-						const toolResponses: Anthropic.ToolResultBlockParam[] = toolUseBlocks.map((block) => ({
-							type: "tool_result",
-							tool_use_id: block.id,
-							content: "Task was interrupted before this tool call could be completed.",
-						}))
-						modifiedApiConversationHistory = [...existingApiConversationHistory] // no changes
-						modifiedOldUserContent = [...toolResponses]
-					} else {
-						modifiedApiConversationHistory = [...existingApiConversationHistory]
-						modifiedOldUserContent = []
-					}
-				} else if (lastMessage.role === "user") {
-					const previousAssistantMessage: ApiMessage | undefined =
-						existingApiConversationHistory[existingApiConversationHistory.length - 2]
-
-					const existingUserContent: Anthropic.Messages.ContentBlockParam[] = Array.isArray(
-						lastMessage.content,
-					)
-						? lastMessage.content
-						: [{ type: "text", text: lastMessage.content }]
-					if (previousAssistantMessage && previousAssistantMessage.role === "assistant") {
-						const assistantContent = Array.isArray(previousAssistantMessage.content)
-							? previousAssistantMessage.content
-							: [{ type: "text", text: previousAssistantMessage.content }]
-
-						const toolUseBlocks = assistantContent.filter(
-							(block) => block.type === "tool_use",
-						) as Anthropic.Messages.ToolUseBlock[]
-
-						if (toolUseBlocks.length > 0) {
-							const existingToolResults = existingUserContent.filter(
-								(block) => block.type === "tool_result",
-							) as Anthropic.ToolResultBlockParam[]
-
-							const missingToolResponses: Anthropic.ToolResultBlockParam[] = toolUseBlocks
-								.filter(
-									(toolUse) =>
-										!existingToolResults.some((result) => result.tool_use_id === toolUse.id),
-								)
-								.map((toolUse) => ({
-									type: "tool_result",
-									tool_use_id: toolUse.id,
-									content: "Task was interrupted before this tool call could be completed.",
-								}))
-
-							modifiedApiConversationHistory = existingApiConversationHistory.slice(0, -1) // removes the last user message
-							modifiedOldUserContent = [...existingUserContent, ...missingToolResponses]
-						} else {
-							modifiedApiConversationHistory = existingApiConversationHistory.slice(0, -1)
-							modifiedOldUserContent = [...existingUserContent]
-						}
-					} else {
-						modifiedApiConversationHistory = existingApiConversationHistory.slice(0, -1)
-						modifiedOldUserContent = [...existingUserContent]
-					}
-				} else {
-					throw new Error("Unexpected: Last message is not a user or assistant message")
-				}
-			} else {
-				throw new Error("Unexpected: No existing API conversation history")
-			}
-
-			let newUserContent: Anthropic.Messages.ContentBlockParam[] = [...modifiedOldUserContent]
-
-			const agoText = ((): string => {
-				const timestamp = lastClineMessage?.ts ?? Date.now()
-				const now = Date.now()
-				const diff = now - timestamp
-				const minutes = Math.floor(diff / 60000)
-				const hours = Math.floor(minutes / 60)
-				const days = Math.floor(hours / 24)
-
-				if (days > 0) {
-					return `${days} day${days > 1 ? "s" : ""} ago`
-				}
-				if (hours > 0) {
-					return `${hours} hour${hours > 1 ? "s" : ""} ago`
-				}
-				if (minutes > 0) {
-					return `${minutes} minute${minutes > 1 ? "s" : ""} ago`
-				}
-				return "just now"
-			})()
-
-			if (responseText) {
-				newUserContent.push({
-					type: "text",
-					text: `<user_message>\n${responseText}\n</user_message>`,
-				})
-			}
-
-			if (responseImages && responseImages.length > 0) {
-				newUserContent.push(...formatResponse.imageBlocks(responseImages))
-			}
-
-			// Ensure we have at least some content to send to the API.
-			// If newUserContent is empty, add a minimal resumption message.
-			if (newUserContent.length === 0) {
-				newUserContent.push({
-					type: "text",
-					text: "[TASK RESUMPTION] Resuming task...",
-				})
-			}
-
-			await this.overwriteApiConversationHistory(modifiedApiConversationHistory)
-
-			// Task resuming from history item.
-			await this.initiateTaskLoop(newUserContent)
-		} catch (error) {
-			// Resume and cancellation can race when users issue repeated cancels.
-			// Treat intentional abort/abandon flows as expected and avoid process-level crashes.
-			if (this.abandoned === true || this.abort === true || this.abortReason === "user_cancelled") {
-				return
-			}
-			throw error
-		}
+		return this.lifecycleHandler.resumeTaskFromHistory()
 	}
 
 	/**
@@ -2219,163 +2021,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.debouncedEmitTokenUsage.flush()
 	}
 
-	private emitTaskSessionMetricsSummary(trigger: "abort" | "dispose"): void {
-		const cacheSummary = globalCacheMetrics.getSummary()
-		const breakSummary = globalPromptCacheBreakDetector.getBreaksBySource()
-		const payload = {
-			timestamp: Date.now(),
-			trigger,
-			taskId: this.taskId,
-			cacheRequests: cacheSummary.totalRequests,
-			cacheHitRate: cacheSummary.cacheHitRate,
-			cacheReadTokens: cacheSummary.totalCacheReadTokens,
-			cacheCreationTokens: cacheSummary.totalCacheCreationTokens,
-			estimatedSavingsPercent: cacheSummary.estimatedSavingsPercent,
-			cacheBreaks: globalPromptCacheBreakDetector.getTotalBreaks(),
-			cacheBreaksBySource: breakSummary,
-		}
-		console.log(
-			`[Task Session Summary] trigger=${payload.trigger} task=${payload.taskId} cacheRequests=${payload.cacheRequests} cacheHitRate=${payload.cacheHitRate.toFixed(3)} cacheRead=${payload.cacheReadTokens} cacheCreate=${payload.cacheCreationTokens} estSavings=${(payload.estimatedSavingsPercent * 100).toFixed(1)}% cacheBreaks=${payload.cacheBreaks} breakBySource=${JSON.stringify(payload.cacheBreaksBySource)}`,
-		)
-
-		getTaskDirectoryPath(this.globalStoragePath, this.taskId)
-			.then(async (taskDir) => {
-				const metricsPath = path.join(taskDir, "task-metrics.jsonl")
-				await fs.appendFile(metricsPath, `${JSON.stringify(payload)}\n`, "utf8")
-			})
-			.catch((error) => {
-				console.error(`[Task Session Summary] failed to persist metrics for task ${this.taskId}:`, error)
-			})
-	}
-
 	public async abortTask(isAbandoned = false) {
-		// Aborting task
-
-		// Will stop any autonomously running promises.
-		if (isAbandoned) {
-			this.abandoned = true
-		}
-
-		this.abort = true
-		this.persistentRetryHandler?.cancel()
-		this.persistentRetryHandler = undefined
-
-		// Reset consecutive error counters on abort (manual intervention)
-		this.consecutiveNoToolUseCount = 0
-		this.consecutiveNoAssistantMessagesCount = 0
-
-		// Force final token usage update before abort event
-		this.emitFinalTokenUsageUpdate()
-
-		this.emit(NJUST_AI_CJEventName.TaskAborted)
-
-		try {
-			this.dispose() // Call the centralized dispose method
-		} catch (error) {
-			console.error(`Error during task ${this.taskId}.${this.instanceId} disposal:`, error)
-			// Don't rethrow - we want abort to always succeed
-		}
-		// Save the countdown message in the automatic retry or other content.
-		try {
-			// Save the countdown message in the automatic retry or other content.
-			await this.saveClineMessages()
-		} catch (error) {
-			console.error(`Error saving messages during abort for task ${this.taskId}.${this.instanceId}:`, error)
-		}
+		return this.lifecycleHandler.abortTask(isAbandoned)
 	}
+
+	public isDisposed = false
 
 	public dispose(): void {
-		console.log(`[Task#dispose] disposing task ${this.taskId}.${this.instanceId}`)
-		this.emitTaskSessionMetricsSummary(this.abort ? "abort" : "dispose")
-		clearMcpInstructionsDelta(this.taskId)
-
-		try {
-			deleteGeneratedCangjieTestFilesForTask(this.taskId)
-		} catch (e) {
-			console.error("Error deleting generated Cangjie test files:", e)
-		}
-
-		// Cancel any in-progress HTTP request
-		try {
-			this.cancelCurrentRequest()
-		} catch (error) {
-			console.error("Error cancelling current request:", error)
-		}
-
-		// Remove provider profile change listener
-		try {
-			if (this.providerProfileChangeListener) {
-				const provider = this.providerRef.deref()
-				if (provider) {
-					provider.off(NJUST_AI_CJEventName.ProviderProfileChanged, this.providerProfileChangeListener)
-				}
-				this.providerProfileChangeListener = undefined
-			}
-		} catch (error) {
-			console.error("Error removing provider profile change listener:", error)
-		}
-
-		// Dispose message queue and remove event listeners.
-		try {
-			if (this.messageQueueStateChangedHandler) {
-				this.messageQueueService.removeListener("stateChanged", this.messageQueueStateChangedHandler)
-				this.messageQueueStateChangedHandler = undefined
-			}
-
-			this.messageQueueService.dispose()
-		} catch (error) {
-			console.error("Error disposing message queue:", error)
-		}
-
-		// Remove all event listeners to prevent memory leaks.
-		try {
-			this.removeAllListeners()
-		} catch (error) {
-			console.error("Error removing event listeners:", error)
-		}
-
-		// Release any terminals associated with this task.
-		try {
-			// Release any terminals associated with this task.
-			TerminalRegistry.releaseTerminalsForTask(this.taskId)
-		} catch (error) {
-			console.error("Error releasing terminals:", error)
-		}
-
-		// Cleanup command output artifacts
-		getTaskDirectoryPath(this.globalStoragePath, this.taskId)
-			.then((taskDir) => {
-				const outputDir = path.join(taskDir, "command-output")
-				return OutputInterceptor.cleanup(outputDir)
-			})
-			.catch((error) => {
-				console.error("Error cleaning up command output artifacts:", error)
-			})
-
-		try {
-			if (this.rooIgnoreController) {
-				this.rooIgnoreController.dispose()
-				this.rooIgnoreController = undefined
-			}
-		} catch (error) {
-			console.error("Error disposing RooIgnoreController:", error)
-			// This is the critical one for the leak fix.
-		}
-
-		try {
-			this.fileContextTracker.dispose()
-		} catch (error) {
-			console.error("Error disposing file context tracker:", error)
-		}
-
-		try {
-			// If we're not streaming then `abortStream` won't be called.
-			if (this.isStreaming && this.diffViewProvider.isEditing) {
-				this.diffViewProvider.revertChanges().catch(console.error)
-			}
-		} catch (error) {
-			console.error("Error reverting diff changes:", error)
-		}
+		return this.lifecycleHandler.dispose()
 	}
 
 	// Subtasks
@@ -2388,7 +2041,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		isolationLevel: IsolationLevel = "shared",
 		forkedConfig?: ForkedContextConfig,
 	) {
-		const provider = this.providerRef.deref()
+		const provider = this.hostRef.deref()
 
 		if (!provider) {
 			throw new Error("Provider not available")
@@ -2406,7 +2059,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			)
 		}
 
-		const child = await (provider as any).delegateParentAndOpenChild({
+		const child = await provider.delegateParentAndOpenChild({
 			parentTaskId: this.taskId,
 			message,
 			initialTodos,
@@ -2491,618 +2144,25 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		await this.initiateTaskLoop([])
 	}
 
-	// Cloud Agent loop: synchronous REST to cloud service (GET /health, POST /v1/run). Streaming/tool callbacks are not used by the extension client.
+	// Cloud Agent orchestration delegated to CloudAgentOrchestrator
 
 	private async initiateCloudAgentLoop(userMessage: string, images?: string[]): Promise<void> {
-		const config = vscode.workspace.getConfiguration(Package.name)
-		const serverUrl = (config.get<string>("cloudAgent.serverUrl", "") ?? "").trim()
-		const deviceToken = config.get<string>("cloudAgent.deviceToken", "")
-		let apiKey = (config.get<string>("cloudAgent.apiKey", "") ?? "").trim()
-		if (!apiKey) {
-			apiKey = (
-				vscode.workspace.getConfiguration().get<string>(`${Package.name}.cloudAgent.apiKey`) ?? ""
-			).trim()
+		const host: ICloudAgentHost = {
+			taskId: this.taskId,
+			cwd: this.cwd,
+			get abort() { return (this as unknown as { _task: Task })._task?.abort ?? false },
+			rooIgnoreController: this.rooIgnoreController,
+			rooProtectedController: this.rooProtectedController,
+			say: (type, text?, imgs?) => this.say(type, text, imgs),
+			ask: (type, text?, partial?) => this.ask(type, text, partial),
+			emit: (event, ...args) => (EventEmitter.prototype.emit.call(this, event, ...args) as boolean),
+			setCurrentRequestAbortController: (ctrl) => { this.currentRequestAbortController = ctrl },
 		}
-		if (!apiKey) {
-			apiKey = (process.env.CLOUD_AGENT_MOCK_API_KEY ?? process.env.NJUST_CLOUD_AGENT_API_KEY ?? "").trim()
-		}
-		const requestTimeoutMs = config.get<number>("cloudAgent.requestTimeoutMs", 0) ?? 0
+		// Patch the abort getter to actually read from this task instance
+		Object.defineProperty(host, "abort", { get: () => this.abort })
 
-		if (!serverUrl) {
-			await this.say(
-				"error",
-				"Cloud Agent server URL is not configured. Set njust-ai-cj.cloudAgent.serverUrl (e.g. http://127.0.0.1:4000 for the local mock).",
-			)
-			return
-		}
-
-		if (!deviceToken) {
-			await this.say("error", "Cloud Agent device token not found. Please restart VS Code.")
-			return
-		}
-
-		const callbacks: CloudAgentCallbacks = {
-			onText: async (content) => {
-				await this.say("text", content)
-			},
-			onReasoning: async (content) => {
-				await this.say("reasoning", content)
-			},
-			onDone: async (summary) => {
-				if (summary) {
-					await this.say("completion_result", summary)
-				}
-			},
-			onError: async (message) => {
-				await this.say("error", message)
-			},
-		}
-
-		const requestAbort = new AbortController()
-		this.currentRequestAbortController = requestAbort
-
-		const client = new CloudAgentClient(serverUrl, deviceToken, callbacks, {
-			apiKey: apiKey || undefined,
-			signal: requestAbort.signal,
-			requestTimeoutMs: requestTimeoutMs > 0 ? requestTimeoutMs : undefined,
-		})
-		this.emit(NJUST_AI_CJEventName.TaskStarted)
-
-		// Branch: deferred protocol (start → tool execution → resume → done)
-		const useDeferredProtocol = config.get<boolean>("cloudAgent.deferredProtocol", true) ?? true
-		if (useDeferredProtocol) {
-			try {
-				await client.connect()
-			} catch (error) {
-				if (this.abort) return
-				const msg = error instanceof Error ? error.message : String(error)
-				await this.say("error", `Cloud Agent connect error: ${msg}`)
-				await this.ask("api_req_failed", msg)
-				return
-			} finally {
-				this.currentRequestAbortController = undefined
-			}
-		await this.runDeferredCloudAgentLoop(
-			client,
-			serverUrl,
-			deviceToken,
-			apiKey,
-			requestTimeoutMs,
-			config,
-			callbacks,
-			userMessage,
-			images,
-		)
-			return
-		}
-
-		// Legacy single-shot /v1/run path
-		await this.say("api_req_started", JSON.stringify({ request: "Cloud Agent task submitted" }))
-
-		let runResult: CloudRunResult | undefined
-		try {
-			await client.connect()
-			runResult = await client.submitTask(this.taskId, userMessage, this.cwd, images)
-			await this.say(
-				"api_req_finished",
-				JSON.stringify({
-					tokensIn: runResult.tokensIn,
-					tokensOut: runResult.tokensOut,
-					cost: runResult.cost,
-				}),
-			)
-		} catch (error) {
-			if (this.abort) return
-			const isAbort =
-				error instanceof Error &&
-				(error.name === "AbortError" || /aborted|timeout/i.test(error.message))
-			if (isAbort) {
-				const errorMsg = error instanceof Error ? error.message : String(error)
-				await this.say("error", `Cloud Agent request was cancelled or timed out: ${errorMsg}`)
-				await this.ask("api_req_failed", errorMsg)
-				return
-			}
-			const errorMsg = error instanceof Error ? error.message : String(error)
-			await this.say("error", `Cloud Agent error: ${errorMsg}`)
-			await this.ask("api_req_failed", errorMsg)
-		} finally {
-			this.currentRequestAbortController = undefined
-			await client.disconnect()
-		}
-
-		if (this.abort || !runResult) {
-			return
-		}
-
-		if (runResult.workspaceOpsParseError) {
-			await this.say(
-				"text",
-				`Cloud Agent 响应中的 workspace_ops 格式无效，已跳过本地写盘。校验信息：${runResult.workspaceOpsParseError}`,
-			)
-		}
-
-		const applyRemoteWorkspaceOps = config.get<boolean>("cloudAgent.applyRemoteWorkspaceOps", true) ?? true
-		const confirmRemoteWorkspaceOps = config.get<boolean>("cloudAgent.confirmRemoteWorkspaceOps", true) ?? true
-		const ops = runResult.workspaceOps
-
-		if (!applyRemoteWorkspaceOps && ops.length > 0) {
-			await this.say(
-				"text",
-				`Cloud Agent 返回了 ${ops.length} 条可应用的 workspace_ops，但当前设置未开启「应用远程工作区操作」，因此不会在本地创建或修改文件。请在设置中启用 ${Package.name}.cloudAgent.applyRemoteWorkspaceOps（并可保留 ${Package.name}.cloudAgent.confirmRemoteWorkspaceOps 以在聊天界面中逐项确认）。`,
-			)
-		}
-
-		if (applyRemoteWorkspaceOps && ops.length > 0) {
-			if (confirmRemoteWorkspaceOps) {
-				for (let i = 0; i < ops.length; i++) {
-					if (this.abort) {
-						break
-					}
-					const op = ops[i]
-					const accessAllowed = allowRooIgnorePathAccess(this.rooIgnoreController, op.path)
-					if (!accessAllowed) {
-						await this.say("rooignore_error", op.path)
-						continue
-					}
-					const isWriteProtected = this.rooProtectedController?.isWriteProtected(op.path) || false
-					const toolJson = await buildCloudWorkspaceOpToolMessage(this.cwd, op, {
-						isWriteProtected,
-					})
-
-					let response: ClineAskResponse
-					let text: string | undefined
-					let images: string[] | undefined
-					try {
-						const askResult = await this.ask("tool", toolJson, false)
-						response = askResult.response
-						text = askResult.text
-						images = askResult.images
-					} catch (err) {
-						if (err instanceof AskIgnoredError) {
-							break
-						}
-						throw err
-					}
-
-					if (response !== "yesButtonClicked") {
-						if (text) {
-							await this.say("user_feedback", text, images)
-						}
-						await this.say(
-							"text",
-							`Skipped cloud workspace op (${i + 1}/${ops.length}): ${op.path}`,
-						)
-						continue
-					}
-
-					if (text) {
-						await this.say("user_feedback", text, images)
-					}
-
-					const single = await applySingleCloudWorkspaceOp(this.cwd, op)
-					await this.say("text", single.message)
-					if (!single.ok) {
-						await this.say("error", `Remote workspace operation failed: ${single.message}`)
-						break
-					}
-				}
-			} else {
-				const applied = await applyCloudWorkspaceOps(this.cwd, ops, () => this.abort)
-				const lines = applied.results.map((r) => `${r.ok ? "OK" : "FAIL"} ${r.path}: ${r.message}`)
-				const header = applied.ok
-					? `Cloud workspace_ops applied (${applied.results.length} operation(s)).`
-					: `Cloud workspace_ops stopped at operation ${(applied.failedAtIndex ?? 0) + 1} of ${ops.length}.`
-				await this.say("text", [header, ...lines].join("\n"))
-				if (!applied.ok) {
-					await this.say(
-						"error",
-						`Remote workspace operation failed: ${applied.results.at(-1)?.message ?? "unknown"}`,
-					)
-				}
-			}
-		}
-		// When applyRemoteWorkspaceOps is false, skip applying workspace_ops (user disabled in settings).
-
-		// --- Compile feedback loop (legacy /v1/run path); deferred path has an equivalent at end of runDeferredCloudAgentLoop ---
-		const compileLoopEnabled = config.get<boolean>("cloudAgent.compileLoop.enabled", true) ?? true
-		const compileMaxRetries = config.get<number>("cloudAgent.compileLoop.maxRetries", 3) ?? 3
-
-		if (compileLoopEnabled && applyRemoteWorkspaceOps && ops.length > 0 && !this.abort) {
-			await this.runCompileFeedbackLoop(
-				client,
-				serverUrl,
-				deviceToken,
-				apiKey,
-				requestTimeoutMs,
-				callbacks,
-				compileMaxRetries,
-				confirmRemoteWorkspaceOps,
-			)
-		}
-	}
-
-	/**
-	 * Compile feedback loop: compile on server → if errors, ask Cloud Agent to fix → apply fixes → re-compile.
-	 * Loops until compilation passes or maxRetries is exhausted.
-	 */
-	private async runCompileFeedbackLoop(
-		client: CloudAgentClient,
-		serverUrl: string,
-		deviceToken: string,
-		apiKey: string,
-		requestTimeoutMs: number,
-		callbacks: CloudAgentCallbacks,
-		maxRetries: number,
-		confirmOps: boolean,
-	): Promise<void> {
-		for (let attempt = 1; attempt <= maxRetries && !this.abort; attempt++) {
-			await this.say("text", `[Compile] 编译检查 (${attempt}/${maxRetries})...`)
-
-			const compileAbort = new AbortController()
-			this.currentRequestAbortController = compileAbort
-
-			let compileResult: CloudCompileResult
-			try {
-				const compileClient = new CloudAgentClient(serverUrl, deviceToken, callbacks, {
-					apiKey: apiKey || undefined,
-					signal: compileAbort.signal,
-					requestTimeoutMs: requestTimeoutMs > 0 ? requestTimeoutMs : undefined,
-				})
-				compileResult = await compileClient.compile(this.taskId, this.cwd)
-			} catch (error) {
-				if (this.abort) break
-				const msg = error instanceof Error ? error.message : String(error)
-				await this.say("error", `[Compile] 编译请求失败: ${msg}`)
-				break
-			} finally {
-				this.currentRequestAbortController = undefined
-			}
-
-			if (compileResult.success) {
-				await this.say("text", "[Compile] 编译通过!")
-				break
-			}
-
-			const truncatedOutput =
-				compileResult.output.length > 8000
-					? compileResult.output.slice(0, 8000) + "\n...(output truncated)"
-					: compileResult.output
-			await this.say("text", `[Compile] 编译失败:\n\`\`\`\n${truncatedOutput}\n\`\`\``)
-
-			if (attempt >= maxRetries) {
-				await this.say("text", `[Compile] 已达最大重试次数 (${maxRetries})，停止编译反馈循环。`)
-				break
-			}
-
-			// Ask Cloud Agent to fix the compilation errors
-			const fixGoal =
-				`以下仓颉代码编译失败，请根据错误信息修正代码，返回修正后的 workspace_ops。` +
-				`仅修改出错的文件，不要重复返回正确的文件。\n\n编译输出:\n${truncatedOutput}`
-
-			await this.say("api_req_started", JSON.stringify({ request: "Cloud Agent compile-fix iteration" }))
-
-			const fixAbort = new AbortController()
-			this.currentRequestAbortController = fixAbort
-
-			let fixResult: CloudRunResult
-			try {
-				const fixClient = new CloudAgentClient(serverUrl, deviceToken, callbacks, {
-					apiKey: apiKey || undefined,
-					signal: fixAbort.signal,
-					requestTimeoutMs: requestTimeoutMs > 0 ? requestTimeoutMs : undefined,
-				})
-				fixResult = await fixClient.submitTask(this.taskId, fixGoal, this.cwd)
-				await this.say(
-					"api_req_finished",
-					JSON.stringify({
-						tokensIn: fixResult.tokensIn,
-						tokensOut: fixResult.tokensOut,
-						cost: fixResult.cost,
-					}),
-				)
-			} catch (error) {
-				if (this.abort) break
-				const msg = error instanceof Error ? error.message : String(error)
-				await this.say("error", `[Compile] 修正请求失败: ${msg}`)
-				break
-			} finally {
-				this.currentRequestAbortController = undefined
-			}
-
-			const fixOps = fixResult.workspaceOps
-			if (fixOps.length === 0) {
-				await this.say("text", "[Compile] Cloud Agent 未返回修正代码，停止编译反馈循环。")
-				break
-			}
-
-			// Apply fix workspace_ops
-			if (confirmOps) {
-				for (let i = 0; i < fixOps.length && !this.abort; i++) {
-					const op = fixOps[i]
-					const accessAllowed = allowRooIgnorePathAccess(this.rooIgnoreController, op.path)
-					if (!accessAllowed) {
-						await this.say("rooignore_error", op.path)
-						continue
-					}
-					const isWriteProtected = this.rooProtectedController?.isWriteProtected(op.path) || false
-					const toolJson = await buildCloudWorkspaceOpToolMessage(this.cwd, op, { isWriteProtected })
-
-					let response: ClineAskResponse
-					try {
-						const askResult = await this.ask("tool", toolJson, false)
-						response = askResult.response
-						if (askResult.text) {
-							await this.say("user_feedback", askResult.text, askResult.images)
-						}
-					} catch (err) {
-						if (err instanceof AskIgnoredError) break
-						throw err
-					}
-
-					if (response !== "yesButtonClicked") {
-						await this.say("text", `Skipped compile-fix op (${i + 1}/${fixOps.length}): ${op.path}`)
-						continue
-					}
-
-					const single = await applySingleCloudWorkspaceOp(this.cwd, op)
-					await this.say("text", single.message)
-					if (!single.ok) {
-						await this.say("error", `Compile-fix workspace operation failed: ${single.message}`)
-						break
-					}
-				}
-			} else {
-				const applied = await applyCloudWorkspaceOps(this.cwd, fixOps, () => this.abort)
-				const lines = applied.results.map((r) => `${r.ok ? "OK" : "FAIL"} ${r.path}: ${r.message}`)
-				const header = applied.ok
-					? `[Compile] 修正代码已应用 (${applied.results.length} 个文件)。`
-					: `[Compile] 修正代码应用在第 ${(applied.failedAtIndex ?? 0) + 1} 个操作处失败。`
-				await this.say("text", [header, ...lines].join("\n"))
-				if (!applied.ok) break
-			}
-		}
-	}
-
-	// ---------------------------------------------------------------------------
-	// Deferred Cloud Agent loop
-	// POST /v1/run/deferred/start → execute pending_tools / workspace_ops locally
-	// → POST /v1/run/deferred/resume → repeat until status == "done"
-	// ---------------------------------------------------------------------------
-
-	private async runDeferredCloudAgentLoop(
-		client: CloudAgentClient,
-		serverUrl: string,
-		deviceToken: string,
-		apiKey: string,
-		requestTimeoutMs: number,
-		config: vscode.WorkspaceConfiguration,
-		callbacks: CloudAgentCallbacks,
-		userMessage: string,
-		images?: string[],
-	): Promise<void> {
-		const applyRemoteWorkspaceOps = config.get<boolean>("cloudAgent.applyRemoteWorkspaceOps", true) ?? true
-		const confirmRemoteWorkspaceOps = config.get<boolean>("cloudAgent.confirmRemoteWorkspaceOps", true) ?? true
-		const maxIterations = 50
-		let hadWorkspaceOpsForCompile = false
-
-		await this.say("api_req_started", JSON.stringify({ request: "Cloud Agent deferred/start" }))
-
-		const startAbort = new AbortController()
-		this.currentRequestAbortController = startAbort
-
-		let deferredResp: DeferredResponse
-		try {
-			const startClient = new CloudAgentClient(serverUrl, deviceToken, {
-				onText: async (c) => this.say("text", c),
-				onReasoning: async (c) => this.say("reasoning", c),
-				onDone: async (s) => { if (s) await this.say("completion_result", s) },
-				onError: async (m) => this.say("error", m),
-			}, {
-				apiKey: apiKey || undefined,
-				signal: startAbort.signal,
-				requestTimeoutMs: requestTimeoutMs > 0 ? requestTimeoutMs : undefined,
-			})
-			deferredResp = await startClient.deferredStart(this.taskId, userMessage, this.cwd, images)
-			await this.say(
-				"api_req_finished",
-				JSON.stringify({ tokensIn: deferredResp.tokens_in ?? 0, tokensOut: deferredResp.tokens_out ?? 0, cost: deferredResp.cost ?? 0 }),
-			)
-		} catch (error) {
-			if (this.abort) return
-			const msg = error instanceof Error ? error.message : String(error)
-			await this.say("error", `Cloud Agent deferred/start error: ${msg}`)
-			await this.ask("api_req_failed", msg)
-			return
-		} finally {
-			this.currentRequestAbortController = undefined
-		}
-
-		let iteration = 0
-		while (deferredResp.status === "pending" && iteration < maxIterations && !this.abort) {
-			iteration++
-
-			// Display incremental text / reasoning
-			if (deferredResp.text) {
-				await this.say("text", deferredResp.text)
-			}
-			if (deferredResp.reasoning) {
-				await this.say("reasoning", deferredResp.reasoning)
-			}
-			for (const log of deferredResp.logs ?? []) {
-				await this.say("text", log)
-			}
-
-		// Apply workspace_ops if present
-		const { operations: ops } = parseWorkspaceOps(deferredResp)
-		if (ops.length > 0 && applyRemoteWorkspaceOps) {
-			hadWorkspaceOpsForCompile = true
-			await this.applyWorkspaceOps(ops, confirmRemoteWorkspaceOps)
-		} else if (ops.length > 0) {
-			await this.say(
-				"text",
-				`Cloud Agent 返回了 ${ops.length} 条 workspace_ops，但 applyRemoteWorkspaceOps 已关闭，跳过写盘。`,
-			)
-		}
-
-			// Execute pending_tools locally
-			const toolResults: DeferredToolResult[] = []
-			const pendingTools = deferredResp.pending_tools ?? []
-			for (const call of pendingTools) {
-				if (this.abort) break
-				await this.say("text", `[Deferred] executing tool: ${call.tool} (${call.call_id})`)
-				const result = await executeDeferredToolCall(this.cwd, call)
-				toolResults.push(result)
-				if (result.is_error) {
-					await this.say("text", `[Deferred] tool ${call.tool} error: ${result.content.slice(0, 500)}`)
-				}
-			}
-
-			if (this.abort) break
-
-			if (pendingTools.length > 0 && toolResults.length !== pendingTools.length) {
-				const msg = `Cloud Agent deferred/resume 无法继续：本轮 pending_tools 为 ${pendingTools.length} 条，本地仅生成 ${toolResults.length} 条 tool_results（请重试任务或更新插件）。`
-				await this.say("error", msg)
-				await this.ask("api_req_failed", msg)
-				return
-			}
-
-			// Resume
-			await this.say("api_req_started", JSON.stringify({ request: `Cloud Agent deferred/resume (iteration ${iteration})` }))
-
-			const resumeAbort = new AbortController()
-			this.currentRequestAbortController = resumeAbort
-
-			try {
-				const resumeClient = new CloudAgentClient(serverUrl, deviceToken, {
-					onText: async (c) => this.say("text", c),
-					onReasoning: async (c) => this.say("reasoning", c),
-					onDone: async (s) => { if (s) await this.say("completion_result", s) },
-					onError: async (m) => this.say("error", m),
-				}, {
-					apiKey: apiKey || undefined,
-					signal: resumeAbort.signal,
-					requestTimeoutMs: requestTimeoutMs > 0 ? requestTimeoutMs : undefined,
-				})
-				deferredResp = await resumeClient.deferredResume(
-					deferredResp.run_id,
-					this.taskId,
-					toolResults,
-				)
-				await this.say(
-					"api_req_finished",
-					JSON.stringify({ tokensIn: deferredResp.tokens_in ?? 0, tokensOut: deferredResp.tokens_out ?? 0, cost: deferredResp.cost ?? 0 }),
-				)
-			} catch (error) {
-				if (this.abort) break
-				const msg = error instanceof Error ? error.message : String(error)
-				await this.say("error", `Cloud Agent deferred/resume error: ${msg}`)
-				await this.ask("api_req_failed", msg)
-				return
-			} finally {
-				this.currentRequestAbortController = undefined
-			}
-		}
-
-		if (iteration >= maxIterations) {
-			await this.say("text", `[Deferred] 达到最大迭代次数 (${maxIterations})，停止循环。`)
-		}
-
-		// Handle final "done" response
-		if (deferredResp.status === "done") {
-			if (deferredResp.text) {
-				await this.say("text", deferredResp.text)
-			}
-			if (deferredResp.reasoning) {
-				await this.say("reasoning", deferredResp.reasoning)
-			}
-			for (const log of deferredResp.logs ?? []) {
-				await this.say("text", log)
-			}
-			if (deferredResp.memory_summary) {
-				await this.say("text", deferredResp.memory_summary)
-			}
-
-		// Final workspace_ops (if any)
-		const { operations: finalOps } = parseWorkspaceOps(deferredResp)
-		if (finalOps.length > 0 && applyRemoteWorkspaceOps) {
-			hadWorkspaceOpsForCompile = true
-			await this.applyWorkspaceOps(finalOps, confirmRemoteWorkspaceOps)
-		}
-
-		// Compile feedback loop (deferred path): mirrors legacy behaviour.
-		// Runs after all workspace_ops are applied and before the completion message.
-		const compileLoopEnabled = config.get<boolean>("cloudAgent.compileLoop.enabled", true) ?? true
-		const compileMaxRetries = config.get<number>("cloudAgent.compileLoop.maxRetries", 3) ?? 3
-		if (compileLoopEnabled && applyRemoteWorkspaceOps && hadWorkspaceOpsForCompile && !this.abort) {
-			await this.runCompileFeedbackLoop(
-				client,
-				serverUrl,
-				deviceToken,
-				apiKey,
-				requestTimeoutMs,
-				callbacks,
-				compileMaxRetries,
-				confirmRemoteWorkspaceOps,
-			)
-		}
-
-		await this.say(
-			"completion_result",
-			deferredResp.ok ? "Cloud Agent 任务完成。" : "Cloud Agent 任务结束（服务端报告未成功）。",
-		)
-	}
-}
-
-	/**
-	 * Shared helper: apply workspace_ops with optional per-op confirmation UI.
-	 */
-	private async applyWorkspaceOps(ops: WorkspaceOp[], confirmOps: boolean): Promise<void> {
-		if (confirmOps) {
-			for (let i = 0; i < ops.length && !this.abort; i++) {
-				const op = ops[i]
-				const accessAllowed = allowRooIgnorePathAccess(this.rooIgnoreController, op.path)
-				if (!accessAllowed) {
-					await this.say("rooignore_error", op.path)
-					continue
-				}
-				const isWriteProtected = this.rooProtectedController?.isWriteProtected(op.path) || false
-				const toolJson = await buildCloudWorkspaceOpToolMessage(this.cwd, op, { isWriteProtected })
-
-				let response: ClineAskResponse
-				try {
-					const askResult = await this.ask("tool", toolJson, false)
-					response = askResult.response
-					if (askResult.text) {
-						await this.say("user_feedback", askResult.text, askResult.images)
-					}
-				} catch (err) {
-					if (err instanceof AskIgnoredError) break
-					throw err
-				}
-
-				if (response !== "yesButtonClicked") {
-					await this.say("text", `Skipped workspace op (${i + 1}/${ops.length}): ${op.path}`)
-					continue
-				}
-
-				const single = await applySingleCloudWorkspaceOp(this.cwd, op)
-				await this.say("text", single.message)
-				if (!single.ok) {
-					await this.say("error", `Workspace operation failed: ${single.message}`)
-					break
-				}
-			}
-		} else {
-			const applied = await applyCloudWorkspaceOps(this.cwd, ops, () => this.abort)
-			const lines = applied.results.map((r) => `${r.ok ? "OK" : "FAIL"} ${r.path}: ${r.message}`)
-			const header = applied.ok
-				? `workspace_ops applied (${applied.results.length} operation(s)).`
-				: `workspace_ops stopped at operation ${(applied.failedAtIndex ?? 0) + 1} of ${ops.length}.`
-			await this.say("text", [header, ...lines].join("\n"))
-			if (!applied.ok) {
-				await this.say("error", `Workspace operation failed: ${applied.results.at(-1)?.message ?? "unknown"}`)
-			}
-		}
+		const orchestrator = new CloudAgentOrchestrator(host)
+		await orchestrator.run(userMessage, images)
 	}
 
 	// Task Loop
@@ -3112,7 +2172,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		getCheckpointService(this)
 
 		// Start skill/memory prefetch in parallel (non-blocking)
-		const provider = this.providerRef.deref()
+		const provider = this.hostRef.deref()
 		startAllPrefetch({
 			skillFetchFn: async () => {
 				const skillsManager = provider?.getSkillsManager()
@@ -3155,1313 +2215,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		userContent: Anthropic.Messages.ContentBlockParam[],
 		includeFileDetails: boolean = false,
 	): Promise<boolean> {
-		interface StackItem {
-			userContent: Anthropic.Messages.ContentBlockParam[]
-			includeFileDetails: boolean
-			retryAttempt?: number
-			userMessageWasRemoved?: boolean // Track if user message was removed due to empty response
-		}
-
-		const stack: StackItem[] = [{ userContent, includeFileDetails, retryAttempt: 0 }]
-
-		while (stack.length > 0) {
-			const currentItem = stack.pop()!
-			const currentUserContent = currentItem.userContent
-			const currentIncludeFileDetails = currentItem.includeFileDetails
-
-			if (this.abort) {
-				throw new Error(`[NJUST_AI_CJ#recursivelyMakeRooRequests] task ${this.taskId}.${this.instanceId} aborted`)
-			}
-
-			if (this.consecutiveMistakeLimit > 0 && this.consecutiveMistakeCount >= this.consecutiveMistakeLimit) {
-				const { response, text, images } = await this.ask(
-					"mistake_limit_reached",
-					t("common:errors.mistake_limit_guidance"),
-				)
-
-				if (response === "messageResponse") {
-					currentUserContent.push(
-						...[
-							{ type: "text" as const, text: formatResponse.tooManyMistakes(text) },
-							...formatResponse.imageBlocks(images),
-						],
-					)
-
-					await this.say("user_feedback", text, images)
-				}
-
-				this.consecutiveMistakeCount = 0
-			}
-
-			// Getting verbose details is an expensive operation, it uses ripgrep to
-			// top-down build file structure of project which for large projects can
-			// take a few seconds. For the best UX we show a placeholder api_req_started
-			// message with a loading spinner as this happens.
-
-			// Determine API protocol based on provider and model
-			const modelId = getModelId(this.apiConfiguration)
-			const apiProvider = this.apiConfiguration.apiProvider
-			const apiProtocol = getApiProtocol(
-				apiProvider && !isRetiredProvider(apiProvider) ? apiProvider : undefined,
-				modelId,
-			)
-			const requestStartedAt = Date.now()
-			const requestProfileId = `${this.taskId}-${requestStartedAt}-${this.apiConversationHistory.length + 1}`
-			globalQueryProfiler.start({
-				requestId: requestProfileId,
-				taskId: this.taskId,
-				modelId: modelId ?? "unknown",
-				startedAt: requestStartedAt,
-			})
-
-			// Respect user-configured provider rate limiting BEFORE we emit api_req_started.
-			// This prevents the UI from showing an "API Request..." spinner while we are
-			// intentionally waiting due to the rate limit slider.
-			//
-			// NOTE: We also set Task.lastGlobalApiRequestTime here to reserve this slot
-			// before we build environment details (which can take time).
-			// This ensures subsequent requests (including subtasks) still honour the
-			// provider rate-limit window.
-			await this.maybeWaitForProviderRateLimit(currentItem.retryAttempt ?? 0)
-			Task.lastGlobalApiRequestTime = performance.now()
-
-			await this.say(
-				"api_req_started",
-				JSON.stringify({
-					apiProtocol,
-				}),
-			)
-
-			const provider = this.providerRef.deref()
-			const state = provider ? await provider.getState() : undefined
-
-			const showRooIgnoredFiles = state?.showRooIgnoredFiles ?? false
-			const includeDiagnosticMessages = state?.includeDiagnosticMessages ?? true
-			const maxDiagnosticMessages = state?.maxDiagnosticMessages ?? 50
-			const currentMode = state?.mode ?? defaultModeSlug
-
-			const { content: parsedUserContent, mode: slashCommandMode } = await processUserContentMentions({
-				userContent: currentUserContent,
-				cwd: this.cwd,
-				fileContextTracker: this.fileContextTracker,
-				rooIgnoreController: this.rooIgnoreController,
-				showRooIgnoredFiles,
-				includeDiagnosticMessages,
-				maxDiagnosticMessages,
-				skillsManager: provider?.getSkillsManager(),
-				currentMode,
-			})
-
-			// Switch mode if specified in a slash command's frontmatter
-			if (slashCommandMode) {
-				const provider = this.providerRef.deref()
-				if (provider) {
-					const state = await provider.getState()
-					const targetMode = getModeBySlug(slashCommandMode, state?.customModes)
-					if (targetMode) {
-						await provider.handleModeSwitch(slashCommandMode)
-					}
-				}
-			}
-
-			const environmentDetails = await getEnvironmentDetails(this, currentIncludeFileDetails)
-
-			// Remove any existing environment_details blocks before adding fresh ones.
-			// This prevents duplicate environment details when resuming tasks,
-			// where the old user message content may already contain environment details from the previous session.
-			// We check for both opening and closing tags to ensure we're matching complete environment detail blocks,
-			// not just mentions of the tag in regular content.
-			const contentWithoutEnvDetails = parsedUserContent.filter((block) => {
-				if (block.type === "text" && typeof block.text === "string") {
-					// Check if this text block is a complete environment_details block
-					// by verifying it starts with the opening tag and ends with the closing tag
-					const isEnvironmentDetailsBlock =
-						block.text.trim().startsWith("<environment_details>") &&
-						block.text.trim().endsWith("</environment_details>")
-					return !isEnvironmentDetailsBlock
-				}
-				return true
-			})
-
-			// Add environment details as its own text block, separate from tool
-			// results.
-			let finalUserContent = [...contentWithoutEnvDetails, { type: "text" as const, text: environmentDetails }]
-			// Only add user message to conversation history if:
-			// 1. This is the first attempt (retryAttempt === 0), AND
-			// 2. The original userContent was not empty (empty signals delegation resume where
-			//    the user message with tool_result and env details is already in history), OR
-			// 3. The message was removed in a previous iteration (userMessageWasRemoved === true)
-			// This prevents consecutive user messages while allowing re-add when needed
-			const isEmptyUserContent = currentUserContent.length === 0
-			const shouldAddUserMessage =
-				((currentItem.retryAttempt ?? 0) === 0 && !isEmptyUserContent) || currentItem.userMessageWasRemoved
-			if (shouldAddUserMessage) {
-				await this.addToApiConversationHistory({ role: "user", content: finalUserContent })
-			}
-
-			// Since we sent off a placeholder api_req_started message to update the
-			// webview while waiting to actually start the API request (to load
-			// potential details for example), we need to update the text of that
-			// message.
-			const lastApiReqIndex = findLastIndex(this.clineMessages, (m) => m.say === "api_req_started")
-
-			this.clineMessages[lastApiReqIndex].text = JSON.stringify({
-				apiProtocol,
-			} satisfies ClineApiReqInfo)
-
-			await this.saveClineMessages()
-			await this.providerRef.deref()?.postStateToWebviewWithoutTaskHistory()
-
-			try {
-				let cacheWriteTokens = 0
-				let cacheReadTokens = 0
-				let inputTokens = 0
-				let outputTokens = 0
-				let totalCost: number | undefined
-
-				// We can't use `api_req_finished` anymore since it's a unique case
-				// where it could come after a streaming message (i.e. in the middle
-				// of being updated or executed).
-				// Fortunately `api_req_finished` was always parsed out for the GUI
-				// anyways, so it remains solely for legacy purposes to keep track
-				// of prices in tasks from history (it's worth removing a few months
-				// from now).
-				const updateApiReqMsg = (cancelReason?: ClineApiReqCancelReason, streamingFailedMessage?: string) => {
-					if (lastApiReqIndex < 0 || !this.clineMessages[lastApiReqIndex]) {
-						return
-					}
-
-					const existingData = JSON.parse(this.clineMessages[lastApiReqIndex].text || "{}")
-
-					// Calculate total tokens and cost using provider-aware function
-					const modelId = getModelId(this.apiConfiguration)
-					const apiProvider = this.apiConfiguration.apiProvider
-					const apiProtocol = getApiProtocol(
-						apiProvider && !isRetiredProvider(apiProvider) ? apiProvider : undefined,
-						modelId,
-					)
-
-					const costResult =
-						apiProtocol === "anthropic"
-							? calculateApiCostAnthropic(
-									streamModelInfo,
-									inputTokens,
-									outputTokens,
-									cacheWriteTokens,
-									cacheReadTokens,
-								)
-							: calculateApiCostOpenAI(
-									streamModelInfo,
-									inputTokens,
-									outputTokens,
-									cacheWriteTokens,
-									cacheReadTokens,
-								)
-
-					this.clineMessages[lastApiReqIndex].text = JSON.stringify({
-						...existingData,
-						tokensIn: costResult.totalInputTokens,
-						tokensOut: costResult.totalOutputTokens,
-						cacheWrites: cacheWriteTokens,
-						cacheReads: cacheReadTokens,
-						cost: totalCost ?? costResult.totalCost,
-						cancelReason,
-						streamingFailedMessage,
-					} satisfies ClineApiReqInfo)
-				}
-
-				const abortStream = async (cancelReason: ClineApiReqCancelReason, streamingFailedMessage?: string) => {
-					if (this.diffViewProvider.isEditing) {
-						await this.diffViewProvider.revertChanges() // closes diff view
-					}
-
-					// if last message is a partial we need to update and save it
-					const lastMessage = this.clineMessages.at(-1)
-
-					if (lastMessage && lastMessage.partial) {
-						// lastMessage.ts = Date.now() DO NOT update ts since it is used as a key for virtuoso list
-						lastMessage.partial = false
-						// instead of streaming partialMessage events, we do a save and post like normal to persist to disk
-					}
-
-					// Update `api_req_started` to have cancelled and cost, so that
-					// we can display the cost of the partial stream and the cancellation reason
-					updateApiReqMsg(cancelReason, streamingFailedMessage)
-					await this.saveClineMessages()
-
-					// Signals to provider that it can retrieve the saved messages
-					// from disk, as abortTask can not be awaited on in nature.
-					this.didFinishAbortingStream = true
-				}
-
-				// Reset streaming state for each new API request
-				this.currentStreamingContentIndex = 0
-				this.currentStreamingDidCheckpoint = false
-				this.assistantMessageContent = []
-				this.didCompleteReadingStream = false
-				this.userMessageContent = []
-				this.userMessageContentReady = false
-				this.didRejectTool = false
-				this.didAlreadyUseTool = false
-				this.assistantMessageSavedToHistory = false
-				// Reset tool failure flag for each new assistant turn - this ensures that tool failures
-				// only prevent attempt_completion within the same assistant message, not across turns
-				// (e.g., if a tool fails, then user sends a message saying "just complete anyway")
-				this.didToolFailInCurrentTurn = false
-				this.presentAssistantMessageLocked = false
-				this.presentAssistantMessageHasPendingUpdates = false
-				// No legacy text-stream tool parser.
-				this.streamingToolCallIndices.clear()
-				// Clear any leftover streaming tool call state from previous interrupted streams
-				NativeToolCallParser.clearAllStreamingToolCalls()
-				NativeToolCallParser.clearRawChunkState()
-
-				await this.diffViewProvider.reset()
-
-				// Cache model info once per API request to avoid repeated calls during streaming
-				// This is especially important for tools and background usage collection
-				this.cachedStreamingModel = this.api.getModel()
-				const streamModelInfo = this.cachedStreamingModel.info
-				const cachedModelId = this.cachedStreamingModel.id
-
-				// Yields only if the first chunk is successful, otherwise will
-				// allow the user to retry the request (most likely due to rate
-				// limit error, which gets thrown on the first chunk).
-				const stream = this.attemptApiRequest(currentItem.retryAttempt ?? 0, { skipProviderRateLimit: true })
-				let assistantMessage = ""
-				let reasoningMessage = ""
-				let pendingGroundingSources: GroundingSource[] = []
-				this.isStreaming = true
-
-				try {
-					const iterator = stream[Symbol.asyncIterator]()
-
-					// Helper to race iterator.next() with abort signal
-					const nextChunkWithAbort = async () => {
-						const nextPromise = iterator.next()
-
-						// If we have an abort controller, race it with the next chunk
-						if (this.currentRequestAbortController) {
-							const abortPromise = new Promise<never>((_, reject) => {
-								const signal = this.currentRequestAbortController!.signal
-								if (signal.aborted) {
-									reject(new Error("Request cancelled by user"))
-								} else {
-									signal.addEventListener("abort", () => {
-										reject(new Error("Request cancelled by user"))
-									})
-								}
-							})
-							return await Promise.race([nextPromise, abortPromise])
-						}
-
-						// No abort controller, just return the next chunk normally
-						return await nextPromise
-					}
-
-					let item = await nextChunkWithAbort()
-					while (!item.done) {
-						const chunk = item.value
-						item = await nextChunkWithAbort()
-						if (!chunk) {
-							// Sometimes chunk is undefined, no idea that can cause
-							// it, but this workaround seems to fix it.
-							continue
-						}
-
-						switch (chunk.type) {
-							case "reasoning": {
-								reasoningMessage += chunk.text
-								// Only apply formatting if the message contains sentence-ending punctuation followed by **
-								let formattedReasoning = reasoningMessage
-								if (reasoningMessage.includes("**")) {
-									// Add line breaks before **Title** patterns that appear after sentence endings
-									// This targets section headers like "...end of sentence.**Title Here**"
-									// Handles periods, exclamation marks, and question marks
-									formattedReasoning = reasoningMessage.replace(
-										/([.!?])\*\*([^*\n]+)\*\*/g,
-										"$1\n\n**$2**",
-									)
-								}
-								await this.say("reasoning", formattedReasoning, undefined, true)
-								break
-							}
-							case "usage":
-								inputTokens += chunk.inputTokens
-								outputTokens += chunk.outputTokens
-								cacheWriteTokens += chunk.cacheWriteTokens ?? 0
-								cacheReadTokens += chunk.cacheReadTokens ?? 0
-								totalCost = chunk.totalCost
-								break
-							case "grounding":
-								// Handle grounding sources separately from regular content
-								// to prevent state persistence issues - store them separately
-								if (chunk.sources && chunk.sources.length > 0) {
-									pendingGroundingSources.push(...chunk.sources)
-								}
-								break
-							case "tool_call_partial": {
-								// Process raw tool call chunk through NativeToolCallParser
-								// which handles tracking, buffering, and emits events
-								const events = NativeToolCallParser.processRawChunk({
-									index: chunk.index,
-									id: chunk.id,
-									name: chunk.name,
-									arguments: chunk.arguments,
-								})
-
-								for (const event of events) {
-									if (event.type === "tool_call_start") {
-										// Guard against duplicate tool_call_start events for the same tool ID.
-										// This can occur due to stream retry, reconnection, or API quirks.
-										// Without this check, duplicate tool_use blocks with the same ID would
-										// be added to assistantMessageContent, causing API 400 errors:
-										// "tool_use ids must be unique"
-										if (this.streamingToolCallIndices.has(event.id)) {
-											console.warn(
-												`[Task#${this.taskId}] Ignoring duplicate tool_call_start for ID: ${event.id} (tool: ${event.name})`,
-											)
-											continue
-										}
-
-										// Initialize streaming in NativeToolCallParser
-										NativeToolCallParser.startStreamingToolCall(event.id, event.name as ToolName)
-
-										// Before adding a new tool, finalize any preceding text block
-										// This prevents the text block from blocking tool presentation
-										const lastBlock =
-											this.assistantMessageContent[this.assistantMessageContent.length - 1]
-										if (lastBlock?.type === "text" && lastBlock.partial) {
-											lastBlock.partial = false
-										}
-
-										// Track the index where this tool will be stored
-										const toolUseIndex = this.assistantMessageContent.length
-										this.streamingToolCallIndices.set(event.id, toolUseIndex)
-
-										// Create initial partial tool use
-										const partialToolUse: ToolUse = {
-											type: "tool_use",
-											name: event.name as ToolName,
-											params: {},
-											partial: true,
-										}
-
-										// Store the ID for native protocol
-										;(partialToolUse as any).id = event.id
-
-										// Add to content and present
-										this.assistantMessageContent.push(partialToolUse)
-										this.userMessageContentReady = false
-										presentAssistantMessage(this)
-									} else if (event.type === "tool_call_delta") {
-										// Process chunk using streaming JSON parser
-										const partialToolUse = NativeToolCallParser.processStreamingChunk(
-											event.id,
-											event.delta,
-										)
-
-										if (partialToolUse) {
-											// Get the index for this tool call
-											const toolUseIndex = this.streamingToolCallIndices.get(event.id)
-											if (toolUseIndex !== undefined) {
-												// Store the ID for native protocol
-												;(partialToolUse as any).id = event.id
-
-												// Update the existing tool use with new partial data
-												this.assistantMessageContent[toolUseIndex] = partialToolUse
-
-												// Present updated tool use
-												presentAssistantMessage(this)
-											}
-										}
-									} else if (event.type === "tool_call_end") {
-										// Finalize the streaming tool call
-										const finalToolUse = NativeToolCallParser.finalizeStreamingToolCall(event.id)
-
-										// Get the index for this tool call
-										const toolUseIndex = this.streamingToolCallIndices.get(event.id)
-
-										if (finalToolUse) {
-											// Store the tool call ID
-											;(finalToolUse as any).id = event.id
-
-											// Get the index and replace partial with final
-											if (toolUseIndex !== undefined) {
-												this.assistantMessageContent[toolUseIndex] = finalToolUse
-											}
-
-											// Clean up tracking
-											this.streamingToolCallIndices.delete(event.id)
-
-											// Mark that we have new content to process
-											this.userMessageContentReady = false
-
-											// Try eager execution for safe auto-approve tools; fallback to regular path.
-											const latest = this.assistantMessageContent[toolUseIndex ?? -1] as any
-											if (latest?.type === "tool_use") {
-												const state = await this.providerRef.deref()?.getState()
-												const enabled = state?.enableStreamingToolExecution !== false
-												if (enabled && (state?.autoApprovalEnabled ?? false)) {
-													const decision = this.streamingToolExecutor.shouldEagerExecute(this, latest)
-													if (decision === "eager") {
-														presentAssistantMessage(this)
-														break
-													}
-												}
-											}
-
-											// Present the finalized tool call
-											presentAssistantMessage(this)
-										} else if (toolUseIndex !== undefined) {
-											// finalizeStreamingToolCall returned null (malformed JSON or missing args)
-											// Mark the tool as non-partial so it's presented as complete, but execution
-											// will be short-circuited in presentAssistantMessage with a structured tool_result.
-											const existingToolUse = this.assistantMessageContent[toolUseIndex]
-											if (existingToolUse && existingToolUse.type === "tool_use") {
-												existingToolUse.partial = false
-												// Ensure it has the ID for native protocol
-												;(existingToolUse as any).id = event.id
-											}
-
-											// Clean up tracking
-											this.streamingToolCallIndices.delete(event.id)
-
-											// Mark that we have new content to process
-											this.userMessageContentReady = false
-
-											// Present the tool call - validation will handle missing params
-											presentAssistantMessage(this)
-										}
-									}
-								}
-								break
-							}
-
-							case "tool_call": {
-								// Legacy: Handle complete tool calls (for backward compatibility)
-								// Convert native tool call to ToolUse format
-								const toolUse = NativeToolCallParser.parseToolCall({
-									id: chunk.id,
-									name: chunk.name as ToolName,
-									arguments: chunk.arguments,
-								})
-
-								if (!toolUse) {
-									console.error(`Failed to parse tool call for task ${this.taskId}:`, chunk)
-									break
-								}
-
-								// Store the tool call ID on the ToolUse object for later reference
-								// This is needed to create tool_result blocks that reference the correct tool_use_id
-								toolUse.id = chunk.id
-
-								// Add the tool use to assistant message content
-								this.assistantMessageContent.push(toolUse)
-
-								// Mark that we have new content to process
-								this.userMessageContentReady = false
-
-								// Present the tool call to user - presentAssistantMessage will execute
-								// tools sequentially and accumulate all results in userMessageContent
-								presentAssistantMessage(this)
-								break
-							}
-							case "text": {
-								assistantMessage += chunk.text
-								globalQueryProfiler.markFirstToken(requestProfileId)
-
-								// Native tool calling: text chunks are plain text.
-								// Create or update a text content block directly
-								const lastBlock = this.assistantMessageContent[this.assistantMessageContent.length - 1]
-								if (lastBlock?.type === "text" && lastBlock.partial) {
-									lastBlock.content = assistantMessage
-								} else {
-									this.assistantMessageContent.push({
-										type: "text",
-										content: assistantMessage,
-										partial: true,
-									})
-									this.userMessageContentReady = false
-								}
-								presentAssistantMessage(this)
-								break
-							}
-						}
-
-						if (this.abort) {
-							console.log(`aborting stream, this.abandoned = ${this.abandoned}`)
-
-							if (!this.abandoned) {
-								// Only need to gracefully abort if this instance
-								// isn't abandoned (sometimes OpenRouter stream
-								// hangs, in which case this would affect future
-								// instances of Cline).
-								await abortStream("user_cancelled")
-							}
-
-							break // Aborts the stream.
-						}
-
-						if (this.didRejectTool) {
-							// `userContent` has a tool rejection, so interrupt the
-							// assistant's response to present the user's feedback.
-							assistantMessage += "\n\n[Response interrupted by user feedback]"
-							// Instead of setting this preemptively, we allow the
-							// present iterator to finish and set
-							// userMessageContentReady when its ready.
-							// this.userMessageContentReady = true
-							break
-						}
-
-						if (this.didAlreadyUseTool) {
-							assistantMessage +=
-								"\n\n[Response interrupted by a tool use result. Only one tool may be used at a time and should be placed at the end of the message.]"
-							break
-						}
-					}
-
-					// Create a copy of current token values to avoid race conditions
-					const currentTokens = {
-						input: inputTokens,
-						output: outputTokens,
-						cacheWrite: cacheWriteTokens,
-						cacheRead: cacheReadTokens,
-						total: totalCost,
-					}
-
-					const drainStreamInBackgroundToFindAllUsage = async (apiReqIndex: number) => {
-						const timeoutMs = DEFAULT_USAGE_COLLECTION_TIMEOUT_MS
-						const startTime = performance.now()
-						const modelId = getModelId(this.apiConfiguration)
-
-						// Local variables to accumulate usage data without affecting the main flow
-						let bgInputTokens = currentTokens.input
-						let bgOutputTokens = currentTokens.output
-						let bgCacheWriteTokens = currentTokens.cacheWrite
-						let bgCacheReadTokens = currentTokens.cacheRead
-						let bgTotalCost = currentTokens.total
-
-						// Helper function to capture telemetry and update messages
-						const captureUsageData = async (
-							tokens: {
-								input: number
-								output: number
-								cacheWrite: number
-								cacheRead: number
-								total?: number
-							},
-							messageIndex: number = apiReqIndex,
-						) => {
-							if (
-								tokens.input > 0 ||
-								tokens.output > 0 ||
-								tokens.cacheWrite > 0 ||
-								tokens.cacheRead > 0
-							) {
-								// Update the shared variables atomically
-								inputTokens = tokens.input
-								outputTokens = tokens.output
-								cacheWriteTokens = tokens.cacheWrite
-								cacheReadTokens = tokens.cacheRead
-								totalCost = tokens.total
-
-								// Update the API request message with the latest usage data
-								updateApiReqMsg()
-								await this.saveClineMessages()
-
-								// Update the specific message in the webview
-								const apiReqMessage = this.clineMessages[messageIndex]
-								if (apiReqMessage) {
-									await this.updateClineMessage(apiReqMessage)
-								}
-
-								// Capture telemetry with provider-aware cost calculation
-								const modelId = getModelId(this.apiConfiguration)
-								const apiProvider = this.apiConfiguration.apiProvider
-								const apiProtocol = getApiProtocol(
-									apiProvider && !isRetiredProvider(apiProvider) ? apiProvider : undefined,
-									modelId,
-								)
-
-								// Use the appropriate cost function based on the API protocol
-								const costResult =
-									apiProtocol === "anthropic"
-										? calculateApiCostAnthropic(
-												streamModelInfo,
-												tokens.input,
-												tokens.output,
-												tokens.cacheWrite,
-												tokens.cacheRead,
-											)
-										: calculateApiCostOpenAI(
-												streamModelInfo,
-												tokens.input,
-												tokens.output,
-												tokens.cacheWrite,
-												tokens.cacheRead,
-											)
-
-								globalCacheMetrics.record({
-									timestamp: Date.now(),
-									inputTokens: tokens.input,
-									cacheCreationInputTokens: tokens.cacheWrite,
-									cacheReadInputTokens: tokens.cacheRead,
-									outputTokens: tokens.output,
-									model: cachedModelId,
-								})
-								this.requestCacheReadWindow.push(tokens.cacheRead)
-								if (this.requestCacheReadWindow.length > 5) {
-									this.requestCacheReadWindow.shift()
-								}
-								this.requestInputTokensWindow.push(tokens.input)
-								if (this.requestInputTokensWindow.length > 5) {
-									this.requestInputTokensWindow.shift()
-								}
-								const cacheSummary = globalCacheMetrics.getSummary()
-
-								const latencyMs = Date.now() - requestStartedAt
-								console.log(
-									`[Task Metrics] task=${this.taskId} mode=${await this.getTaskMode()} latencyMs=${latencyMs} input=${tokens.input} output=${tokens.output} cacheCreate=${tokens.cacheWrite} cacheRead=${tokens.cacheRead} contextTokens=${this.getTokenUsage().contextTokens ?? 0} cacheHitRate=${cacheSummary.cacheHitRate.toFixed(3)} estSavings=${(cacheSummary.estimatedSavingsPercent * 100).toFixed(1)}% requests=${cacheSummary.totalRequests}`,
-								)
-								const runtimeTokenUsage = this.getTokenUsage()
-								const runtimeContextTokens = runtimeTokenUsage.contextTokens ?? 0
-								const runtimeModel = this.api.getModel().info
-								const runtimeContextWindow = runtimeModel?.contextWindow ?? 0
-								const runtimeContextPercent =
-									runtimeContextWindow > 0
-										? (runtimeContextTokens / runtimeContextWindow) * 100
-										: 0
-								const runtimeState = await this.providerRef.deref()?.getState()
-								const runtimeAutoCondenseContext = runtimeState?.autoCondenseContext ?? true
-								const runtimeAutoCondenseContextPercent =
-									runtimeState?.autoCondenseContextPercent ?? DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT
-								const runtimeProfileThresholds = runtimeState?.profileThresholds ?? {}
-								const runtimeCurrentProfileId = runtimeState?.currentApiConfigName ?? "default"
-								const compactLikelyTriggered = willManageContext({
-									totalTokens: runtimeContextTokens,
-									contextWindow: runtimeContextWindow,
-									maxTokens: runtimeModel?.maxTokens,
-									autoCondenseContext: runtimeAutoCondenseContext,
-									autoCondenseContextPercent: runtimeAutoCondenseContextPercent,
-									profileThresholds: runtimeProfileThresholds,
-									currentProfileId: runtimeCurrentProfileId,
-									lastMessageTokens: 0,
-								})
-								await this.providerRef.deref()?.postMessageToWebview({
-									type: "taskMetrics",
-									taskMetrics: {
-										taskId: this.taskId,
-										latencyMs,
-										cacheHitRate: cacheSummary.cacheHitRate,
-										estimatedSavingsPercent: cacheSummary.estimatedSavingsPercent * 100,
-										cacheReadInputTokens: tokens.cacheRead,
-										cacheCreationInputTokens: tokens.cacheWrite,
-										inputTokens: tokens.input,
-										outputTokens: tokens.output,
-										contextTokens: runtimeContextTokens,
-										contextPercent: runtimeContextPercent,
-										compactLikelyTriggered,
-										cacheBreaksTotal: globalPromptCacheBreakDetector.getTotalBreaks(),
-										cacheBreaksBySource: globalPromptCacheBreakDetector.getBreaksBySource(),
-									},
-								})
-
-							}
-						}
-
-						try {
-							// Continue processing the original stream from where the main loop left off
-							let usageFound = false
-							let chunkCount = 0
-
-							// Use the same iterator that the main loop was using
-							while (!item.done) {
-								// Check for timeout
-								if (performance.now() - startTime > timeoutMs) {
-									console.warn(
-										`[Background Usage Collection] Timed out after ${timeoutMs}ms for model: ${modelId}, processed ${chunkCount} chunks`,
-									)
-									// Clean up the iterator before breaking
-									if (iterator.return) {
-										await iterator.return(undefined)
-									}
-									break
-								}
-
-								const chunk = item.value
-								item = await iterator.next()
-								chunkCount++
-
-								if (chunk && chunk.type === "usage") {
-									usageFound = true
-									bgInputTokens += chunk.inputTokens
-									bgOutputTokens += chunk.outputTokens
-									bgCacheWriteTokens += chunk.cacheWriteTokens ?? 0
-									bgCacheReadTokens += chunk.cacheReadTokens ?? 0
-									bgTotalCost = chunk.totalCost
-								}
-							}
-
-							if (
-								usageFound ||
-								bgInputTokens > 0 ||
-								bgOutputTokens > 0 ||
-								bgCacheWriteTokens > 0 ||
-								bgCacheReadTokens > 0
-							) {
-								// We have usage data either from a usage chunk or accumulated tokens
-								await captureUsageData(
-									{
-										input: bgInputTokens,
-										output: bgOutputTokens,
-										cacheWrite: bgCacheWriteTokens,
-										cacheRead: bgCacheReadTokens,
-										total: bgTotalCost,
-									},
-									lastApiReqIndex,
-								)
-							} else {
-								console.warn(
-									`[Background Usage Collection] Suspicious: request ${apiReqIndex} is complete, but no usage info was found. Model: ${modelId}`,
-								)
-							}
-						} catch (error) {
-							console.error("Error draining stream for usage data:", error)
-							// Still try to capture whatever usage data we have collected so far
-							if (
-								bgInputTokens > 0 ||
-								bgOutputTokens > 0 ||
-								bgCacheWriteTokens > 0 ||
-								bgCacheReadTokens > 0
-							) {
-								await captureUsageData(
-									{
-										input: bgInputTokens,
-										output: bgOutputTokens,
-										cacheWrite: bgCacheWriteTokens,
-										cacheRead: bgCacheReadTokens,
-										total: bgTotalCost,
-									},
-									lastApiReqIndex,
-								)
-							}
-						}
-					}
-
-					// Start the background task and handle any errors
-					drainStreamInBackgroundToFindAllUsage(lastApiReqIndex).catch((error) => {
-						console.error("Background usage collection failed:", error)
-					})
-				} catch (error) {
-					// Abandoned happens when extension is no longer waiting for the
-					// Cline instance to finish aborting (error is thrown here when
-					// any function in the for loop throws due to this.abort).
-					if (!this.abandoned) {
-						// Determine cancellation reason
-						const cancelReason: ClineApiReqCancelReason = this.abort ? "user_cancelled" : "streaming_failed"
-
-						const rawErrorMessage = error.message ?? JSON.stringify(serializeError(error), null, 2)
-						const streamingFailedMessage = this.abort
-							? undefined
-							: `${t("common:interruption.streamTerminatedByProvider")}: ${rawErrorMessage}`
-
-						// Clean up partial state
-						await abortStream(cancelReason, streamingFailedMessage)
-
-						if (this.abort) {
-							// User cancelled - abort the entire task
-							this.abortReason = cancelReason
-							await this.abortTask()
-						} else {
-							// Stream failed - log the error and retry with the same content
-							// The existing rate limiting will prevent rapid retries
-							console.error(
-								`[Task#${this.taskId}.${this.instanceId}] Stream failed, will retry: ${streamingFailedMessage}`,
-							)
-
-							// Apply exponential backoff similar to first-chunk errors when auto-resubmit is enabled
-							const stateForBackoff = await this.providerRef.deref()?.getState()
-							if (stateForBackoff?.autoApprovalEnabled) {
-								await this.backoffAndAnnounce(currentItem.retryAttempt ?? 0, error)
-
-								// Check if task was aborted during the backoff
-								if (this.abort) {
-									console.log(
-										`[Task#${this.taskId}.${this.instanceId}] Task aborted during mid-stream retry backoff`,
-									)
-									// Abort the entire task
-									this.abortReason = "user_cancelled"
-									await this.abortTask()
-									break
-								}
-							}
-
-							// Push the same content back onto the stack to retry, incrementing the retry attempt counter
-							stack.push({
-								userContent: currentUserContent,
-								includeFileDetails: false,
-								retryAttempt: (currentItem.retryAttempt ?? 0) + 1,
-							})
-
-							// Continue to retry the request
-							continue
-						}
-					}
-				} finally {
-					this.isStreaming = false
-					const profile = globalQueryProfiler.finish(requestProfileId, {
-						aborted: this.abort || this.abandoned,
-					})
-					if (profile) {
-						console.log(
-							`[Query Profiler] task=${profile.taskId} model=${profile.modelId} ttftMs=${profile.ttftMs ?? -1} e2eMs=${profile.e2eMs ?? -1} aborted=${profile.aborted}`,
-						)
-					}
-					// Clean up the abort controller when streaming completes
-					this.currentRequestAbortController = undefined
-				}
-
-				// Need to call here in case the stream was aborted.
-				if (this.abort || this.abandoned) {
-					throw new Error(
-						`[NJUST_AI_CJ#recursivelyMakeRooRequests] task ${this.taskId}.${this.instanceId} aborted`,
-					)
-				}
-
-				this.didCompleteReadingStream = true
-
-				// Set any blocks to be complete to allow `presentAssistantMessage`
-				// to finish and set `userMessageContentReady` to true.
-				// (Could be a text block that had no subsequent tool uses, or a
-				// text block at the very end, or an invalid tool use, etc. Whatever
-				// the case, `presentAssistantMessage` relies on these blocks either
-				// to be completed or the user to reject a block in order to proceed
-				// and eventually set userMessageContentReady to true.)
-
-				// Finalize any remaining streaming tool calls that weren't explicitly ended
-				// This is critical for MCP tools which need tool_call_end events to be properly
-				// converted from ToolUse to McpToolUse via finalizeStreamingToolCall()
-				const finalizeEvents = NativeToolCallParser.finalizeRawChunks()
-				for (const event of finalizeEvents) {
-					if (event.type === "tool_call_end") {
-						// Finalize the streaming tool call
-						const finalToolUse = NativeToolCallParser.finalizeStreamingToolCall(event.id)
-
-						// Get the index for this tool call
-						const toolUseIndex = this.streamingToolCallIndices.get(event.id)
-
-						if (finalToolUse) {
-							// Store the tool call ID
-							;(finalToolUse as any).id = event.id
-
-							// Get the index and replace partial with final
-							if (toolUseIndex !== undefined) {
-								this.assistantMessageContent[toolUseIndex] = finalToolUse
-							}
-
-							// Clean up tracking
-							this.streamingToolCallIndices.delete(event.id)
-
-							// Mark that we have new content to process
-							this.userMessageContentReady = false
-
-							// Present the finalized tool call
-							presentAssistantMessage(this)
-						} else if (toolUseIndex !== undefined) {
-							// finalizeStreamingToolCall returned null (malformed JSON or missing args)
-							// We still need to mark the tool as non-partial so it gets executed
-							// The tool's validation will catch any missing required parameters
-							const existingToolUse = this.assistantMessageContent[toolUseIndex]
-							if (existingToolUse && existingToolUse.type === "tool_use") {
-								existingToolUse.partial = false
-								// Ensure it has the ID for native protocol
-								;(existingToolUse as any).id = event.id
-							}
-
-							// Clean up tracking
-							this.streamingToolCallIndices.delete(event.id)
-
-							// Mark that we have new content to process
-							this.userMessageContentReady = false
-
-							// Present the tool call - validation will handle missing params
-							presentAssistantMessage(this)
-						}
-					}
-				}
-
-				// IMPORTANT: Capture partialBlocks AFTER finalizeRawChunks() to avoid double-presentation.
-				// Tools finalized above are already presented, so we only want blocks still partial after finalization.
-				const partialBlocks = this.assistantMessageContent.filter((block) => block.partial)
-				partialBlocks.forEach((block) => (block.partial = false))
-
-				// Can't just do this b/c a tool could be in the middle of executing.
-				// this.assistantMessageContent.forEach((e) => (e.partial = false))
-
-				// No legacy streaming parser to finalize.
-
-				// Note: updateApiReqMsg() is now called from within drainStreamInBackgroundToFindAllUsage
-				// to ensure usage data is captured even when the stream is interrupted. The background task
-				// uses local variables to accumulate usage data before atomically updating the shared state.
-
-				// Complete the reasoning message if it exists
-				// We can't use say() here because the reasoning message may not be the last message
-				// (other messages like text blocks or tool uses may have been added after it during streaming)
-				if (reasoningMessage) {
-					const lastReasoningIndex = findLastIndex(
-						this.clineMessages,
-						(m) => m.type === "say" && m.say === "reasoning",
-					)
-
-					if (lastReasoningIndex !== -1 && this.clineMessages[lastReasoningIndex].partial) {
-						this.clineMessages[lastReasoningIndex].partial = false
-						await this.updateClineMessage(this.clineMessages[lastReasoningIndex])
-					}
-				}
-
-				await this.saveClineMessages()
-				await this.providerRef.deref()?.postStateToWebviewWithoutTaskHistory()
-
-				// No legacy text-stream tool parser state to reset.
-
-				// CRITICAL: Save assistant message to API history BEFORE executing tools.
-				// This ensures that when new_task triggers delegation and calls flushPendingToolResultsToHistory(),
-				// the assistant message is already in history. Otherwise, tool_result blocks would appear
-				// BEFORE their corresponding tool_use blocks, causing API errors.
-
-				// Check if we have any content to process (text or tool uses)
-				const hasTextContent = assistantMessage.length > 0
-
-				const hasToolUses = this.assistantMessageContent.some(
-					(block) => block.type === "tool_use" || block.type === "mcp_tool_use",
-				)
-
-				if (hasTextContent || hasToolUses) {
-					// Reset counter when we get a successful response with content
-					this.consecutiveNoAssistantMessagesCount = 0
-					// Display grounding sources to the user if they exist
-					if (pendingGroundingSources.length > 0) {
-						const citationLinks = pendingGroundingSources.map((source, i) => `[${i + 1}](${source.url})`)
-						const sourcesText = `${t("common:gemini.sources")} ${citationLinks.join(", ")}`
-
-						await this.say("text", sourcesText, undefined, false, undefined, undefined, {
-							isNonInteractive: true,
-						})
-					}
-
-					// Build the assistant message content array
-					const assistantContent: Array<Anthropic.TextBlockParam | Anthropic.ToolUseBlockParam> = []
-
-					// Add text content if present
-					if (assistantMessage) {
-						assistantContent.push({
-							type: "text" as const,
-							text: assistantMessage,
-						})
-					}
-
-					// Add tool_use blocks with their IDs for native protocol
-					// This handles both regular ToolUse and McpToolUse types
-					// IMPORTANT: Track seen IDs to prevent duplicates in the API request.
-					// Duplicate tool_use IDs cause Anthropic API 400 errors:
-					// "tool_use ids must be unique"
-					const seenToolUseIds = new Set<string>()
-					const toolUseBlocks = this.assistantMessageContent.filter(
-						(block) => block.type === "tool_use" || block.type === "mcp_tool_use",
-					)
-					for (const block of toolUseBlocks) {
-						if (block.type === "mcp_tool_use") {
-							// McpToolUse already has the original tool name (e.g., "mcp_serverName_toolName")
-							// The arguments are the raw tool arguments (matching the simplified schema)
-							const mcpBlock = block as import("../../shared/tools").McpToolUse
-							if (mcpBlock.id) {
-								const sanitizedId = sanitizeToolUseId(mcpBlock.id)
-								// Pre-flight deduplication: Skip if we've already added this ID
-								if (seenToolUseIds.has(sanitizedId)) {
-									console.warn(
-										`[Task#${this.taskId}] Pre-flight deduplication: Skipping duplicate MCP tool_use ID: ${sanitizedId} (tool: ${mcpBlock.name})`,
-									)
-									continue
-								}
-								seenToolUseIds.add(sanitizedId)
-								assistantContent.push({
-									type: "tool_use" as const,
-									id: sanitizedId,
-									name: mcpBlock.name, // Original dynamic name
-									input: mcpBlock.arguments, // Direct tool arguments
-								})
-							}
-						} else {
-							// Regular ToolUse
-							const toolUse = block as import("../../shared/tools").ToolUse
-							const toolCallId = toolUse.id
-							if (toolCallId) {
-								const sanitizedId = sanitizeToolUseId(toolCallId)
-								// Pre-flight deduplication: Skip if we've already added this ID
-								if (seenToolUseIds.has(sanitizedId)) {
-									console.warn(
-										`[Task#${this.taskId}] Pre-flight deduplication: Skipping duplicate tool_use ID: ${sanitizedId} (tool: ${toolUse.name})`,
-									)
-									continue
-								}
-								seenToolUseIds.add(sanitizedId)
-								// nativeArgs is already in the correct API format for all tools
-								const input = toolUse.nativeArgs || toolUse.params
-
-								// Use originalName (alias) if present for API history consistency.
-								// When tool aliases are used (e.g., "edit_file" -> "search_and_replace" -> "edit" (current canonical name)),
-								// we want the alias name in the conversation history to match what the model
-								// was told the tool was named, preventing confusion in multi-turn conversations.
-								const toolNameForHistory = toolUse.originalName ?? toolUse.name
-
-								assistantContent.push({
-									type: "tool_use" as const,
-									id: sanitizedId,
-									name: toolNameForHistory,
-									input,
-								})
-							}
-						}
-					}
-
-					// Enforce new_task isolation: if new_task is called alongside other tools,
-					// truncate any tools that come after it and inject error tool_results.
-					// This prevents orphaned tools when delegation disposes the parent task.
-					const newTaskIndex = assistantContent.findIndex(
-						(block) => block.type === "tool_use" && block.name === "new_task",
-					)
-
-					if (newTaskIndex !== -1 && newTaskIndex < assistantContent.length - 1) {
-						// new_task found but not last - truncate subsequent tools
-						const truncatedTools = assistantContent.slice(newTaskIndex + 1)
-						assistantContent.length = newTaskIndex + 1 // Truncate API history array
-
-						// ALSO truncate the execution array (assistantMessageContent) to prevent
-						// tools after new_task from being executed by presentAssistantMessage().
-						// Find new_task index in assistantMessageContent (may differ from assistantContent
-						// due to text blocks being structured differently).
-						const executionNewTaskIndex = this.assistantMessageContent.findIndex(
-							(block) => block.type === "tool_use" && block.name === "new_task",
-						)
-						if (executionNewTaskIndex !== -1) {
-							this.assistantMessageContent.length = executionNewTaskIndex + 1
-						}
-
-						// Pre-inject error tool_results for truncated tools
-						for (const tool of truncatedTools) {
-							if (tool.type === "tool_use" && (tool as Anthropic.ToolUseBlockParam).id) {
-								this.pushToolResultToUserContent({
-									type: "tool_result",
-									tool_use_id: (tool as Anthropic.ToolUseBlockParam).id,
-									content:
-										"This tool was not executed because new_task was called in the same message turn. The new_task tool must be the last tool in a message.",
-									is_error: true,
-								})
-							}
-						}
-					}
-
-					// Save assistant message BEFORE executing tools
-					// This is critical for new_task: when it triggers delegation, flushPendingToolResultsToHistory()
-					// will save the user message with tool_results. The assistant message must already be in history
-					// so that tool_result blocks appear AFTER their corresponding tool_use blocks.
-					await this.addToApiConversationHistory(
-						{ role: "assistant", content: assistantContent },
-						reasoningMessage || undefined,
-					)
-					this.assistantMessageSavedToHistory = true
-				}
-
-				// Present any partial blocks that were just completed.
-				// Tool calls are typically presented during streaming via tool_call_partial events,
-				// but we still present here if any partial blocks remain (e.g., malformed streams).
-				// NOTE: This MUST happen AFTER saving the assistant message to API history.
-				// When new_task is in the batch, it triggers delegation which calls flushPendingToolResultsToHistory().
-				// If the assistant message isn't saved yet, tool_results would appear before tool_use blocks.
-				if (partialBlocks.length > 0) {
-					// If there is content to update then it will complete and
-					// update `this.userMessageContentReady` to true, which we
-					// `pWaitFor` before making the next request.
-					presentAssistantMessage(this)
-				}
-
-				if (hasTextContent || hasToolUses) {
-					// NOTE: This comment is here for future reference - this was a
-					// workaround for `userMessageContent` not getting set to true.
-					// It was due to it not recursively calling for partial blocks
-					// when `didRejectTool`, so it would get stuck waiting for a
-					// partial block to complete before it could continue.
-					// In case the content blocks finished it may be the api stream
-					// finished after the last parsed content block was executed, so
-					// we are able to detect out of bounds and set
-					// `userMessageContentReady` to true (note you should not call
-					// `presentAssistantMessage` since if the last block i
-					//  completed it will be presented again).
-					// const completeBlocks = this.assistantMessageContent.filter((block) => !block.partial) // If there are any partial blocks after the stream ended we can consider them invalid.
-					// if (this.currentStreamingContentIndex >= completeBlocks.length) {
-					// 	this.userMessageContentReady = true
-					// }
-
-					await pWaitFor(() => this.userMessageContentReady)
-
-					// If the model did not tool use, then we need to tell it to
-					// either use a tool or attempt_completion.
-					const didToolUse = this.assistantMessageContent.some(
-						(block) => block.type === "tool_use" || block.type === "mcp_tool_use",
-					)
-
-					if (!didToolUse) {
-						// Increment consecutive no-tool-use counter
-						this.consecutiveNoToolUseCount++
-
-						// Only show error and count toward mistake limit after 2 consecutive failures
-						if (this.consecutiveNoToolUseCount >= 2) {
-							await this.say("error", "MODEL_NO_TOOLS_USED")
-							// Only count toward mistake limit after second consecutive failure
-							this.consecutiveMistakeCount++
-						}
-
-						// Use the task's locked protocol for consistent behavior
-						this.userMessageContent.push({
-							type: "text",
-							text: formatResponse.noToolsUsed(),
-						})
-					} else {
-						// Reset counter when tools are used successfully
-						this.consecutiveNoToolUseCount = 0
-					}
-
-					// Push to stack if there's content OR if we're paused waiting for a subtask.
-					// When paused, we push an empty item so the loop continues to the pause check.
-					if (this.userMessageContent.length > 0 || this.isPaused) {
-						stack.push({
-							userContent: [...this.userMessageContent], // Create a copy to avoid mutation issues
-							includeFileDetails: false, // Subsequent iterations don't need file details
-						})
-
-						// Add periodic yielding to prevent blocking
-						await new Promise((resolve) => setImmediate(resolve))
-					}
-
-					continue
-				} else {
-					// If there's no assistant_responses, that means we got no text
-					// or tool_use content blocks from API which we should assume is
-					// an error.
-
-					// Increment consecutive no-assistant-messages counter
-					this.consecutiveNoAssistantMessagesCount++
-
-					// Only show error and count toward mistake limit after 2 consecutive failures
-					// This provides a "grace retry" - first failure retries silently
-					if (this.consecutiveNoAssistantMessagesCount >= 2) {
-						await this.say("error", "MODEL_NO_ASSISTANT_MESSAGES")
-					}
-
-					// IMPORTANT: We already added the user message to
-					// apiConversationHistory at line 1876. Since the assistant failed to respond,
-					// we need to remove that message before retrying to avoid having two consecutive
-					// user messages (which would cause tool_result validation errors).
-					let state = await this.providerRef.deref()?.getState()
-					if (this.apiConversationHistory.length > 0) {
-						const lastMessage = this.apiConversationHistory[this.apiConversationHistory.length - 1]
-						if (lastMessage.role === "user") {
-							// Remove the last user message that we added earlier
-							this.apiConversationHistory.pop()
-						}
-					}
-
-					// Check if we should auto-retry or prompt the user
-					// Reuse the state variable from above
-					if (state?.autoApprovalEnabled) {
-						// Auto-retry with backoff - don't persist failure message when retrying
-						await this.backoffAndAnnounce(
-							currentItem.retryAttempt ?? 0,
-							new Error(
-								"Unexpected API Response: The language model did not provide any assistant messages. This may indicate an issue with the API or the model's output.",
-							),
-						)
-
-						// Check if task was aborted during the backoff
-						if (this.abort) {
-							console.log(
-								`[Task#${this.taskId}.${this.instanceId}] Task aborted during empty-assistant retry backoff`,
-							)
-							break
-						}
-
-						// Push the same content back onto the stack to retry, incrementing the retry attempt counter
-						// Mark that user message was removed so it gets re-added on retry
-						stack.push({
-							userContent: currentUserContent,
-							includeFileDetails: false,
-							retryAttempt: (currentItem.retryAttempt ?? 0) + 1,
-							userMessageWasRemoved: true,
-						})
-
-						// Continue to retry the request
-						continue
-					} else {
-						// Prompt the user for retry decision
-						const { response } = await this.ask(
-							"api_req_failed",
-							"The model returned no assistant messages. This may indicate an issue with the API or the model's output.",
-						)
-
-						if (response === "yesButtonClicked") {
-							await this.say("api_req_retried")
-
-							// Push the same content back to retry
-							stack.push({
-								userContent: currentUserContent,
-								includeFileDetails: false,
-								retryAttempt: (currentItem.retryAttempt ?? 0) + 1,
-							})
-
-							// Continue to retry the request
-							continue
-						} else {
-							// User declined to retry
-							// Re-add the user message we removed.
-							await this.addToApiConversationHistory({
-								role: "user",
-								content: currentUserContent,
-							})
-
-							await this.say(
-								"error",
-								"Unexpected API Response: The language model did not provide any assistant messages. This may indicate an issue with the API or the model's output.",
-							)
-
-							await this.addToApiConversationHistory({
-								role: "assistant",
-								content: [{ type: "text", text: "Failure: I did not provide a response." }],
-							})
-						}
-					}
-				}
-
-				// If we reach here without continuing, return false (will always be false for now)
-				return false
-			} catch (error) {
-				// This should never happen since the only thing that can throw an
-				// error is the attemptApiRequest, which is wrapped in a try catch
-				// that sends an ask where if noButtonClicked, will clear current
-				// task and destroy this instance. However to avoid unhandled
-				// promise rejection, we will end this loop which will end execution
-				// of this instance (see `startTask`).
-				return true // Needs to be true so parent loop knows to end task.
-			}
-		}
-
-		// If we exit the while loop normally (stack is empty), return false
-		return false
-	}
-
-	private inheritSystemPromptPartsCacheFromParent(): void {
-		if (!this.parentTask) return
-		this.requestBuilder.inheritCacheFromParent(this.parentTask)
+		return this.executor.recursivelyMakeClineRequests(userContent, includeFileDetails)
 	}
 
 	private async getSystemPromptParts(): Promise<SystemPromptParts> {
@@ -4491,493 +2245,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		retryAttempt: number = 0,
 		options: { skipProviderRateLimit?: boolean } = {},
 	): ApiStream {
-		// Warn if this subtask is approaching the parent's remaining token budget.
-		if (this.parentTask) {
-			this.checkSubtaskTokenBudget()
-		}
-
-		this.stateMachine.force(TaskState.PREPARING)
-		const state = await this.providerRef.deref()?.getState()
-
-		const {
-			apiConfiguration,
-			autoApprovalEnabled,
-			requestDelaySeconds,
-			mode,
-			autoCondenseContext = true,
-			autoCondenseContextPercent = DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT,
-			profileThresholds = {},
-		} = state ?? {}
-		const unattendedRetryEnabled = (state as any)?.unattendedRetryEnabled ?? false
-		const unattendedMaxRetryAttempts = (state as any)?.unattendedMaxRetryAttempts ?? 5
-
-		// Persistent retry: long-duration retry for unattended scenarios (rate_limit / capacity).
-		// Default disabled; enable via state configuration.
-		const enablePersistentRetry = (state as any)?.enablePersistentRetry ?? false
-		const persistentRetryHandler = this.persistentRetryHandler ?? (this.persistentRetryHandler = new PersistentRetryManager())
-
-		// Get condensing configuration for automatic triggers.
-		const customCondensingPrompt = state?.customSupportPrompts?.CONDENSE
-
-		if (!options.skipProviderRateLimit) {
-			await this.maybeWaitForProviderRateLimit(retryAttempt)
-		}
-
-		// Update last request time right before making the request so that subsequent
-		// requests — even from new subtasks — will honour the provider's rate-limit.
-		//
-		// NOTE: When recursivelyMakeClineRequests handles rate limiting, it sets the
-		// timestamp earlier to include the environment details build. We still set it
-		// here for direct callers (tests) and for the case where we didn't rate-limit
-		// in the caller.
-		Task.lastGlobalApiRequestTime = performance.now()
-
-		// Pre-fetch core request prerequisites concurrently to reduce start latency.
-		void this.requestBuilder.prefetchSystemPromptData()
-		const systemPromptPartsPromise = this.getSystemPromptParts()
-		const tokenUsagePromise = Promise.resolve(this.getTokenUsage())
-		const modelSnapshotPromise = Promise.resolve(this.api.getModel())
-
-		// Prepare lastMessageContent before Promise.all so countTokens can run concurrently.
-		const lastMessage = this.apiConversationHistory[this.apiConversationHistory.length - 1]
-		const lastMessageContent = lastMessage?.content
-		const lastMsgTokensPromise = lastMessageContent
-			? Array.isArray(lastMessageContent)
-				? this.api.countTokens(lastMessageContent)
-				: this.api.countTokens([{ type: "text", text: lastMessageContent as string }])
-			: Promise.resolve(0)
-
-		const [systemPromptParts, tokenUsage, modelSnapshot, lastMessageTokens] = await Promise.all([
-			systemPromptPartsPromise,
-			tokenUsagePromise,
-			modelSnapshotPromise,
-			lastMsgTokensPromise,
-		])
-		const systemPrompt = systemPromptParts.fullPrompt
-
-		const cacheBreak = globalPromptCacheBreakDetector.check(
-			systemPromptParts.staticPart,
-			systemPromptParts.dynamicPart,
-			systemPromptParts.perToolHashes,
-		)
-		if (cacheBreak) {
-			console.log(
-				`[Prompt Cache] break source=${cacheBreak.changeSource} staticChanged=${cacheBreak.staticPartChanged} dynamicChanged=${cacheBreak.dynamicPartChanged} changedTools=${(cacheBreak.changedTools ?? []).join(",") || "none"}`,
-			)
-		}
-		const { contextTokens } = tokenUsage
-		const cacheReadTokens = this.requestCacheReadWindow.length
-			? Math.round(this.requestCacheReadWindow.reduce((sum, n) => sum + n, 0) / this.requestCacheReadWindow.length)
-			: undefined
-		const cacheAwareTotalTokens = this.requestInputTokensWindow.length
-			? Math.max(
-				1,
-				Math.round(
-					this.requestInputTokensWindow.reduce((sum, n) => sum + n, 0) / this.requestInputTokensWindow.length,
-				),
-			)
-			: undefined
-
-		if (contextTokens) {
-			const modelInfo = modelSnapshot.info
-
-			const maxTokens = getModelMaxOutputTokens({
-				modelId: modelSnapshot.id,
-				model: modelInfo,
-				settings: this.apiConfiguration,
-			})
-
-			const contextWindow = modelInfo.contextWindow
-
-			// Get the current profile ID using the helper method
-			const currentProfileId = this.getCurrentProfileId(state)
-			const ctxProvider = this.providerRef.deref()
-			const contextMgmtToolsPromise = ctxProvider
-				? buildNativeToolsArrayWithRestrictions({
-						provider: ctxProvider,
-						cwd: this.cwd,
-						mode,
-						customModes: state?.customModes,
-						experiments: state?.experiments,
-						apiConfiguration,
-						disabledTools: state?.disabledTools,
-						enableWebSearch: state?.enableWebSearch,
-						modelInfo,
-						includeAllToolsWithRestrictions: false,
-					})
-				: Promise.resolve({ tools: [] as OpenAI.Chat.ChatCompletionTool[] })
-
-			this.tokenGrowthTracker.addSample(contextTokens + lastMessageTokens)
-			const growthSnapshot = this.tokenGrowthTracker.getSnapshot()
-			const predictedTotalTokens = growthSnapshot?.predictedNextTokens ?? contextTokens
-
-			const contextManagementWillRun = willManageContext({
-				totalTokens: Math.max(contextTokens, predictedTotalTokens),
-				contextWindow,
-				maxTokens,
-				autoCondenseContext,
-				autoCondenseContextPercent,
-				profileThresholds,
-				currentProfileId,
-				lastMessageTokens,
-			})
-
-			// Send condenseTaskContextStarted BEFORE manageContext to show in-progress indicator
-			// This notification must be sent here (not earlier) because the early check uses stale token count
-			// (before user message is added to history), which could incorrectly skip showing the indicator
-			if (contextManagementWillRun && autoCondenseContext) {
-				await this.providerRef
-					.deref()
-					?.postMessageToWebview({ type: "condenseTaskContextStarted", text: this.taskId })
-			}
-
-			// Build tools for condensing metadata only when context management will run.
-			// This avoids awaiting tool schema preparation on non-compaction turns.
-			const contextMgmtTools: import("openai").default.Chat.ChatCompletionTool[] = contextManagementWillRun
-				? (await contextMgmtToolsPromise).tools
-				: []
-
-			// Build metadata with tools and taskId for the condensing API call
-			const contextMgmtMetadata: ApiHandlerCreateMessageMetadata = {
-				mode,
-				taskId: this.taskId,
-				...(contextMgmtTools.length > 0
-					? {
-							tools: contextMgmtTools,
-							tool_choice: "auto",
-							parallelToolCalls: true,
-						}
-					: {}),
-			}
-
-			// Run environment details, file list, and tool schema fetch concurrently
-			// when context management will actually run. Avoids serial await overhead.
-			const [contextMgmtEnvironmentDetails, contextMgmtFilesReadByRoo] = contextManagementWillRun
-				? await Promise.all([
-						getEnvironmentDetails(this, true),
-						autoCondenseContext
-							? this.getFilesReadByRooSafely("attemptApiRequest")
-							: Promise.resolve(undefined),
-					])
-				: [undefined, undefined]
-
-			try {
-				const shouldBypassCondense = this.errorRecovery.shouldBypassCondense()
-				const truncateResult = await manageContext({
-					messages: this.apiConversationHistory,
-					totalTokens: contextTokens,
-					maxTokens,
-					contextWindow,
-					apiHandler: this.api,
-					autoCondenseContext: shouldBypassCondense ? false : autoCondenseContext,
-					autoCondenseContextPercent,
-					systemPrompt,
-					taskId: this.taskId,
-					customCondensingPrompt,
-					profileThresholds,
-					currentProfileId,
-					metadata: contextMgmtMetadata,
-					environmentDetails: contextMgmtEnvironmentDetails,
-					filesReadByRoo: contextMgmtFilesReadByRoo,
-					cwd: this.cwd,
-					rooIgnoreController: this.rooIgnoreController,
-					enableMicroCompact: true,
-					cacheReadTokens,
-					cacheAwareTotalTokens,
-				})
-				if (truncateResult.messages !== this.apiConversationHistory) {
-					await this.overwriteApiConversationHistory(truncateResult.messages)
-				}
-				if (truncateResult.error) {
-					await this.errorRecovery.recordCompactFailure(truncateResult.error)
-				}
-				if (truncateResult.summary) {
-					this.errorRecovery.resetCompactFailure()
-					const { summary, cost, prevContextTokens, newContextTokens = 0, condenseId } = truncateResult
-					const contextCondense: ContextCondense = {
-						summary,
-						cost,
-						newContextTokens,
-						prevContextTokens,
-						condenseId,
-					}
-					await this.say(
-						"condense_context",
-						undefined /* text */,
-						undefined /* images */,
-						false /* partial */,
-						undefined /* checkpoint */,
-						undefined /* progressStatus */,
-						{ isNonInteractive: true } /* options */,
-						contextCondense,
-					)
-				} else if (truncateResult.truncationId) {
-					// Sliding window truncation occurred (fallback when condensing fails or is disabled)
-					const contextTruncation: ContextTruncation = {
-						truncationId: truncateResult.truncationId,
-						messagesRemoved: truncateResult.messagesRemoved ?? 0,
-						prevContextTokens: truncateResult.prevContextTokens,
-						newContextTokens: truncateResult.newContextTokensAfterTruncation ?? 0,
-					}
-					await this.say(
-						"sliding_window_truncation",
-						undefined /* text */,
-						undefined /* images */,
-						false /* partial */,
-						undefined /* checkpoint */,
-						undefined /* progressStatus */,
-						{ isNonInteractive: true } /* options */,
-						undefined /* contextCondense */,
-						contextTruncation,
-					)
-				}
-			} finally {
-				// Notify webview that context management is complete (sets isCondensing = false)
-				// This removes the in-progress spinner and allows the completed result to show
-				// IMPORTANT: Must always be sent to dismiss the spinner, even on error
-				if (contextManagementWillRun && autoCondenseContext) {
-					await this.providerRef
-						.deref()
-						?.postMessageToWebview({ type: "condenseTaskContextResponse", text: this.taskId })
-				}
-			}
-		}
-
-		// Get the effective API history by filtering out condensed messages
-		// This allows non-destructive condensing where messages are tagged but not deleted,
-		// enabling accurate rewind operations while still sending condensed history to the API.
-		const effectiveHistory = getEffectiveApiHistory(this.apiConversationHistory)
-		const messagesSinceLastSummary = getMessagesSinceLastSummary(effectiveHistory)
-		// For API only: merge consecutive user messages (excludes summary messages per
-		// mergeConsecutiveApiMessages implementation) without mutating stored history.
-		const mergedForApi = mergeConsecutiveApiMessages(messagesSinceLastSummary, { roles: ["user"] })
-		const messagesWithoutImages = maybeRemoveImageBlocks(mergedForApi, this.api)
-		const cleanConversationHistory = this.buildCleanConversationHistory(messagesWithoutImages as ApiMessage[])
-
-		// Check auto-approval limits
-		const approvalResult = await this.autoApprovalHandler.checkAutoApprovalLimits(
-			state,
-			this.combineMessages(this.clineMessages.slice(1)),
-			async (type, data) => this.ask(type, data),
-		)
-
-		if (!approvalResult.shouldProceed) {
-			// User did not approve, task should be aborted
-			throw new Error("Auto-approval limit reached and user did not approve continuation")
-		}
-
-		// Whether we include tools is determined by whether we have any tools to send.
-		const modelInfo = modelSnapshot.info
-
-		// Build complete tools array: native tools + dynamic MCP tools
-		// When includeAllToolsWithRestrictions is true, returns all tools but provides
-		// allowedFunctionNames for providers (like Gemini) that need to see all tool
-		// definitions in history while restricting callable tools for the current mode.
-		// Only Gemini currently supports this - other providers filter tools normally.
-		let allTools: OpenAI.Chat.ChatCompletionTool[] = []
-		let allowedFunctionNames: string[] | undefined
-		const provider = this.providerRef.deref()
-		if (!provider) {
-			throw new Error("Provider reference lost during tool building")
-		}
-
-		// Gemini requires all tool definitions to be present for history compatibility,
-		// but uses allowedFunctionNames to restrict which tools can be called.
-		// Other providers (Anthropic, OpenAI, etc.) don't support this feature yet,
-		// so they continue to receive only the filtered tools for the current mode.
-		const supportsAllowedFunctionNames = apiConfiguration?.apiProvider === "gemini"
-
-		const toolsResult = await buildNativeToolsArrayWithRestrictions({
-			provider,
-			cwd: this.cwd,
-			mode,
-			customModes: state?.customModes,
-			experiments: state?.experiments,
-			apiConfiguration,
-			disabledTools: state?.disabledTools,
-			enableWebSearch: state?.enableWebSearch,
-			modelInfo,
-			includeAllToolsWithRestrictions: supportsAllowedFunctionNames,
-		})
-		allTools = toolsResult.tools
-		allowedFunctionNames = toolsResult.allowedFunctionNames
-
-		// Cache tool definitions for reuse by child tasks with the same mode.
-		if (mode) {
-			this.cachedToolDefinitions = { mode, tools: allTools, time: Date.now() }
-		}
-
-		const shouldIncludeTools = allTools.length > 0
-
-		const metadata: ApiHandlerCreateMessageMetadata = {
-			mode: mode,
-			taskId: this.taskId,
-			suppressPreviousResponseId: this.skipPrevResponseIdOnce,
-			// Include tools whenever they are present.
-			...(shouldIncludeTools
-				? {
-						tools: allTools,
-						tool_choice: "auto",
-						parallelToolCalls: true,
-						// When mode restricts tools, provide allowedFunctionNames so providers
-						// like Gemini can see all tools in history but only call allowed ones
-						...(allowedFunctionNames ? { allowedFunctionNames } : {}),
-					}
-				: {}),
-		}
-
-		// Create an AbortController to allow cancelling the request mid-stream
-		this.currentRequestAbortController = new AbortController()
-		const abortSignal = this.currentRequestAbortController.signal
-		// Reset the flag after using it
-		this.skipPrevResponseIdOnce = false
-
-		// The provider accepts reasoning items alongside standard messages; cast to the expected parameter type.
-		const stream = this.api.createMessage(
-			systemPrompt,
-			cleanConversationHistory as unknown as Anthropic.Messages.MessageParam[],
-			metadata,
-		)
-		this.stateMachine.force(TaskState.STREAMING)
-		const iterator = stream[Symbol.asyncIterator]()
-
-		// Set up abort handling - when the signal is aborted, clean up the controller reference
-		abortSignal.addEventListener("abort", () => {
-			console.log(`[Task#${this.taskId}.${this.instanceId}] AbortSignal triggered for current request`)
-			this.currentRequestAbortController = undefined
-		})
-
-		try {
-			// Awaiting first chunk to see if it will throw an error.
-			this.isWaitingForFirstChunk = true
-
-			// Race between the first chunk and the abort signal
-			const firstChunkPromise = iterator.next()
-			const abortPromise = new Promise<never>((_, reject) => {
-				if (abortSignal.aborted) {
-					reject(new Error("Request cancelled by user"))
-				} else {
-					abortSignal.addEventListener("abort", () => {
-						reject(new Error("Request cancelled by user"))
-					})
-				}
-			})
-
-			const firstChunk = await Promise.race([firstChunkPromise, abortPromise])
-			await clearRetryEvents(this.globalStoragePath, this.taskId)
-			const firstValue = firstChunk.value
-			if ((firstValue as any)?.type === "error") {
-				const errMsg = (firstValue as any)?.message || (firstValue as any)?.error || "API stream error"
-				throw new Error(String(errMsg))
-			}
-			yield firstValue
-			this.isWaitingForFirstChunk = false
-		} catch (error) {
-			this.isWaitingForFirstChunk = false
-			this.currentRequestAbortController = undefined
-			this.stateMachine.force(TaskState.ERROR)
-
-			// Delegate error classification, retry event recording, and structured recovery
-			// to ErrorRecoveryHandler. It returns a decision; we handle flow control here.
-			const recovery = await this.errorRecovery.handleApiError(error, retryAttempt)
-			if (recovery.action === "retry") {
-				yield* this.attemptApiRequest(recovery.nextAttempt)
-				return
-			}
-
-			// note that this api_req_failed ask is unique in that we only present this option if the api hasn't streamed any content yet (ie it fails on the first chunk due), as it would allow them to hit a retry button. However if the api failed mid-stream, it could be in any arbitrary state where some tools may have executed, so that error is handled differently and requires cancelling the task entirely.
-			if (autoApprovalEnabled) {
-				this.stateMachine.force(TaskState.RECOVERING_MAX_TOKENS)
-				if (unattendedRetryEnabled && retryAttempt >= unattendedMaxRetryAttempts) {
-					// Before giving up, check if persistent retry is eligible for this error.
-					// Persistent retry handles rate_limit and capacity errors with long-duration
-					// backoff (up to 6 hours) and heartbeat messages to the UI.
-					const { classifyApiError } = await import("../errors/apiErrorClassifier")
-					const errorType = classifyApiError(error)
-					if (persistentRetryHandler.isEligible(errorType)) {
-						console.log(
-							`[Task#${this.taskId}] Normal retry limit reached. Entering persistent retry for ${errorType}...`,
-						)
-						try {
-							await persistentRetryHandler.waitForRetry(
-								errorType,
-								(message, _retryCount, _elapsed) => {
-									// Send heartbeat to UI via the existing retry delayed say type
-									this.say("api_req_retry_delayed", message, undefined, true)
-								},
-							)
-						} catch (persistentErr) {
-							// Persistent retry expired or was cancelled
-							const stats = persistentRetryHandler.getStats()
-							throw new Error(
-								`[Task#${this.taskId}] Persistent retry ended after ${stats.totalRetries} attempts: ${persistentErr instanceof Error ? persistentErr.message : String(persistentErr)}`,
-							)
-						}
-
-						// Check abort after persistent retry wait
-						if (this.abort) {
-							persistentRetryHandler.cancel()
-							throw new Error(
-								`[Task#attemptApiRequest] task ${this.taskId}.${this.instanceId} aborted during persistent retry`,
-							)
-						}
-
-						// Continue retrying from current attempt
-						yield* this.attemptApiRequest(retryAttempt + 1)
-						return
-					}
-
-					throw new Error(
-						`[Task#${this.taskId}] Unattended retry limit reached (${unattendedMaxRetryAttempts}).`,
-					)
-				}
-				// Apply shared exponential backoff and countdown UX
-				await this.backoffAndAnnounce(retryAttempt, error)
-
-				// CRITICAL: Check if task was aborted during the backoff countdown
-				// This prevents infinite loops when users cancel during auto-retry
-				// Without this check, the recursive call below would continue even after abort
-				if (this.abort) {
-					throw new Error(
-						`[Task#attemptApiRequest] task ${this.taskId}.${this.instanceId} aborted during retry`,
-					)
-				}
-
-				// Delegate generator output from the recursive call with
-				// incremented retry count.
-				yield* this.attemptApiRequest(retryAttempt + 1)
-
-				return
-			} else {
-				const { response } = await this.ask(
-					"api_req_failed",
-					error.message ?? JSON.stringify(serializeError(error), null, 2),
-				)
-
-				if (response !== "yesButtonClicked") {
-					// This will never happen since if noButtonClicked, we will
-					// clear current task, aborting this instance.
-					throw new Error("API request failed")
-				}
-
-				await this.say("api_req_retried")
-
-				// Delegate generator output from the recursive call.
-				yield* this.attemptApiRequest()
-				return
-			}
-		}
-
-		// No error, so we can continue to yield all remaining chunks.
-		// (Needs to be placed outside of try/catch since it we want caller to
-		// handle errors not with api_req_failed as that is reserved for first
-		// chunk failures only.)
-		// This delegates to another generator or iterable object. In this case,
-		// it's saying "yield all remaining values from this iterator". This
-		// effectively passes along all subsequent chunks from the original
-		// stream.
-		yield* iterator
-		this.stateMachine.force(TaskState.COMPLETED)
+		yield* this.executor.attemptApiRequest(retryAttempt, options)
 	}
 
 	// Delegated to TaskStreamProcessor
@@ -5018,25 +2286,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		return getApiMetrics(this.combineMessages(this.clineMessages.slice(1)))
 	}
 
-	/**
-	 * Check if this subtask is approaching the parent's remaining token budget.
-	 * Emits a warning when usage exceeds 80% of parent's remaining capacity.
-	 */
-	private checkSubtaskTokenBudget(): void {
-		if (!this.parentTask) return
-		const parentUsage = this.parentTask.getTokenUsage()
-		const myUsage = this.getTokenUsage()
-		const modelInfo = this.api.getModel().info
-		const contextWindow = modelInfo.contextWindow || 200_000
-		const parentRemaining = contextWindow - (parentUsage.contextTokens || 0)
-		const myTokens = myUsage.contextTokens || 0
-		if (parentRemaining > 0 && myTokens > parentRemaining * 0.8) {
-			console.warn(
-				`[Task#${this.taskId}] SubTask token usage (${myTokens}) approaching parent's remaining budget (${parentRemaining}). ` +
-					`Consider completing this subtask soon.`,
-			)
-		}
-	}
+	// checkSubtaskTokenBudget() moved to TaskExecutor
 
 	public recordToolUsage(toolName: ToolName) {
 		if (!this.toolUsage[toolName]) {
@@ -5052,6 +2302,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		}
 
 		this.toolUsage[toolName].failures++
+		this.toolExecution.recordToolErrorMetric(toolName)
 
 		if (error) {
 			this.emit(NJUST_AI_CJEventName.TaskToolFailed, this.taskId, toolName, error)

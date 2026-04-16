@@ -1,7 +1,7 @@
 import { addCustomInstructions } from "../sections/custom-instructions"
 import { getCapabilitiesSection } from "../sections/capabilities"
 import { getRulesSection, getCommandChainOperator } from "../sections/rules"
-import { McpHub } from "../../../services/mcp/McpHub"
+import type { IMcpHubService } from "../../../services/mcp/interfaces/IMcpHubService"
 import * as shellUtils from "../../../utils/shell"
 
 describe("addCustomInstructions", () => {
@@ -44,7 +44,7 @@ describe("getCapabilitiesSection", () => {
 	})
 
 	it("includes MCP reference when mcpHub is provided", () => {
-		const mockMcpHub = {} as McpHub
+		const mockMcpHub = {} as IMcpHubService
 		const result = getCapabilitiesSection(cwd, mockMcpHub)
 
 		expect(result).toContain("MCP servers")

@@ -48,7 +48,7 @@ import * as vscode from "vscode"
 import { ModeConfig } from "@njust-ai-cj/types"
 
 import { SYSTEM_PROMPT } from "../system"
-import { McpHub } from "../../../services/mcp/McpHub"
+import type { IMcpHubService } from "../../../services/mcp/interfaces/IMcpHubService"
 import { defaultModeSlug, modes, Mode } from "../../../shared/modes"
 import "../../../utils/path"
 import { addCustomInstructions } from "../sections/custom-instructions"
@@ -171,8 +171,8 @@ const mockContext = {
 	},
 } as unknown as vscode.ExtensionContext
 
-// Instead of extending McpHub, create a mock that implements just what we need
-const createMockMcpHub = (withServers: boolean = false): McpHub =>
+// Instead of extending IMcpHubService, create a mock that implements just what we need
+const createMockIMcpHubService = (withServers: boolean = false): IMcpHubService =>
 	({
 		getServers: () =>
 			withServers
@@ -195,10 +195,10 @@ const createMockMcpHub = (withServers: boolean = false): McpHub =>
 		toggleToolAlwaysAllow: async () => {},
 		isConnecting: false,
 		connections: [],
-	}) as unknown as McpHub
+	}) as unknown as IMcpHubService
 
 describe("SYSTEM_PROMPT", () => {
-	let mockMcpHub: McpHub
+	let mockIMcpHubService: IMcpHubService
 	let experiments: Record<string, boolean> | undefined
 
 	beforeEach(() => {
@@ -211,8 +211,8 @@ describe("SYSTEM_PROMPT", () => {
 	})
 
 	afterEach(async () => {
-		if (mockMcpHub) {
-			await mockMcpHub.dispose()
+		if (mockIMcpHubService) {
+			await mockIMcpHubService.dispose()
 		}
 	})
 
@@ -236,13 +236,13 @@ describe("SYSTEM_PROMPT", () => {
 	})
 
 	it("should include MCP server info when mcpHub is provided", async () => {
-		mockMcpHub = createMockMcpHub(true)
+		mockIMcpHubService = createMockIMcpHubService(true)
 
 		const prompt = await SYSTEM_PROMPT(
 			mockContext,
 			"/test/path",
 			false,
-			mockMcpHub, // mcpHub
+			mockIMcpHubService, // mcpHub
 			undefined, // diffStrategy
 			defaultModeSlug, // mode
 			undefined, // customModePrompts

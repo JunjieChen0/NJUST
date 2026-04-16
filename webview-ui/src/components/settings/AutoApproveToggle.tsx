@@ -4,7 +4,7 @@ import { useAppTranslation } from "@/i18n/TranslationContext"
 import { cn } from "@/lib/utils"
 import { Button, StandardTooltip } from "@/components/ui"
 
-type AutoApproveToggles = Pick<
+type CoreAutoApproveToggles = Pick<
 	GlobalSettings,
 	| "alwaysAllowReadOnly"
 	| "alwaysAllowWrite"
@@ -14,6 +14,11 @@ type AutoApproveToggles = Pick<
 	| "alwaysAllowExecute"
 	| "alwaysAllowFollowupQuestions"
 >
+
+/** Mirrors VS Code `njust-ai-cj.saveAllBeforeExecuteCommand`; not part of GlobalSettings storage. */
+type AutoApproveToggles = CoreAutoApproveToggles & {
+	saveAllBeforeExecuteCommand?: boolean
+}
 
 export type AutoApproveSetting = keyof AutoApproveToggles
 
@@ -67,6 +72,13 @@ export const autoApproveSettingsConfig: Record<AutoApproveSetting, AutoApproveCo
 		descriptionKey: "settings:autoApprove.execute.description",
 		icon: "terminal",
 		testId: "always-allow-execute-toggle",
+	},
+	saveAllBeforeExecuteCommand: {
+		key: "saveAllBeforeExecuteCommand",
+		labelKey: "settings:autoApprove.saveFiles.label",
+		descriptionKey: "settings:autoApprove.saveFiles.description",
+		icon: "save",
+		testId: "save-all-before-execute-toggle",
 	},
 	alwaysAllowFollowupQuestions: {
 		key: "alwaysAllowFollowupQuestions",

@@ -20,7 +20,8 @@ import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import type { ApiHandlerOptions } from "../../shared/api"
 
-import { calculateApiCostOpenAI } from "../../shared/cost"
+import { calculateApiCostOpenAI, resolveOpenAiUsageForCost } from "../../shared/cost"
+import { reportExtensionError } from "../../utils/errorReporter"
 
 import { ApiStream, ApiStreamUsageChunk } from "../transform/stream"
 import { getModelParams } from "../transform/model-params"
@@ -140,15 +141,24 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			this.lastServiceTier || (this.options.openAiNativeServiceTier as ServiceTier | undefined) || undefined
 		const effectiveInfo = this.applyServiceTierPricing(model.info, effectiveTier)
 
-		// Pass total input tokens directly to calculateApiCostOpenAI
-		// The function handles subtracting both cache reads and writes internally
-		const { totalCost } = calculateApiCostOpenAI(
+		const detailMiss = typeof inputDetails?.cache_miss_tokens === "number" ? inputDetails.cache_miss_tokens : undefined
+		const detailCached = typeof inputDetails?.cached_tokens === "number" ? inputDetails.cached_tokens : undefined
+
+		const resolved = resolveOpenAiUsageForCost({
+			inputTokensReported: totalInputTokens,
+			cacheWriteTokens: cacheWriteTokens,
+			cacheReadTokens: cacheReadTokens,
+			cacheMissTokensFromDetails: detailMiss,
+			cachedTokensFromDetails: detailCached,
+		})
+
+		const costResult = calculateApiCostOpenAI(
 			effectiveInfo,
-			totalInputTokens,
+			resolved.totalInputTokens,
 			totalOutputTokens,
-			cacheWriteTokens,
-			cacheReadTokens,
-			effectiveTier,
+			resolved.cacheWriteTokens,
+			resolved.cacheReadTokens,
+			{ serviceTier: effectiveTier },
 		)
 
 		const reasoningTokens =
@@ -158,13 +168,13 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 
 		const out: ApiStreamUsageChunk = {
 			type: "usage",
-			// Keep inputTokens as TOTAL input to preserve correct context length
-			inputTokens: totalInputTokens,
+			// TOTAL billable input after normalizing OpenAI cache breakdown (may expand prompt total)
+			inputTokens: costResult.totalInputTokens,
 			outputTokens: totalOutputTokens,
-			cacheWriteTokens,
-			cacheReadTokens,
+			cacheWriteTokens: resolved.cacheWriteTokens,
+			cacheReadTokens: resolved.cacheReadTokens,
 			...(typeof reasoningTokens === "number" ? { reasoningTokens } : {}),
-			totalCost,
+			totalCost: costResult.totalCost,
 		}
 		return out
 	}
@@ -392,7 +402,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 					}
 				}),
 			tool_choice: metadata?.tool_choice,
-			parallel_tool_calls: metadata?.parallelToolCalls ?? true,
+			parallel_tool_calls: metadata?.parallelToolCalls ?? false,
 		}
 
 		// Include text.verbosity only when the model explicitly supports it
@@ -683,6 +693,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		let hasContent = false
 		let totalInputTokens = 0
 		let totalOutputTokens = 0
+		let sseJsonParseFailureCount = 0
 
 		try {
 			while (true) {
@@ -1107,6 +1118,15 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 							if (!(e instanceof SyntaxError)) {
 								throw e
 							}
+							sseJsonParseFailureCount++
+							if (sseJsonParseFailureCount <= 3) {
+								const preview = data.length > 220 ? `${data.slice(0, 220)}…` : data
+								reportExtensionError(
+									"OpenAI-Native/SSE",
+									e instanceof Error ? e : new Error(String(e)),
+									{ count: sseJsonParseFailureCount, preview },
+								)
+							}
 						}
 					}
 					// Also try to parse non-SSE formatted lines
@@ -1127,6 +1147,15 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 						}
 					}
 				}
+			}
+
+			if (buffer.trim().length > 0) {
+				const preview =
+					buffer.length > 300 ? `${buffer.trimStart().slice(0, 300)}…` : buffer.trimStart()
+				reportExtensionError("OpenAI-Native/SSE", new Error("Stream ended with incomplete buffer"), {
+					bufferChars: buffer.length,
+					preview,
+				})
 			}
 
 			// If we didn't get any content, don't throw - the API might have returned an empty response

@@ -13,7 +13,12 @@ export enum IpcMessageType {
 	Ack = "Ack",
 	TaskCommand = "TaskCommand",
 	TaskEvent = "TaskEvent",
+	/** Structured error from server (optional IPC v2). */
+	ServerError = "ServerError",
 }
+
+/** Bump when adding breaking IPC payload shapes; sent on Ack optionally. */
+export const IPC_PROTOCOL_VERSION = 1 as const
 
 /**
  * IpcOrigin
@@ -32,6 +37,7 @@ export const ackSchema = z.object({
 	clientId: z.string(),
 	pid: z.number(),
 	ppid: z.number(),
+	protocolVersion: z.number().int().optional(),
 })
 
 export type Ack = z.infer<typeof ackSchema>
@@ -122,6 +128,15 @@ export const ipcMessageSchema = z.discriminatedUnion("type", [
 		relayClientId: z.string().optional(),
 		data: taskEventSchema,
 	}),
+	z.object({
+		type: z.literal(IpcMessageType.ServerError),
+		origin: z.literal(IpcOrigin.Server),
+		protocolVersion: z.number().int().optional(),
+		data: z.object({
+			message: z.string(),
+			code: z.string().optional(),
+		}),
+	}),
 ])
 
 export type IpcMessage = z.infer<typeof ipcMessageSchema>
@@ -130,12 +145,18 @@ export type IpcMessage = z.infer<typeof ipcMessageSchema>
  * IpcClientEvents
  */
 
+export type IpcServerErrorPayload = {
+	message: string
+	code?: string
+}
+
 export type IpcClientEvents = {
 	[IpcMessageType.Connect]: []
 	[IpcMessageType.Disconnect]: []
 	[IpcMessageType.Ack]: [data: Ack]
 	[IpcMessageType.TaskCommand]: [data: TaskCommand]
 	[IpcMessageType.TaskEvent]: [data: TaskEvent]
+	[IpcMessageType.ServerError]: [data: IpcServerErrorPayload]
 }
 
 /**

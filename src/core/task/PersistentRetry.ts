@@ -4,6 +4,10 @@
  * Tracks retry counts across API requests within a task session.
  * Unlike per-request retry, this maintains state across the entire task lifecycle,
  * preventing infinite retry loops and enabling progressive degradation.
+ *
+ * **Relation to `ApiRetryStrategy` / `DEFAULT_API_RETRY_OPTIONS`:** those control a **single**
+ * transport attempt (e.g. one `fetch` or stream open). This module caps **session-level**
+ * and **per-category** retries across turns; keep both layers when tuning behavior.
  */
 
 export interface RetryRecord {

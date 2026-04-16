@@ -80,6 +80,10 @@ export interface DeferredToolResult {
 /** Response shape shared by both /v1/deferred/start and /v1/deferred/resume. */
 export interface DeferredResponse {
 	run_id: string
+	/** Optional protocol version from the server (must be >= client minimum). */
+	deferred_protocol_version?: number
+	/** Optional opaque token for detecting server-side session rotation between rounds. */
+	server_revision?: string
 	status: "pending" | "done"
 	/** Tool calls the extension must execute locally before resuming (server uses pending_tools). */
 	pending_tools?: DeferredToolCall[]

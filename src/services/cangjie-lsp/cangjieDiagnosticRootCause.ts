@@ -31,7 +31,7 @@ export function traceDiagnosticRootCause(
 	const idx = CangjieSymbolIndex.getInstance()
 	if (!idx) return null
 
-	const defs = idx.findDefinitions(sym)
+	const defs = idx.findDefinitions(sym, vscode.Uri.parse(diagnosticUriStr))
 	if (defs.length !== 1) return null
 
 	const def = defs[0]

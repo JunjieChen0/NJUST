@@ -18,6 +18,15 @@ export async function executeDeferredToolCall(
 ): Promise<DeferredToolResult> {
 	try {
 		const args = call.arguments
+		if (args._arguments_parse_failed === true) {
+			const raw = typeof args._raw_arguments === "string" ? args._raw_arguments : ""
+			return {
+				call_id: call.call_id,
+				content: `Invalid JSON in tool arguments (parse failed before execution). Raw: ${raw.slice(0, 2000)}`,
+				is_error: true,
+			}
+		}
+
 		let content: string
 
 		switch (call.tool) {

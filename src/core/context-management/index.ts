@@ -13,6 +13,7 @@ import { snipCompactMessages } from "./snipCompact"
 import { contextCollapseMessages } from "./contextCollapse"
 import { postCompactRestore } from "./postCompactRestore"
 import { shouldSkipCompactForCache, getAdjustedCompactThreshold } from "../condense/cacheAwareCompact"
+import { globalCacheMetrics } from "../../utils/cacheMetrics"
 
 /**
  * Context Management
@@ -395,8 +396,17 @@ export function willManageContext({
 		// Invalid values fall back to global setting (effectiveThreshold already set)
 	}
 
-	const contextPercent = (100 * prevContextTokens) / contextWindow
-	return contextPercent >= effectiveThreshold || prevContextTokens > allowedTokens
+	const contextPercent = contextWindow > 0 ? (100 * prevContextTokens) / contextWindow : 0
+	// Start condense slightly before the exact profile threshold to reduce “one more turn then hit limit” surprises.
+	const nearCondenseThreshold =
+		autoCondenseContext &&
+		contextWindow > 0 &&
+		contextPercent >= effectiveThreshold - 1.5 &&
+		contextPercent < effectiveThreshold
+
+	return (
+		contextPercent >= effectiveThreshold || prevContextTokens > allowedTokens || Boolean(nearCondenseThreshold)
+	)
 }
 
 /**
@@ -524,18 +534,28 @@ export async function manageContext({
 		const contextPercent = (100 * prevContextTokens) / contextWindow
 
 		// Cache-aware threshold adjustment: if prompt cache is being utilized well,
-		// raise the threshold to avoid breaking the cache prematurely
+		// raise the threshold to avoid breaking the cache prematurely.
+		// Use per-request cacheReadTokens when available, otherwise fall back to
+		// the rolling average from globalCacheMetrics to still benefit from
+		// cache awareness when providers don't report per-call breakdowns.
 		const cacheAwareTokensBase = cacheAwareTotalTokens ?? totalTokens
-		const adjustedThreshold = cacheReadTokens !== undefined
-			? getAdjustedCompactThreshold(effectiveThreshold, cacheReadTokens, cacheAwareTokensBase)
+		let effectiveCacheReadTokens = cacheReadTokens
+		if (effectiveCacheReadTokens === undefined && cacheAwareTokensBase > 0) {
+			const rollingHitRate = globalCacheMetrics.getRecentHitRate(10)
+			if (rollingHitRate > 0) {
+				effectiveCacheReadTokens = Math.round(rollingHitRate * cacheAwareTokensBase)
+			}
+		}
+		const adjustedThreshold = effectiveCacheReadTokens !== undefined
+			? getAdjustedCompactThreshold(effectiveThreshold, effectiveCacheReadTokens, cacheAwareTokensBase)
 			: effectiveThreshold
 
 		if (contextPercent >= adjustedThreshold || prevContextTokens > allowedTokens) {
 			// Cache-aware check: skip compression if prompt cache hit rate is very high
-			if (cacheReadTokens !== undefined && shouldSkipCompactForCache(cacheReadTokens, cacheAwareTokensBase)) {
+			if (effectiveCacheReadTokens !== undefined && shouldSkipCompactForCache(effectiveCacheReadTokens, cacheAwareTokensBase)) {
 				console.log(
 					`[Context Management] Skipping auto-compact: high prompt cache hit rate ` +
-					`(${((cacheReadTokens / Math.max(1, cacheAwareTokensBase)) * 100).toFixed(1)}%). ` +
+					`(${((effectiveCacheReadTokens / Math.max(1, cacheAwareTokensBase)) * 100).toFixed(1)}%). ` +
 					`Compression would break cache and increase costs.`,
 				)
 				// Fall through to truncation check below if tokens still exceed allowed

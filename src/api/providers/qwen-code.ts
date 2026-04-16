@@ -8,7 +8,6 @@ import { type ModelInfo, type QwenCodeModelId, qwenCodeModels, qwenCodeDefaultMo
 
 import type { ApiHandlerOptions } from "../../shared/api"
 
-import { NativeToolCallParser } from "../../core/assistant-message/NativeToolCallParser"
 
 import { convertToOpenAiMessages } from "../transform/openai-format"
 import { ApiStream } from "../transform/stream"
@@ -228,7 +227,7 @@ export class QwenCodeHandler extends BaseProvider implements SingleCompletionHan
 			max_completion_tokens: model.info.maxTokens,
 			tools: this.convertToolsForOpenAI(metadata?.tools),
 			tool_choice: metadata?.tool_choice,
-			parallel_tool_calls: metadata?.parallelToolCalls ?? true,
+			parallel_tool_calls: metadata?.parallelToolCalls ?? false,
 		}
 
 		const stream = await this.callApiWithRetry(() => client.chat.completions.create(requestOptions))
@@ -299,7 +298,7 @@ export class QwenCodeHandler extends BaseProvider implements SingleCompletionHan
 
 			// Process finish_reason to emit tool_call_end events
 			if (finishReason) {
-				const endEvents = NativeToolCallParser.processFinishReason(finishReason)
+				const endEvents = this.options.toolCallParser!.processFinishReason(finishReason)
 				for (const event of endEvents) {
 					yield event
 				}

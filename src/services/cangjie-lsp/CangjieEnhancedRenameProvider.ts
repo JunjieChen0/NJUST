@@ -23,7 +23,7 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 		const word = document.getText(wordRange)
 		if (!word || word.length < 2) return undefined
 
-		const defs = this.index.findDefinitions(word)
+		const defs = this.index.findDefinitions(word, document.uri)
 		if (defs.length === 0) return undefined
 
 		return wordRange
@@ -47,7 +47,7 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 		if (!oldName || oldName.length < 2) return undefined
 
 		const lspEdit = await this.tryLspRename(document, position, newName)
-		const rawIndexRefs = this.index.findReferences(oldName)
+		const rawIndexRefs = this.index.findReferences(oldName, document.uri)
 		const indexRefs = this.filterRenameCandidates(oldName, rawIndexRefs)
 
 		const lspLocCount = lspEdit ? this.countLocations(lspEdit) : 0

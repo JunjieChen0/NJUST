@@ -5,7 +5,8 @@ import type { ModeConfig } from "@njust-ai-cj/types"
 import { modes } from "../../../shared/modes"
 import { TOOL_GROUPS } from "../../../shared/tools"
 
-import { validateToolUse, isToolAllowedForMode } from "../validateToolUse"
+import { validateToolUse, isToolAllowedForMode, mergeToolParamsForValidation } from "../validateToolUse"
+import { validateToolParams } from "../toolParamValidator"
 
 const codeMode = modes.find((m) => m.slug === "code")?.slug || "code"
 const architectMode = modes.find((m) => m.slug === "architect")?.slug || "architect"
@@ -250,5 +251,63 @@ describe("mode-validator", () => {
 
 			expect(() => validateToolUse("execute_command", codeMode, [], toolRequirements)).not.toThrow()
 		})
+	})
+})
+
+describe("mergeToolParamsForValidation + validateToolParams", () => {
+	it("preserves boolean and number nativeArgs for zod (no JSON.stringify)", () => {
+		const editMerged = mergeToolParamsForValidation({
+			params: {},
+			nativeArgs: {
+				file_path: "src/main.cj",
+				old_string: "a",
+				new_string: "b",
+				replace_all: false,
+			},
+		})
+		expect(editMerged.replace_all).toBe(false)
+		expect(validateToolParams("edit", editMerged).valid).toBe(true)
+
+		const cmdMerged = mergeToolParamsForValidation({
+			params: {},
+			nativeArgs: {
+				command: "cjpm build",
+				cwd: undefined,
+				timeout: 60,
+			},
+		})
+		expect(cmdMerged.timeout).toBe(60)
+		expect(validateToolParams("execute_command", cmdMerged).valid).toBe(true)
+	})
+
+	it("resolves tool aliases to the same schema (write_file → write_to_file, search_replace → edit)", () => {
+		expect(
+			validateToolParams("write_file", { path: "a.cj", content: "x" }).valid,
+		).toBe(true)
+		expect(
+			validateToolParams("search_replace", {
+				file_path: "a.cj",
+				old_string: "1",
+				new_string: "2",
+				replace_all: false,
+			}).valid,
+		).toBe(true)
+	})
+
+	it("accepts read_file line numbers as numeric strings from legacy params", () => {
+		expect(
+			validateToolParams("read_file", { path: "a.cj", start_line: "1", end_line: "10" }).valid,
+		).toBe(true)
+	})
+
+	it("validates edit_file separately from edit (expected_replacements)", () => {
+		expect(
+			validateToolParams("edit_file", {
+				file_path: "a.cj",
+				old_string: "x",
+				new_string: "y",
+				expected_replacements: "2",
+			}).valid,
+		).toBe(true)
 	})
 })

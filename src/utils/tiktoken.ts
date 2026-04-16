@@ -74,14 +74,16 @@ export async function tiktoken(content: Anthropic.Messages.ContentBlockParam[]):
 				totalTokens += tokens.length
 			}
 		} else if (block.type === "image") {
-			// For images, calculate based on data size.
+			// Vision APIs charge by tiles/pixels; approximate without decoding (conservative vs pure sqrt).
 			const imageSource = block.source
 
 			if (imageSource && typeof imageSource === "object" && "data" in imageSource) {
 				const base64Data = imageSource.data as string
-				totalTokens += Math.ceil(Math.sqrt(base64Data.length))
+				const n = base64Data.length
+				const approxTiles = Math.ceil(n / 1400)
+				totalTokens += Math.min(2_000, Math.max(256, approxTiles * 200))
 			} else {
-				totalTokens += 300 // Conservative estimate for unknown images
+				totalTokens += 400
 			}
 		} else if (block.type === "tool_use") {
 			// Serialize tool_use block to text and count tokens

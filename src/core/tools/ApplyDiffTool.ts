@@ -186,6 +186,7 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 				const didApprove = await askApproval("tool", completeMessage, toolProgressStatus, isWriteProtected)
 
 				if (!didApprove) {
+					await task.diffViewProvider.reset()
 					return
 				}
 

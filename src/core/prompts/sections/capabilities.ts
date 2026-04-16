@@ -1,7 +1,7 @@
-import { McpHub } from "../../../services/mcp/McpHub"
+import type { IMcpHubService } from "../../../services/mcp/interfaces/IMcpHubService"
 import { computeMcpInstructionsDelta } from "./mcp-instructions-delta"
 
-export function getCapabilitiesSection(cwd: string, mcpHub?: McpHub, taskId?: string): string {
+export function getCapabilitiesSection(cwd: string, mcpHub?: IMcpHubService, taskId?: string): string {
 	const mcpSection = mcpHub
 		? `
 - You have access to MCP servers that may provide additional tools and resources. Each server may provide different capabilities that you can use to accomplish tasks more effectively.

@@ -7,7 +7,8 @@ import delay from "delay"
 
 import { type ExperimentId, DEFAULT_MAX_OPEN_TABS_CONTEXT } from "@njust-ai-cj/types"
 
-import { defaultModeSlug, getFullModeDetails } from "../../shared/modes"
+import { defaultModeSlug } from "../../shared/modes"
+import { getFullModeDetails } from "../prompts/getFullModeDetails"
 import { getApiMetrics } from "../../shared/getApiMetrics"
 import { listFiles } from "../../services/glob/list-files"
 import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"

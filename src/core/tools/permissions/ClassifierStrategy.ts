@@ -75,6 +75,16 @@ export interface ClassifierStrategy {
 		input: Record<string, unknown>,
 		context: ClassifierContext,
 	): Promise<ClassifyResult>
+
+	/**
+	 * Optional synchronous classification for PermissionRuleEngine.evaluate() (sync).
+	 * Implement when classify() has no I/O so the engine can use real results without microtask races.
+	 */
+	classifySync?(
+		toolName: string,
+		input: Record<string, unknown>,
+		context: ClassifierContext,
+	): ClassifyResult
 }
 
 /**
