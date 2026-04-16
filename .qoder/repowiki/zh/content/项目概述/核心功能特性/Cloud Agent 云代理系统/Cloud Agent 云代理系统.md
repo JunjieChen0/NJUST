@@ -2,20 +2,29 @@
 
 <cite>
 **本文档引用的文件**
+- [CloudAgentOrchestrator.ts](file://src/core/task/CloudAgentOrchestrator.ts)
 - [CloudAgentClient.ts](file://src/services/cloud-agent/CloudAgentClient.ts)
 - [types.ts](file://src/services/cloud-agent/types.ts)
 - [executeDeferredToolCall.ts](file://src/services/cloud-agent/executeDeferredToolCall.ts)
 - [parseWorkspaceOps.ts](file://src/services/cloud-agent/parseWorkspaceOps.ts)
 - [normalizeDeferredResponse.ts](file://src/services/cloud-agent/normalizeDeferredResponse.ts)
+- [applyCloudWorkspaceOps.ts](file://src/services/cloud-agent/applyCloudWorkspaceOps.ts)
+- [buildCloudWorkspaceOpToolMessage.ts](file://src/services/cloud-agent/buildCloudWorkspaceOpToolMessage.ts)
+- [deferredConstants.ts](file://src/services/cloud-agent/deferredConstants.ts)
 - [tool-executors.ts](file://src/services/mcp-server/tool-executors.ts)
 - [Task.ts](file://src/core/task/Task.ts)
 - [cloud-agent-integration.md](file://docs/cloud-agent-integration.md)
-- [buildCloudWorkspaceOpToolMessage.ts](file://src/services/cloud-agent/buildCloudWorkspaceOpToolMessage.ts)
-- [applyCloudWorkspaceOps.ts](file://src/services/cloud-agent/applyCloudWorkspaceOps.ts)
-- [extension.ts](file://src/extension.ts)
 - [package.json](file://src/package.json)
 - [test-cloud-agent-mock.mjs](file://src/test-cloud-agent-mock.mjs)
 </cite>
+
+## 更新摘要
+**变更内容**
+- CloudAgentOrchestrator 成为独立组件，提供完整的任务编排能力
+- 新增延迟协议循环执行机制，支持多轮交互和工具调用
+- 实现编译反馈循环，自动处理编译错误和代码修正
+- 增强工作区操作确认系统，支持逐项确认和批量执行
+- 完善错误处理和超时控制机制
 
 ## 目录
 1. [简介](#简介)
@@ -33,6 +42,8 @@
 
 Cloud Agent 云代理系统是一个基于 REST API 的分布式任务执行框架，专为 NJUST AI CJ 扩展设计。该系统通过云端代理与本地扩展的协作机制，实现了智能任务调度、工具调用映射、工作区操作处理和编译反馈循环等核心功能。
 
+**重大更新**：系统现已重构为以 CloudAgentOrchestrator 为核心的独立组件架构，显著增强了与云端代理的交互能力和任务编排能力。
+
 系统采用延迟协议（Deferred Protocol）设计，通过分阶段的交互模式，将复杂的任务分解为可管理的步骤，确保在云端和本地之间高效传递控制流和数据流。
 
 ## 项目结构
@@ -41,50 +52,64 @@ Cloud Agent 系统主要分布在以下关键目录中：
 
 ```mermaid
 graph TB
-subgraph "Cloud Agent 核心服务"
-CA[CloudAgentClient.ts]
+subgraph "Cloud Agent Orchestrator 核心"
+CO[CloudAgentOrchestrator.ts]
+HC[ICloudAgentHost 接口]
+CC[CloudAgentClient.ts]
+DC[deferredConstants.ts]
+end
+subgraph "服务层"
 Types[types.ts]
 Parse[parseWorkspaceOps.ts]
 Norm[normalizeDeferredResponse.ts]
 Exec[executeDeferredToolCall.ts]
-end
-subgraph "工具执行器"
-TE[tool-executors.ts]
 Apply[applyCloudWorkspaceOps.ts]
 Build[buildCloudWorkspaceOpToolMessage.ts]
 end
-subgraph "任务协调"
-Task[Task.ts]
+subgraph "工具执行器"
+TE[tool-executors.ts]
 end
 subgraph "配置与集成"
-Ext[extension.ts]
+Task[Task.ts]
 Pkg[package.json]
 Doc[cloud-agent-integration.md]
 Mock[test-cloud-agent-mock.mjs]
 end
-CA --> Types
-CA --> Parse
-CA --> Norm
-CA --> Exec
+CO --> HC
+CO --> CC
+CO --> DC
+CC --> Types
+CC --> Parse
+CC --> Norm
+CC --> Exec
 Exec --> TE
-Task --> CA
-Task --> Apply
-Task --> Build
-Ext --> CA
-Pkg --> Ext
-Doc --> CA
+Apply --> TE
+Task --> CO
+Pkg --> Task
+Doc --> CO
 ```
 
 **图表来源**
-- [CloudAgentClient.ts:1-339](file://src/services/cloud-agent/CloudAgentClient.ts#L1-L339)
-- [types.ts:1-102](file://src/services/cloud-agent/types.ts#L1-L102)
-- [tool-executors.ts:1-208](file://src/services/mcp-server/tool-executors.ts#L1-L208)
+- [CloudAgentOrchestrator.ts:106-588](file://src/core/task/CloudAgentOrchestrator.ts#L106-L588)
+- [CloudAgentClient.ts:60-200](file://src/services/cloud-agent/CloudAgentClient.ts#L60-L200)
+- [types.ts:1-106](file://src/services/cloud-agent/types.ts#L1-L106)
 
 **章节来源**
-- [CloudAgentClient.ts:1-339](file://src/services/cloud-agent/CloudAgentClient.ts#L1-L339)
+- [CloudAgentOrchestrator.ts:106-588](file://src/core/task/CloudAgentOrchestrator.ts#L106-L588)
 - [cloud-agent-integration.md:1-351](file://docs/cloud-agent-integration.md#L1-L351)
 
 ## 核心组件
+
+### CloudAgentOrchestrator - 独立任务编排器
+
+CloudAgentOrchestrator 是系统的核心编排组件，负责管理整个 Cloud Agent 任务生命周期，提供完整的任务执行、监控和错误处理能力。
+
+**主要功能特性：**
+- 独立的任务编排和生命周期管理
+- 支持延迟协议和传统协议两种执行模式
+- 智能的编译反馈循环处理
+- 工作区操作的确认和应用系统
+- 完善的错误处理和超时控制
 
 ### CloudAgentClient - 主要客户端类
 
@@ -118,9 +143,10 @@ CloudAgentClient 是系统的核心组件，负责与云端服务进行 HTTP 通
 - `execute_command` → `execCommand`
 
 **章节来源**
+- [CloudAgentOrchestrator.ts:106-588](file://src/core/task/CloudAgentOrchestrator.ts#L106-L588)
 - [CloudAgentClient.ts:43-339](file://src/services/cloud-agent/CloudAgentClient.ts#L43-L339)
-- [types.ts:1-102](file://src/services/cloud-agent/types.ts#L1-L102)
-- [executeDeferredToolCall.ts:1-83](file://src/services/cloud-agent/executeDeferredToolCall.ts#L1-L83)
+- [types.ts:1-106](file://src/services/cloud-agent/types.ts#L1-L106)
+- [executeDeferredToolCall.ts:1-95](file://src/services/cloud-agent/executeDeferredToolCall.ts#L1-L95)
 
 ## 架构概览
 
@@ -128,131 +154,184 @@ Cloud Agent 系统采用分层架构设计，通过清晰的职责分离实现�
 
 ```mermaid
 sequenceDiagram
-participant Client as 扩展客户端
+participant Orchestrator as CloudAgentOrchestrator
+participant Client as CloudAgentClient
 participant Server as 云端服务
 participant Local as 本地执行器
 participant MCP as MCP服务器
-Client->>Server : GET /health (健康检查)
-Server-->>Client : 200 OK
-Client->>Server : POST /v1/deferred/start (开始任务)
-Server-->>Client : {run_id, status : "pending", tool_calls[]}
+Orchestrator->>Client : connect() (健康检查)
+Client-->>Orchestrator : 200 OK
+alt 使用延迟协议
+Orchestrator->>Client : deferredStart()
+Client->>Server : POST /v1/deferred/start
+Server-->>Client : DeferredResponse (status : "pending")
 loop 直到 status == "done"
-Client->>Local : 执行本地工具调用
-Local-->>Client : 工具执行结果
-Client->>Server : POST /v1/deferred/resume (恢复任务)
-Server-->>Client : {status : "pending"|"done", ...}
+Orchestrator->>Local : 执行本地工具调用
+Local-->>Orchestrator : 工具执行结果
+Orchestrator->>Client : deferredResume(tool_results)
+Client->>Server : POST /v1/deferred/resume
+Server-->>Client : DeferredResponse (status : "pending"|"done")
+end
+else 使用传统协议
+Orchestrator->>Client : submitTask()
+Client->>Server : POST /v1/run
+Server-->>Client : CloudRunResult
 end
 alt 编译反馈循环启用
-Client->>Server : POST /v1/compile (编译反馈)
+Orchestrator->>Client : compile()
+Client->>Server : POST /v1/compile
 Server-->>Client : {success, output}
+alt 编译失败
+Orchestrator->>Client : submitTask(修正请求)
+Client->>Server : POST /v1/run
+Server-->>Client : 修正后的 workspace_ops
 end
-Client-->>Client : 任务完成
+end
+Orchestrator-->>Orchestrator : 任务完成
 ```
 
 **图表来源**
 - [cloud-agent-integration.md:18-207](file://docs/cloud-agent-integration.md#L18-L207)
-- [Task.ts:2900-3021](file://src/core/task/Task.ts#L2900-L3021)
+- [CloudAgentOrchestrator.ts:109-153](file://src/core/task/CloudAgentOrchestrator.ts#L109-L153)
+- [CloudAgentOrchestrator.ts:225-438](file://src/core/task/CloudAgentOrchestrator.ts#L225-L438)
 
 ## 详细组件分析
 
-### CloudAgentClient 类设计
+### CloudAgentOrchestrator 类设计
 
 ```mermaid
 classDiagram
-class CloudAgentClient {
--string serverUrl
--string deviceToken
--CloudAgentCallbacks callbacks
--CloudAgentClientOptions options
-+constructor(serverUrl, deviceToken, callbacks, options)
-+connect() Promise~void~
-+submitTask(sessionId, message, workspacePath, images) Promise~CloudRunResult~
-+compile(sessionId, workspacePath) Promise~CloudCompileResult~
-+deferredStart(sessionId, message, workspacePath, images) Promise~DeferredResponse~
-+deferredResume(runId, sessionId, toolResults) Promise~DeferredResponse~
-+disconnect() Promise~void~
--mergeAbortAndTimeout() object
--buildHeaders() object
--parseJsonResponse(response) Promise~CloudRunResponse~
--fetchDeferred(endpoint, body) Promise~DeferredResponse~
+class CloudAgentOrchestrator {
++constructor(host : ICloudAgentHost)
++run(userMessage, images?) Promise~void~
+-private runLegacy(client, cfg, callbacks, message, images) Promise~void~
+-private runDeferredLoop(client, cfg, callbacks, message, images) Promise~void~
+-private runCompileFeedbackLoop(cfg, callbacks, maxRetries, confirmOps) Promise~void~
+-private applyWorkspaceOps(ops, confirmOps) Promise~void~
 }
-class CloudAgentCallbacks {
-+onText(content) Promise~void~
-+onReasoning(content) Promise~void~
-+onDone(summary) Promise~void~
-+onError(message) Promise~void~
+class ICloudAgentHost {
++taskId : string
++cwd : string
++abort : boolean
++say(type, text?, images?) Promise~void~
++ask(type, text?, partial?) Promise~void~
++emit(event, ...args) boolean
++setCurrentRequestAbortController(controller) void
 }
-class CloudAgentClientOptions {
-+string apiKey
-+AbortSignal signal
-+number requestTimeoutMs
+class CloudAgentConfig {
++serverUrl : string
++deviceToken : string
++apiKey : string
++requestTimeoutMs : number
++applyRemoteWorkspaceOps : boolean
++confirmRemoteWorkspaceOps : boolean
++useDeferredProtocol : boolean
++compileLoopEnabled : boolean
++compileMaxRetries : number
 }
-CloudAgentClient --> CloudAgentCallbacks : 使用
-CloudAgentClient --> CloudAgentClientOptions : 配置
+CloudAgentOrchestrator --> ICloudAgentHost : 依赖
+CloudAgentOrchestrator --> CloudAgentConfig : 使用
 ```
 
 **图表来源**
-- [CloudAgentClient.ts:43-94](file://src/services/cloud-agent/CloudAgentClient.ts#L43-L94)
-- [types.ts:35-49](file://src/services/cloud-agent/types.ts#L35-L49)
-
-### 工作区操作处理流程
-
-```mermaid
-flowchart TD
-Start([接收 workspace_ops]) --> Validate[验证操作结构]
-Validate --> Valid{验证通过?}
-Valid --> |否| LogWarn[记录警告并忽略]
-Valid --> |是| CheckSetting{允许远程操作?}
-CheckSetting --> |否| Skip[跳过写盘]
-CheckSetting --> |是| CheckConfirm{需要确认?}
-CheckConfirm --> |是| ConfirmUI[显示确认界面]
-CheckConfirm --> |否| BatchApply[批量顺序执行]
-ConfirmUI --> UserDecision{用户同意?}
-UserDecision --> |否| SkipOp[跳过操作]
-UserDecision --> |是| ApplyOp[执行操作]
-ApplyOp --> NextOp{还有操作?}
-SkipOp --> NextOp
-NextOp --> |是| ConfirmUI
-NextOp --> |否| Complete[完成]
-Skip --> Complete
-LogWarn --> Complete
-```
-
-**图表来源**
-- [Task.ts:3026-3073](file://src/core/task/Task.ts#L3026-L3073)
-- [parseWorkspaceOps.ts:41-61](file://src/services/cloud-agent/parseWorkspaceOps.ts#L41-L61)
+- [CloudAgentOrchestrator.ts:106-153](file://src/core/task/CloudAgentOrchestrator.ts#L106-L153)
+- [CloudAgentOrchestrator.ts:30-43](file://src/core/task/CloudAgentOrchestrator.ts#L30-L43)
+- [CloudAgentOrchestrator.ts:45-82](file://src/core/task/CloudAgentOrchestrator.ts#L45-L82)
 
 ### 延迟协议执行机制
 
 ```mermaid
 sequenceDiagram
-participant Task as Task控制器
+participant Orchestrator as CloudAgentOrchestrator
 participant Client as CloudAgentClient
 participant Server as 云端服务器
 participant Local as 本地执行器
-Task->>Client : deferredStart()
+Orchestrator->>Client : deferredStart()
 Client->>Server : POST /v1/deferred/start
 Server-->>Client : DeferredResponse (status : "pending")
-Client-->>Task : 返回响应
-loop 直到 status == "done"
-Task->>Task : 解析 workspace_ops
-Task->>Local : 执行本地工具调用
-Local-->>Task : 返回工具结果
-Task->>Client : deferredResume(tool_results)
+loop 直到 status == "done" 或达到最大迭代次数
+Orchestrator->>Orchestrator : 解析 workspace_ops
+Orchestrator->>Local : 执行本地工具调用
+Local-->>Orchestrator : 返回工具结果
+Orchestrator->>Client : deferredResume(tool_results)
 Client->>Server : POST /v1/deferred/resume
 Server-->>Client : DeferredResponse (status : "pending"|"done")
-Client-->>Task : 返回响应
+Orchestrator->>Orchestrator : 检查 server_revision 变更
+Orchestrator->>Orchestrator : 更新 run_id 和 tokens
 end
-Task->>Task : 处理最终响应
+alt 编译反馈循环启用
+Orchestrator->>Client : compile()
+Client->>Server : POST /v1/compile
+Server-->>Client : {success, output}
+alt 编译失败
+Orchestrator->>Client : submitTask(修正请求)
+Client->>Server : POST /v1/run
+Server-->>Client : 修正后的 workspace_ops
+end
+end
 ```
 
 **图表来源**
-- [Task.ts:2900-3021](file://src/core/task/Task.ts#L2900-L3021)
-- [executeDeferredToolCall.ts:15-83](file://src/services/cloud-agent/executeDeferredToolCall.ts#L15-L83)
+- [CloudAgentOrchestrator.ts:225-438](file://src/core/task/CloudAgentOrchestrator.ts#L225-L438)
+- [CloudAgentOrchestrator.ts:442-536](file://src/core/task/CloudAgentOrchestrator.ts#L442-L536)
+
+### 编译反馈循环机制
+
+```mermaid
+flowchart TD
+Start([开始编译反馈循环]) --> CheckEnabled{编译循环启用?}
+CheckEnabled --> |否| End([结束])
+CheckEnabled --> |是| FirstCompile[第一次编译检查]
+FirstCompile --> CompileRequest[发送编译请求]
+CompileRequest --> CompileResult{编译成功?}
+CompileResult --> |是| Success[编译通过!]
+CompileResult --> |否| ShowError[显示编译错误]
+ShowError --> CheckRetries{达到最大重试次数?}
+CheckRetries --> |是| StopLoop[停止循环]
+CheckRetries --> |否| CreateFixGoal[生成修正目标]
+CreateFixGoal --> SendFixRequest[发送修正请求]
+SendFixRequest --> FixResult{修正结果有效?}
+FixResult --> |否| StopLoop
+FixResult --> |是| ApplyFixOps[应用修正操作]
+ApplyFixOps --> FirstCompile
+Success --> End
+StopLoop --> End
+```
+
+**图表来源**
+- [CloudAgentOrchestrator.ts:442-536](file://src/core/task/CloudAgentOrchestrator.ts#L442-L536)
+
+### 工作区操作确认系统
+
+```mermaid
+flowchart TD
+Start([接收 workspace_ops]) --> CheckConfirm{需要确认?}
+CheckConfirm --> |否| BatchApply[批量顺序执行]
+CheckConfirm --> |是| LoopOps[逐项确认执行]
+LoopOps --> CheckAccess{检查路径访问权限?}
+CheckAccess --> |否| SkipOp[跳过操作]
+CheckAccess --> |是| BuildToolMessage[构建工具消息]
+BuildToolMessage --> AskUser[询问用户确认]
+AskUser --> UserDecision{用户同意?}
+UserDecision --> |否| SkipOp
+UserDecision --> |是| ApplyOp[执行操作]
+ApplyOp --> CheckError{执行成功?}
+CheckError --> |否| StopLoop[停止循环]
+CheckError --> |是| NextOp{还有操作?}
+SkipOp --> NextOp
+NextOp --> |是| LoopOps
+NextOp --> |否| Complete[完成]
+BatchApply --> Complete
+Complete --> End([结束])
+StopLoop --> End
+```
+
+**图表来源**
+- [CloudAgentOrchestrator.ts:540-587](file://src/core/task/CloudAgentOrchestrator.ts#L540-L587)
 
 **章节来源**
+- [CloudAgentOrchestrator.ts:106-588](file://src/core/task/CloudAgentOrchestrator.ts#L106-L588)
 - [CloudAgentClient.ts:259-339](file://src/services/cloud-agent/CloudAgentClient.ts#L259-L339)
-- [Task.ts:2900-3021](file://src/core/task/Task.ts#L2900-L3021)
 
 ### 工具执行器安全机制
 
@@ -293,7 +372,8 @@ Child[child_process]
 Zod[Zod 验证库]
 end
 subgraph "内部模块"
-CA[CloudAgentClient]
+CO[CloudAgentOrchestrator]
+CC[CloudAgentClient]
 Types[类型定义]
 Utils[工具函数]
 Services[服务层]
@@ -303,24 +383,30 @@ Auth[认证机制]
 WS[工作区操作]
 Tools[工具执行]
 Protocol[协议处理]
+Compile[编译反馈]
 end
-CA --> Types
-CA --> Auth
-CA --> Protocol
+CO --> CC
+CO --> Protocol
+CO --> Compile
+CO --> WS
+CC --> Types
+CC --> Auth
+CC --> Protocol
 WS --> Tools
 Tools --> FS
 Tools --> Child
 Protocol --> Zod
 Protocol --> Utils
+Compile --> CC
 ```
 
 **图表来源**
-- [CloudAgentClient.ts:1-12](file://src/services/cloud-agent/CloudAgentClient.ts#L1-L12)
-- [parseWorkspaceOps.ts:1-2](file://src/services/cloud-agent/parseWorkspaceOps.ts#L1-L2)
+- [CloudAgentOrchestrator.ts:1-25](file://src/core/task/CloudAgentOrchestrator.ts#L1-L25)
+- [CloudAgentClient.ts:1-15](file://src/services/cloud-agent/CloudAgentClient.ts#L1-L15)
 
 **章节来源**
-- [CloudAgentClient.ts:1-339](file://src/services/cloud-agent/CloudAgentClient.ts#L1-L339)
-- [parseWorkspaceOps.ts:1-62](file://src/services/cloud-agent/parseWorkspaceOps.ts#L1-L62)
+- [CloudAgentOrchestrator.ts:1-589](file://src/core/task/CloudAgentOrchestrator.ts#L1-L589)
+- [CloudAgentClient.ts:1-452](file://src/services/cloud-agent/CloudAgentClient.ts#L1-L452)
 
 ## 性能考虑
 
@@ -351,6 +437,10 @@ Protocol --> Utils
 - 失败时立即停止并报告错误
 - 可选的逐个确认模式
 
+**章节来源**
+- [CloudAgentOrchestrator.ts:448-485](file://src/core/task/CloudAgentOrchestrator.ts#L448-L485)
+- [CloudAgentOrchestrator.ts:576-586](file://src/core/task/CloudAgentOrchestrator.ts#L576-L586)
+
 ## 故障排除指南
 
 ### 常见认证问题
@@ -377,6 +467,18 @@ Protocol --> Utils
 - 检查服务器响应时间
 - 考虑网络延迟因素
 
+### 延迟协议问题
+
+**会话串线问题：**
+- 检查 `server_revision` 变更日志
+- 验证 `run_id` 的连续性
+- 确认会话状态的一致性
+
+**工具调用失败：**
+- 查看工具执行结果的详细信息
+- 检查本地工具的可用性
+- 验证工具参数的有效性
+
 ### 工作区操作问题
 
 **路径权限问题：**
@@ -390,21 +492,22 @@ Protocol --> Utils
 - 验证目标文件的状态
 
 **章节来源**
-- [CloudAgentClient.ts:32-41](file://src/services/cloud-agent/CloudAgentClient.ts#L32-L41)
-- [extension.ts:133-153](file://src/extension.ts#L133-L153)
+- [CloudAgentOrchestrator.ts:344-362](file://src/core/task/CloudAgentOrchestrator.ts#L344-L362)
+- [CloudAgentClient.ts:32-58](file://src/services/cloud-agent/CloudAgentClient.ts#L32-L58)
 - [cloud-agent-integration.md:330-351](file://docs/cloud-agent-integration.md#L330-L351)
 
 ## 结论
 
-Cloud Agent 云代理系统通过精心设计的架构和完善的错误处理机制，为分布式任务执行提供了可靠的基础设施。系统的主要优势包括：
+Cloud Agent 云代理系统通过精心设计的架构和完善的错误处理机制，为分布式任务执行提供了可靠的基础设施。**重大更新后**，系统的主要优势包括：
 
-1. **模块化设计**：清晰的职责分离和接口定义
-2. **安全机制**：严格的路径验证和权限控制
-3. **灵活性**：支持多种认证方式和配置选项
-4. **可靠性**：完善的错误处理和重试机制
-5. **可扩展性**：易于添加新的工具调用和工作区操作
+1. **独立组件化**：CloudAgentOrchestrator 成为独立的编排组件，提供清晰的职责分离
+2. **增强的协议支持**：完整的延迟协议循环执行机制，支持多轮交互
+3. **智能编译反馈**：自动化的编译错误检测和代码修正循环
+4. **安全的工作区操作**：支持逐项确认和批量执行的双重模式
+5. **完善的错误处理**：多层次的错误检测、报告和恢复机制
+6. **灵活的配置选项**：丰富的配置参数支持不同的使用场景
 
-该系统为 NJUST AI CJ 扩展提供了强大的云端代理能力，支持复杂的分布式任务执行场景。
+该系统为 NJUST AI CJ 扩展提供了强大的云端代理能力，支持复杂的分布式任务执行场景，显著提升了系统的可靠性和用户体验。
 
 ## 附录
 
@@ -420,6 +523,13 @@ Cloud Agent 云代理系统通过精心设计的架构和完善的错误处理�
 - `njust-ai-cj.cloudAgent.applyRemoteWorkspaceOps`: 是否应用远程工作区操作
 - `njust-ai-cj.cloudAgent.confirmRemoteWorkspaceOps`: 是否显示确认界面
 
+**协议配置：**
+- `njust-ai-cj.cloudAgent.deferredProtocol`: 是否使用延迟协议
+
+**编译反馈循环配置：**
+- `njust-ai-cj.cloudAgent.compileLoop.enabled`: 是否启用编译反馈循环
+- `njust-ai-cj.cloudAgent.compileLoop.maxRetries`: 编译循环最大重试次数
+
 ### 开发者指南
 
 **本地联调步骤：**
@@ -429,5 +539,5 @@ Cloud Agent 云代理系统通过精心设计的架构和完善的错误处理�
 4. 使用 Mock API Key 进行认证
 
 **章节来源**
-- [package.json:853-878](file://src/package.json#L853-L878)
+- [package.json:983-1031](file://src/package.json#L983-L1031)
 - [test-cloud-agent-mock.mjs:170-213](file://src/test-cloud-agent-mock.mjs#L170-L213)

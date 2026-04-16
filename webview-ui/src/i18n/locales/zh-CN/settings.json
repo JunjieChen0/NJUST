@@ -34,6 +34,7 @@
 		"notifications": "通知",
 		"contextManagement": "上下文",
 		"terminal": "终端",
+		"inlineCompletion": "代码补全",
 		"slashCommands": "斜杠命令",
 		"prompts": "提示词",
 		"ui": "UI",
@@ -1033,6 +1034,29 @@
 		},
 		"footer": "使用技能编写器模式创建您自己的技能，可在 <MarketplaceLink>模式市集</MarketplaceLink> 中获得。",
 		"footerSimple": "使用技能编写器模式创建您自己的技能。"
+	},
+	"inlineCompletion": {
+		"enabled": {
+			"label": "启用内联补全",
+			"description": "在编辑器中显示幽灵式内联代码建议（Tab 接受，Esc 取消）。"
+		},
+		"triggerDelayMs": {
+			"label": "自动触发延迟（毫秒）",
+			"description": "停止输入后等待多久再请求补全（100–2000 毫秒）。"
+		},
+		"maxLines": {
+			"label": "补全最大行数",
+			"description": "单次补全建议最多占用的行数上限（1–50）。"
+		},
+		"enableCangjieEnhanced": {
+			"label": "仓颉（.cj）增强补全",
+			"description": "对仓颉文件将 LLM 与项目及语料库 ripgrep 上下文结合，生成更贴合的补全。"
+		},
+		"triggerCommand": {
+			"label": "手动触发（说明）",
+			"description": "默认快捷键的文字说明；实际按键请在「键盘快捷方式」中修改。"
+		},
+		"triggerCommand.shortcutHint": "打开 <ShortcutLink>键盘快捷方式</ShortcutLink> 可自定义手动触发命令。"
 	},
 	"webSearch": {
 		"enable": {

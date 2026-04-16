@@ -380,6 +380,16 @@
 				"command": "njust-ai-cj.cangjieCleanGeneratedTests",
 				"title": "Cangjie: Clean Generated Test Files",
 				"category": "Cangjie"
+			},
+			{
+				"command": "njust-ai-cj.triggerInlineCompletion",
+				"title": "%command.triggerInlineCompletion.title%",
+				"category": "NJUST_AI_CJ"
+			},
+			{
+				"command": "njust-ai-cj.inlineCompletionDiagnostics",
+				"title": "%command.inlineCompletionDiagnostics.title%",
+				"category": "NJUST_AI_CJ"
 			}
 		],
 		"menus": {
@@ -574,6 +584,14 @@
 				"win": "ctrl+shift+delete",
 				"linux": "ctrl+shift+delete",
 				"when": "editorTextFocus && editorLangId == cangjie"
+			},
+			{
+				"command": "njust-ai-cj.triggerInlineCompletion",
+				"key": "alt+\\",
+				"mac": "alt+\\",
+				"win": "alt+\\",
+				"linux": "alt+\\",
+				"when": "editorTextFocus"
 			}
 		],
 		"submenus": [
@@ -1081,6 +1099,40 @@
 					"default": false,
 					"description": "%settings.debugProxy.tlsInsecure.description%",
 					"markdownDescription": "%settings.debugProxy.tlsInsecure.description%"
+				},
+				"njust-ai-cj.inlineCompletion.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "%settings.inlineCompletion.enabled.description%"
+				},
+				"njust-ai-cj.inlineCompletion.triggerDelayMs": {
+					"type": "number",
+					"default": 300,
+					"minimum": 100,
+					"maximum": 2000,
+					"description": "%settings.inlineCompletion.triggerDelayMs.description%"
+				},
+				"njust-ai-cj.inlineCompletion.maxLines": {
+					"type": "number",
+					"default": 10,
+					"minimum": 1,
+					"maximum": 50,
+					"description": "%settings.inlineCompletion.maxLines.description%"
+				},
+				"njust-ai-cj.inlineCompletion.enableCangjieEnhanced": {
+					"type": "boolean",
+					"default": true,
+					"description": "%settings.inlineCompletion.enableCangjieEnhanced.description%"
+				},
+				"njust-ai-cj.inlineCompletion.triggerCommand": {
+					"type": "string",
+					"default": "alt+\\",
+					"description": "%settings.inlineCompletion.triggerCommand.description%"
+				},
+				"njust-ai-cj.inlineCompletion.verboseLog": {
+					"type": "boolean",
+					"default": false,
+					"description": "%settings.inlineCompletion.verboseLog.description%"
 				}
 			}
 		}

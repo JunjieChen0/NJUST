@@ -266,6 +266,11 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		includeCurrentCost: true,
 		lockApiConfigAcrossModes: false,
 		saveAllBeforeExecuteCommand: true,
+		inlineCompletionEnabled: true,
+		inlineCompletionTriggerDelayMs: 300,
+		inlineCompletionMaxLines: 10,
+		inlineCompletionEnableCangjieEnhanced: true,
+		inlineCompletionTriggerCommand: "alt+\\",
 	})
 
 	const [didHydrateState, setDidHydrateState] = useState(false)

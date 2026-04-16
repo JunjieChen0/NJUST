@@ -75,6 +75,8 @@ import {
 } from "./activate"
 import { initializeI18n } from "./i18n"
 import { ChatParticipantHandler, registerLMTools, ChatStateSync } from "./chat"
+import { InlineCompletionProvider } from "./services/inline-completion/InlineCompletionProvider"
+import { resolveInlineCompletionApiHandler } from "./services/inline-completion/inlineCompletionApi"
 
 /**
  * Built using https://github.com/microsoft/vscode-webview-ui-toolkit
@@ -362,6 +364,38 @@ export async function activate(context: vscode.ExtensionContext) {
 	}
 
 	registerCommands({ context, outputChannel, provider })
+
+	const inlineCompletionProvider = new InlineCompletionProvider(context, provider, outputChannel)
+	// Use scheme + glob: a lone `pattern: "**/*"` often fails to match workspace/untitled documents reliably.
+	context.subscriptions.push(
+		vscode.languages.registerInlineCompletionItemProvider(
+			[
+				{ scheme: "file", pattern: "**" },
+				{ scheme: "untitled", pattern: "**" },
+				{ scheme: "vscode-notebook-cell", pattern: "**" },
+			],
+			inlineCompletionProvider,
+		),
+	)
+	context.subscriptions.push(
+		vscode.commands.registerCommand("njust-ai-cj.triggerInlineCompletion", async () => {
+			await vscode.commands.executeCommand("editor.action.inlineSuggest.trigger")
+		}),
+	)
+	context.subscriptions.push(
+		vscode.commands.registerCommand("njust-ai-cj.inlineCompletionDiagnostics", async () => {
+			const log = (m: string) => outputChannel.appendLine(m)
+			const api = await resolveInlineCompletionApiHandler(provider, log)
+			if (api) {
+				const { id } = api.getModel()
+				void vscode.window.showInformationMessage(`内联补全 API 可用：${id}`)
+			} else {
+				void vscode.window.showWarningMessage(
+					"内联补全：未解析到 API。请在扩展设置中配置提供商并填写密钥，或先开始侧边栏对话任务；详情见输出面板「NJUST_AI_CJ」。",
+				)
+			}
+		}),
+	)
 
 	// Register VSCode Chat Participant (@roo) for the native chat panel.
 	const chatParticipant = new ChatParticipantHandler(provider, context, outputChannel)

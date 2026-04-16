@@ -341,6 +341,13 @@ export type ExtensionState = Pick<
 
 	/** Mirrored from VS Code setting `njust-ai-cj.saveAllBeforeExecuteCommand` (not persisted in global state). */
 	saveAllBeforeExecuteCommand?: boolean
+
+	/** Mirrored from VS Code `njust-ai-cj.inlineCompletion.*` (workspace configuration). */
+	inlineCompletionEnabled?: boolean
+	inlineCompletionTriggerDelayMs?: number
+	inlineCompletionMaxLines?: number
+	inlineCompletionEnableCangjieEnhanced?: boolean
+	inlineCompletionTriggerCommand?: string
 }
 
 export interface Command {
@@ -619,7 +626,14 @@ export interface WebviewMessage {
 		codebaseIndexVercelAiGatewayApiKey?: string
 		codebaseIndexOpenRouterApiKey?: string
 	}
-	updatedSettings?: NJUST_AI_CJSettings & { cloudAgentServerUrl?: string }
+	updatedSettings?: NJUST_AI_CJSettings & {
+		cloudAgentServerUrl?: string
+		inlineCompletionEnabled?: boolean
+		inlineCompletionTriggerDelayMs?: number
+		inlineCompletionMaxLines?: number
+		inlineCompletionEnableCangjieEnhanced?: boolean
+		inlineCompletionTriggerCommand?: string
+	}
 	/** Task configuration applied via `createTask()` when starting a cloud task. */
 	taskConfiguration?: NJUST_AI_CJSettings
 	action?: string

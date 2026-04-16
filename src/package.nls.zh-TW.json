@@ -47,5 +47,13 @@
 	"settings.debug.description": "啟用偵錯模式以顯示額外按鈕，用於在暫存檔案中以格式化 JSON 檢視 API 對話歷史紀錄和使用者介面訊息。",
 	"settings.debugProxy.enabled.description": "**啟用 Debug Proxy** — 將所有出站網路要求透過代理進行路由，以進行 MITM 偵錯。只有在除錯模式 (F5) 執行時才會啟用。",
 	"settings.debugProxy.serverUrl.description": "代理 URL（例如 `http://127.0.0.1:8888`）。只有在啟用 **Debug Proxy** 時才會使用。",
-	"settings.debugProxy.tlsInsecure.description": "接受來自代理的 self-signed 憑證。**MITM 檢查所必需。** ⚠️ 不安全——只在本機偵錯時使用。"
+	"settings.debugProxy.tlsInsecure.description": "接受來自代理的 self-signed 憑證。**MITM 檢查所必需。** ⚠️ 不安全——只在本機偵錯時使用。",
+	"command.triggerInlineCompletion.title": "觸發內聯補全",
+	"command.inlineCompletionDiagnostics.title": "內聯補全：檢查 API 設定",
+	"settings.inlineCompletion.enabled.description": "啟用或停用內聯程式碼補全（幽靈程式碼）。",
+	"settings.inlineCompletion.triggerDelayMs.description": "自動觸發補全前的延遲（毫秒）。",
+	"settings.inlineCompletion.maxLines.description": "補全建議的最大行數。",
+	"settings.inlineCompletion.enableCangjieEnhanced.description": "為倉頡（.cj）檔案啟用增強的 LLM + Grep 補全。",
+	"settings.inlineCompletion.triggerCommand.description": "手動觸發內聯補全的預設快捷鍵（可在鍵盤快捷方式中修改）。此設定僅供說明；實際綁定請在快捷鍵中設定。",
+	"settings.inlineCompletion.verboseLog.description": "將每次內聯補全呼叫寫入輸出通道（NJUST_AI_CJ）。偵錯幽靈程式碼未出現時可啟用。"
 }

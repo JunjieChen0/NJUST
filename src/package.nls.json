@@ -47,5 +47,13 @@
 	"settings.debug.description": "Enable debug mode to show additional buttons for viewing API conversation history and UI messages as prettified JSON in temporary files.",
 	"settings.debugProxy.enabled.description": "**Enable Debug Proxy** — Route all outbound network requests through a proxy for MITM debugging. Only active when running in debug mode (F5).",
 	"settings.debugProxy.serverUrl.description": "Proxy URL (e.g., `http://127.0.0.1:8888`). Only used when **Debug Proxy** is enabled.",
-	"settings.debugProxy.tlsInsecure.description": "Accept self-signed certificates from the proxy. **Required for MITM inspection.** ⚠️ Insecure — only use for local debugging."
+	"settings.debugProxy.tlsInsecure.description": "Accept self-signed certificates from the proxy. **Required for MITM inspection.** ⚠️ Insecure — only use for local debugging.",
+	"command.triggerInlineCompletion.title": "Trigger Inline Completion",
+	"command.inlineCompletionDiagnostics.title": "Inline Completion: Check API Configuration",
+	"settings.inlineCompletion.enabled.description": "Enable/disable inline code completion (ghost code).",
+	"settings.inlineCompletion.triggerDelayMs.description": "Delay in milliseconds before triggering completion automatically.",
+	"settings.inlineCompletion.maxLines.description": "Maximum number of lines for completion suggestions.",
+	"settings.inlineCompletion.enableCangjieEnhanced.description": "Enable enhanced LLM+Grep completion for Cangjie files.",
+	"settings.inlineCompletion.triggerCommand.description": "Default keybinding for manual inline completion (change in Keyboard Shortcuts). This setting documents the default; use keybindings to customize.",
+	"settings.inlineCompletion.verboseLog.description": "Log each inline completion invocation to the Output channel (NJUST_AI_CJ). Enable when debugging why ghost text does not appear."
 }

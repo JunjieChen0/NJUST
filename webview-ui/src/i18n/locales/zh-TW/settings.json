@@ -34,6 +34,7 @@
 		"notifications": "通知",
 		"contextManagement": "上下文",
 		"terminal": "終端機",
+		"inlineCompletion": "程式碼補全",
 		"slashCommands": "斜線命令",
 		"prompts": "提示詞",
 		"ui": "UI",
@@ -1027,5 +1028,28 @@
 			"descriptionTooLong": "說明不得超過1024個字元"
 		},
 		"footer": "使用技能編寫器模式建立您自己的技能，可在 <MarketplaceLink>模式市集</MarketplaceLink> 中取得。"
+	},
+	"inlineCompletion": {
+		"enabled": {
+			"label": "啟用內聯補全",
+			"description": "在編輯器中顯示幽靈式內聯程式碼建議（Tab 接受，Esc 取消）。"
+		},
+		"triggerDelayMs": {
+			"label": "自動觸發延遲（毫秒）",
+			"description": "停止輸入後等待多久再請求補全（100–2000 毫秒）。"
+		},
+		"maxLines": {
+			"label": "補全最大行數",
+			"description": "單次補全建議最多佔用的行數上限（1–50）。"
+		},
+		"enableCangjieEnhanced": {
+			"label": "倉頡（.cj）增強補全",
+			"description": "對倉頡檔將 LLM 與專案及語料庫 ripgrep 上下文結合，產生更貼切的補全。"
+		},
+		"triggerCommand": {
+			"label": "手動觸發（說明）",
+			"description": "預設快捷鍵的文字說明；實際按鍵請在「鍵盤快捷方式」中修改。"
+		},
+		"triggerCommand.shortcutHint": "開啟 <ShortcutLink>鍵盤快捷方式</ShortcutLink> 可自訂手動觸發命令。"
 	}
 }

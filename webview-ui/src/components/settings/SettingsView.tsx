@@ -29,6 +29,7 @@ import {
 	GitCommitVertical,
 	GraduationCap,
 	Search,
+	TextCursor,
 } from "lucide-react"
 
 import {
@@ -72,6 +73,7 @@ import { ContextManagementSettings } from "./ContextManagementSettings"
 import { TerminalSettings } from "./TerminalSettings"
 import { ExperimentalSettings } from "./ExperimentalSettings"
 import { WebSearchSettings } from "./WebSearchSettings"
+import { InlineCompletionSettings } from "./InlineCompletionSettings"
 import { AppearanceSettings } from "./AppearanceSettings"
 import { About } from "./About"
 import { Section } from "./Section"
@@ -104,6 +106,7 @@ export const sectionNames = [
 	"notifications",
 	"contextManagement",
 	"terminal",
+	"inlineCompletion",
 	"webSearch",
 	"modes",
 	"mcp",
@@ -157,6 +160,11 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 		fontFamily,
 		alwaysAllowExecute,
 		saveAllBeforeExecuteCommand,
+		inlineCompletionEnabled,
+		inlineCompletionTriggerDelayMs,
+		inlineCompletionMaxLines,
+		inlineCompletionEnableCangjieEnhanced,
+		inlineCompletionTriggerCommand,
 		alwaysAllowMcp,
 		alwaysAllowModeSwitch,
 		alwaysAllowSubtasks,
@@ -421,6 +429,11 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 					openRouterImageGenerationSelectedModel,
 					experiments,
 					customSupportPrompts,
+					inlineCompletionEnabled: inlineCompletionEnabled ?? true,
+					inlineCompletionTriggerDelayMs: inlineCompletionTriggerDelayMs ?? 300,
+					inlineCompletionMaxLines: inlineCompletionMaxLines ?? 10,
+					inlineCompletionEnableCangjieEnhanced: inlineCompletionEnableCangjieEnhanced ?? true,
+					inlineCompletionTriggerCommand: inlineCompletionTriggerCommand ?? "alt+\\",
 				},
 			})
 
@@ -516,6 +529,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 			{ id: "notifications", icon: Bell },
 			{ id: "contextManagement", icon: Database },
 			{ id: "terminal", icon: SquareTerminal },
+			{ id: "inlineCompletion", icon: TextCursor },
 			{ id: "webSearch", icon: Search },
 			{ id: "prompts", icon: MessageSquare },
 			{ id: "ui", icon: Glasses },
@@ -861,6 +875,18 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 								terminalZshOhMy={terminalZshOhMy}
 								terminalZshP10k={terminalZshP10k}
 								terminalZdotdir={terminalZdotdir}
+								setCachedStateField={setCachedStateField}
+							/>
+						)}
+
+						{/* Inline completion Section */}
+						{renderTab === "inlineCompletion" && (
+							<InlineCompletionSettings
+								inlineCompletionEnabled={inlineCompletionEnabled}
+								inlineCompletionTriggerDelayMs={inlineCompletionTriggerDelayMs}
+								inlineCompletionMaxLines={inlineCompletionMaxLines}
+								inlineCompletionEnableCangjieEnhanced={inlineCompletionEnableCangjieEnhanced}
+								inlineCompletionTriggerCommand={inlineCompletionTriggerCommand}
 								setCachedStateField={setCachedStateField}
 							/>
 						)}

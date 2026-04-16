@@ -2046,6 +2046,14 @@ export class ClineProvider
 			cloudAgentServerUrl,
 			debug,
 			saveAllBeforeExecuteCommand: workspaceConfig.get<boolean>("saveAllBeforeExecuteCommand", true),
+			inlineCompletionEnabled: workspaceConfig.get<boolean>("inlineCompletion.enabled", true),
+			inlineCompletionTriggerDelayMs: workspaceConfig.get<number>("inlineCompletion.triggerDelayMs", 300),
+			inlineCompletionMaxLines: workspaceConfig.get<number>("inlineCompletion.maxLines", 10),
+			inlineCompletionEnableCangjieEnhanced: workspaceConfig.get<boolean>(
+				"inlineCompletion.enableCangjieEnhanced",
+				true,
+			),
+			inlineCompletionTriggerCommand: workspaceConfig.get<string>("inlineCompletion.triggerCommand", "alt+\\"),
 		}
 	}
 

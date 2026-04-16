@@ -35,6 +35,7 @@
 		"notifications": "Notifications",
 		"contextManagement": "Context",
 		"terminal": "Terminal",
+		"inlineCompletion": "Code Completion",
 		"slashCommands": "Slash Commands",
 		"prompts": "Prompts",
 		"ui": "UI",
@@ -1033,6 +1034,29 @@
 			"output": "Output",
 			"cacheReads": "Cache reads"
 		}
+	},
+	"inlineCompletion": {
+		"enabled": {
+			"label": "Enable inline completion",
+			"description": "Show ghost-style inline code suggestions in the editor (Tab to accept, Esc to dismiss)."
+		},
+		"triggerDelayMs": {
+			"label": "Auto-trigger delay (ms)",
+			"description": "Wait time after you stop typing before requesting a suggestion (100–2000 ms)."
+		},
+		"maxLines": {
+			"label": "Maximum suggestion lines",
+			"description": "Upper bound on how many lines a single suggestion may span (1–50)."
+		},
+		"enableCangjieEnhanced": {
+			"label": "Enhanced Cangjie (.cj) completion",
+			"description": "For Cangjie files, combine LLM with project + corpus ripgrep context for richer suggestions."
+		},
+		"triggerCommand": {
+			"label": "Manual trigger (reference)",
+			"description": "Default shortcut label for documentation. Change the real keybinding in Keyboard Shortcuts."
+		},
+		"triggerCommand.shortcutHint": "Open <ShortcutLink>keyboard shortcuts</ShortcutLink> to customize the manual trigger command."
 	},
 	"webSearch": {
 		"enable": {

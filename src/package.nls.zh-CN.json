@@ -47,5 +47,13 @@
 	"settings.debug.description": "启用调试模式以显示额外按钮，用于在临时文件中以格式化 JSON 查看 API 对话历史和 UI 消息。",
 	"settings.debugProxy.enabled.description": "**启用 Debug Proxy** — 通过代理转发所有出站网络请求，用于 MITM 调试。只在调试模式 (F5) 运行时生效。",
 	"settings.debugProxy.serverUrl.description": "代理 URL（例如 `http://127.0.0.1:8888`）。仅在启用 **Debug Proxy** 时使用。",
-	"settings.debugProxy.tlsInsecure.description": "接受来自代理的 self-signed 证书。**MITM 检查所必需。** ⚠️ 不安全——只在本地调试时使用。"
+	"settings.debugProxy.tlsInsecure.description": "接受来自代理的 self-signed 证书。**MITM 检查所必需。** ⚠️ 不安全——只在本地调试时使用。",
+	"command.triggerInlineCompletion.title": "触发内联补全",
+	"command.inlineCompletionDiagnostics.title": "内联补全：检查 API 配置",
+	"settings.inlineCompletion.enabled.description": "启用或禁用内联代码补全（幽灵代码）。",
+	"settings.inlineCompletion.triggerDelayMs.description": "自动触发补全前的延迟（毫秒）。",
+	"settings.inlineCompletion.maxLines.description": "补全建议的最大行数。",
+	"settings.inlineCompletion.enableCangjieEnhanced.description": "为仓颉（.cj）文件启用增强的 LLM + Grep 补全。",
+	"settings.inlineCompletion.triggerCommand.description": "手动触发内联补全的默认快捷键（可在键盘快捷方式中修改）。此设置仅作说明；实际绑定请在快捷键中配置。",
+	"settings.inlineCompletion.verboseLog.description": "将每次内联补全调用写入输出通道（NJUST_AI_CJ）。排查幽灵代码不出现时启用。"
 }

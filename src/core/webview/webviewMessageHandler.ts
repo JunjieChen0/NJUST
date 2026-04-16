@@ -728,6 +728,42 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 							.getConfiguration(Package.name)
 							.update("saveAllBeforeExecuteCommand", value ?? true, vscode.ConfigurationTarget.Global)
 						continue
+					} else if (key === "inlineCompletionEnabled") {
+						await vscode.workspace
+							.getConfiguration(Package.name)
+							.update("inlineCompletion.enabled", value ?? true, vscode.ConfigurationTarget.Global)
+						continue
+					} else if (key === "inlineCompletionTriggerDelayMs") {
+						const n = typeof value === "number" ? value : 300
+						await vscode.workspace
+							.getConfiguration(Package.name)
+							.update(
+								"inlineCompletion.triggerDelayMs",
+								Math.min(2000, Math.max(100, n)),
+								vscode.ConfigurationTarget.Global,
+							)
+						continue
+					} else if (key === "inlineCompletionMaxLines") {
+						const n = typeof value === "number" ? value : 10
+						await vscode.workspace
+							.getConfiguration(Package.name)
+							.update(
+								"inlineCompletion.maxLines",
+								Math.min(50, Math.max(1, n)),
+								vscode.ConfigurationTarget.Global,
+							)
+						continue
+					} else if (key === "inlineCompletionEnableCangjieEnhanced") {
+						await vscode.workspace
+							.getConfiguration(Package.name)
+							.update("inlineCompletion.enableCangjieEnhanced", value ?? true, vscode.ConfigurationTarget.Global)
+						continue
+					} else if (key === "inlineCompletionTriggerCommand") {
+						const s = typeof value === "string" ? value : "alt+\\"
+						await vscode.workspace
+							.getConfiguration(Package.name)
+							.update("inlineCompletion.triggerCommand", s, vscode.ConfigurationTarget.Global)
+						continue
 					}
 
 					await provider.contextProxy.setValue(key as keyof NJUST_AI_CJSettings, newValue)

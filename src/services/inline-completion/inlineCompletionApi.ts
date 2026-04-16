@@ -1,0 +1,36 @@
+import { buildApiHandler, type ApiHandler } from "../../api"
+import type { ClineProvider } from "../../core/webview/ClineProvider"
+
+let loggedMissingApiProfile = false
+
+/**
+ * Prefer the active task's API handler; otherwise build from the current provider profile (same as chat).
+ */
+export async function resolveInlineCompletionApiHandler(
+	provider: ClineProvider,
+	log?: (message: string) => void,
+): Promise<ApiHandler | undefined> {
+	const task = provider.getCurrentTask()
+	if (task) {
+		return task.api
+	}
+	try {
+		const { apiConfiguration } = await provider.getState()
+		if (!apiConfiguration?.apiProvider) {
+			if (log && !loggedMissingApiProfile) {
+				loggedMissingApiProfile = true
+				log(
+					"[InlineCompletion] No API profile yet — configure a provider in NJUST_AI_CJ settings, or start a chat task (inline completion reuses the same API as the sidebar).",
+				)
+			}
+			return undefined
+		}
+		loggedMissingApiProfile = false
+		return buildApiHandler(apiConfiguration)
+	} catch (error) {
+		log?.(
+			`[InlineCompletion] Could not build API handler: ${error instanceof Error ? error.message : String(error)}`,
+		)
+		return undefined
+	}
+}
