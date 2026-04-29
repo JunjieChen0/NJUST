@@ -34,7 +34,7 @@ export default {
 					description: RECURSIVE_PARAMETER_DESCRIPTION,
 				},
 			},
-			required: ["path", "recursive"],
+			required: ["path"],
 			additionalProperties: false,
 		},
 	},

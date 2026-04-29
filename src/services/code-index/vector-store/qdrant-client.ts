@@ -313,7 +313,7 @@ export class QdrantVectorStore implements IVectorStore {
 		}
 
 		// Create indexes for pathSegments fields
-		for (let i = 0; i <= 4; i++) {
+		for (let i = 0; i <= 7; i++) {
 			try {
 				await this.client.createPayloadIndex(this.collectionName, {
 					field_name: `pathSegments.${i}`,
@@ -345,7 +345,8 @@ export class QdrantVectorStore implements IVectorStore {
 		try {
 			const processedPoints = points.map((point) => {
 				if (point.payload?.filePath) {
-					const segments = point.payload.filePath.split(path.sep).filter(Boolean)
+					const normalizedPath = point.payload.filePath.replace(/\\/g, "/")
+					const segments = normalizedPath.split("/").filter(Boolean)
 					const pathSegments = segments.reduce(
 						(acc: Record<string, string>, segment: string, index: number) => {
 							acc[index.toString()] = segment
@@ -449,7 +450,7 @@ export class QdrantVectorStore implements IVectorStore {
 				score_threshold: minScore ?? DEFAULT_SEARCH_MIN_SCORE,
 				limit: maxResults ?? DEFAULT_MAX_SEARCH_RESULTS,
 				params: {
-					hnsw_ef: 128,
+					hnsw_ef: hnswEf ?? 128,
 					exact: false,
 				},
 				with_payload: {
@@ -502,7 +503,8 @@ export class QdrantVectorStore implements IVectorStore {
 				const normalizedRelativePath = path.normalize(relativePath)
 
 				// Split the path into segments like we do in upsertPoints
-				const segments = normalizedRelativePath.split(path.sep).filter(Boolean)
+				const posixPath = normalizedRelativePath.replace(/\\/g, "/")
+				const segments = posixPath.split("/").filter(Boolean)
 
 				// Create a filter that matches all segments of the path
 				// This ensures we only delete points that match the exact file path
@@ -560,11 +562,9 @@ export class QdrantVectorStore implements IVectorStore {
 	async clearCollection(): Promise<void> {
 		try {
 			await this.client.delete(this.collectionName, {
-				filter: {
-					must: [],
-				},
-				wait: true,
-			})
+					filter: {},
+					wait: true,
+				})
 		} catch (error) {
 			console.error("Failed to clear collection:", error)
 			throw error

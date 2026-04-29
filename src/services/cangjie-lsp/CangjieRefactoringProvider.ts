@@ -203,7 +203,7 @@ export class CangjieRefactoringProvider implements vscode.CodeActionProvider {
 		range: vscode.Range,
 		selectedText: string,
 	): Array<{ name: string; inferredType: string }> {
-		const identRe = /\b([a-z_]\w*)\b/g
+		const identRe = /\b([A-Za-z_]\w*)\b/g
 		const usedInSelection = new Set<string>()
 		let m: RegExpExecArray | null
 		while ((m = identRe.exec(selectedText)) !== null) {

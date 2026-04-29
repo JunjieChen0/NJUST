@@ -22,15 +22,16 @@ vi.mock("openai", () => {
 									completion_tokens: 5,
 									total_tokens: 15,
 									prompt_tokens_details: {
-										cache_miss_tokens: 8,
+										cache_write_tokens: 8,
 										cached_tokens: 2,
 									},
 								},
 							}
 						}
 
-						// Check if this is a reasoning_content test by looking at model
-						const isReasonerModel = options.model?.includes("deepseek-reasoner")
+						// Emit reasoning deltas when thinking is enabled (reasoner, V4 + thinking, etc.)
+						const isReasonerModel =
+							options.model?.includes("deepseek-reasoner") || options.thinking?.type === "enabled"
 						const isToolCallTest = options.tools?.length > 0
 
 						// Return async iterator for streaming
@@ -122,7 +123,12 @@ vi.mock("openai", () => {
 import OpenAI from "openai"
 import type { Anthropic } from "@anthropic-ai/sdk"
 
-import { deepSeekDefaultModelId, DEEP_SEEK_DEFAULT_TEMPERATURE, type ModelInfo } from "@njust-ai-cj/types"
+import {
+	deepSeekDefaultModelId,
+	deepSeekModels,
+	DEEP_SEEK_DEFAULT_TEMPERATURE,
+	type ModelInfo,
+} from "@njust-ai-cj/types"
 
 import type { ApiHandlerOptions } from "../../../shared/api"
 
@@ -206,8 +212,8 @@ describe("DeepSeekHandler", () => {
 			const model = handler.getModel()
 			expect(model.id).toBe(mockOptions.apiModelId)
 			expect(model.info).toBeDefined()
-			expect(model.info.maxTokens).toBe(8192) // deepseek-chat has 8K max
-			expect(model.info.contextWindow).toBe(128_000)
+			expect(model.info.maxTokens).toBe(131_072)
+			expect(model.info.contextWindow).toBe(1_000_000)
 			expect(model.info.supportsImages).toBe(false)
 			expect(model.info.supportsPromptCache).toBe(true) // Should be true now
 		})
@@ -220,8 +226,8 @@ describe("DeepSeekHandler", () => {
 			const model = handlerWithReasoner.getModel()
 			expect(model.id).toBe("deepseek-reasoner")
 			expect(model.info).toBeDefined()
-			expect(model.info.maxTokens).toBe(8192) // deepseek-reasoner has 8K max
-			expect(model.info.contextWindow).toBe(128_000)
+			expect(model.info.maxTokens).toBe(131_072)
+			expect(model.info.contextWindow).toBe(1_000_000)
 			expect(model.info.supportsImages).toBe(false)
 			expect(model.info.supportsPromptCache).toBe(true)
 		})
@@ -256,9 +262,9 @@ describe("DeepSeekHandler", () => {
 			expect(model.id).toBe("invalid-model") // Returns provided ID
 			expect(model.info).toBeDefined()
 			// With the current implementation, it's the same object reference when using default model info
-			expect(model.info).toBe(handler.getModel().info)
-			// Should have the same base properties
-			expect(model.info.contextWindow).toBe(handler.getModel().info.contextWindow)
+			expect(model.info).toBe(deepSeekModels[deepSeekDefaultModelId])
+			// Should match default catalog context
+			expect(model.info.contextWindow).toBe(deepSeekModels[deepSeekDefaultModelId].contextWindow)
 			// And should have supportsPromptCache set to true
 			expect(model.info.supportsPromptCache).toBe(true)
 		})
@@ -365,7 +371,7 @@ describe("DeepSeekHandler", () => {
 				completion_tokens: 50,
 				total_tokens: 150,
 				prompt_tokens_details: {
-					cache_miss_tokens: 80,
+					cache_write_tokens: 80,
 					cached_tokens: 20,
 				},
 			}
@@ -473,6 +479,42 @@ describe("DeepSeekHandler", () => {
 			// Verify that the thinking parameter was NOT passed to the API
 			const callArgs = mockCreate.mock.calls[0][0]
 			expect(callArgs.thinking).toBeUndefined()
+		})
+
+		it("should pass thinking disabled for deepseek-v4-flash when reasoning is off", async () => {
+			const h = new DeepSeekHandler({
+				...mockOptions,
+				apiModelId: "deepseek-v4-flash",
+				enableReasoningEffort: false,
+			})
+			const stream = h.createMessage(systemPrompt, messages)
+			for await (const _chunk of stream) {
+				// drain
+			}
+			expect(mockCreate).toHaveBeenCalledWith(
+				expect.objectContaining({
+					thinking: { type: "disabled" },
+				}),
+				{},
+			)
+		})
+
+		it("should pass thinking enabled for deepseek-v4-flash when reasoning is on", async () => {
+			const h = new DeepSeekHandler({
+				...mockOptions,
+				apiModelId: "deepseek-v4-flash",
+				enableReasoningEffort: true,
+			})
+			const stream = h.createMessage(systemPrompt, messages)
+			for await (const _chunk of stream) {
+				// drain
+			}
+			expect(mockCreate).toHaveBeenCalledWith(
+				expect.objectContaining({
+					thinking: { type: "enabled" },
+				}),
+				{},
+			)
 		})
 
 		it("should handle tool calls with reasoning_content", async () => {

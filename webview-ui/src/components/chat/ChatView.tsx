@@ -163,7 +163,28 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 	const autoApproveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 	const userRespondedRef = useRef<boolean>(false)
 	const [currentFollowUpTs, setCurrentFollowUpTs] = useState<number | null>(null)
-	const [aggregatedCostsMap, setAggregatedCostsMap] = useState<
+	const cappedSetAggregatedCostsMap = useCallback(
+		(updater: (prev: typeof aggregatedCostsMap) => typeof aggregatedCostsMap) => {
+			setAggregatedCostsMap((prev) => {
+				const next = updater(prev)
+				if (next.size <= MAX_AGGREGATED_COST_ENTRIES) return next
+				// Evict oldest entries (Map iteration is insertion-ordered)
+				const excess = next.size - MAX_AGGREGATED_COST_ENTRIES
+				let removed = 0
+				for (const key of next.keys()) {
+					if (removed >= excess) break
+					next.delete(key)
+					removed++
+				}
+				return new Map(next)
+			})
+		},
+		[],
+	)
+
+		const MAX_AGGREGATED_COST_ENTRIES = 200
+
+		const [aggregatedCostsMap, setAggregatedCostsMap] = useState<
 		Map<
 			string,
 			{
@@ -672,9 +693,9 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			markFollowUpAsAnswered,
 			sendingDisabled,
 			isStreaming,
-			messageQueue.length,
+			messageQueue,
 			apiConfiguration?.apiProvider,
-		], // messagesRef and clineAskRef are stable
+		], // messageQueue used as object ref, not .length, to avoid stale closure captures
 	)
 
 	const handleSetChatBoxMessage = useCallback(
@@ -1067,13 +1088,18 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			return true
 		})
 
-		const viewportStart = Math.max(0, newVisibleMessages.length - 100)
-		newVisibleMessages
-			.slice(viewportStart)
-			.forEach((msg: ClineMessage) => everVisibleMessagesTsRef.current.set(msg.ts, true))
-
 		return newVisibleMessages
 	}, [modifiedMessages])
+
+	// Side effect extracted from useMemo: track visible message timestamps.
+	// Must be in useEffect — React strict mode double-fires useMemo,
+	// and side effects inside useMemo are a documented anti-pattern.
+	useEffect(() => {
+		const viewportStart = Math.max(0, visibleMessages.length - 100)
+		visibleMessages
+			.slice(viewportStart)
+			.forEach((msg: ClineMessage) => everVisibleMessagesTsRef.current.set(msg.ts, true))
+	}, [visibleMessages])
 
 	useEffect(() => {
 		const cleanupInterval = setInterval(() => {
@@ -1087,7 +1113,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 					cache.delete(key)
 				}
 			})
-		}, 60000)
+		}, 30000)
 
 		return () => clearInterval(cleanupInterval)
 	}, [modifiedMessages, visibleMessages])

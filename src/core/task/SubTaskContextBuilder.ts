@@ -11,7 +11,7 @@
  * inspired by Claude Code's Fork isolation mode.
  */
 
-import type { SubTaskOptions, IsolationLevel, ForkedContextConfig } from "./SubTaskOptions"
+import type { SubTaskOptions, IsolationLevel, ForkedContextConfig, CacheSafeParams } from "./SubTaskOptions"
 import { DEFAULT_FORKED_CONTEXT_CONFIG } from "./SubTaskOptions"
 
 export interface ForkedContext {
@@ -199,6 +199,72 @@ export function generateParentContextSummary(
 	}
 
 	return summary || "(No parent context available)"
+}
+
+/**
+ * Cache-aware fork context result: messages that share the parent's prompt
+ * cache prefix, with only the final user message differing per child.
+ */
+export interface CacheAwareForkContext {
+	/** Messages to use as the fork's initial conversation */
+	messages: Array<{ role: string; content: any }>
+	/** Cache-safe params for the forked agent to reuse */
+	cacheSafeParams: CacheSafeParams
+}
+
+/**
+ * Build a cache-aware fork context that maximizes prompt cache reuse.
+ *
+ * Instead of a plain-text summary (which produces a completely new prompt),
+ * this approach preserves the parent's messages as a byte-identical prefix
+ * and only appends a single user message with the task description.
+ *
+ * The provider's prompt cache key includes: system prompt + tools + model +
+ * messages (prefix) + thinking config. By keeping all of these identical
+ * between parent and fork, the cache hit rate approaches 100%.
+ */
+export function buildCacheAwareForkContext(
+	taskDescription: string,
+	cacheSafeParams: CacheSafeParams,
+): CacheAwareForkContext {
+	const { forkContextMessages } = cacheSafeParams
+
+	// Build the fork's initial message array:
+	// 1. Parent's full conversation prefix (byte-identical for cache hit)
+	// 2. Single user message with the task description (only new content)
+	const messages: Array<{ role: string; content: any }> = []
+
+	if (forkContextMessages && forkContextMessages.length > 0) {
+		messages.push(...forkContextMessages)
+	}
+
+	messages.push({
+		role: "user",
+		content: taskDescription,
+	})
+
+	return { messages, cacheSafeParams }
+}
+
+/**
+ * Build a fork placeholder tool_result. Byte-identical across all fork
+ * children to maximize cache hits when the parent continues after spawning.
+ */
+export function buildForkPlaceholderResult(
+	toolUseId: string,
+	message: string = "Fork started -- processing in background",
+): { role: string; content: any } {
+	return {
+		role: "user",
+		content: [
+			{
+				type: "tool_result",
+				tool_use_id: toolUseId,
+				content: message,
+			},
+		],
+	}
+}
 }
 
 /**

@@ -90,8 +90,34 @@ export class ConcurrentToolExecutor {
 			}
 
 			const category = itemCategories?.get(idx)
-			if (category && this.scheduler) await this.scheduler.acquire(category)
-			if (category && this.concurrencyController) await this.concurrencyController.acquire(category)
+			let schedulerAcquired = false
+			let concurrencyAcquired = false
+			if (category && this.scheduler) {
+				await this.scheduler.acquire(category)
+				schedulerAcquired = true
+			}
+			// Lock ordering invariant (scheduler → concurrency → scheduler):
+			//   1. Acquire scheduler first
+			//   2. Release scheduler before blocking on concurrency controller
+			//   3. Acquire concurrency controller
+			//   4. Re-acquire scheduler
+			//   5. Release in reverse: scheduler → concurrency
+			// This order prevents deadlock: no code path holds concurrency
+			// while waiting for scheduler, and vice versa never overlaps.
+			// DO NOT alter without auditing all callers for circular wait.
+			if (schedulerAcquired && category && this.concurrencyController) {
+				this.scheduler?.release(category)
+				schedulerAcquired = false
+			}
+			if (category && this.concurrencyController) {
+				await this.concurrencyController.acquire(category)
+				concurrencyAcquired = true
+			}
+			// Re-acquire scheduler after concurrency slot is secured.
+			if (concurrencyAcquired && category && this.scheduler) {
+				await this.scheduler.acquire(category)
+				schedulerAcquired = true
+			}
 
 			try {
 				await fn(items[idx], idx, { siblingAbortController, signal: siblingAbortController.signal })
@@ -102,8 +128,8 @@ export class ConcurrentToolExecutor {
 					siblingAbortController.abort(err)
 				}
 			} finally {
-				if (category && this.concurrencyController) this.concurrencyController.release(category)
-				if (category && this.scheduler) this.scheduler.release(category)
+				if (schedulerAcquired) this.scheduler!.release(category!)
+				if (concurrencyAcquired) this.concurrencyController!.release(category!)
 			}
 		}
 
@@ -124,7 +150,7 @@ export class ConcurrentToolExecutor {
 			})()
 		}
 
-		await Promise.all(workerTasks)
+		await Promise.allSettled(workerTasks)
 
 		if (errors.length > 0) {
 			const messages = errors.map((e) => `[item ${e.index}] ${e.error instanceof Error ? e.error.message : String(e.error)}`)

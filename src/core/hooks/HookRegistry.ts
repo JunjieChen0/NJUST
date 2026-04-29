@@ -4,8 +4,15 @@
  * Manages registration and execution of hooks with priority ordering.
  * Inspired by Claude Code's AsyncHookRegistry.
  *
- * Initially serves as an internal extension point. Can be opened to
- * users/plugins in future iterations.
+ * **@deprecated** — prefer {@link ToolHookManager} for new integrations.
+ * ToolHookManager provides richer context objects, typed handlers, and
+ * support for preToolUse/postToolUse/postToolUseFailure/preCompact/postCompact
+ * hooks. This registry will be kept for backward compatibility but new
+ * integrations should use ToolHookManager.instance.register().
+ *
+ * Migration guide:
+ *   HookRegistry.register("preCompact", ...)  →  ToolHookManager.instance.onPreCompact(...)
+ *   HookRegistry.register("postCompact", ...) →  ToolHookManager.instance.onPostCompact(...)
  */
 
 import { HookType, AnyHookContext, HookHandler, RegisteredHook, HookResult } from "./types"
@@ -80,8 +87,14 @@ export class HookRegistry {
 					}
 				}
 			} catch (error) {
-				// Hook errors should not crash the main flow
 				console.error(`[HookRegistry] Hook "${hook.name}" (${hook.hookType}) threw:`, error)
+				// For pre-hooks, treat exceptions as abort to prevent security bypass.
+				if (context.hookType.startsWith("pre")) {
+					return {
+						abort: true,
+						message: `Aborted: hook "${hook.name}" threw an error: ${error instanceof Error ? error.message : String(error)}`,
+					}
+				}
 			}
 		}
 

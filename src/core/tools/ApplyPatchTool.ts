@@ -17,6 +17,12 @@ import { BaseTool, ToolCallbacks } from "./BaseTool"
 import type { ToolUse } from "../../shared/tools"
 import { parsePatch, ParseError, processAllHunks } from "./apply-patch"
 import type { ApplyPatchFileChange } from "./apply-patch"
+import {
+	cangjiePreflightCheck,
+	buildSearchGateWarning,
+	CRITICAL_SIGNATURE_MODULES,
+	resolveRootPackageName,
+} from "./cangjiePreflightCheck"
 
 interface ApplyPatchParams {
 	patch: string
@@ -25,6 +31,15 @@ interface ApplyPatchParams {
 export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 	readonly name = "apply_patch" as const
 	override readonly requiresCheckpoint = true
+
+	override isConcurrencySafe(_params?: ApplyPatchParams): boolean {
+		return true
+	}
+
+	private isBuildAffectingPath(relPath: string): boolean {
+		const lowerPath = relPath.toLowerCase()
+		return lowerPath.endsWith(".cj") || lowerPath.endsWith(".toml")
+	}
 
 	override interruptBehavior(): "cancel" | "block" {
 		return "block"
@@ -159,6 +174,18 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 	): Promise<void> {
 		const { askApproval, pushToolResult } = callbacks
 
+		// Block writes outside workspace for safety (path traversal attack prevention)
+		if (isPathOutsideWorkspace(absolutePath)) {
+			task.consecutiveMistakeCount++
+			task.recordToolError("apply_patch")
+			pushToolResult(
+				formatResponse.toolError(
+					`Safety: cannot create file outside workspace: ${getReadablePath(task.cwd, relPath)}`,
+				),
+			)
+			return
+		}
+
 		// Check if file already exists
 		const fileExists = await fileExistsAtPath(absolutePath)
 		if (fileExists) {
@@ -171,6 +198,56 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		}
 
 		const newContent = change.newContent || ""
+		if (task.taskMode === "cangjie") {
+			const structureError = await task.cangjieRuntimePolicy.validateProjectStructureForWrite(relPath, newContent)
+			if (structureError) {
+				task.recordToolError("apply_patch", structureError)
+				pushToolResult(formatResponse.toolError(structureError))
+				return
+			}
+		}
+		let cangjiePostWriteWarnings = ""
+		if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+			const initError = await task.cangjieRuntimePolicy.ensureProjectInitializedForWrite(relPath)
+			if (initError) {
+				task.recordToolError("apply_patch", initError)
+				pushToolResult(formatResponse.toolError(initError))
+				return
+			}
+			const rootPkg = await resolveRootPackageName(task.cwd)
+			const preflight = cangjiePreflightCheck(newContent, relPath, task.cwd, rootPkg)
+			if (!preflight.pass) {
+				const errorMsg =
+					`Cangjie preflight failed; patch was not applied:\n` +
+					preflight.errors.map((e) => `- ${e}`).join("\n")
+				task.recordToolError("apply_patch", errorMsg)
+				pushToolResult(formatResponse.toolError(errorMsg))
+				return
+			}
+			if (preflight.warnings.length > 0) {
+				cangjiePostWriteWarnings =
+					`\n\n<cangjie_preflight_warnings>\n` +
+					preflight.warnings.map((w) => `- ${w}`).join("\n") +
+					`\n</cangjie_preflight_warnings>`
+			}
+			const searchGate = buildSearchGateWarning(
+				newContent,
+				task.cangjieSearchHistory ?? new Set(),
+				CRITICAL_SIGNATURE_MODULES,
+			)
+			if (searchGate) {
+				cangjiePostWriteWarnings += searchGate
+			}
+			const missingEvidence = task.cangjieRuntimePolicy.getMissingImportEvidence(undefined, newContent)
+			if (missingEvidence.length > 0) {
+				const errorMsg =
+					`Missing bundled corpus evidence for newly introduced stdlib modules: ${missingEvidence.join(", ")}. ` +
+					`Use search_files or read_file against the bundled CangjieCorpus before editing this code.`
+				task.recordToolError("apply_patch", errorMsg)
+				pushToolResult(formatResponse.toolError(errorMsg))
+				return
+			}
+		}
 		const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)
 
 		// Initialize diff view for new file
@@ -234,9 +311,10 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		// Track file edit operation
 		await task.fileContextTracker.trackFileContext(relPath, "roo_edited" as RecordSource)
 		task.didEditFile = true
+		task.cangjieRuntimePolicy.noteWriteApplied(relPath, undefined, newContent)
 
 		const message = await task.diffViewProvider.pushToolWriteResult(task, task.cwd, true)
-		pushToolResult(message)
+		pushToolResult(message + cangjiePostWriteWarnings)
 		await task.diffViewProvider.reset()
 		task.processQueuedMessages()
 	}
@@ -249,6 +327,18 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		isWriteProtected: boolean,
 	): Promise<void> {
 		const { askApproval, pushToolResult } = callbacks
+
+		// Block deletes outside workspace for safety (path traversal attack prevention)
+		if (isPathOutsideWorkspace(absolutePath)) {
+			task.consecutiveMistakeCount++
+			task.recordToolError("apply_patch")
+			pushToolResult(
+				formatResponse.toolError(
+					`Safety: cannot delete file outside workspace: ${getReadablePath(task.cwd, relPath)}`,
+				),
+			)
+			return
+		}
 
 		// Check if file exists
 		const fileExists = await fileExistsAtPath(absolutePath)
@@ -294,6 +384,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		}
 
 		task.didEditFile = true
+		task.cangjieRuntimePolicy.notePathDeleted(relPath)
 		pushToolResult(`Successfully deleted ${relPath}`)
 		task.processQueuedMessages()
 	}
@@ -308,6 +399,18 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 	): Promise<void> {
 		const { askApproval, pushToolResult } = callbacks
 
+		// Block writes outside workspace for safety (path traversal attack prevention)
+		if (isPathOutsideWorkspace(absolutePath)) {
+			task.consecutiveMistakeCount++
+			task.recordToolError("apply_patch")
+			pushToolResult(
+				formatResponse.toolError(
+					`Safety: cannot update file outside workspace: ${getReadablePath(task.cwd, relPath)}`,
+				),
+			)
+			return
+		}
+
 		// Check if file exists
 		const fileExists = await fileExistsAtPath(absolutePath)
 		if (!fileExists) {
@@ -321,6 +424,58 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 
 		const originalContent = change.originalContent || ""
 		const newContent = change.newContent || ""
+		const targetRelPath = change.movePath ?? relPath
+		const targetAbsolutePath = path.resolve(task.cwd, targetRelPath)
+		if (task.taskMode === "cangjie") {
+			const structureError = await task.cangjieRuntimePolicy.validateProjectStructureForWrite(targetRelPath, newContent)
+			if (structureError) {
+				task.recordToolError("apply_patch", structureError)
+				pushToolResult(formatResponse.toolError(structureError))
+				return
+			}
+		}
+		let cangjiePostWriteWarnings = ""
+		if (targetAbsolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+			const initError = await task.cangjieRuntimePolicy.ensureProjectInitializedForWrite(targetRelPath)
+			if (initError) {
+				task.recordToolError("apply_patch", initError)
+				pushToolResult(formatResponse.toolError(initError))
+				return
+			}
+			const rootPkg = await resolveRootPackageName(task.cwd)
+			const preflight = cangjiePreflightCheck(newContent, targetRelPath, task.cwd, rootPkg)
+			if (!preflight.pass) {
+				const errorMsg =
+					`Cangjie preflight failed; patch was not applied:\n` +
+					preflight.errors.map((e) => `- ${e}`).join("\n")
+				task.recordToolError("apply_patch", errorMsg)
+				pushToolResult(formatResponse.toolError(errorMsg))
+				return
+			}
+			if (preflight.warnings.length > 0) {
+				cangjiePostWriteWarnings =
+					`\n\n<cangjie_preflight_warnings>\n` +
+					preflight.warnings.map((w) => `- ${w}`).join("\n") +
+					`\n</cangjie_preflight_warnings>`
+			}
+			const searchGate = buildSearchGateWarning(
+				newContent,
+				task.cangjieSearchHistory ?? new Set(),
+				CRITICAL_SIGNATURE_MODULES,
+			)
+			if (searchGate) {
+				cangjiePostWriteWarnings += searchGate
+			}
+			const missingEvidence = task.cangjieRuntimePolicy.getMissingImportEvidence(originalContent, newContent)
+			if (missingEvidence.length > 0) {
+				const errorMsg =
+					`Missing bundled corpus evidence for newly introduced stdlib modules: ${missingEvidence.join(", ")}. ` +
+					`Use search_files or read_file against the bundled CangjieCorpus before editing this code.`
+				task.recordToolError("apply_patch", errorMsg)
+				pushToolResult(formatResponse.toolError(errorMsg))
+				return
+			}
+		}
 		const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)
 
 		// Initialize diff view
@@ -454,9 +609,13 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		}
 
 		task.didEditFile = true
+		if (change.movePath && this.isBuildAffectingPath(relPath) && !this.isBuildAffectingPath(change.movePath)) {
+			task.cangjieRuntimePolicy.notePathDeleted(relPath)
+		}
+		task.cangjieRuntimePolicy.noteWriteApplied(targetRelPath, originalContent, newContent)
 
 		const message = await task.diffViewProvider.pushToolWriteResult(task, task.cwd, false)
-		pushToolResult(message)
+		pushToolResult(message + cangjiePostWriteWarnings)
 		await task.diffViewProvider.reset()
 		task.processQueuedMessages()
 	}

@@ -9,22 +9,18 @@ const generateDiagnosticText = (diagnostics?: any[]) => {
 }
 
 export const createPrompt = (template: string, params: PromptParams): string => {
-	return template.replace(/\${(.*?)}/g, (_, key) => {
+	return template.replace(/\$\{(\w+)\}/g, (match, key) => {
 		if (key === "diagnosticText") {
 			return generateDiagnosticText(params["diagnostics"] as any[])
-			// eslint-disable-next-line no-prototype-builtins
-		} else if (params.hasOwnProperty(key)) {
-			// Ensure the value is treated as a string for replacement
+		} else if (key in params) {
 			const value = params[key]
 			if (typeof value === "string") {
 				return value
-			} else {
-				// Convert non-string values to string for replacement
-				return String(value)
 			}
+			return String(value)
 		} else {
-			// If the placeholder key is not in params, replace with empty string
-			return ""
+			console.warn(`[support-prompt] Missing variable: ${key}`)
+			return match // Keep original placeholder, don't silently clear
 		}
 	})
 }

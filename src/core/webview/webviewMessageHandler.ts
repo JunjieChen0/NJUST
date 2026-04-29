@@ -78,6 +78,7 @@ import { getCommand } from "../../utils/commands"
 const ALLOWED_VSCODE_SETTINGS = new Set(["terminal.integrated.inheritEnv"])
 
 import { setPendingTodoList } from "../tools/UpdateTodoListTool"
+import { debugLog } from "../../utils/debugLog"
 export const webviewMessageHandler = async (provider: ClineProvider, message: WebviewMessage) => {
 	// Utility functions provided for concise get/update of global state via contextProxy API.
 	const getGlobalState = <K extends keyof GlobalState>(key: K) => provider.contextProxy.getValue(key)
@@ -493,7 +494,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			console.error("Error in edit message:", error)
 			vscode.window.showErrorMessage(
 				t("common:errors.message.error_editing_message", {
-					error: error instanceof Error ? error.message : String(error),
+					error: error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error),
 				}),
 			)
 		}
@@ -613,7 +614,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				await provider.postMessageToWebview({ type: "invoke", invoke: "newChat" })
 				// Show error to user
 				vscode.window.showErrorMessage(
-					`Failed to create task: ${error instanceof Error ? error.message : String(error)}`,
+					`Failed to create task: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`,
 				)
 			}
 			break
@@ -876,7 +877,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 						} catch (error) {
 							// Keep error logging for debugging purposes
 							console.log(
-								`Failed to delete task ${id}: ${error instanceof Error ? error.message : String(error)}`,
+								`Failed to delete task ${id}: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`,
 							)
 							return { id, success: false }
 						}
@@ -923,7 +924,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					type: "taskWithAggregatedCosts",
 					// Include taskId when available for correlation in UI logs.
 					text: message.text,
-					error: error instanceof Error ? error.message : String(error),
+					error: error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error),
 				})
 			}
 			break
@@ -1102,7 +1103,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				}
 			} catch (error) {
 				// Silently fail - user hasn't configured Ollama yet
-				console.debug("Ollama models fetch failed:", error)
+				debugLog("Ollama models fetch failed:", error)
 			}
 			break
 		}
@@ -1127,7 +1128,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				}
 			} catch (error) {
 				// Silently fail - user hasn't configured LM Studio yet.
-				console.debug("LM Studio models fetch failed:", error)
+				debugLog("LM Studio models fetch failed:", error)
 			}
 			break
 		}
@@ -1149,7 +1150,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				values: { provider: "roo", models: rooModels },
 			})
 		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : String(error)
+			const errorMessage = error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)
 			provider.postMessageToWebview({
 				type: "singleRouterModelFetchResponse",
 				success: false,
@@ -1244,7 +1245,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				const content = await fs.readFile(absPath, "utf-8")
 				provider.postMessageToWebview({ type: "fileContent", fileContent: { path: relPath, content } })
 			} catch (err) {
-				const errorMsg = err instanceof Error ? err.message : String(err)
+				const errorMsg = err instanceof Error ? err instanceof Error ? err.message : String(err) : String(err)
 				provider.postMessageToWebview({
 					type: "fileContent",
 					fileContent: { path: relPath, content: null, error: errorMsg },
@@ -1257,7 +1258,12 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			break
 		case "openExternal":
 			if (message.url) {
-				vscode.env.openExternal(vscode.Uri.parse(message.url))
+				const parsed = vscode.Uri.parse(message.url)
+				if (parsed.scheme !== "http" && parsed.scheme !== "https") {
+					vscode.window.showErrorMessage(`Only HTTP/HTTPS URLs are allowed. Got: ${parsed.scheme}`)
+					break
+				}
+				vscode.env.openExternal(parsed)
 			}
 			break
 		case "checkpointDiff":
@@ -1396,7 +1402,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				// Refresh the webview state
 				await provider.postStateToWebview()
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
+				const errorMessage = error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)
 				provider.log(`Failed to delete MCP server: ${errorMessage}`)
 				// Error messages are already handled by McpHub.deleteServer
 			}
@@ -1529,7 +1535,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					await provider.postMessageToWebview({
 						type: "vsCodeSetting",
 						setting,
-						error: `Failed to get setting: ${error.message}`,
+						error: `Failed to get setting: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`,
 						value: undefined,
 					})
 				}
@@ -1560,7 +1566,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				break
 			}
 
-			if (typeof message.value !== "number" || !message.value) {
+			if (typeof message.value !== "number" || !Number.isFinite(message.value) || message.value <= 0) {
 				await vscode.window.showErrorMessage(t("common:errors.message.invalid_timestamp_for_deletion"))
 				break
 			}
@@ -1746,11 +1752,11 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				})
 			} catch (error) {
 				provider.log(
-					`transcribeAudio: ${error instanceof Error ? error.message : JSON.stringify(error)}`,
+					`transcribeAudio: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : JSON.stringify(error)}`,
 				)
 				await postError({
 					errorI18nKey: "chat:voiceInput.errorTranscriptionFailed",
-					detail: error instanceof Error ? error.message : String(error),
+					detail: error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error),
 				})
 			}
 			break
@@ -1857,7 +1863,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					tempController?.dispose()
 				}
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
+				const errorMessage = error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)
 
 				// Send error response to webview
 				await provider.postMessageToWebview({
@@ -1890,7 +1896,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				await provider.postMessageToWebview({
 					type: "customToolsResult",
 					tools: [],
-					error: error instanceof Error ? error.message : String(error),
+					error: error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error),
 				})
 			}
 
@@ -2133,7 +2139,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 						vscode.window.showErrorMessage(
 							t("common:errors.delete_rules_folder_failed", {
 								rulesFolderPath,
-								error: error instanceof Error ? error.message : String(error),
+								error: error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error),
 							}),
 						)
 						// Continue with mode deletion even if folder deletion fails
@@ -2210,7 +2216,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 						})
 					}
 				} catch (error) {
-					const errorMessage = error instanceof Error ? error.message : String(error)
+					const errorMessage = error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)
 					provider.log(`Failed to export mode ${message.slug}: ${errorMessage}`)
 
 					// Send error message to webview
@@ -2301,7 +2307,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					})
 				}
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
+				const errorMessage = error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)
 				provider.log(`Failed to import mode: ${errorMessage}`)
 
 				// Send error message to webview
@@ -2352,7 +2358,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					.catch((error) => {
 						provider.log(`OpenAI Codex OAuth callback failed: ${error}`)
 						if (!String(error).includes("timed out")) {
-							vscode.window.showErrorMessage(`OpenAI Codex sign in failed: ${error.message || error}`)
+							vscode.window.showErrorMessage(`OpenAI Codex sign in failed: ${error instanceof Error ? error.message : String(error)}`)
 						}
 					})
 			} catch (error) {
@@ -2465,7 +2471,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 						} catch (error) {
 							// Validation failed - the error state is already set by handleSettingsChange
 							provider.log(
-								`Embedder validation failed after provider change: ${error instanceof Error ? error.message : String(error)}`,
+								`Embedder validation failed after provider change: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`,
 							)
 							// Send validation error to webview
 							await provider.postMessageToWebview({
@@ -2482,7 +2488,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 						} catch (error) {
 							// Log but don't fail - settings are saved
 							provider.log(
-								`Settings change handling error: ${error instanceof Error ? error.message : String(error)}`,
+								`Settings change handling error: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`,
 							)
 						}
 					}
@@ -2498,7 +2504,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 								provider.log(`Code index manager initialized after settings save`)
 							} catch (error) {
 								provider.log(
-									`Code index initialization failed: ${error instanceof Error ? error.message : String(error)}`,
+									`Code index initialization failed: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`,
 								)
 								// Send error status to webview
 								await provider.postMessageToWebview({
@@ -2523,11 +2529,11 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					})
 				}
 			} catch (error) {
-				provider.log(`Error saving code index settings: ${error.message || error}`)
+				provider.log(`Error saving code index settings: ${error instanceof Error ? error.message : String(error) || error}`)
 				await provider.postMessageToWebview({
 					type: "codeIndexSettingsSaved",
 					success: false,
-					error: error.message || "Failed to save settings",
+					error: error instanceof Error ? error.message : "Failed to save settings",
 				})
 			}
 			break
@@ -2633,7 +2639,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					}
 				}
 			} catch (error) {
-				provider.log(`Error starting indexing: ${error instanceof Error ? error.message : String(error)}`)
+				provider.log(`Error starting indexing: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`)
 			}
 			break
 		}
@@ -2650,7 +2656,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					values: manager.getCurrentStatus(),
 				})
 			} catch (error) {
-				provider.log(`Error stopping indexing: ${error instanceof Error ? error.message : String(error)}`)
+				provider.log(`Error stopping indexing: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`)
 			}
 			break
 		}
@@ -2675,7 +2681,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				})
 			} catch (error) {
 				provider.log(
-					`Error toggling workspace indexing: ${error instanceof Error ? error.message : String(error)}`,
+					`Error toggling workspace indexing: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`,
 				)
 			}
 			break
@@ -2708,7 +2714,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				})
 			} catch (error) {
 				provider.log(
-					`Error setting auto-enable default: ${error instanceof Error ? error.message : String(error)}`,
+					`Error setting auto-enable default: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`,
 				)
 			}
 			break
@@ -2730,12 +2736,12 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				await manager.clearIndexData()
 				provider.postMessageToWebview({ type: "indexCleared", values: { success: true } })
 			} catch (error) {
-				provider.log(`Error clearing index data: ${error instanceof Error ? error.message : String(error)}`)
+				provider.log(`Error clearing index data: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`)
 				provider.postMessageToWebview({
 					type: "indexCleared",
 					values: {
 						success: false,
-						error: error instanceof Error ? error.message : String(error),
+						error: error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error),
 					},
 				})
 			}
@@ -2817,7 +2823,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					text: JSON.stringify({ status: "ok", provider: providerName }),
 				})
 			} catch (error) {
-				const msg = error instanceof Error ? error.message : String(error)
+				const msg = error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)
 				await provider.postMessageToWebview({
 					type: "webSearchStatus",
 					text: JSON.stringify({ status: "error", message: msg }),
@@ -3044,7 +3050,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					})
 				} catch (error) {
 					// Fail silently as per Bruno's comment - it's OK to fail silently in this case
-					provider.log(`Failed to dismiss upsell: ${error instanceof Error ? error.message : String(error)}`)
+					provider.log(`Failed to dismiss upsell: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}`)
 				}
 			}
 			break
@@ -3072,7 +3078,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					const doc = await vscode.workspace.openTextDocument(tempFilePath)
 					await vscode.commands.executeCommand("markdown.showPreview", doc.uri)
 				} catch (error) {
-					const errorMessage = error instanceof Error ? error.message : String(error)
+					const errorMessage = error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)
 					provider.log(`Error opening markdown preview: ${errorMessage}`)
 					vscode.window.showErrorMessage(`Failed to open markdown preview: ${errorMessage}`)
 				}
@@ -3102,7 +3108,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 					values: rateLimits,
 				})
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
+				const errorMessage = error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)
 				provider.log(`Error fetching OpenAI Codex rate limits: ${errorMessage}`)
 				provider.postMessageToWebview({
 					type: "openAiCodexRateLimits",
@@ -3161,7 +3167,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				const doc = await vscode.workspace.openTextDocument(tempFilePath)
 				await vscode.window.showTextDocument(doc, { preview: true })
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : String(error)
+				const errorMessage = error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)
 				provider.log(`Error opening debug history: ${errorMessage}`)
 				vscode.window.showErrorMessage(`Failed to open debug history: ${errorMessage}`)
 			}

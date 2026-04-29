@@ -344,6 +344,12 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				document.removeEventListener("mousedown", handleClickOutside)
 			}
 		}, [showContextMenu, setShowContextMenu])
+	useEffect(() => {
+		return () => {
+			if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+		}
+	}, [])
+
 
 		const handleMentionSelect = useCallback(
 			(type: ContextMenuOptionType, value?: string) => {
@@ -790,10 +796,14 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				return commands?.some((cmd) => cmd.name === commandName) || false
 			}
 
-			// Process the text to highlight mentions and valid commands
+			// Process the text to highlight mentions and valid commands.
+			// HTML-escape characters BEFORE injecting <mark> tags to prevent XSS.
 			let processedText = text
 				.replace(/\n$/, "\n\n")
-				.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c] || c)
+				// Single-pass regex callback: each source character is replaced
+				// exactly once. No double-escaping can occur — the callback
+				// runs per matched character, not sequentially against output.
+				.replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c] || c)
 				.replace(mentionRegexGlobal, '<mark class="mention-context-textarea-highlight">$&</mark>')
 
 			// Custom replacement for commands - only highlight valid ones

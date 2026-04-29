@@ -3,6 +3,7 @@ import path from "path"
 import { type ClineSayTool } from "@njust-ai-cj/types"
 
 import { Task } from "../task/Task"
+import { validateRegexPattern } from "../../utils/safeRegex"
 import { getReadablePath } from "../../utils/path"
 import { ignoreAbortError } from "../../utils/errorHandling"
 import { isPathUnderBundledCangjieCorpus, isPathPotentiallyUnderCangjieCorpus, getBundledCangjieCorpusPath } from "../../utils/bundledCangjieCorpus"
@@ -56,11 +57,10 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 		if (!params.regex || params.regex.trim() === "") {
 			return { valid: false, error: "Search regex pattern is required and cannot be empty." }
 		}
-		// Validate regex syntax
-		try {
-			new RegExp(params.regex)
-		} catch {
-			return { valid: false, error: `Invalid regex pattern: ${params.regex}` }
+		// Validate regex safety (ReDoS protection + syntax)
+		const regexSafety = validateRegexPattern(params.regex)
+		if (!regexSafety.valid) {
+			return { valid: false, error: `Invalid regex: ${regexSafety.reason}` }
 		}
 		if (!params.path || params.path.trim() === "") {
 			return { valid: false, error: "Search path is required and cannot be empty." }
@@ -110,6 +110,7 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 			if (isUnderCangjieCorpus && task.taskMode === "cangjie") {
 				const stdModules = extractStdModulesFromQuery(regex, semanticQuery)
 				for (const m of stdModules) task.cangjieSearchHistory.add(m)
+				task.cangjieRuntimePolicy.noteCorpusSearch(stdModules, semanticQuery ?? regex)
 			}
 		}
 

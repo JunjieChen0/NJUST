@@ -51,6 +51,7 @@ type OrchestratorEvents = {
 export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 	private agents: Map<string, AgentInfo> = new Map()
 	private sharedContext: SharedContext
+	private sharedContextMutex: Promise<void> = Promise.resolve() // Serializes writes to sharedContext
 	private activeTasks: Map<string, Task> = new Map()
 
 	constructor(
@@ -75,26 +76,58 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 			`[AgentOrchestrator] Starting ${specs.length} parallel tasks`,
 		)
 
+		// Detect cycles in dependency graph before scheduling
+		const cycleNodes = this.detectCycles(specs)
+		if (cycleNodes.length > 0) {
+			const cycleDescriptions = cycleNodes.join(" -> ")
+			throw new Error(
+				`Circular dependency detected among agents: ${cycleDescriptions}. ` +
+				`Tasks involved in cycles cannot be scheduled.`,
+			)
+		}
+
 		const independentSpecs = specs.filter((s) => !s.dependencies?.length)
 		const dependentSpecs = specs.filter((s) => s.dependencies?.length)
 
 		const independentResults = await this.runBatch(independentSpecs)
-
 		const allResults = [...independentResults]
+		const completedIds = new Set(
+			independentResults.filter((r) => r.status === "completed").map((r) => r.agentId),
+		)
 
-		if (dependentSpecs.length > 0) {
-			const completedIds = new Set(
-				independentResults.filter((r) => r.status === "completed").map((r) => r.agentId),
-			)
-
-			const readyDependents = dependentSpecs.filter((s) =>
+		// Resolve dependencies level by level (topological order)
+		let remainingDeps = [...dependentSpecs]
+		while (remainingDeps.length > 0) {
+			const readyDependents = remainingDeps.filter((s) =>
 				s.dependencies!.every((dep) => completedIds.has(dep)),
 			)
 
-			if (readyDependents.length > 0) {
-				const depResults = await this.runBatch(readyDependents)
-				allResults.push(...depResults)
+			if (readyDependents.length === 0) {
+				// Dependencies can never be satisfied (should not happen after cycle check,
+				// but handle gracefully for external dependency references)
+				for (const spec of remainingDeps) {
+					const missingDeps = spec.dependencies!.filter((dep) => !completedIds.has(dep))
+					allResults.push({
+						agentId: `unresolved-${spec.mode}`,
+						taskId: "",
+						mode: spec.mode,
+						status: "failed",
+						error: `Unresolved dependencies: ${missingDeps.join(", ")}`,
+					})
+				}
+				break
 			}
+
+			const depResults = await this.runBatch(readyDependents)
+			allResults.push(...depResults)
+			for (const r of depResults) {
+				if (r.status === "completed") {
+					completedIds.add(r.agentId)
+				}
+			}
+			remainingDeps = remainingDeps.filter(
+				(s) => !readyDependents.includes(s),
+			)
 		}
 
 		this.emit("allCompleted", allResults)
@@ -105,6 +138,71 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 		)
 
 		return allResults
+	}
+
+	/**
+	 * Detects cycles in the dependency graph using DFS.
+	 * Returns the first cycle path found, or an empty array if the graph is acyclic.
+	 */
+	private detectCycles(specs: ParallelTaskSpec[]): string[] {
+		const specNodes = new Map<string, ParallelTaskSpec>()
+		for (const spec of specs) {
+			specNodes.set(spec.mode, spec)
+		}
+
+		const WHITE = 0, GRAY = 1, BLACK = 2
+		const color = new Map<string, number>()
+		const parent = new Map<string, string>()
+
+		for (const node of specNodes.keys()) {
+			color.set(node, WHITE)
+		}
+
+		for (const node of specNodes.keys()) {
+			if (color.get(node) === WHITE) {
+				const cycle = this.dfsVisit(node, specNodes, color, parent)
+				if (cycle.length > 0) return cycle
+			}
+		}
+		return []
+	}
+
+	private dfsVisit(
+		node: string,
+		nodes: Map<string, ParallelTaskSpec>,
+		color: Map<string, number>,
+		parent: Map<string, string>,
+	): string[] {
+		color.set(node, 1) // GRAY
+
+		const spec = nodes.get(node)
+		if (spec?.dependencies) {
+			for (const dep of spec.dependencies) {
+				// Skip dependencies that reference agents outside the current spec set
+				if (!nodes.has(dep)) continue
+
+				const depColor = color.get(dep)
+				if (depColor === 1) {
+					// Back edge found — extract the cycle path
+					const cycle: string[] = [dep, node]
+					let current = node
+					while (parent.has(current) && parent.get(current) !== dep) {
+						current = parent.get(current)!
+						cycle.push(current)
+					}
+					cycle.push(dep)
+					cycle.reverse()
+					return cycle
+				} else if (depColor === 0) {
+					parent.set(dep, node)
+					const cycle = this.dfsVisit(dep, nodes, color, parent)
+					if (cycle.length > 0) return cycle
+				}
+			}
+		}
+
+		color.set(node, 2) // BLACK
+		return []
 	}
 
 	private async runBatch(specs: ParallelTaskSpec[]): Promise<ParallelTaskResult[]> {
@@ -150,6 +248,7 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 
 			agent.taskId = task.taskId
 			this.activeTasks.set(agentId, task)
+			try {
 
 			const result = await this.waitForCompletion(task)
 
@@ -167,7 +266,9 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 				result,
 			}
 
-			this.activeTasks.delete(agentId)
+			} finally {
+				this.activeTasks.delete(agentId)
+			}
 			return taskResult
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error)
@@ -175,7 +276,6 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 			agent.completedAt = Date.now()
 
 			this.emit("agentFailed", agent, errorMsg)
-			this.activeTasks.delete(agentId)
 
 			return {
 				agentId,
@@ -247,6 +347,17 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 		return parts.length > 0
 			? `[Shared Context]\n${parts.join("\n\n")}\n[End Shared Context]`
 			: ""
+	}
+
+	// Run an async operation under the shared-context mutex to prevent
+	// interleaved writes to Set/Map from parallel agents.
+	private withSharedContextLock<T>(fn: () => Promise<T>): Promise<T> {
+		const result = this.sharedContextMutex.then(fn, fn)
+		this.sharedContextMutex = result.then(
+			() => {},
+			() => {},
+		)
+		return result
 	}
 
 	// Public API

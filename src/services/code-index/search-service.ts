@@ -52,6 +52,15 @@ export class CodeIndexSearchService {
 				normalizedPrefix = path.normalize(directoryPrefix)
 			}
 
+			// Validate vector dimension before search
+			const expectedDimension = this.configManager.currentModelDimension
+			if (expectedDimension !== undefined && vector.length !== expectedDimension) {
+				throw new Error(
+					`Vector dimension mismatch: generated ${vector.length}, expected ${expectedDimension}. ` +
+					`The embedding model may have changed. Please re-index the codebase.`,
+				)
+			}
+
 			// Perform search
 			const results = await this.vectorStore.search(vector, normalizedPrefix, minScore, maxResults)
 			return results

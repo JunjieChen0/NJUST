@@ -247,6 +247,7 @@ export type ContextTruncation = z.infer<typeof contextTruncationSchema>
  * Note: These fields are mutually exclusive - a message will have at most one of them.
  */
 export const clineMessageSchema = z.object({
+	id: z.string(),
 	ts: z.number(),
 	type: z.union([z.literal("ask"), z.literal("say")]),
 	ask: clineAskSchema.optional(),

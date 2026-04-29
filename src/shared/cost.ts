@@ -32,9 +32,15 @@ export function resolveOpenAiUsageForCost(args: {
 		cr = Math.max(cr, cachedD)
 		const sumParts = miss + cachedD + cw
 		if (sumParts > 0) {
-			if (total === 0 || Math.abs(total - sumParts) <= Math.max(2, sumParts * 0.005)) {
+			const tolerance = Math.max(1, Math.ceil(sumParts * 0.005))
+			if (total === 0 || Math.abs(total - sumParts) <= tolerance) {
 				total = sumParts
-			} else if (total < sumParts - Math.max(2, sumParts * 0.005)) {
+			} else if (total < sumParts - tolerance) {
+				console.warn(
+					`[Cost Audit] Token mismatch beyond tolerance: reported=${total}, ` +
+					`sumParts=${sumParts} (miss=${miss}, cached=${cachedD}, writes=${cw}), ` +
+					`tolerance=${tolerance}`,
+				)
 				// Total likely excludes cached portion; reconstruct billable prompt size
 				total = sumParts
 			}

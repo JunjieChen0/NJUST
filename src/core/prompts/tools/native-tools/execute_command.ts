@@ -51,7 +51,7 @@ export default {
 					description: TIMEOUT_PARAMETER_DESCRIPTION,
 				},
 			},
-			required: ["command", "cwd", "timeout"],
+			required: ["command"],
 			additionalProperties: false,
 		},
 	},

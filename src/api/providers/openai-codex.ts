@@ -220,11 +220,15 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 		metadata?: ApiHandlerCreateMessageMetadata,
 	): any {
 		const ensureAllRequired = (schema: any): any => {
-			if (!schema || typeof schema !== "object" || schema.type !== "object") {
+			const getPrimaryType = (value: any): string | undefined =>
+				Array.isArray(value?.type) ? value.type.find((t: string) => t !== "null") : value?.type
+
+			if (!schema || typeof schema !== "object" || getPrimaryType(schema) !== "object") {
 				return schema
 			}
 
 			const result = { ...schema }
+			const originallyRequired = new Set(Array.isArray(schema.required) ? schema.required : [])
 			if (result.additionalProperties !== false) {
 				result.additionalProperties = false
 			}
@@ -236,12 +240,20 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 				const newProps = { ...result.properties }
 				for (const key of allKeys) {
 					const prop = newProps[key]
-					if (prop.type === "object") {
-						newProps[key] = ensureAllRequired(prop)
-					} else if (prop.type === "array" && prop.items?.type === "object") {
+					if (prop && !originallyRequired.has(key)) {
+						const types = Array.isArray(prop.type) ? prop.type : prop.type ? [prop.type] : []
+						if (types.length > 0 && !types.includes("null")) {
+							newProps[key] = { ...prop, type: [...types, "null"] }
+						}
+					}
+					const normalizedProp = newProps[key]
+					const primaryType = getPrimaryType(normalizedProp)
+					if (primaryType === "object") {
+						newProps[key] = ensureAllRequired(normalizedProp)
+					} else if (primaryType === "array" && getPrimaryType(normalizedProp.items) === "object") {
 						newProps[key] = {
-							...prop,
-							items: ensureAllRequired(prop.items),
+							...normalizedProp,
+							items: ensureAllRequired(normalizedProp.items),
 						}
 					}
 				}

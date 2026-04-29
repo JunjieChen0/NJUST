@@ -21,6 +21,11 @@ export class IpcServer extends EventEmitter<IpcServerEvents> implements NJUST_AI
 
 	private _isListening = false
 
+	private static readonly MAX_CLIENTS = 20
+	private static readonly CONNECT_WINDOW_MS = 10_000
+	private _recentConnectTimestamps: number[] = []
+	private static readonly MAX_CONNECTS_PER_WINDOW = 30
+
 	constructor(socketPath: string, log = console.log) {
 		super()
 
@@ -44,6 +49,21 @@ export class IpcServer extends EventEmitter<IpcServerEvents> implements NJUST_AI
 	}
 
 	private onConnect(socket: Socket) {
+		// Rate-limit: reject if too many concurrent clients or connection burst.
+		const now = Date.now()
+		this._recentConnectTimestamps = this._recentConnectTimestamps.filter(
+			(t) => now - t < IpcServer.CONNECT_WINDOW_MS,
+		)
+		if (
+			this._clients.size >= IpcServer.MAX_CLIENTS ||
+			this._recentConnectTimestamps.length >= IpcServer.MAX_CONNECTS_PER_WINDOW
+		) {
+			this.log(`[server#onConnect] rate-limited — rejecting connection (clients=${this._clients.size})`)
+			socket.destroy()
+			return
+		}
+		this._recentConnectTimestamps.push(now)
+
 		const clientId = crypto.randomBytes(6).toString("hex")
 		this._clients.set(clientId, socket)
 		this.log(`[server#onConnect] clientId = ${clientId}, # clients = ${this._clients.size}`)
@@ -51,7 +71,7 @@ export class IpcServer extends EventEmitter<IpcServerEvents> implements NJUST_AI
 		this.send(socket, {
 			type: IpcMessageType.Ack,
 			origin: IpcOrigin.Server,
-			data: { clientId, pid: process.pid, ppid: process.ppid, protocolVersion: IPC_PROTOCOL_VERSION },
+			data: { clientId, protocolVersion: IPC_PROTOCOL_VERSION },
 		})
 
 		this.emit(IpcMessageType.Connect, clientId)

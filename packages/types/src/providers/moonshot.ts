@@ -2,7 +2,7 @@ import type { ModelInfo } from "../model.js"
 
 // https://platform.moonshot.ai/
 // Pricing: https://platform.moonshot.ai/docs/pricing
-// Updated: March 2026
+// Updated: April 2026 (Kimi K2.5; Bedrock id: moonshotai.kimi-k2.5)
 export type MoonshotModelId = keyof typeof moonshotModels
 
 export const moonshotDefaultModelId: MoonshotModelId = "kimi-k2.5"

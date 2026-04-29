@@ -384,6 +384,7 @@ export class CangjieLspClient {
 			}
 			this.extensionOutputChannel.appendLine("[CangjieLSP] Configuration changed, restarting server...")
 			this.configRestartChain = this.configRestartChain
+				.catch(() => { /* keep chain alive after error */ })
 				.then(async () => {
 					await this.stop()
 					await this.start()
@@ -561,7 +562,7 @@ export class CangjieLspClient {
 		// Register before start() so a crash/stop between start resolving and this listener cannot be missed.
 		this.clientStateDisposable?.dispose()
 		this.clientStateDisposable = this.client.onDidChangeState((e) => {
-			if (e.newState === 1 /* Stopped */ && this._state === "running") {
+			if (e.newState === 1 /* Stopped */ && (this._state === "running" || this._state === "starting")) {
 				this.extensionOutputChannel.appendLine("[CangjieLSP] Server process stopped unexpectedly.")
 				this.setState("error", "Server stopped unexpectedly")
 				this.client = undefined
@@ -622,8 +623,9 @@ export class CangjieLspClient {
 			`[CangjieLSP] Auto-restarting in ${delayMs / 1000}s (attempt ${this.autoRestartCount}/${MAX_AUTO_RESTARTS})…`,
 		)
 
-		this.restartTimer = setTimeout(() => {
+		this.restartTimer = setTimeout(async () => {
 			this.restartTimer = undefined
+			await this.stop()
 			void this.doStart(getConfig())
 		}, delayMs)
 	}
@@ -662,7 +664,7 @@ export class CangjieLspClient {
 		await this.start()
 	}
 
-	dispose(): void {
+	async dispose(): Promise<void> {
 		if (this.restartTimer) {
 			clearTimeout(this.restartTimer)
 			this.restartTimer = undefined
@@ -677,7 +679,14 @@ export class CangjieLspClient {
 		this.clientStateDisposable = undefined
 
 		if (this.client?.isRunning()) {
-			void this.client.stop().catch(() => {})
+			try {
+				await Promise.race([
+					this.client.stop(),
+					new Promise((_, reject) => setTimeout(() => reject(new Error("LSP stop timeout")), 5_000)),
+				])
+			} catch {
+				// Process cleaned up by VS Code on extension deactivation
+			}
 		}
 		this.client = undefined
 

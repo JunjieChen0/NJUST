@@ -62,21 +62,26 @@ export class SkillsManager {
 		}
 
 		try {
-			// Get the real path (resolves if dirPath is a symlink)
 			const realDirPath = await fs.realpath(dirPath)
 
-			// Read directory entries
 			const entries = await fs.readdir(realDirPath)
 
 			for (const entryName of entries) {
 				const entryPath = path.join(realDirPath, entryName)
 
-				// Check if this entry is a directory (follows symlinks automatically)
 				const stats = await fs.stat(entryPath).catch(() => null)
 				if (!stats?.isDirectory()) continue
 
-				// Load skill metadata - the skill name comes from the entry name (symlink name if symlinked)
-				await this.loadSkillMetadata(entryPath, source, mode, entryName)
+				// Guard against symlinks that escape the skills directory.
+				const realEntryPath = await fs.realpath(entryPath)
+				const normalizedReal = realEntryPath.toLowerCase()
+				const normalizedDir = realDirPath.toLowerCase()
+				if (!normalizedReal.startsWith(normalizedDir + path.sep) && normalizedReal !== normalizedDir) {
+					console.error(`[SkillsManager] Skipping "${entryName}": symlink target "${realEntryPath}" escapes skills directory "${realDirPath}"`)
+					continue
+				}
+
+				await this.loadSkillMetadata(realEntryPath, source, mode, entryName)
 			}
 		} catch {
 			// Directory doesn't exist or can't be read - this is fine
@@ -90,6 +95,8 @@ export class SkillsManager {
 	 * @param mode - The mode this skill is specific to (undefined for generic skills)
 	 * @param skillName - The skill name (from symlink name if symlinked, otherwise from directory name)
 	 */
+	private static readonly MAX_SKILL_FILE_SIZE = 512 * 1024 // 512 KB
+
 	private async loadSkillMetadata(
 		skillDir: string,
 		source: "global" | "project",
@@ -100,6 +107,11 @@ export class SkillsManager {
 		if (!(await fileExists(skillMdPath))) return
 
 		try {
+			const stat = await fs.stat(skillMdPath)
+			if (stat.size > SkillsManager.MAX_SKILL_FILE_SIZE) {
+				console.error(`Skill at ${skillDir}: SKILL.md exceeds maximum size of ${SkillsManager.MAX_SKILL_FILE_SIZE} bytes (${stat.size} bytes)`)
+				return
+			}
 			const fileContent = await fs.readFile(skillMdPath, "utf-8")
 
 			// Use gray-matter to parse frontmatter
@@ -292,6 +304,30 @@ export class SkillsManager {
 	}
 
 	/**
+	 * Preload specified skills by name for an agent. Loads skill content
+	 * and caches it for prompt injection. Returns the loaded skill contents
+	 * as an array of { name, content } objects.
+	 *
+	 * Used by AgentDefinition.skills to preload agent-specific skills
+	 * at agent startup.
+	 */
+	async preloadSkills(names: string[], currentMode?: string): Promise<Array<{ name: string; content: string }>> {
+		const results: Array<{ name: string; content: string }> = []
+		for (const name of names) {
+			try {
+				const content = await this.getSkillContent(name, currentMode)
+				if (content) {
+					results.push({ name, content: content.text })
+				}
+			} catch {
+				// Silently skip skills that fail to load
+			}
+		}
+		return results
+	}
+
+
+	/**
 	 * Get a skill by name, source, and optionally mode
 	 */
 	getSkill(name: string, source: "global" | "project", mode?: string): SkillMetadata | undefined {
@@ -431,20 +467,34 @@ Add your skill instructions here.
 	 * @param mode - Optional mode (to locate in skills-{mode}/ directory)
 	 */
 	async deleteSkill(name: string, source: "global" | "project", mode?: string): Promise<void> {
-		// Find the skill
 		const skill = this.getSkill(name, source, mode)
 		if (!skill) {
 			const modeInfo = mode ? ` (mode: ${mode})` : ""
 			throw new Error(t("skills:errors.not_found", { name, source, modeInfo }))
 		}
 
-		// Get the skill directory (parent of SKILL.md)
 		const skillDir = path.dirname(skill.path)
 
-		// Delete the entire skill directory
+		// Validate that the skill directory is within an expected skills root.
+		let expectedBase: string
+		if (source === "global") {
+			expectedBase = getGlobalRooDirectory()
+		} else {
+			const provider = this.providerRef.deref()
+			if (!provider?.cwd) {
+				throw new Error(t("skills:errors.no_workspace"))
+			}
+			expectedBase = path.join(provider.cwd, NJUST_AI_CONFIG_DIR)
+		}
+
+		const realSkillDir = await fs.realpath(skillDir)
+		const realBase = await fs.realpath(expectedBase)
+		if (!realSkillDir.startsWith(realBase + path.sep)) {
+			throw new Error(`Refusing to delete "${skillDir}": path escapes the expected skills root "${expectedBase}"`)
+		}
+
 		await fs.rm(skillDir, { recursive: true, force: true })
 
-		// Refresh skills list
 		await this.discoverSkills()
 	}
 

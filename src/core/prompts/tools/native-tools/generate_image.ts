@@ -44,7 +44,7 @@ export default {
 					description: IMAGE_PARAMETER_DESCRIPTION,
 				},
 			},
-			required: ["prompt", "path", "image"],
+			required: ["prompt", "path"],
 			additionalProperties: false,
 		},
 	},

@@ -167,12 +167,15 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 			if (inString) {
 				if (escaped) {
 					escaped = false
+					if (i === index) return false
 					continue
 				}
 				if (ch === "\\") {
 					escaped = true
+					if (i === index) return false
 					continue
 				}
+				if (ch === quote) {
 				if (ch === quote) {
 					inString = false
 					quote = ""

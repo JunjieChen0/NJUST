@@ -33,6 +33,7 @@ export interface IVectorStore {
 		directoryPrefix?: string,
 		minScore?: number,
 		maxResults?: number,
+		hnswEf?: number,
 	): Promise<VectorStoreSearchResult[]>
 
 	/**

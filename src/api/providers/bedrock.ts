@@ -45,6 +45,7 @@ import { getModelParams } from "../transform/model-params"
 import { shouldUseReasoningBudget } from "../../shared/api"
 import { normalizeToolSchema } from "../../utils/json-schema"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
+import { getApiRequestTimeout } from "./utils/timeout-config"
 
 /************************************************************************************
  *
@@ -61,10 +62,14 @@ interface BedrockInferenceConfig {
 // Define interface for Bedrock additional model request fields
 // This includes thinking configuration, 1M context beta, and other model-specific parameters
 interface BedrockAdditionalModelFields {
-	thinking?: {
-		type: "enabled"
-		budget_tokens: number
-	}
+	thinking?:
+		| {
+				type: "enabled"
+				budget_tokens: number
+		  }
+		| {
+				type: "adaptive"
+		  }
 	anthropic_beta?: string[]
 	[key: string]: any // Add index signature to be compatible with DocumentType
 }
@@ -383,6 +388,9 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			conversationId,
 		)
 
+		const baseModelId = this.parseBaseModelId(modelConfig.id)
+		const isBedrockClaudeOpus47 = baseModelId === "anthropic.claude-opus-4-7"
+
 		let additionalModelRequestFields: BedrockAdditionalModelFields | undefined
 		let thinkingEnabled = false
 
@@ -397,11 +405,19 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 
 		if ((isThinkingExplicitlyEnabled || isThinkingEnabledBySettings) && modelConfig.info.supportsReasoningBudget) {
 			thinkingEnabled = true
-			additionalModelRequestFields = {
-				thinking: {
-					type: "enabled",
-					budget_tokens: metadata?.thinking?.maxThinkingTokens || modelConfig.reasoningBudget || 4096,
-				},
+			// Claude Opus 4.7 on Bedrock only supports adaptive thinking (not enabled + budget_tokens).
+			// https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html
+			if (isBedrockClaudeOpus47) {
+				additionalModelRequestFields = {
+					thinking: { type: "adaptive" },
+				}
+			} else {
+				additionalModelRequestFields = {
+					thinking: {
+						type: "enabled",
+						budget_tokens: metadata?.thinking?.maxThinkingTokens || modelConfig.reasoningBudget || 4096,
+					},
+				}
 			}
 			logger.info("Extended thinking enabled for Bedrock request", {
 				ctx: "bedrock",
@@ -412,12 +428,13 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 
 		const inferenceConfig: BedrockInferenceConfig = {
 			maxTokens: modelConfig.maxTokens || (modelConfig.info.maxTokens as number),
-			temperature: modelConfig.temperature ?? (this.options.modelTemperature as number),
+			...(!isBedrockClaudeOpus47 && {
+				temperature: modelConfig.temperature ?? (this.options.modelTemperature as number),
+			}),
 		}
 
 		// Check if 1M context is enabled for supported Claude 4 models
 		// Use parseBaseModelId to handle cross-region inference prefixes
-		const baseModelId = this.parseBaseModelId(modelConfig.id)
 		const is1MContextEnabled =
 			BEDROCK_1M_CONTEXT_MODEL_IDS.includes(baseModelId as any) && this.options.awsBedrock1MContext
 
@@ -485,7 +502,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 				() => {
 					controller.abort()
 				},
-				10 * 60 * 1000,
+				getApiRequestTimeout(),
 			)
 
 			const command = new ConverseStreamCommand(payload)
@@ -567,10 +584,8 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 							ctx: "bedrock",
 							error: error instanceof Error ? error : String(error),
 						})
-					} finally {
-						// eslint-disable-next-line no-unsafe-finally
-						continue
 					}
+					continue
 				}
 
 				// Handle message start
@@ -745,10 +760,13 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 	async completePrompt(prompt: string): Promise<string> {
 		try {
 			const modelConfig = this.getModel()
+			const isBedrockClaudeOpus47 = this.parseBaseModelId(modelConfig.id) === "anthropic.claude-opus-4-7"
 
 			const inferenceConfig: BedrockInferenceConfig = {
 				maxTokens: modelConfig.maxTokens || (modelConfig.info.maxTokens as number),
-				temperature: modelConfig.temperature ?? (this.options.modelTemperature as number),
+				...(!isBedrockClaudeOpus47 && {
+					temperature: modelConfig.temperature ?? (this.options.modelTemperature as number),
+				}),
 			}
 
 			// For completePrompt, use a unique conversation ID based on the prompt

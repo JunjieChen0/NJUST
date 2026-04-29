@@ -5,6 +5,7 @@ import * as childProcess from "child_process"
 import { createDirectoriesForFile, fileExistsAtPath } from "../../utils/fs"
 import { regexSearchFiles } from "../../services/ripgrep"
 import { listFiles } from "../../services/glob/list-files"
+import { checkCommandSafety } from "../../core/tools/helpers/commandSafety"
 
 /**
  * Ensures a resolved path stays within the workspace boundary (after realpath, to reduce symlink escape).
@@ -18,16 +19,28 @@ async function ensureWithinWorkspace(cwd: string, relPath: string): Promise<stri
 	} catch {
 		/* use logical cwd if missing */
 	}
+	// Normalize comparison for case-insensitive filesystems (Windows).
+	// startsWith is case-sensitive, but NTFS/FAT are not — so lower-case
+	// both sides before comparing to prevent false negatives or escapes.
+	const isWithin = (parent: string, child: string): boolean => {
+		if (process.platform === "win32") {
+			const p = parent.toLowerCase()
+			const c = child.toLowerCase()
+			return c.startsWith(p + path.sep) || c === p
+		}
+		return child.startsWith(parent + path.sep) || child === parent
+	}
+
 	let target = resolved
 	try {
 		target = await fs.realpath(resolved)
 	} catch {
-		if (!resolved.startsWith(base + path.sep) && resolved !== base) {
+		if (!isWithin(base, resolved)) {
 			throw new Error(`Path escapes workspace boundary: ${relPath}`)
 		}
 		return resolved
 	}
-	if (!target.startsWith(base + path.sep) && target !== base) {
+	if (!isWithin(base, target)) {
 		throw new Error(`Path escapes workspace boundary: ${relPath}`)
 	}
 	return target
@@ -138,14 +151,29 @@ export async function execCommand(
 		execCwd = path.isAbsolute(params.cwd) ? params.cwd : path.resolve(workspaceCwd, params.cwd)
 	}
 
-	if (deniedCommands?.length) {
-		const cmd = params.command.trim()
-		for (const denied of deniedCommands) {
-			if (cmd.startsWith(denied)) {
-				throw new Error(`Command denied by policy: ${denied}`)
+		if (deniedCommands?.length) {
+			const cmd = params.command.trim()
+			const baseName = cmd.split(/\s+/)[0]?.replace(/^.*[/\\]/, "").toLowerCase()
+			for (const denied of deniedCommands) {
+				if (cmd.startsWith(denied) || baseName === denied.toLowerCase()) {
+					throw new Error(`Command denied by policy: ${denied}`)
+				}
 			}
 		}
-	}
+
+		// Run the same security analysis used by the interactive execute_command tool.
+		// Forbidden patterns (e.g. rm -rf /, mkfs, fork bombs) are rejected outright.
+		// Dangerous patterns are allowed but flagged in the result.
+		const safetyCheck = checkCommandSafety(params.command)
+		if (safetyCheck.riskLevel === "forbidden") {
+			throw new Error(
+				`Command blocked for safety: ${safetyCheck.reasons.join("; ")}`,
+			)
+		}
+		const safetyWarning =
+			safetyCheck.riskLevel === "dangerous"
+				? `\n[Safety warning] ${safetyCheck.reasons.join("; ")}`
+				: ""
 
 	const timeoutMs = (params.timeout ?? 30) * 1000
 
@@ -179,6 +207,7 @@ export async function execCommand(
 			clearTimeout(timer)
 			const output = [
 				`Exit code: ${code ?? "unknown"}`,
+				safetyWarning,
 				stdout ? `\nSTDOUT:\n${stdout}` : "",
 				stderr ? `\nSTDERR:\n${stderr}` : "",
 			].join("")

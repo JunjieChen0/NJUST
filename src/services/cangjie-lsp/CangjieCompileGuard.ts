@@ -7,7 +7,7 @@ import { execFile } from "child_process"
 import { promisify } from "util"
 import { Package } from "../../shared/package"
 import { resolveCangjieToolPath, buildCangjieToolEnv } from "./cangjieToolUtils"
-import { recordLearnedFix, recordLearnedFailure } from "../../core/prompts/sections/cangjie-context"
+import { invalidateCangjieL3ContextCache, recordLearnedFix, recordLearnedFailure } from "../../core/prompts/sections/cangjie-context"
 import { getCjpmTreeSummaryForPrompt } from "./cjpmTreeForPrompt"
 import { recordCompileHistoryEvent } from "./cangjieCompileHistory"
 import { analyzeCompileOutput, formatAnalysisSummary, getFixDirectiveForLearning, normalizeErrorPattern } from "./CangjieErrorAnalyzer"
@@ -134,7 +134,12 @@ export class CangjieCompileGuard implements vscode.Disposable {
 			if (prev) clearTimeout(prev)
 			const t = setTimeout(() => {
 				this.compileDebounceByCwd.delete(cwd)
-				void this.runDebouncedPostSavePipeline(cwd)
+				this.runDebouncedPostSavePipeline(cwd).catch((err) => {
+				this.outputChannel.appendLine(
+					`[CompileGuard] Unhandled error in post-save pipeline: ` +
+					`${err instanceof Error ? err.message : String(err)}`,
+				)
+			})
 			}, this.COMPILE_DEBOUNCE_MS)
 			this.compileDebounceByCwd.set(cwd, t)
 		})
@@ -341,6 +346,8 @@ export class CangjieCompileGuard implements vscode.Disposable {
 			errors: historyErrors,
 		})
 
+		invalidateCangjieL3ContextCache()
+
 		return final
 	}
 
@@ -405,11 +412,15 @@ export class CangjieCompileGuard implements vscode.Disposable {
 		buildOutput: string,
 		success: boolean,
 	): void {
-		const coll = this.compileDiagnostics
-		if (success) {
-			coll?.clear()
-			this.onCjpmBuildSucceededForLsp?.({ cwd })
-			return
+			// Clear only diagnostics under this project root (multi-project safe).
+			if (coll) {
+				for (const [uri] of coll) {
+					if (uri.fsPath.startsWith(cwd)) {
+						coll.delete(uri)
+					}
+				}
+			}
+			
 		}
 		if (!coll) return
 		if (locations.length === 0) {

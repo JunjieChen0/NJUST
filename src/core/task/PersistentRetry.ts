@@ -68,6 +68,7 @@ const BASE_DELAYS: Record<string, number> = {
 }
 
 const MAX_SUGGESTED_DELAY_MS = 120_000 // 2 minutes cap
+const MAX_EXPONENT = 12 // Cap exponent to prevent unbounded Math.pow(2, ...) growth
 
 export class PersistentRetryManager {
 	private records: Map<string, RetryRecord> = new Map()
@@ -174,9 +175,13 @@ export class PersistentRetryManager {
 		const record = this.records.get(errorCategory)
 		const categoryCount = record?.count ?? 0
 
-		// Calculate suggested delay using exponential backoff
+		// Exponential backoff with jitter to prevent thundering herd
+		// when multiple agents hit rate limits simultaneously.
 		const baseDelay = BASE_DELAYS[errorCategory] ?? 1000
-		const suggestedDelayMs = Math.min(baseDelay * Math.pow(2, categoryCount), MAX_SUGGESTED_DELAY_MS)
+		const effectiveCount = Math.min(categoryCount, MAX_EXPONENT)
+		const rawDelayMs = Math.min(baseDelay * Math.pow(2, effectiveCount), MAX_SUGGESTED_DELAY_MS)
+		const jitterFactor = 0.75 + Math.random() * 0.5
+		const suggestedDelayMs = Math.round(rawDelayMs * jitterFactor)
 
 		// Check total retries exceeded
 		if (this.totalRetries >= this.config.maxTotalRetries) {

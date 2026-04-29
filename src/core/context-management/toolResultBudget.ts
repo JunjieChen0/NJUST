@@ -125,6 +125,22 @@ function resolveBudgetByTool(
 }
 
 /**
+ * Build a mapping from tool_use_id to tool name by scanning all assistant messages.
+ */
+function buildToolUseIdToNameMap(messages: ApiMessage[]): Map<string, string> {
+	const map = new Map<string, string>()
+	for (const m of messages) {
+		if (m.role !== "assistant" || !Array.isArray(m.content)) continue
+		for (const block of m.content) {
+			if (block.type === "tool_use" && block.id && block.name) {
+				map.set(block.id, block.name)
+			}
+		}
+	}
+	return map
+}
+
+/**
  * Apply conservative budget compaction to historical tool results.
  * Keeps recent messages intact and progressively tightens budget for older messages.
  */
@@ -138,6 +154,7 @@ export function applyToolResultBudget(
 	const defaultMaxChars = opts?.defaultMaxChars ?? DEFAULT_MAX_CHARS
 	const keepRecent = opts?.recentMessagesToKeepFull ?? DEFAULT_RECENT_MESSAGES_TO_KEEP_FULL
 	const boundary = Math.max(0, messages.length - keepRecent)
+	const toolUseIdToName = buildToolUseIdToNameMap(messages)
 
 	let changed = false
 	const out: ApiMessage[] = messages.map((m, index) => {
@@ -149,8 +166,9 @@ export function applyToolResultBudget(
 		let blockChanged = false
 		const nextBlocks = blocks.map((block) => {
 			if (block.type !== "tool_result") return block
-			const toolName = (block as { name?: string }).name ?? "unknown_tool"
-			const budget = resolveBudgetByTool(block as { name?: string }, maxCharsByTool, defaultMaxChars, agePenaltyLevel)
+			const toolUseId = (block as { tool_use_id?: string }).tool_use_id
+			const toolName = (toolUseId && toolUseIdToName.get(toolUseId)) ?? "unknown_tool"
+			const budget = resolveBudgetByTool({ name: toolName }, maxCharsByTool, defaultMaxChars, agePenaltyLevel)
 			if (typeof block.content === "string") {
 				const compacted = compactByToolHeuristic(block.content, toolName, budget)
 				if (compacted !== block.content) {

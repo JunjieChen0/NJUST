@@ -21,6 +21,8 @@ import {
 	type SystemPromptParts,
 	deriveCangjieContextTokenBudgetFromContextWindow,
 } from "../prompts/system"
+import { getCangjieSystemPromptCacheKeySuffix } from "../prompts/sections/cangjie-context"
+import type { ApiMessage } from "../task-persistence"
 import { buildNativeToolsArrayWithRestrictions } from "./build-tools"
 import { getEnvironmentDetails } from "../environment/getEnvironmentDetails"
 import { summarizeConversation } from "../condense"
@@ -40,6 +42,28 @@ export class TaskRequestBuilder {
 	private prefetchInFlight?: Promise<void>
 
 	constructor(private task: Task) {}
+
+	/** Last user message text for Ask/Architect 仓颉语料相关性检测（与缓存键一致）。 */
+	private getLastUserMessageTextForCangjieHint(): string | undefined {
+		const history = this.task.apiConversationHistory
+		for (let i = history.length - 1; i >= 0; i--) {
+			const m = history[i] as ApiMessage
+			if (m.role !== "user") continue
+			const c = m.content
+			if (typeof c === "string") return c
+			if (Array.isArray(c)) {
+				const parts: string[] = []
+				for (const block of c) {
+					if (block && typeof block === "object" && (block as { type?: string }).type === "text") {
+						const t = (block as { text?: string }).text
+						if (typeof t === "string") parts.push(t)
+					}
+				}
+				if (parts.length > 0) return parts.join("\n")
+			}
+		}
+		return undefined
+	}
 
 	/**
 	 * Inherit system prompt parts cache from a parent task's builder.
@@ -124,6 +148,7 @@ export class TaskRequestBuilder {
 				.update(`${customInstructions ?? ""}|${JSON.stringify(customModePrompts ?? {})}`)
 				.digest("hex")
 				.slice(0, 12)
+			const lastUserForCangjie = this.getLastUserMessageTextForCangjieHint()
 			const staticKey = JSON.stringify({
 				cwd: this.task.cwd,
 				mode,
@@ -135,6 +160,11 @@ export class TaskRequestBuilder {
 				mcpServerCount: mcpServers.length,
 				mcpToolsHash,
 				instructionHash,
+				cangjieAugmentKey: getCangjieSystemPromptCacheKeySuffix(
+					this.task.cwd,
+					mode ?? defaultModeSlug,
+					lastUserForCangjie,
+				),
 			})
 			const cacheKey = `${mode ?? defaultModeSlug}:${staticKey}`
 			const now = Date.now()
@@ -175,10 +205,16 @@ export class TaskRequestBuilder {
 					cangjieContextTokenBudget: deriveCangjieContextTokenBudgetFromContextWindow(
 						modelInfo?.contextWindow,
 					),
+					cangjieContextIntensity: this.task.cangjieRuntimePolicy.getContextIntensity(
+						Math.max(0, this.task.apiConversationHistory.length - 1),
+					),
+					cangjieRecentBuildRootCauses: this.task.cangjieRuntimePolicy.getRecentBuildRootCauses(),
+					cangjieRepairDirective: this.task.cangjieRuntimePolicy.getRepairDirective(),
 					contextWindow: modelInfo?.contextWindow,
 					taskId: this.task.taskId,
 					turnIndex: Math.max(0, this.task.apiConversationHistory.length - 1),
 					enableTurnAwarePromptPruning: (state as any)?.enableTurnAwarePromptPruning ?? true,
+					lastUserMessageForCangjieHint: lastUserForCangjie,
 				},
 				undefined, // todoList
 				this.task.api.getModel().id,

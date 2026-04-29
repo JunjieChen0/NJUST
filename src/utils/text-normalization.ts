@@ -45,22 +45,26 @@ const DEFAULT_OPTIONS: NormalizeOptions = {
  * @param options Normalization options
  * @returns The normalized string
  */
+// Pre-compiled combined regex for single-pass smart char normalization.
+// Avoids O(n*m) per-char iterations across the string.
+const SMART_CHAR_MAP: Record<string, string> = { ...NORMALIZATION_MAPS.SMART_QUOTES, ...NORMALIZATION_MAPS.TYPOGRAPHIC }
+const SMART_CHAR_RE = new RegExp(`[${Object.keys(SMART_CHAR_MAP).join("")}]`, "g")
+
+function applySmartCharReplacement(text: string): string {
+	return text.replace(SMART_CHAR_RE, (ch) => SMART_CHAR_MAP[ch] ?? ch)
+}
+
 export function normalizeString(str: string, options: NormalizeOptions = DEFAULT_OPTIONS): string {
 	const opts = { ...DEFAULT_OPTIONS, ...options }
 	let normalized = str
 
-	// Replace smart quotes
-	if (opts.smartQuotes) {
-		for (const [smart, regular] of Object.entries(NORMALIZATION_MAPS.SMART_QUOTES)) {
-			normalized = normalized.replace(new RegExp(smart, "g"), regular)
-		}
-	}
-
-	// Replace typographic characters
-	if (opts.typographicChars) {
-		for (const [typographic, regular] of Object.entries(NORMALIZATION_MAPS.TYPOGRAPHIC)) {
-			normalized = normalized.replace(new RegExp(typographic, "g"), regular)
-		}
+	// Replace smart quotes and typographic characters in a single pass
+	if (opts.smartQuotes || opts.typographicChars) {
+		const map: Record<string, string> = {}
+		if (opts.smartQuotes) Object.assign(map, NORMALIZATION_MAPS.SMART_QUOTES)
+		if (opts.typographicChars) Object.assign(map, NORMALIZATION_MAPS.TYPOGRAPHIC)
+		const re = new RegExp(`[${Object.keys(map).join("")}]`, "g")
+		normalized = normalized.replace(re, (ch) => map[ch] ?? ch)
 	}
 
 	// Normalize whitespace
@@ -82,18 +86,16 @@ export function normalizeString(str: string, options: NormalizeOptions = DEFAULT
  * @param text The string containing HTML entities to unescape
  * @returns The unescaped string with HTML entities converted to their literal characters
  */
+const HTML_ENTITIES: Record<string, string> = {
+	"&amp;": "&", "&lt;": "<", "&gt;": ">",
+	"&quot;": '"', "&#39;": "'", "&#x27;": "'",
+	"&apos;": "'", "&nbsp;": " ", "&#x2F;": "/",
+	"&#91;": "[", "&#93;": "]", "&lsqb;": "[", "&rsqb;": "]",
+	"&#x60;": "`", "&#96;": "`",
+}
+
 export function unescapeHtmlEntities(text: string): string {
 	if (!text) return text
-
-	return text
-		.replace(/&lt;/g, "<")
-		.replace(/&gt;/g, ">")
-		.replace(/&quot;/g, '"')
-		.replace(/&#39;/g, "'")
-		.replace(/&apos;/g, "'")
-		.replace(/&#91;/g, "[")
-		.replace(/&#93;/g, "]")
-		.replace(/&lsqb;/g, "[")
-		.replace(/&rsqb;/g, "]")
-		.replace(/&amp;/g, "&")
+	return text.replace(/&(?:#[xX]?[\\da-fA-F]+|\\w+);/g,
+		(match) => HTML_ENTITIES[match] ?? match)
 }

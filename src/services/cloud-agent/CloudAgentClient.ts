@@ -100,7 +100,10 @@ export class CloudAgentClient {
 				throw enrichFetchError(e)
 			}
 			if (resp.status === 404) {
-				// Older servers — expected until upgraded
+				// Older servers — expected until upgraded.
+				// Still clean up local session state so counters / caches
+				// don't leak across connection attempts.
+				this.localSessionCleanup?.()
 				return
 			}
 			if (!resp.ok) {
@@ -128,6 +131,10 @@ export class CloudAgentClient {
 		options?: CloudAgentClientOptions,
 	) {
 		this.serverUrl = serverUrl.replace(/\/$/, "")
+		const url = new URL(this.serverUrl)
+		if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
+			throw new Error("Cloud Agent requires HTTPS for non-localhost connections")
+		}
 		this.deviceToken = deviceToken
 		this.callbacks = callbacks
 		this.options = options

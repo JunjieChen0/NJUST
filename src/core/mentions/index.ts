@@ -193,7 +193,7 @@ export async function parseMentions(
 				)
 				contentBlocks.push(fileResult)
 			} catch (error) {
-				const errorMsg = error instanceof Error ? error.message : String(error)
+				const errorMsg = error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)
 				contentBlocks.push({
 					type: mention.endsWith("/") ? "folder" : "file",
 					path: mentionPath,
@@ -205,28 +205,28 @@ export async function parseMentions(
 				const problems = await getWorkspaceProblems(cwd, includeDiagnosticMessages, maxDiagnosticMessages)
 				parsedText += `\n\n<workspace_diagnostics>\n${problems}\n</workspace_diagnostics>`
 			} catch (error) {
-				parsedText += `\n\n<workspace_diagnostics>\nError fetching diagnostics: ${error.message}\n</workspace_diagnostics>`
+				parsedText += `\n\n<workspace_diagnostics>\nError fetching diagnostics: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}\n</workspace_diagnostics>`
 			}
 		} else if (mention === "git-changes") {
 			try {
 				const workingState = await getWorkingState(cwd)
 				parsedText += `\n\n<git_working_state>\n${workingState}\n</git_working_state>`
 			} catch (error) {
-				parsedText += `\n\n<git_working_state>\nError fetching working state: ${error.message}\n</git_working_state>`
+				parsedText += `\n\n<git_working_state>\nError fetching working state: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}\n</git_working_state>`
 			}
 		} else if (/^[a-f0-9]{7,40}$/.test(mention)) {
 			try {
 				const commitInfo = await getCommitInfo(mention, cwd)
 				parsedText += `\n\n<git_commit hash="${mention}">\n${commitInfo}\n</git_commit>`
 			} catch (error) {
-				parsedText += `\n\n<git_commit hash="${mention}">\nError fetching commit info: ${error.message}\n</git_commit>`
+				parsedText += `\n\n<git_commit hash="${mention}">\nError fetching commit info: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}\n</git_commit>`
 			}
 		} else if (mention === "terminal") {
 			try {
 				const terminalOutput = await getLatestTerminalOutput()
 				parsedText += `\n\n<terminal_output>\n${terminalOutput}\n</terminal_output>`
 			} catch (error) {
-				parsedText += `\n\n<terminal_output>\nError fetching terminal output: ${error.message}\n</terminal_output>`
+				parsedText += `\n\n<terminal_output>\nError fetching terminal output: ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}\n</terminal_output>`
 			}
 		}
 	}
@@ -242,7 +242,7 @@ export async function parseMentions(
 			commandOutput += command.content
 			slashCommandHelp += `\n\n<command name="${commandName}">\n${commandOutput}\n</command>`
 		} catch (error) {
-			slashCommandHelp += `\n\n<command name="${commandName}">\nError loading command '${commandName}': ${error.message}\n</command>`
+			slashCommandHelp += `\n\n<command name="${commandName}">\nError loading command '${commandName}': ${error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)}\n</command>`
 		}
 	}
 
@@ -314,7 +314,7 @@ async function getFileOrFolderContentWithMetadata(
 					},
 				}
 			} catch (error) {
-				const errorMsg = error instanceof Error ? error.message : String(error)
+				const errorMsg = error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)
 				return {
 					type: "file",
 					path: mentionPath,
@@ -326,8 +326,16 @@ async function getFileOrFolderContentWithMetadata(
 			let folderListing = ""
 			const fileReadResults: string[] = []
 			const LOCK_SYMBOL = "🔒"
+			const MAX_FOLDER_FILES = 200
+			const MAX_FOLDER_CONTENT_BYTES = 512 * 1024
+			let totalContentBytes = 0
 
 			for (let index = 0; index < entries.length; index++) {
+				if (index >= MAX_FOLDER_FILES) {
+					folderListing += `... (${entries.length - MAX_FOLDER_FILES} more entries omitted)\n`
+					break
+				}
+
 				const entry = entries[index]
 				const isLast = index === entries.length - 1
 				const linePrefix = isLast ? "└── " : "├── "
@@ -346,14 +354,16 @@ async function getFileOrFolderContentWithMetadata(
 
 				if (entry.isFile()) {
 					folderListing += `${linePrefix}${displayName}\n`
-					if (!isIgnored) {
+					if (!isIgnored && totalContentBytes < MAX_FOLDER_CONTENT_BYTES) {
 						const filePath = path.join(mentionPath, entry.name)
 						const absoluteFilePath = path.resolve(absPath, entry.name)
 						try {
 							const isBinary = await isBinaryFile(absoluteFilePath).catch(() => false)
 							if (!isBinary) {
 								const result = await extractTextFromFileWithMetadata(absoluteFilePath)
-								fileReadResults.push(formatFileReadResult(filePath.toPosix(), result))
+								const formatted = formatFileReadResult(filePath.toPosix(), result)
+								totalContentBytes += formatted.length
+								fileReadResults.push(formatted)
 							}
 						} catch (error) {
 							// Skip files that can't be read
@@ -385,7 +395,7 @@ async function getFileOrFolderContentWithMetadata(
 			}
 		}
 	} catch (error) {
-		const errorMsg = error instanceof Error ? error.message : String(error)
+		const errorMsg = error instanceof Error ? error instanceof Error ? error.message : String(error) : String(error)
 		throw new Error(`Failed to access path "${mentionPath}": ${errorMsg}`)
 	}
 }
@@ -414,28 +424,28 @@ async function getWorkspaceProblems(
  * @returns The terminal contents as a string
  */
 export async function getLatestTerminalOutput(): Promise<string> {
-	// Store original clipboard content to restore later
+	// SECURITY NOTE: VS Code does not expose a non-clipboard API for reading
+	// terminal buffer contents.  During the brief window between writing to the
+	// clipboard (steps below) and restoring the original content, any process
+	// with clipboard access can observe the terminal output.  This is an
+	// inherent limitation of the VS Code extension API.
+	const nonce = `__terminal_capture_${Date.now()}_${Math.random().toString(36).slice(2)}__`
 	const originalClipboard = await vscode.env.clipboard.readText()
 
 	try {
-		// Select terminal content
+		// Write nonce so we can tell whether the copy overwrote it.
+		await vscode.env.clipboard.writeText(nonce)
+
 		await vscode.commands.executeCommand("workbench.action.terminal.selectAll")
-
-		// Copy selection to clipboard
 		await vscode.commands.executeCommand("workbench.action.terminal.copySelection")
-
-		// Clear the selection
 		await vscode.commands.executeCommand("workbench.action.terminal.clearSelection")
 
-		// Get terminal contents from clipboard
 		let terminalContents = (await vscode.env.clipboard.readText()).trim()
 
-		// Check if there's actually a terminal open
-		if (terminalContents === originalClipboard) {
+		if (terminalContents === nonce) {
 			return ""
 		}
 
-		// Clean up command separation
 		const lines = terminalContents.split("\n")
 		const lastLine = lines.pop()?.trim()
 
@@ -451,7 +461,7 @@ export async function getLatestTerminalOutput(): Promise<string> {
 
 		return terminalContents
 	} finally {
-		// Restore original clipboard content
+		// Restore original clipboard content as quickly as possible.
 		await vscode.env.clipboard.writeText(originalClipboard)
 	}
 }

@@ -179,6 +179,21 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 			action: "toggleAutoApprove",
 		})
 	},
+	openMarkdownPreview: async () => {
+		const ed = vscode.window.activeTextEditor
+		if (!ed || ed.document.languageId !== "markdown") {
+			void vscode.window.showInformationMessage(t("common:markdown_preview.focus_markdown_editor"))
+			return
+		}
+		try {
+			await vscode.commands.executeCommand("markdown.showPreviewToSide", ed.document.uri)
+		} catch (e) {
+			outputChannel.appendLine(
+				`[openMarkdownPreview] Built-in Markdown preview failed: ${e instanceof Error ? e.message : String(e)}`,
+			)
+			void vscode.window.showWarningMessage(t("common:markdown_preview.builtin_unavailable"))
+		}
+	},
 	runCode: () => runActiveEditorCode(outputChannel),
 })
 

@@ -240,6 +240,10 @@
 			"description": "Prevent task completion when there are incomplete todos in the todo list"
 		}
 	},
+	"markdown_preview": {
+		"focus_markdown_editor": "Focus a Markdown (.md) editor first.",
+		"builtin_unavailable": "Could not open the built-in Markdown preview. Ensure the built-in Markdown features are enabled."
+	},
 	"docsLink": {
 		"label": "Docs",
 		"url": "https://docs.njust-ai-cj.local"

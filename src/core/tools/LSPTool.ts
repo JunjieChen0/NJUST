@@ -3,6 +3,8 @@ import { z } from "zod"
 
 import { BaseTool, type ToolCallbacks } from "./BaseTool"
 import type { Task } from "../task/Task"
+import { isPathOutsideWorkspace } from "../../utils/pathUtils"
+import { formatResponse } from "../prompts/responses"
 
 type LSPAction = "definition" | "references" | "hover" | "symbols" | "implementations"
 
@@ -203,6 +205,16 @@ export class LSPTool extends BaseTool<"lsp"> {
 			const absolutePath = path.resolve(task.cwd, filePath)
 			const relPath = path.relative(task.cwd, absolutePath)
 
+			// Block LSP operations on files outside workspace for safety
+			if (isPathOutsideWorkspace(absolutePath)) {
+				pushToolResult(
+					formatResponse.toolError(
+						`Safety: cannot perform LSP operations on path outside workspace: ${relPath}`,
+					),
+				)
+				return
+			}
+
 			// Approval
 			const approved = await askApproval(
 				"tool",
@@ -226,6 +238,9 @@ export class LSPTool extends BaseTool<"lsp"> {
 				const command = ACTION_COMMAND_MAP[action]
 				const results = await vscode.commands.executeCommand<any[]>(command, symbolName)
 				resultText = formatSymbolResults(results, task.cwd)
+				if (task.taskMode === "cangjie" && symbolName && resultText !== "No symbols found.") {
+					task.cangjieRuntimePolicy.noteLspEvidence("symbols", symbolName, resultText.slice(0, 1000))
+				}
 			} else {
 				// Open the document and create a position
 				const uri = vscode.Uri.file(absolutePath)
@@ -240,6 +255,13 @@ export class LSPTool extends BaseTool<"lsp"> {
 					resultText = formatHoverResults(results)
 				} else {
 					resultText = formatLocations(results, task.cwd)
+				}
+				if (
+					task.taskMode === "cangjie" &&
+					(action === "hover" || action === "definition") &&
+					!/^No (hover information available|results found)\./.test(resultText)
+				) {
+					task.cangjieRuntimePolicy.noteLspEvidence(action, `${relPath}:${line}:${character}`, resultText.slice(0, 1000))
 				}
 			}
 

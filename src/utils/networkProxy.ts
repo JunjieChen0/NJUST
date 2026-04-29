@@ -100,6 +100,10 @@ function applyTlsVerificationOverride(config: ProxyConfig): void {
 		originalNodeTlsRejectUnauthorized = process.env.NODE_TLS_REJECT_UNAUTHORIZED
 	}
 
+	// WARNING: This globally disables TLS verification for ALL connections,
+	// including API providers (OpenAI/Anthropic). Only Active in debug mode.
+	// TLS is restored on extension deactivate() via restoreTlsVerificationOverride().
+	// Prefer per-agent rejectUnauthorized (see configureUndiciProxy) for fine-grained control.
 	// CodeQL: debug-only opt-in for MITM debugging.
 	process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0" // lgtm[js/disabling-certificate-validation]
 	tlsVerificationOverridden = true

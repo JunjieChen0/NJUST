@@ -85,10 +85,11 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 		// modelMaxTokens so the ThinkingBudget slider can control the cap. For effort-only or
 		// standard models (like gemini-3-pro-preview), ignore any stale modelMaxTokens and
 		// default to the model's computed maxTokens from getModelMaxOutputTokens.
+		const GEMINI_DEFAULT_MAX_TOKENS = 8192
 		const isHybridReasoningModel = info.supportsReasoningBudget || info.requiredReasoningBudget
 		const maxOutputTokens = isHybridReasoningModel
-			? (this.options.modelMaxTokens ?? maxTokens ?? undefined)
-			: (maxTokens ?? undefined)
+			? (this.options.modelMaxTokens ?? maxTokens ?? GEMINI_DEFAULT_MAX_TOKENS)
+			: (maxTokens ?? GEMINI_DEFAULT_MAX_TOKENS)
 
 		// Gemini 3 validates thought signatures for tool/function calling steps.
 		// We must round-trip the signature when tools are in use, even if the user chose
@@ -363,11 +364,10 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 			defaultTemperature: info.defaultTemperature ?? 1,
 		})
 
-		// Gemini models perform better with the edit tool instead of apply_diff.
+		// Gemini models perform better with the edit tool.
 		info = {
 			...info,
-			excludedTools: [...new Set([...(info.excludedTools || []), "apply_diff"])],
-			includedTools: [...new Set([...(info.includedTools || []), "edit"])],
+includedTools: [...new Set([...(info.includedTools || []), "edit"])],
 		}
 
 		// The `:thinking` suffix indicates that the model is a "Hybrid"

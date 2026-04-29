@@ -12,6 +12,15 @@ import { StandardTooltip } from "@/components/ui"
 const MIN_ZOOM = 0.5
 const MAX_ZOOM = 20
 
+/** Strip script tags, event handlers, and javascript: URIs from SVG for XSS defense-in-depth. */
+function sanitizeSvg(svg: string): string {
+	return svg
+		.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+		.replace(/\bon\w+\s*=\s*"[^"]*"/gi, "")
+		.replace(/\bon\w+\s*=\s*'[^']*'/gi, "")
+		.replace(/javascript\s*:/gi, "")
+}
+
 export interface MermaidButtonProps {
 	containerRef: React.RefObject<HTMLDivElement>
 	code: string
@@ -193,7 +202,7 @@ export function MermaidButton({ containerRef, code, isLoading, svgToPng, childre
 								onMouseUp={() => setIsDragging(false)}
 								onMouseLeave={() => setIsDragging(false)}>
 								{containerRef.current && containerRef.current.innerHTML && (
-									<div dangerouslySetInnerHTML={{ __html: containerRef.current.innerHTML }} />
+									<div dangerouslySetInnerHTML={{ __html: sanitizeSvg(containerRef.current.innerHTML) }} />
 								)}
 							</div>
 							<div className="absolute bottom-4 left-4 bg-vscode-editor-background border border-vscode-editorGroup-border rounded px-2 py-1 text-xs text-vscode-descriptionForeground pointer-events-none opacity-80">

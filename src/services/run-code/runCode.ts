@@ -2,6 +2,10 @@ import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
 import { resolveCangjieToolPath, buildCangjieToolEnv, CJC_CONFIG_KEY } from "../cangjie-lsp/cangjieToolUtils"
+import { buildMatlabRunConfig } from "../matlab/matlabRunner"
+import { resolveMatlabRuntime } from "../matlab/matlabToolUtils"
+import { Package } from "../../shared/package"
+import { resolveLatexmkExecutable, resolvePdflatexExecutable } from "../latex/latexResolve"
 
 interface RunConfig {
 	command: string
@@ -231,6 +235,28 @@ function buildRustConfig(filePath: string): RunConfig {
 	return { command: chain(`rustc "${filePath}" -o ${out}`, out), cwd: fileDir }
 }
 
+function buildMatlabConfig(filePath: string, _workDir: string): RunConfig | undefined {
+	const ext = path.extname(filePath).toLowerCase()
+	if (ext === ".mlx") {
+		void vscode.window.showWarningMessage(
+			".mlx（MATLAB Live Script）不适合用命令行直接执行；请用 MATLAB 桌面打开，或改用纯 .m 脚本。",
+		)
+		return undefined
+	}
+	const c = buildMatlabRunConfig(filePath)
+	if (!c) {
+		if (ext === ".m") {
+			if (!resolveMatlabRuntime()) {
+				void vscode.window.showErrorMessage("未检测到 MATLAB 或 Octave，无法运行。")
+			} else {
+				void vscode.window.showWarningMessage("Failed to generate run command for this file.")
+			}
+		}
+		return undefined
+	}
+	return c
+}
+
 function buildCangjieConfig(filePath: string): RunConfig {
 	const fileDir = path.dirname(filePath)
 	const env = buildCangjieToolEnv()
@@ -299,6 +325,30 @@ function buildSwiftConfig(filePath: string): RunConfig {
 	return { command: `swift "${filePath}"` }
 }
 
+/**
+ * LaTeX: compile to PDF in the same directory as the .tex file (default tool output location).
+ * Uses `njust-ai-cj.latex.*` settings (same as command LaTeX: Compile local).
+ */
+function buildLatexConfig(filePath: string, _workDir: string): RunConfig {
+	const cwd = path.dirname(filePath)
+	const base = path.basename(filePath)
+	const cfg = vscode.workspace.getConfiguration(Package.name)
+	const engine = (cfg.get<string>("latex.engine") ?? "latexmk").toLowerCase()
+	const extra = cfg.get<string[]>("latex.extraArgs") ?? []
+
+	const quoteArg = (a: string) => (/\s|[&|<>]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)
+
+	if (engine === "latexmk") {
+		const bin = quoteArg(resolveLatexmkExecutable(cfg.get<string>("latex.latexmkPath")))
+		const args = ["-pdf", "-interaction=nonstopmode", "-file-line-error", "-synctex=1", ...extra.map(quoteArg), quoteArg(base)]
+		return { command: `${bin} ${args.join(" ")}`, cwd }
+	}
+
+	const bin = quoteArg(resolvePdflatexExecutable(cfg.get<string>("latex.pdflatexPath")))
+	const args = ["-interaction=nonstopmode", "-file-line-error", "-synctex=1", ...extra.map(quoteArg), quoteArg(base)]
+	return { command: `${bin} ${args.join(" ")}`, cwd }
+}
+
 // ---------------------------------------------------------------------------
 // Language → builder mapping
 // ---------------------------------------------------------------------------
@@ -325,6 +375,9 @@ const LANGUAGE_RUN_MAP: Record<string, RunConfigBuilder> = {
 	lua: (fp) => ({ command: `lua "${fp}"` }),
 	perl: (fp) => ({ command: `perl "${fp}"` }),
 	r: (fp) => ({ command: `Rscript "${fp}"` }),
+	matlab: buildMatlabConfig,
+	latex: buildLatexConfig,
+	tex: buildLatexConfig,
 }
 
 // ---------------------------------------------------------------------------
@@ -360,14 +413,22 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
 	".kt": "kotlin",
 	".kts": "kotlin",
 	".dart": "dart",
+	".tex": "latex",
+	".ltx": "latex",
 }
 
 function detectLanguage(document: vscode.TextDocument): string | undefined {
 	const vscodeLang = document.languageId
+	if (vscodeLang === "objective-c" && path.extname(document.fileName).toLowerCase() === ".m") {
+		return undefined
+	}
 	if (LANGUAGE_RUN_MAP[vscodeLang]) {
 		return vscodeLang
 	}
 	const ext = path.extname(document.fileName).toLowerCase()
+	if (ext === ".m" || ext === ".mlx") {
+		return "matlab"
+	}
 	return EXT_TO_LANGUAGE[ext]
 }
 
@@ -409,7 +470,9 @@ export async function runActiveEditorCode(outputChannel: vscode.OutputChannel): 
 	const workDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || path.dirname(filePath)
 	const config = builder(filePath, workDir)
 	if (!config) {
-		vscode.window.showWarningMessage("Failed to generate run command for this file.")
+		if (language !== "matlab") {
+			vscode.window.showWarningMessage("Failed to generate run command for this file.")
+		}
 		return
 	}
 

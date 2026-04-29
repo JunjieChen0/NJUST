@@ -10,6 +10,7 @@ import { CloudAgentClient } from "../../services/cloud-agent/CloudAgentClient"
 import { executeDeferredToolCall } from "../../services/cloud-agent/executeDeferredToolCall"
 import { CLOUD_AGENT_DEFERRED_MAX_ITERATIONS } from "../../services/cloud-agent/deferredConstants"
 import { parseWorkspaceOps } from "../../services/cloud-agent/parseWorkspaceOps"
+import { getDeviceToken } from "../../services/cloud-agent/deviceToken"
 import type {
 	CloudAgentCallbacks,
 	CloudCompileResult,
@@ -57,7 +58,7 @@ interface CloudAgentConfig {
 function readCloudAgentConfig(): CloudAgentConfig {
 	const config = vscode.workspace.getConfiguration(Package.name)
 	const serverUrl = (config.get<string>("cloudAgent.serverUrl", "") ?? "").trim()
-	const deviceToken = config.get<string>("cloudAgent.deviceToken", "")
+	const deviceToken = getDeviceToken()
 	let apiKey = (config.get<string>("cloudAgent.apiKey", "") ?? "").trim()
 	if (!apiKey) {
 		apiKey = (
@@ -66,6 +67,22 @@ function readCloudAgentConfig(): CloudAgentConfig {
 	}
 	if (!apiKey) {
 		apiKey = (process.env.CLOUD_AGENT_MOCK_API_KEY ?? process.env.NJUST_CLOUD_AGENT_API_KEY ?? "").trim()
+	}
+
+	if (serverUrl && !apiKey) {
+		vscode.window
+			.showWarningMessage(
+				"Cloud Agent server is configured but no API Key is set. Configure njust-ai-cj.cloudAgent.apiKey in settings.",
+				"Open Settings",
+			)
+			.then((choice) => {
+				if (choice === "Open Settings") {
+					void vscode.commands.executeCommand(
+						"workbench.action.openSettings",
+						"njust-ai-cj.cloudAgent.apiKey",
+					)
+				}
+			})
 	}
 
 	return {

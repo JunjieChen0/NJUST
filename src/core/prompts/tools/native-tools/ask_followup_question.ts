@@ -48,7 +48,7 @@ export default {
 								description: FOLLOW_UP_MODE_DESCRIPTION,
 							},
 						},
-						required: ["text", "mode"],
+						required: ["text"],
 						additionalProperties: false,
 					},
 					minItems: 1,

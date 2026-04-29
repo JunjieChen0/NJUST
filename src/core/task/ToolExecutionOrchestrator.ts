@@ -118,9 +118,12 @@ export class ToolExecutionScheduler {
 	}
 
 	private drainWaitQueue(): void {
-		const queue = this.waitQueue.splice(0)
-		for (const resolve of queue) {
-			resolve()
+		// Wake all waiters so readers can enter concurrently.
+		// JS's single-threaded event loop makes this safe: each
+		// waiter re-checks its while-loop condition in acquire()
+		// and re-queues itself if it still cannot proceed.
+		while (this.waitQueue.length > 0) {
+			this.waitQueue.shift()!()
 		}
 	}
 }

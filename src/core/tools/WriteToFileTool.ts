@@ -36,6 +36,10 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 	readonly name = "write_to_file" as const
 	override readonly requiresCheckpoint = true
 
+	override isConcurrencySafe(_params?: WriteToFileParams): boolean {
+		return true
+	}
+
 	override interruptBehavior(): "cancel" | "block" {
 		return "block"
 	}
@@ -73,6 +77,12 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 		}
 
 		const accessAllowed = allowRooIgnorePathAccess(task.rooIgnoreController, relPath)
+		// Guard against excessive file sizes (5 MB limit)
+		const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
+		if (Buffer.byteLength(newContent, "utf8") > MAX_FILE_SIZE_BYTES) {
+			pushToolResult(formatResponse.toolError(`Content exceeds maximum file size of ${MAX_FILE_SIZE_BYTES} bytes.`))
+			return
+		}
 
 		if (!accessAllowed) {
 			await task.say("rooignore_error", relPath)
@@ -84,6 +94,7 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 
 		let fileExists: boolean
 		const absolutePath = path.resolve(task.cwd, relPath)
+		let previousContent: string | undefined
 
 		if (task.diffViewProvider.editType !== undefined) {
 			fileExists = task.diffViewProvider.editType === "modify"
@@ -98,6 +109,16 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 			await createDirectoriesForFile(absolutePath)
 		}
 
+		if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+			const initError = await task.cangjieRuntimePolicy.ensureProjectInitializedForWrite(relPath)
+			if (initError) {
+				task.recordToolError("write_to_file", initError)
+				pushToolResult(formatResponse.toolError(initError))
+				await task.diffViewProvider.reset()
+				return
+			}
+		}
+
 		if (newContent.startsWith("```")) {
 			newContent = newContent.split("\n").slice(1).join("\n")
 		}
@@ -110,9 +131,26 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 			newContent = unescapeHtmlEntities(newContent)
 		}
 
+		if (task.taskMode === "cangjie") {
+			const structureError = await task.cangjieRuntimePolicy.validateProjectStructureForWrite(relPath, newContent)
+			if (structureError) {
+				task.recordToolError("write_to_file", structureError)
+				pushToolResult(formatResponse.toolError(structureError))
+				await task.diffViewProvider.reset()
+				return
+			}
+		}
+
 		// Cangjie preflight check: validate .cj files before writing (only in Cangjie mode)
 		let cangjiePostWriteWarnings = ""
 		if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+			if (fileExists) {
+				try {
+					previousContent = await fs.readFile(absolutePath, "utf-8")
+				} catch {
+					previousContent = undefined
+				}
+			}
 			const rootPkg = await resolveRootPackageName(task.cwd)
 			const preflight = cangjiePreflightCheck(newContent, relPath, task.cwd, rootPkg)
 			if (!preflight.pass) {
@@ -133,6 +171,16 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 					preflight.warnings.map((w) => `- ${w}`).join("\n") +
 					`\n</cangjie_preflight_warnings>`
 			}
+			const missingEvidence = task.cangjieRuntimePolicy.getMissingImportEvidence(previousContent, newContent)
+			if (missingEvidence.length > 0) {
+				const errorMsg =
+					`Missing bundled corpus evidence for newly introduced stdlib modules: ${missingEvidence.join(", ")}. ` +
+					`Use search_files or read_file against the bundled CangjieCorpus before writing this code.`
+				task.recordToolError("write_to_file", errorMsg)
+				pushToolResult(formatResponse.toolError(errorMsg))
+				await task.diffViewProvider.reset()
+				return
+			}
 			// Search gate: warn if std modules were used without prior search
 			const searchGate = buildSearchGateWarning(
 				newContent,
@@ -146,6 +194,19 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 
 		const fullPath = relPath ? path.resolve(task.cwd, relPath) : ""
 		const isOutsideWorkspace = isPathOutsideWorkspace(fullPath)
+
+		// Block writes outside workspace for safety (path traversal attack prevention)
+		if (isOutsideWorkspace) {
+			task.consecutiveMistakeCount++
+			task.recordToolError("write_to_file")
+			pushToolResult(
+				formatResponse.toolError(
+					`Safety: cannot write to path outside workspace: ${getReadablePath(task.cwd, relPath)}`,
+				),
+			)
+			await task.diffViewProvider.reset()
+			return
+		}
 
 		const sharedMessageProps: ClineSayTool = {
 			tool: fileExists ? "editedExistingFile" : "newFileCreated",
@@ -234,6 +295,7 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 			}
 
 			task.didEditFile = true
+			task.cangjieRuntimePolicy.noteWriteApplied(relPath, previousContent, newContent)
 
 			const message = await task.diffViewProvider.pushToolWriteResult(task, task.cwd, !fileExists)
 

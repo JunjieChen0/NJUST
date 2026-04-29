@@ -104,6 +104,22 @@ export const modeConfigSchema = z.object({
 	source: z.enum(["global", "project"]).optional(),
 })
 
+
+/**
+ * Validate a file path against a mode's edit permission fileRegex.
+ * Returns true if the path is allowed (regex matches or no regex configured).
+ */
+export function isFileAllowedByModeRegex(
+	filePath: string,
+	fileRegex?: string,
+): boolean {
+	if (!fileRegex) return true
+	try {
+		return new RegExp(fileRegex).test(filePath)
+	} catch {
+		return false // Broken regex → deny for safety
+	}
+}
 export type ModeConfig = z.infer<typeof modeConfigSchema>
 
 /**

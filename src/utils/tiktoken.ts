@@ -2,7 +2,7 @@ import { Anthropic } from "@anthropic-ai/sdk"
 import { Tiktoken } from "tiktoken/lite"
 import o200kBase from "tiktoken/encoders/o200k_base"
 
-const TOKEN_FUDGE_FACTOR = 1.5
+const TOKEN_FUDGE_FACTOR = 1.1
 
 let encoder: Tiktoken | null = null
 

@@ -24,7 +24,14 @@ function parseArgumentsField(raw: unknown): Record<string, unknown> {
 		const s = raw.trim()
 		if (!s) return {}
 		try {
-			const parsed = JSON.parse(s) as unknown
+			if (s.length > 10485760) {
+			console.error(
+				`[normalizeDeferredResponse] Arguments string exceeds size limit ` +
+				`(${s.length} > 10485760), dropping to prevent OOM.`,
+			)
+			return { _arguments_parse_failed: true as const, _raw_arguments: s.slice(0, 200) + "..." }
+		}
+		const parsed = JSON.parse(s) as unknown
 			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
 				return parsed as Record<string, unknown>
 			}

@@ -151,10 +151,10 @@ export class CangjieProfiler implements vscode.Disposable {
 	private parseProfileOutput(output: string): HotPathEntry[] {
 		// Try JSON format first
 		try {
-			const jsonStart = output.indexOf("[")
-			const jsonEnd = output.lastIndexOf("]")
+			// Find JSON array by "[{" to avoid log-line false positives.
+			const jsonStart = output.indexOf("[{")
+			const jsonEnd = jsonStart >= 0 ? output.indexOf("}]", jsonStart) : -1
 			if (jsonStart >= 0 && jsonEnd > jsonStart) {
-				const json = JSON.parse(output.slice(jsonStart, jsonEnd + 1)) as Array<{
 					function?: string
 					file?: string
 					line?: number

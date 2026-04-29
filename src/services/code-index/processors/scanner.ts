@@ -322,41 +322,36 @@ export class DirectoryScanner implements IDirectoryScanner {
 			}
 		}
 
-		// Handle deleted files
+		// Handle deleted files — batch all paths into a single Qdrant filter call
 		const oldHashes = this.cacheManager.getAllHashes()
+		const deletedFilePaths: string[] = []
 		for (const cachedFilePath of Object.keys(oldHashes)) {
 			if (!processedFiles.has(cachedFilePath)) {
-				// File was deleted or is no longer supported/indexed
-				if (this.qdrantClient) {
-					try {
-						await this.qdrantClient.deletePointsByFilePath(cachedFilePath)
-						await this.cacheManager.deleteHash(cachedFilePath)
-					} catch (error: any) {
-						const errorStatus = error?.status || error?.response?.status || error?.statusCode
-						const errorMessage = error instanceof Error ? error.message : String(error)
+				deletedFilePaths.push(cachedFilePath)
+			}
+		}
 
-						console.error(
-							`[DirectoryScanner] Failed to delete points for ${cachedFilePath} in workspace ${scanWorkspace}:`,
-							error,
-						)
-
-						if (onError) {
-							// Report error to error handler
-							onError(
-								error instanceof Error
-									? new Error(
-											`${error.message} (Workspace: ${scanWorkspace}, File: ${cachedFilePath})`,
-										)
-									: new Error(
-											t("embeddings:scanner.unknownErrorDeletingPoints", {
-												filePath: cachedFilePath,
-											}) + ` (Workspace: ${scanWorkspace})`,
-										),
-							)
-						}
-						// Log error and continue processing instead of re-throwing
-						console.error(`Failed to delete points for removed file: ${cachedFilePath}`, error)
-					}
+		if (deletedFilePaths.length > 0 && this.qdrantClient) {
+			try {
+				await this.qdrantClient.deletePointsByMultipleFilePaths(deletedFilePaths)
+				for (const fp of deletedFilePaths) {
+					await this.cacheManager.deleteHash(fp)
+				}
+			} catch (error: any) {
+				console.error(
+					`[DirectoryScanner] Failed to batch-delete ${deletedFilePaths.length} files from workspace ${scanWorkspace}:`,
+					error,
+				)
+				if (onError) {
+					onError(
+						error instanceof Error
+							? error
+							: new Error(
+									t("embeddings:scanner.batchDeleteError", {
+										count: deletedFilePaths.length,
+									}) + ` (Workspace: ${scanWorkspace})`,
+								),
+					)
 				}
 			}
 		}

@@ -6,7 +6,7 @@ We actively patch only the most recent minor release of Roo Code. Older version
 
 ## Reporting a Vulnerability
 
-Email security@njust-ai-cj.local with:
+Email security@njust-ai-cj.dev with:
 
 - A short summary of the issue
 - Steps to reproduce or a proof of concept

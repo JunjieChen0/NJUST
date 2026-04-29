@@ -16,6 +16,8 @@
 	"command.acceptInput.title": "接受输入/建议",
 	"command.toggleAutoApprove.title": "切换自动批准",
 	"command.runCode.title": "运行代码",
+	"command.openMarkdownPreview.title": "在侧边打开 Markdown 预览",
+	"command.latexCompile.title": "编译 LaTeX（本地）",
 	"views.activitybar.title": "NJUST_AI_CJ",
 	"views.contextMenu.label": "NJUST_AI_CJ",
 	"views.terminalMenu.label": "NJUST_AI_CJ",

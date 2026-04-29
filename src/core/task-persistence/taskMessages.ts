@@ -55,3 +55,39 @@ export async function saveTaskMessages({ messages, taskId, globalStoragePath }: 
 	// safeWriteJson: temp file + rename under lock (crash-safe).
 	await safeWriteJson(filePath, messages)
 }
+/**
+ * Save only new messages since the last full save.
+ * Uses a counter file to track how many messages were in the last full persistence.
+ * When the delta exceeds DELTA_COMPACTION_THRESHOLD, performs a full compaction save instead.
+ */
+const DELTA_COMPACTION_THRESHOLD = 200
+
+export async function saveTaskMessagesIncremental({ messages, taskId, globalStoragePath }: SaveTaskMessagesOptions) {
+	const taskDir = await getTaskDirectoryPath(globalStoragePath, taskId)
+	const filePath = path.join(taskDir, GlobalFileNames.uiMessages)
+	const countFilePath = path.join(taskDir, GlobalFileNames.uiMessages + ".count")
+
+	let lastFullCount = 0
+	try {
+		const countData = await fs.readFile(countFilePath, "utf-8")
+		lastFullCount = parseInt(countData, 10) || 0
+	} catch {
+		// No count file yet — will do full save
+	}
+
+	const delta = messages.length - lastFullCount
+	if (delta <= 0 || messages.length < lastFullCount || delta >= DELTA_COMPACTION_THRESHOLD) {
+		// Full save: messages were truncated/rewound, or delta is large enough to compact
+		await safeWriteJson(filePath, messages)
+		await fs.writeFile(countFilePath, String(messages.length), "utf-8")
+		return
+	}
+
+	// Incremental: serialize only the new messages and append to an append log
+	const appendFilePath = filePath + ".append"
+	const newMessages = messages.slice(lastFullCount)
+	const appendLine = JSON.stringify(newMessages) + "
+"
+	await fs.appendFile(appendFilePath, appendLine, "utf-8")
+	await fs.writeFile(countFilePath, String(messages.length), "utf-8")
+}

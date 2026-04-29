@@ -43,7 +43,7 @@ async function formatExpandedCangjieWithCjfmt(expanded: string, outputChannel: v
 	return expanded
 }
 
-const MACRO_CALL_RE = /(?:^|\s)@(\w+)/g
+const MACRO_CALL_RE = /@(\w+)(?=\s*\(|\s+\w|$)/g
 const MACRO_DEF_RE = /^\s*(?:public\s+|private\s+|protected\s+|internal\s+)*macro\s+(\w+)/
 
 /**
@@ -175,7 +175,10 @@ export function registerMacroCommands(context: vscode.ExtensionContext, outputCh
 						{ timeout: 15_000, env: buildCangjieToolEnv() as NodeJS.ProcessEnv },
 					)
 
-					let expanded = stdout || stderr
+					let expanded = stdout
+					if (stderr && stderr.trim()) {
+						console.warn(`[CangjieMacro] cjc stderr:\n${stderr}`)
+					}
 					if (!expanded || expanded.trim().length === 0) {
 						vscode.window.showInformationMessage("宏展开未产生输出（可能 cjc 不支持 --expand-macros 标志）。")
 						return

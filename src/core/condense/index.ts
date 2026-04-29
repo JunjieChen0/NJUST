@@ -11,6 +11,8 @@ import { findLast } from "../../shared/array"
 import { supportPrompt } from "../../shared/support-prompt"
 import { RooIgnoreController } from "../ignore/RooIgnoreController"
 import { generateFoldedFileContext } from "./foldedFileContext"
+import { getCompactPrompt, getPartialCompactPrompt, formatCompactSummary } from "./prompt"
+import type { PartialCompactDirection } from "./prompt"
 
 export type { FoldedFileContextResult, FoldedFileContextOptions } from "./foldedFileContext"
 
@@ -111,16 +113,14 @@ export function transformMessagesForCondensing<
 export const MIN_CONDENSE_THRESHOLD = 5 // Minimum percentage of context window to trigger condensing
 export const MAX_CONDENSE_THRESHOLD = 100 // Maximum percentage of context window to trigger condensing
 
-const SUMMARY_PROMPT = `You are a helpful AI assistant tasked with summarizing conversations.
-
-CRITICAL: This is a summarization-only request. DO NOT call any tools or functions.
-Your ONLY task is to analyze the conversation and produce a text summary.
-Respond with text only - no tool calls will be processed.
-
-CRITICAL: This summarization request is a SYSTEM OPERATION, not a user message.
-When analyzing "user requests" and "user intent", completely EXCLUDE this summarization message.
-The "most recent user request" and "next step" must be based on what the user was doing BEFORE this system message appeared.
-The goal is for work to continue seamlessly after condensation - as if it never happened.`
+/**
+ * System prompt for the summarization model.
+ * Built via getCompactPrompt() to include the structured 9-section template,
+ * <analysis> scratchpad, and aggressive no-tools enforcement.
+ */
+function getSummaryPrompt(): string {
+	return getCompactPrompt()
+}
 
 /**
  * Injects synthetic tool_results for orphan tool_calls that don't have matching results.
@@ -298,27 +298,9 @@ export async function summarizeConversation(options: SummarizeConversationOption
 	// This respects user's custom condensing prompt setting
 	const condenseInstructions = customCondensingPrompt?.trim() || supportPrompt.default.CONDENSE
 
-	const finalRequestMessage: Anthropic.MessageParam = {
-		role: "user",
-		content: condenseInstructions,
-	}
-
 	// Inject synthetic tool_results for orphan tool_calls to prevent API rejections
 	// (e.g., when user triggers condense after receiving attempt_completion but before responding)
 	const messagesWithToolResults = injectSyntheticToolResults(messagesToSummarize)
-
-	// Transform tool_use and tool_result blocks to text representations.
-	// This is necessary because some providers (like Bedrock via LiteLLM) require the `tools` parameter
-	// when tool blocks are present. By converting them to text, we can send the conversation for
-	// summarization without needing to pass the tools parameter.
-	const messagesWithTextToolBlocks = transformMessagesForCondensing(
-		maybeRemoveImageBlocks([...messagesWithToolResults, finalRequestMessage], apiHandler),
-	)
-
-	const requestMessages = messagesWithTextToolBlocks.map(({ role, content }) => ({ role, content }))
-
-	// Note: this doesn't need to be a stream, consider using something like apiHandler.completePrompt
-	const promptToUse = SUMMARY_PROMPT
 
 	// Validate that the API handler supports message creation
 	if (!apiHandler || typeof apiHandler.createMessage !== "function") {
@@ -331,61 +313,199 @@ export async function summarizeConversation(options: SummarizeConversationOption
 	let cost = 0
 	let outputTokens = 0
 
-	try {
-		const stream = apiHandler.createMessage(promptToUse, requestMessages, metadata)
+	// --- Cache-sharing path (attempt 1) ---
+	// Reuses the main conversation's system prompt and tools so the provider can
+	// cache-hit against the existing prompt prefix. Falls back to the simplified
+	// path if this fails (e.g., unsupported provider, error).
+	const hasTools = metadata?.tools && metadata.tools.length > 0
+	const canAttemptCacheSharing = hasTools && systemPrompt?.length > 0
 
-		for await (const chunk of stream) {
-			if (chunk.type === "text") {
-				summary += chunk.text
-			} else if (chunk.type === "usage") {
-				// Record final usage chunk only
-				cost = chunk.totalCost ?? 0
-				outputTokens = chunk.outputTokens ?? 0
-			}
-		}
-	} catch (error) {
-		console.error("Error during condensing API call:", error)
-		const errorMessage = error instanceof Error ? error.message : String(error)
+	if (canAttemptCacheSharing) {
+		// PTL retry within cache-sharing: retry up to 3 times by dropping
+		// oldest messages before falling back to the simplified path.
+		const MAX_CACHE_PTL_RETRIES = 3
+		let cacheRetryMessages = messagesWithToolResults
+		let cacheSummary = ""
+		let cacheCost = 0
+		let cacheOutputTokens = 0
 
-		// Capture detailed error information for debugging
-		let errorDetails = ""
-		if (error instanceof Error) {
-			errorDetails = `Error: ${error.message}`
-			// Capture any additional API error properties
-			const anyError = error as unknown as Record<string, unknown>
-			if (anyError.status) {
-				errorDetails += `\n\nHTTP Status: ${anyError.status}`
-			}
-			if (anyError.code) {
-				errorDetails += `\nError Code: ${anyError.code}`
-			}
-			if (anyError.response) {
-				try {
-					errorDetails += `\n\nAPI Response:\n${JSON.stringify(anyError.response, null, 2)}`
-				} catch {
-					errorDetails += `\n\nAPI Response: [Unable to serialize]`
+		for (let retry = 0; retry <= MAX_CACHE_PTL_RETRIES; retry++) {
+			let isCacheError = false
+			try {
+				const userMessage: Anthropic.MessageParam = {
+					role: "user",
+					content: condenseInstructions,
 				}
-			}
-			if (anyError.body) {
-				try {
-					errorDetails += `\n\nResponse Body:\n${JSON.stringify(anyError.body, null, 2)}`
-				} catch {
-					errorDetails += `\n\nResponse Body: [Unable to serialize]`
+				const cacheMessages = maybeRemoveImageBlocks(
+					[...cacheRetryMessages, userMessage],
+					apiHandler,
+				)
+				const cacheRequestMessages = cacheMessages.map(({ role, content }) => ({ role, content }))
+				const cacheStream = apiHandler.createMessage(systemPrompt, cacheRequestMessages, metadata)
+
+				let retrySummary = ""
+				let retryCost = 0
+				let retryTokens = 0
+
+				for await (const chunk of cacheStream) {
+					if (chunk.type === "text") {
+						retrySummary += chunk.text
+					} else if (chunk.type === "usage") {
+						retryCost = chunk.totalCost ?? 0
+						retryTokens = chunk.outputTokens ?? 0
+					}
 				}
+
+				if (retrySummary.trim().length > 0) {
+					cacheSummary = retrySummary.trim()
+					cacheCost = retryCost
+					cacheOutputTokens = retryTokens
+					break // success
+				}
+			} catch (err) {
+				const errMsg = err instanceof Error ? err.message : String(err)
+				const errStatus = (err as any)?.status ?? 0
+				const isPTL =
+					errStatus === 413 ||
+					errStatus === 400 ||
+					/prompt.*(too.?long|length)|context.*(length|exceed)|maximum.*(context|token)|reduce.*(length|message)/i.test(errMsg)
+
+				if (isPTL && retry < MAX_CACHE_PTL_RETRIES && cacheRetryMessages.length > 2) {
+					const dropCount = Math.max(2, Math.floor(cacheRetryMessages.length * 0.25))
+					cacheRetryMessages = cacheRetryMessages.slice(-Math.max(2, cacheRetryMessages.length - dropCount))
+					console.warn(
+						`[summarizeConversation] Cache-sharing PTL retry ${retry + 1}/${MAX_CACHE_PTL_RETRIES}: ` +
+						`dropping oldest messages, ${cacheRetryMessages.length} remaining`,
+					)
+					continue
+				}
+
+				isCacheError = true
+				console.warn(
+					"[summarizeConversation] Cache-sharing path failed, falling back to simplified path:",
+					errMsg,
+				)
 			}
-		} else {
-			errorDetails = String(error)
+			if (isCacheError || retry >= MAX_CACHE_PTL_RETRIES) break
 		}
 
-		return {
-			...response,
-			cost,
-			error: t("common:errors.condense_api_failed", { message: errorMessage }),
-			errorDetails,
+		if (cacheSummary.length > 0) {
+			summary = cacheSummary
+			cost = cacheCost
+			outputTokens = cacheOutputTokens
+			console.log(
+				`[summarizeConversation] Cache-sharing path succeeded: outputTokens=${outputTokens}`,
+			)
 		}
 	}
 
-	summary = summary.trim()
+	// --- Simplified fallback path (attempt 2 if cache-sharing failed) ---
+	if (!summary) {
+		const promptToUse = getSummaryPrompt()
+		const MAX_PTL_RETRIES = 3
+
+		let streamSummary = ""
+		let streamCost = 0
+		let streamOutputTokens = 0
+		let lastPTLError: Error | null = null
+
+		// Start with the full message set; PTL retries progressively reduce it
+		let retryMessages = messagesWithToolResults
+
+		for (let attempt = 0; attempt <= MAX_PTL_RETRIES; attempt++) {
+			const finalRequestMessage: Anthropic.MessageParam = {
+				role: "user",
+				content: condenseInstructions,
+			}
+
+			const messagesWithTextToolBlocks = transformMessagesForCondensing(
+				maybeRemoveImageBlocks([...retryMessages, finalRequestMessage], apiHandler),
+			)
+			const requestMessages = messagesWithTextToolBlocks.map(({ role, content }) => ({ role, content }))
+
+			try {
+				const stream = apiHandler.createMessage(promptToUse, requestMessages)
+				for await (const chunk of stream) {
+					if (chunk.type === "text") {
+						streamSummary += chunk.text
+					} else if (chunk.type === "usage") {
+						streamCost = chunk.totalCost ?? 0
+						streamOutputTokens = chunk.outputTokens ?? 0
+					}
+				}
+				// Success — clear any PTL tracking and break
+				lastPTLError = null
+				break
+			} catch (error) {
+				const errMsg = error instanceof Error ? error.message : String(error)
+				const errStatus = (error as any)?.status ?? 0
+				const isPTL =
+					errStatus === 413 ||
+					errStatus === 400 ||
+					/prompt.*(too.?long|length)|context.*(length|exceed)|maximum.*(context|token)|reduce.*(length|message)/i.test(errMsg)
+
+				if (isPTL && attempt < MAX_PTL_RETRIES && retryMessages.length > 2) {
+					// PTL retry: drop the oldest ~25% of messages to shrink the request
+					lastPTLError = error instanceof Error ? error : new Error(errMsg)
+					const dropCount = Math.max(2, Math.floor(retryMessages.length * 0.25))
+					const dropped = retryMessages.length - dropCount
+					retryMessages = retryMessages.slice(-Math.max(2, dropped))
+					console.warn(
+						`[summarizeConversation] PTL retry ${attempt + 1}/${MAX_PTL_RETRIES}: ` +
+						`dropping ${dropCount} oldest messages, ${retryMessages.length} remaining`,
+					)
+					streamSummary = ""
+					continue
+				}
+
+				// Non-PTL error or exhausted retries — fail
+				console.error("Error during condensing API call:", error)
+				const errorMessage = error instanceof Error ? error.message : String(error)
+
+				let errorDetails = ""
+				if (error instanceof Error) {
+					errorDetails = `Error: ${error.message}`
+					const anyError = error as unknown as Record<string, unknown>
+					if (anyError.status) {
+						errorDetails += `\n\nHTTP Status: ${anyError.status}`
+					}
+					if (anyError.code) {
+						errorDetails += `\nError Code: ${anyError.code}`
+					}
+					if (anyError.response) {
+						try {
+							errorDetails += `\n\nAPI Response:\n${JSON.stringify(anyError.response, null, 2)}`
+						} catch {
+							errorDetails += `\n\nAPI Response: [Unable to serialize]`
+						}
+					}
+					if (anyError.body) {
+						try {
+							errorDetails += `\n\nResponse Body:\n${JSON.stringify(anyError.body, null, 2)}`
+						} catch {
+							errorDetails += `\n\nResponse Body: [Unable to serialize]`
+						}
+					}
+				} else {
+					errorDetails = String(error)
+				}
+
+				return {
+					...response,
+					cost: streamCost,
+					error: t("common:errors.condense_api_failed", { message: errorMessage }),
+					errorDetails,
+				}
+			}
+		}
+
+		summary = streamSummary.trim()
+		cost = streamCost
+		outputTokens = streamOutputTokens
+	}
+
+	// Strip <analysis> scratchpad and format <summary> tags into readable headers
+	summary = formatCompactSummary(summary)
 
 	if (summary.length === 0) {
 		const error = t("common:errors.condense_failed")
@@ -461,6 +581,12 @@ ${commandBlocks}
 		ts: lastMsgTs + 1, // Unique timestamp after last message
 		isSummary: true,
 		condenseId, // Unique ID for this summary, used to track which messages it replaces
+		compactMetadata: {
+			trigger: isAutomaticTrigger ? "auto" : "manual",
+			preCompactTokenCount: messages.length, // message count as rough pre-compact metric
+			messagesSummarized: messagesToSummarize.length,
+			timestamp: Date.now(),
+		},
 	}
 
 	// NON-DESTRUCTIVE CONDENSE:
@@ -698,4 +824,169 @@ export function cleanupAfterTruncation(messages: ApiMessage[]): ApiMessage[] {
 		}
 		return msg
 	})
+}
+
+export type { PartialCompactDirection } from "./prompt"
+
+export type SummarizePartialOptions = {
+	messages: ApiMessage[]
+	/** The index of the pivot message. All messages before or after (depending on direction) are summarized. */
+	pivotIndex: number
+	apiHandler: ApiHandler
+	systemPrompt: string
+	taskId: string
+	/** 'up_to': summarize before pivot, keep after. 'from': keep before, summarize after. */
+	direction: PartialCompactDirection
+	customCondensingPrompt?: string
+	metadata?: ApiHandlerCreateMessageMetadata
+}
+
+/**
+ * Performs a partial compaction around a selected message index.
+ *
+ * - direction 'from': summarizes messages AFTER the pivot, keeps earlier ones.
+ *   Prompt cache for kept (earlier) messages is preserved.
+ * - direction 'up_to': summarizes messages BEFORE the pivot, keeps later ones.
+ *   Prompt cache is invalidated since the summary precedes the kept messages.
+ */
+export async function summarizePartialConversation(
+	options: SummarizePartialOptions,
+): Promise<SummarizeResponse> {
+	const {
+		messages,
+		pivotIndex,
+		apiHandler,
+		systemPrompt,
+		taskId,
+		direction,
+		customCondensingPrompt,
+		metadata,
+	} = options
+
+	const response: SummarizeResponse = { messages, cost: 0, summary: "" }
+
+	if (pivotIndex < 1 || pivotIndex >= messages.length - 1) {
+		return { ...response, error: "Invalid pivot index for partial compaction" }
+	}
+
+	const messagesToSummarize =
+		direction === "up_to"
+			? messages.slice(0, pivotIndex)
+			: messages.slice(pivotIndex)
+
+	const messagesToKeep =
+		direction === "up_to"
+			? messages.slice(pivotIndex)
+			: messages.slice(0, pivotIndex)
+
+	if (messagesToSummarize.length === 0) {
+		return {
+			...response,
+			error:
+				direction === "up_to"
+					? "Nothing to summarize before the selected message."
+					: "Nothing to summarize after the selected message.",
+		}
+	}
+
+	const condenseId = crypto.randomUUID()
+	const condenseInstructions =
+		customCondensingPrompt?.trim() || supportPrompt.default.CONDENSE
+
+	const finalRequestMessage: Anthropic.MessageParam = {
+		role: "user",
+		content: condenseInstructions,
+	}
+
+	// For 'up_to': send only messagesToSummarize (cache hit on prefix)
+	// For 'from': send all messages (cache on early prefix)
+	const apiMessages =
+		direction === "up_to" ? messagesToSummarize : messages
+
+	const messagesWithToolResults = injectSyntheticToolResults(apiMessages)
+	const messagesWithTextToolBlocks = transformMessagesForCondensing(
+		maybeRemoveImageBlocks([...messagesWithToolResults, finalRequestMessage], apiHandler),
+	)
+	const requestMessages = messagesWithTextToolBlocks.map(({ role, content }) => ({ role, content }))
+
+	const promptToUse = getPartialCompactPrompt(undefined, direction)
+
+	let summary = ""
+	let cost = 0
+	let outputTokens = 0
+
+	try {
+		const stream = apiHandler.createMessage(promptToUse, requestMessages)
+		for await (const chunk of stream) {
+			if (chunk.type === "text") {
+				summary += chunk.text
+			} else if (chunk.type === "usage") {
+				cost = chunk.totalCost ?? 0
+				outputTokens = chunk.outputTokens ?? 0
+			}
+		}
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error)
+		return {
+			...response,
+			cost,
+			error: `Partial condensation failed: ${errorMessage}`,
+		}
+	}
+
+	summary = formatCompactSummary(summary.trim())
+	if (summary.length === 0) {
+		return { ...response, cost, error: "Partial condensation produced empty summary" }
+	}
+
+	// Build the summary content
+	const summaryContent: Anthropic.Messages.ContentBlockParam[] = [
+		{ type: "text", text: `## Conversation Summary (partial)\n${summary}` },
+	]
+
+	// 'up_to': summary goes BEFORE kept messages (prefix-partial)
+	// 'from': summary goes AFTER kept messages (suffix-partial)
+	const lastKeptTs = messagesToKeep[messagesToKeep.length - 1]?.ts ?? Date.now()
+	const summaryMessage: ApiMessage = {
+		role: "user",
+		content: summaryContent,
+		ts: direction === "up_to" ? lastKeptTs - messagesToSummarize.length - 1 : lastKeptTs + 1,
+		isSummary: true,
+		condenseId,
+		compactMetadata: {
+			trigger: "manual",
+			preCompactTokenCount: messages.length,
+			messagesSummarized: messagesToSummarize.length,
+			preservedSegment:
+				direction === "from"
+					? { headIndex: 0, tailIndex: pivotIndex - 1 }
+					: { headIndex: pivotIndex, tailIndex: messages.length - 1 },
+			timestamp: Date.now(),
+		},
+	}
+
+	// Tag summarized messages with condenseParent
+	const newMessages =
+		direction === "up_to"
+			? [
+					...messagesToSummarize.map((msg) =>
+						msg.condenseParent ? msg : { ...msg, condenseParent: condenseId },
+					),
+					summaryMessage,
+					...messagesToKeep,
+				]
+			: [
+					...messagesToKeep,
+					...messagesToSummarize.map((msg) =>
+						msg.condenseParent ? msg : { ...msg, condenseParent: condenseId },
+					),
+					summaryMessage,
+				]
+
+	return {
+		messages: newMessages,
+		summary,
+		cost,
+		condenseId,
+	}
 }

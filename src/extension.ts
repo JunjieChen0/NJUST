@@ -42,6 +42,7 @@ import { cleanupOrphanedTestFiles, initTestCleanup } from "./services/cangjie-ls
 import { CangjieCodeActionProvider } from "./services/cangjie-lsp/CangjieCodeActionProvider"
 import { checkAndPromptSdkSetup } from "./services/cangjie-lsp/CangjieSdkSetup"
 import { probeCangjieToolchain } from "./services/cangjie-lsp/cangjieToolUtils"
+import { setDeviceToken } from "./services/cloud-agent/deviceToken"
 import { CangjieDocumentSymbolProvider } from "./services/cangjie-lsp/CangjieDocumentSymbolProvider"
 import { CangjieFoldingRangeProvider } from "./services/cangjie-lsp/CangjieFoldingRangeProvider"
 import { CangjieHoverProvider } from "./services/cangjie-lsp/CangjieHoverProvider"
@@ -52,10 +53,16 @@ import { CangjieDefinitionProvider } from "./services/cangjie-lsp/CangjieDefinit
 import { CangjieReferenceProvider } from "./services/cangjie-lsp/CangjieReferenceProvider"
 import { CangjieEnhancedRenameProvider } from "./services/cangjie-lsp/CangjieEnhancedRenameProvider"
 import { CangjieMacroCodeLensProvider, CangjieMacroHoverProvider, registerMacroCommands } from "./services/cangjie-lsp/CangjieMacroProvider"
+import { CangjieSemanticTokensProvider } from "./services/cangjie-lsp/CangjieSemanticTokensProvider"
+import { CangjieInlayHintsProvider } from "./services/cangjie-lsp/CangjieInlayHintsProvider"
+import { CangjieCallHierarchyProvider } from "./services/cangjie-lsp/CangjieCallHierarchyProvider"
+import { CangjieTypeHierarchyProvider } from "./services/cangjie-lsp/CangjieTypeHierarchyProvider"
+import { CangjieWorkspaceSymbolProvider } from "./services/cangjie-lsp/CangjieWorkspaceSymbolProvider"
 import { CangjieCompileGuard } from "./services/cangjie-lsp/CangjieCompileGuard"
 import { invalidateCangjieToolEnvCache } from "./services/cangjie-lsp/cangjieToolUtils"
 import { bumpCangjieL3TtlConfigCache, invalidateCangjieL3ContextCache } from "./core/prompts/sections/cangjie-context"
 import { registerCangjieRulesHotReload } from "./services/cangjie-lsp/cangjieRulesHotReload"
+import { registerLatexCommands } from "./services/latex/latexCommands"
 import { cangjieDiagnosticModeSwitch } from "./services/cangjie-lsp/cangjieDiagnosticModeSwitch"
 import { CangjieLintConfig } from "./services/cangjie-lsp/CangjieLintConfig"
 import { CangjieMetricsCollector } from "./services/cangjie-lsp/CangjieMetricsCollector"
@@ -131,6 +138,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(outputChannel)
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((e) => {
+			// Respond to any NJUST_AI_CJ config change across all subsystems.
 			if (e.affectsConfiguration(Package.name)) {
 				invalidateCangjieToolEnvCache()
 				bumpCangjieL3TtlConfigCache()
@@ -213,23 +221,30 @@ export async function activate(context: vscode.ExtensionContext) {
 	}
 
 	// Auto-generate Cloud Agent device token on first activation.
-	if (!context.globalState.get<string>("njustCloudDeviceToken")) {
-		const { randomUUID } = await import("crypto")
-		const token = randomUUID()
-		await context.globalState.update("njustCloudDeviceToken", token)
+	// Stored in SecretStorage to prevent exposure to other extensions.
+	const DEVICE_TOKEN_KEY = "njust-ai-cj.cloudAgent.deviceToken"
+	let deviceToken = await context.secrets.get(DEVICE_TOKEN_KEY)
+	if (!deviceToken) {
+		// Migration: check old globalState key then old config value
+		const legacyToken =
+			context.globalState.get<string>("njustCloudDeviceToken") ||
+			vscode.workspace.getConfiguration(Package.name).get<string>("cloudAgent.deviceToken", "")
+		if (legacyToken && legacyToken.trim()) {
+			deviceToken = legacyToken.trim()
+		} else {
+			const { randomUUID } = await import("crypto")
+			deviceToken = randomUUID()
+		}
+		await context.secrets.store(DEVICE_TOKEN_KEY, deviceToken)
+		// Clean up legacy storage
+		await context.globalState.update("njustCloudDeviceToken", undefined)
 		const debug = vscode.workspace.getConfiguration(Package.name).get<boolean>("debug")
 		if (debug) {
-			outputChannel.appendLine(`[CloudAgent] Generated device token (debug): ${token.slice(0, 8)}...`)
+			outputChannel.appendLine(`[CloudAgent] Generated device token (debug): ${deviceToken.slice(0, 8)}...`)
 		} else {
-			outputChannel.appendLine("[CloudAgent] Device token generated and saved.")
+			outputChannel.appendLine("[CloudAgent] Device token generated and saved to SecretStorage.")
 		}
-	}
-
-	// Sync device token into workspace config so Task can read it.
-	const cloudDeviceToken = context.globalState.get<string>("njustCloudDeviceToken")!
-	const cloudConfig = vscode.workspace.getConfiguration(Package.name)
-	if (cloudConfig.get<string>("cloudAgent.deviceToken") !== cloudDeviceToken) {
-		await cloudConfig.update("cloudAgent.deviceToken", cloudDeviceToken, vscode.ConfigurationTarget.Global)
+		setDeviceToken(deviceToken)
 	}
 
 	const contextProxy = await ContextProxy.getInstance(context)
@@ -365,6 +380,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	registerCommands({ context, outputChannel, provider })
 
+	registerLatexCommands(context, outputChannel)
+
 	const inlineCompletionProvider = new InlineCompletionProvider(context, provider, outputChannel)
 	// Use scheme + glob: a lone `pattern: "**/*"` often fails to match workspace/untitled documents reliably.
 	context.subscriptions.push(
@@ -479,6 +496,21 @@ export async function activate(context: vscode.ExtensionContext) {
 		),
 	)
 
+	context.subscriptions.push(
+		vscode.languages.registerDocumentSemanticTokensProvider(
+			{ language: "cangjie", scheme: "file" },
+			new CangjieSemanticTokensProvider(),
+			CangjieSemanticTokensProvider.legend,
+		),
+	)
+
+	context.subscriptions.push(
+		vscode.languages.registerInlayHintsProvider(
+			{ language: "cangjie", scheme: "file" },
+			new CangjieInlayHintsProvider(),
+		),
+	)
+
 	// Test run/debug commands for CodeLens
 	context.subscriptions.push(
 		vscode.commands.registerCommand("njust-ai-cj.cangjieRunTest", (testName: string, fileUri?: vscode.Uri) => {
@@ -551,6 +583,26 @@ export async function activate(context: vscode.ExtensionContext) {
 			),
 		)
 
+		context.subscriptions.push(
+			vscode.languages.registerCallHierarchyProvider(
+				{ language: "cangjie", scheme: "file" },
+				new CangjieCallHierarchyProvider(cangjieSymbolIndex),
+			),
+		)
+
+		context.subscriptions.push(
+			vscode.languages.registerTypeHierarchyProvider(
+				{ language: "cangjie", scheme: "file" },
+				new CangjieTypeHierarchyProvider(cangjieSymbolIndex),
+			),
+		)
+
+		context.subscriptions.push(
+			vscode.languages.registerWorkspaceSymbolProvider(
+				new CangjieWorkspaceSymbolProvider(cangjieSymbolIndex),
+			),
+		)
+
 		if (cangjieLspClient && cangjieSymbolIndex) {
 			registerCangjieCommands(context, cangjieLspClient, cangjieSymbolIndex, () => provider.getCurrentTask()?.taskId)
 		}
@@ -567,7 +619,18 @@ export async function activate(context: vscode.ExtensionContext) {
 	if (mcpServerEnabled) {
 		const port = mcpServerConfig.get<number>("mcpServer.port", 3100)
 		const bindAddress = mcpServerConfig.get<string>("mcpServer.bindAddress", "127.0.0.1")
-		const authToken = mcpServerConfig.get<string>("mcpServer.authToken", "") || undefined
+
+		// Read MCP authToken from SecretStorage (preferred) or migrate from settings.
+		const MCP_AUTH_TOKEN_SECRET_KEY = "njust-ai-cj.mcpServer.authToken"
+		let authToken = (await context.secrets.get(MCP_AUTH_TOKEN_SECRET_KEY)) || undefined
+		if (!authToken) {
+			// Migration: read legacy token from settings and store in SecretStorage.
+			const legacyToken = mcpServerConfig.get<string>("mcpServer.authToken", "")
+			if (legacyToken && legacyToken.trim()) {
+				authToken = legacyToken.trim()
+				context.secrets.store(MCP_AUTH_TOKEN_SECRET_KEY, authToken).then(() => {}, () => {})
+			}
+		}
 
 		const startMcpServer = (wsPath: string) => {
 			rooToolsMcpServer = new RooToolsMcpServer({

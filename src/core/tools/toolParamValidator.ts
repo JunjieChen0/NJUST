@@ -10,8 +10,7 @@
  * Unregistered tools pass through without validation.
  *
  * **Aliases:** Some tool names are aliases of canonical tools (see TOOL_ALIASES).
- * Validation resolves *safe* aliases (same parameter shape) to the canonical schema.
- * `edit_file` is NOT aliased to `edit` (different optional fields).
+ * Validation resolves only safe compatibility aliases to the canonical schema.
  */
 import { z } from "zod"
 
@@ -66,6 +65,12 @@ const toolSchemas = {
 		old_string: z.string(),
 		new_string: z.string(),
 		replace_all: optionalBooleanCoerced,
+	}),
+
+	search_replace: z.object({
+		file_path: pathSchema,
+		old_string: z.string(),
+		new_string: z.string(),
 	}),
 
 	execute_command: z.object({
@@ -132,7 +137,6 @@ type ValidatableToolName = keyof typeof toolSchemas
  */
 const VALIDATION_SCHEMA_BY_ALIAS: Partial<Record<string, ValidatableToolName>> = {
 	write_file: "write_to_file",
-	search_replace: "edit",
 	search_and_replace: "edit",
 }
 

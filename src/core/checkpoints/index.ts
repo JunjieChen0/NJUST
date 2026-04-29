@@ -119,10 +119,10 @@ export async function getCheckpointService(task: Task, { interval = 250 }: { int
 		}
 		return service
 	} catch (err) {
-		if (err.name === "TimeoutError" && task.enableCheckpoints) {
+		if ((err as any).name === "TimeoutError" && task.enableCheckpoints) {
 			sendCheckpointInitWarn(task, "INIT_TIMEOUT", task.checkpointTimeout)
 		}
-		log(`[Task#getCheckpointService] ${err.message}`)
+		log(`[Task#getCheckpointService] ${err instanceof Error ? err.message : String(err)}`)
 		task.enableCheckpoints = false
 		task.checkpointServiceInitializing = false
 		return undefined
@@ -198,11 +198,12 @@ async function checkGitInstallation(
 		try {
 			await service.initShadowGit()
 		} catch (err) {
-			log(`[Task#getCheckpointService] initShadowGit -> ${err.message}`)
+			log(`[Task#getCheckpointService] initShadowGit -> ${err instanceof Error ? err.message : String(err)}`)
 			task.enableCheckpoints = false
 		}
+			task.checkpointServiceInitializing = false
 	} catch (err) {
-		log(`[Task#getCheckpointService] Unexpected error during Git check: ${err.message}`)
+		log(`[Task#getCheckpointService] Unexpected error during Git check: ${err instanceof Error ? err.message : String(err)}`)
 		console.error("Git check error:", err)
 		task.enableCheckpoints = false
 		task.checkpointServiceInitializing = false

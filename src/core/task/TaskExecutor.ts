@@ -42,8 +42,9 @@ import { type ApiStream, GroundingSource } from "../../api/transform/stream"
 import { maybeRemoveImageBlocks } from "../../api/transform/image-cleaning"
 import type { SystemPromptParts } from "../prompts/system"
 import { checkToolPromptConsistency } from "../prompts/toolPromptConsistency"
-import { type AssistantMessageContent, presentAssistantMessage } from "../assistant-message"
+import { type AssistantMessageContent, presentAssistantMessage, markUserContentReadyIfDrained } from "../assistant-message"
 import { NativeToolCallParser } from "../assistant-message/NativeToolCallParser"
+import { defaultToolCallParser } from "../assistant-message/ToolCallParserImpl"
 import type { ApiMessage } from "../task-persistence"
 import { getModelMaxOutputTokens } from "../../shared/api"
 import { findLastIndex } from "../../shared/array"
@@ -68,7 +69,16 @@ import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
 import { t as i18nT } from "../../i18n"
 import { processUserContentMentions } from "../mentions/processUserContentMentions"
 
+import { debugLog } from "../../utils/debugLog"
 const DEFAULT_USAGE_COLLECTION_TIMEOUT_MS = 5000
+
+/**
+ * Maximum time (ms) to wait for presentAssistantMessage to set
+ * userMessageContentReady.  If a tool handler hangs or fails to push
+ * a tool_result, this prevents the executor from blocking forever.
+ * Set to 0 to disable (infinite wait, legacy behaviour).
+ */
+const USER_MESSAGE_CONTENT_READY_TIMEOUT_MS = 30_000
 
 // ── Host interface ───────────────────────────────────────────────────────
 // Structural contract: Task implements this shape at runtime.
@@ -93,8 +103,12 @@ export interface TaskExecutorHost {
 	apiConversationHistory: ApiMessage[]
 	clineMessages: ClineMessage[]
 	userMessageContent: Anthropic.Messages.ContentBlockParam[]
-	assistantMessageContent: AssistantMessageContent
+	assistantMessageContent: AssistantMessageContent[]
 	assistantMessageSavedToHistory: boolean
+	/** Stream/present gating (presentAssistantMessage) */
+	userMessageContentReady: boolean
+	currentStreamingContentIndex: number
+	didCompleteReadingStream: boolean
 
 	// Sub-delegates
 	stateMachine: { force(state: TaskState): void; readonly state: TaskState }
@@ -135,6 +149,7 @@ export interface TaskExecutorHost {
 	parentTask: { getTokenUsage(): TokenUsage } | undefined
 	rooIgnoreController: any
 	toolExecution: any
+	compactFailures: number
 
 	// Token windows
 	requestCacheReadWindow: number[]
@@ -149,6 +164,27 @@ export interface TaskExecutorHost {
 	consecutiveMistakeCount: number
 	consecutiveMistakeLimit: number
 	didEditFile: boolean
+
+	// Streaming state
+	abandoned: boolean
+	didRejectTool: boolean
+	didAlreadyUseTool: boolean
+	didToolFailInCurrentTurn: boolean
+	presentAssistantMessageLocked: boolean
+	presentAssistantMessageHasPendingUpdates: boolean
+	consecutiveNoToolUseCount: number
+	consecutiveNoAssistantMessagesCount: number
+	streamingToolCallIndices: Map<string, number>
+	cachedStreamingModel?: any
+	notifier?: { postMessageToWebview(message: any): Promise<void> }
+
+	// Delegated services
+	diffViewProvider: {
+		isEditing: boolean
+		reset(): Promise<void>
+		revertChanges(): Promise<void>
+	}
+	fileContextTracker: any
 
 	// Methods the executor delegates back to
 	say(
@@ -183,11 +219,30 @@ export interface TaskExecutorHost {
 	// Static field access — provided by the host
 	setLastGlobalApiRequestTime(time: number): void
 	getLastGlobalApiRequestTime(): number
+
+	// Persistence
+	saveClineMessages(): Promise<boolean>
+	refreshWebviewState(): Promise<void>
+	updateClineMessage(message: ClineMessage): Promise<void>
+
+	// Control
+	abortTask(isAbandoned?: boolean): Promise<void>
+	backoffAndAnnounce(retryAttempt: number, error: any): Promise<void>
+	maybeWaitForProviderRateLimit(retryAttempt: number): Promise<void>
+	attemptApiRequest(retryAttempt: number, options?: { skipProviderRateLimit?: boolean }): AsyncGenerator<any, void, unknown>
+
+	// Streaming lifecycle flags
+	didFinishAbortingStream: boolean
+	currentStreamingDidCheckpoint: boolean
+
+	// Task mode
+	getTaskMode(): string | undefined
 }
 
 // ── Executor ─────────────────────────────────────────────────────────────
 
 export class TaskExecutor {
+	private readonly toolCallParser = new NativeToolCallParser()
 	constructor(private host: TaskExecutorHost) {}
 
 	/**
@@ -371,7 +426,9 @@ export class TaskExecutor {
 					enableMicroCompact: true,
 					cacheReadTokens,
 					cacheAwareTotalTokens,
+					compactFailures: h.compactFailures,
 				})
+				h.compactFailures = truncateResult.compactFailures ?? 0
 				if (truncateResult.messages !== h.apiConversationHistory) {
 					await h.overwriteApiConversationHistory(truncateResult.messages)
 				}
@@ -594,7 +651,7 @@ export class TaskExecutor {
 			} else {
 				const { response } = await h.ask(
 					"api_req_failed",
-					error.message ?? JSON.stringify(serializeError(error), null, 2),
+					error instanceof Error ? error.message : String(error) ?? JSON.stringify(serializeError(error), null, 2),
 				)
 
 				if (response !== "yesButtonClicked") {
@@ -633,7 +690,7 @@ export class TaskExecutor {
 		userContent: Anthropic.Messages.ContentBlockParam[],
 		includeFileDetails: boolean = false,
 	): Promise<boolean> {
-		const t = this.host as any
+		const t = this.host
 
 		interface StackItem {
 			userContent: Anthropic.Messages.ContentBlockParam[]
@@ -744,7 +801,7 @@ export class TaskExecutor {
 				}
 			}
 
-			const environmentDetails = await getEnvironmentDetails(t, currentIncludeFileDetails)
+			const environmentDetails = await getEnvironmentDetails(t as any, currentIncludeFileDetails)
 
 			// Remove any existing environment_details blocks before adding fresh ones.
 			// This prevents duplicate environment details when resuming tasks,
@@ -785,9 +842,11 @@ export class TaskExecutor {
 			// message.
 			const lastApiReqIndex = findLastIndex(t.clineMessages, (m: ClineMessage) => m.say === "api_req_started")
 
-			t.clineMessages[lastApiReqIndex].text = JSON.stringify({
-				apiProtocol,
-			} satisfies ClineApiReqInfo)
+			if (lastApiReqIndex >= 0 && t.clineMessages[lastApiReqIndex]) {
+				t.clineMessages[lastApiReqIndex].text = JSON.stringify({
+					apiProtocol,
+				} satisfies ClineApiReqInfo)
+			}
 
 			await t.saveClineMessages()
 			await t.refreshWebviewState()
@@ -893,8 +952,8 @@ export class TaskExecutor {
 				// No legacy text-stream tool parser.
 				t.streamingToolCallIndices.clear()
 				// Clear any leftover streaming tool call state from previous interrupted streams
-				NativeToolCallParser.clearAllStreamingToolCalls()
-				NativeToolCallParser.clearRawChunkState()
+				this.toolCallParser.clearAllStreamingToolCalls()
+				this.toolCallParser.clearRawChunkState()
 
 				await t.diffViewProvider.reset()
 
@@ -922,17 +981,21 @@ export class TaskExecutor {
 
 						// If we have an abort controller, race it with the next chunk
 						if (t.currentRequestAbortController) {
+							const signal = t.currentRequestAbortController!.signal
+							let onAbort: (() => void) | undefined
 							const abortPromise = new Promise<never>((_, reject) => {
-								const signal = t.currentRequestAbortController!.signal
 								if (signal.aborted) {
 									reject(new Error("Request cancelled by user"))
-								} else {
-									signal.addEventListener("abort", () => {
-										reject(new Error("Request cancelled by user"))
-									})
+									return
 								}
+								onAbort = () => reject(new Error("Request cancelled by user"))
+								signal.addEventListener("abort", onAbort, { once: true })
 							})
-							return await Promise.race([nextPromise, abortPromise])
+							try {
+								return await Promise.race([nextPromise, abortPromise])
+							} finally {
+								if (onAbort) signal.removeEventListener("abort", onAbort)
+							}
 						}
 
 						// No abort controller, just return the next chunk normally
@@ -983,7 +1046,7 @@ export class TaskExecutor {
 							case "tool_call_partial": {
 								// Process raw tool call chunk through NativeToolCallParser
 								// which handles tracking, buffering, and emits events
-								const events = NativeToolCallParser.processRawChunk({
+								const events = this.toolCallParser.processRawChunk({
 									index: chunk.index,
 									id: chunk.id,
 									name: chunk.name,
@@ -1005,7 +1068,7 @@ export class TaskExecutor {
 										}
 
 										// Initialize streaming in NativeToolCallParser
-										NativeToolCallParser.startStreamingToolCall(event.id, event.name as ToolName)
+										this.toolCallParser.startStreamingToolCall(event.id, event.name as ToolName)
 
 										// Before adding a new tool, finalize any preceding text block
 										// This prevents the text block from blocking tool presentation
@@ -1033,10 +1096,10 @@ export class TaskExecutor {
 										// Add to content and present
 										t.assistantMessageContent.push(partialToolUse)
 										t.userMessageContentReady = false
-										presentAssistantMessage(t)
+										presentAssistantMessage(t as any)
 									} else if (event.type === "tool_call_delta") {
 										// Process chunk using streaming JSON parser
-										const partialToolUse = NativeToolCallParser.processStreamingChunk(
+										const partialToolUse = this.toolCallParser.processStreamingChunk(
 											event.id,
 											event.delta,
 										)
@@ -1052,12 +1115,12 @@ export class TaskExecutor {
 												t.assistantMessageContent[toolUseIndex] = partialToolUse
 
 												// Present updated tool use
-												presentAssistantMessage(t)
+												presentAssistantMessage(t as any)
 											}
 										}
 									} else if (event.type === "tool_call_end") {
 										// Finalize the streaming tool call
-										const finalToolUse = NativeToolCallParser.finalizeStreamingToolCall(event.id)
+										const finalToolUse = this.toolCallParser.finalizeStreamingToolCall(event.id)
 
 										// Get the index for this tool call
 										const toolUseIndex = t.streamingToolCallIndices.get(event.id)
@@ -1085,14 +1148,14 @@ export class TaskExecutor {
 												if (enabled && (state?.autoApprovalEnabled ?? false)) {
 													const decision = t.toolExecution.streamingExecutor.shouldEagerExecute(t, latest)
 													if (decision === "eager") {
-														presentAssistantMessage(t)
+														presentAssistantMessage(t as any)
 														break
 													}
 												}
 											}
 
 											// Present the finalized tool call
-											presentAssistantMessage(t)
+											presentAssistantMessage(t as any)
 										} else if (toolUseIndex !== undefined) {
 											// finalizeStreamingToolCall returned null (malformed JSON or missing args)
 											// Mark the tool as non-partial so it's presented as complete, but execution
@@ -1111,7 +1174,7 @@ export class TaskExecutor {
 											t.userMessageContentReady = false
 
 											// Present the tool call - validation will handle missing params
-											presentAssistantMessage(t)
+											presentAssistantMessage(t as any)
 										}
 									}
 								}
@@ -1144,7 +1207,7 @@ export class TaskExecutor {
 
 								// Present the tool call to user - presentAssistantMessage will execute
 								// tools sequentially and accumulate all results in userMessageContent
-								presentAssistantMessage(t)
+								presentAssistantMessage(t as any)
 								break
 							}
 							case "text": {
@@ -1164,7 +1227,7 @@ export class TaskExecutor {
 									})
 									t.userMessageContentReady = false
 								}
-								presentAssistantMessage(t)
+								presentAssistantMessage(t as any)
 								break
 							}
 						}
@@ -1441,7 +1504,7 @@ export class TaskExecutor {
 						// Determine cancellation reason
 						const cancelReason: ClineApiReqCancelReason = t.abort ? "user_cancelled" : "streaming_failed"
 
-						const rawErrorMessage = error.message ?? JSON.stringify(serializeError(error), null, 2)
+						const rawErrorMessage = error instanceof Error ? error.message : String(error) ?? JSON.stringify(serializeError(error), null, 2)
 						const streamingFailedMessage = t.abort
 							? undefined
 							: `${i18nT("common:interruption.streamTerminatedByProvider")}: ${rawErrorMessage}`
@@ -1522,11 +1585,11 @@ export class TaskExecutor {
 				// Finalize any remaining streaming tool calls that weren't explicitly ended
 				// This is critical for MCP tools which need tool_call_end events to be properly
 				// converted from ToolUse to McpToolUse via finalizeStreamingToolCall()
-				const finalizeEvents = NativeToolCallParser.finalizeRawChunks()
+				const finalizeEvents = this.toolCallParser.finalizeRawChunks()
 				for (const event of finalizeEvents) {
 					if (event.type === "tool_call_end") {
 						// Finalize the streaming tool call
-						const finalToolUse = NativeToolCallParser.finalizeStreamingToolCall(event.id)
+						const finalToolUse = this.toolCallParser.finalizeStreamingToolCall(event.id)
 
 						// Get the index for this tool call
 						const toolUseIndex = t.streamingToolCallIndices.get(event.id)
@@ -1547,7 +1610,7 @@ export class TaskExecutor {
 							t.userMessageContentReady = false
 
 							// Present the finalized tool call
-							presentAssistantMessage(t)
+							presentAssistantMessage(t as any)
 						} else if (toolUseIndex !== undefined) {
 							// finalizeStreamingToolCall returned null (malformed JSON or missing args)
 							// We still need to mark the tool as non-partial so it gets executed
@@ -1566,7 +1629,7 @@ export class TaskExecutor {
 							t.userMessageContentReady = false
 
 							// Present the tool call - validation will handle missing params
-							presentAssistantMessage(t)
+							presentAssistantMessage(t as any)
 						}
 					}
 				}
@@ -1689,10 +1752,8 @@ export class TaskExecutor {
 								// nativeArgs is already in the correct API format for all tools
 								const input = toolUse.nativeArgs || toolUse.params
 
-								// Use originalName (alias) if present for API history consistency.
-								// When tool aliases are used (e.g., "edit_file" -> "search_and_replace" -> "edit" (current canonical name)),
-								// we want the alias name in the conversation history to match what the model
-								// was told the tool was named, preventing confusion in multi-turn conversations.
+								// Use originalName (compatibility alias) if present for API history consistency.
+								// The history should match the tool name the model was shown.
 								const toolNameForHistory = toolUse.originalName ?? toolUse.name
 
 								assistantContent.push({
@@ -1763,7 +1824,7 @@ export class TaskExecutor {
 					// If there is content to update then it will complete and
 					// update `t.userMessageContentReady` to true, which we
 					// `pWaitFor` before making the next request.
-					presentAssistantMessage(t)
+					presentAssistantMessage(t as any)
 				}
 
 				if (hasTextContent || hasToolUses) {
@@ -1783,7 +1844,54 @@ export class TaskExecutor {
 					// 	t.userMessageContentReady = true
 					// }
 
-					await pWaitFor(() => t.userMessageContentReady)
+					const waitStartMs = performance.now()
+					debugLog(
+						`[TaskExecutor][${requestProfileId}] pWaitFor userMessageContentReady – start (contentIndex=${t.currentStreamingContentIndex}, blocks=${t.assistantMessageContent.length})`,
+					)
+
+					try {
+						await pWaitFor(() => t.userMessageContentReady, {
+							...(USER_MESSAGE_CONTENT_READY_TIMEOUT_MS > 0 && {
+								timeout: USER_MESSAGE_CONTENT_READY_TIMEOUT_MS,
+							}),
+						})
+					} catch (_timeoutErr) {
+						// Timeout: inject error tool_results for any tool_use blocks
+						// that never received a result, then force-unblock.
+						const pendingToolBlocks = t.assistantMessageContent.filter(
+							(b: any) =>
+								(b.type === "tool_use" || b.type === "mcp_tool_use") &&
+								b.id &&
+								!t.userMessageContent.some(
+									(r: any) =>
+										r.type === "tool_result" && r.tool_use_id === sanitizeToolUseId(b.id),
+								),
+						)
+
+						console.error(
+							`[TaskExecutor][${requestProfileId}] userMessageContentReady timed out after ${USER_MESSAGE_CONTENT_READY_TIMEOUT_MS}ms ` +
+								`(taskId=${t.taskId}, instance=${t.instanceId}, contentIndex=${t.currentStreamingContentIndex}, ` +
+								`blocks=${t.assistantMessageContent.length}, pendingTools=${pendingToolBlocks.length})`,
+						)
+
+						for (const block of pendingToolBlocks) {
+							t.pushToolResultToUserContent({
+								type: "tool_result",
+								tool_use_id: sanitizeToolUseId((block as any).id),
+								content: formatResponse.toolError(
+									"Tool execution timed out — the handler did not return a result within the allowed window.",
+								),
+								is_error: true,
+							})
+						}
+
+						markUserContentReadyIfDrained(t as any)
+						t.userMessageContentReady = true
+					}
+
+					debugLog(
+						`[TaskExecutor][${requestProfileId}] pWaitFor userMessageContentReady – done (${(performance.now() - waitStartMs).toFixed(0)}ms)`,
+					)
 
 					// If the model did not tool use, then we need to tell it to
 					// either use a tool or attempt_completion.
@@ -1925,13 +2033,30 @@ export class TaskExecutor {
 				// If we reach here without continuing, return false (will always be false for now)
 				return false
 			} catch (error) {
-				// This should never happen since the only thing that can throw an
-				// error is the attemptApiRequest, which is wrapped in a try catch
-				// that sends an ask where if noButtonClicked, will clear current
-				// task and destroy this instance. However to avoid unhandled
-				// promise rejection, we will end this loop which will end execution
-				// of this instance (see `startTask`).
-				return true // Needs to be true so parent loop knows to end task.
+				// A tool execution or presentAssistantMessage threw an unhandled
+				// exception. Log it, notify the user, and end the task gracefully.
+				const errMsg = error instanceof Error ? error.message : String(error)
+				console.error(
+					`[TaskExecutor#${h.taskId}] Unhandled error in request loop (retry ${retryAttempt}):`,
+					errMsg,
+					error instanceof Error ? error.stack : "",
+				)
+				// Release the presentAssistantMessage lock if it was held.
+				// presentAssistantMessageLocked may be stuck true if the exception
+				// escaped the while loop without reaching the finally block.
+				if (h.presentAssistantMessageLocked) {
+					console.warn(
+						`[TaskExecutor#${h.taskId}] Force-releasing stuck presentAssistantMessageLocked`,
+					)
+					h.presentAssistantMessageLocked = false
+				}
+				// Notify the user through the UI
+				try {
+					await h.say("error", `Task ended unexpectedly: ${errMsg}`)
+				} catch {
+					// Best-effort notification
+				}
+				return true // End the task loop
 			}
 		}
 

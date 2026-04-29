@@ -7,6 +7,7 @@ import { BaseProvider } from "./base-provider"
 import type { ApiHandlerOptions } from "../../shared/api"
 import { getOllamaModels } from "./fetchers/ollama"
 import { TagMatcher } from "../../utils/tag-matcher"
+import { redactApiSecrets } from "../../utils/redactApiSecrets"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
 
 interface OllamaChatOptions {
@@ -172,7 +173,7 @@ export class NativeOllamaHandler extends BaseProvider implements SingleCompletio
 
 				this.client = new Ollama(clientOptions)
 			} catch (error: any) {
-				throw new Error(`Error creating Ollama client: ${error.message}`)
+				throw new Error(`Error creating Ollama client: ${redactApiSecrets(error.message)}`)
 			}
 		}
 		return this.client
@@ -308,8 +309,13 @@ export class NativeOllamaHandler extends BaseProvider implements SingleCompletio
 					}
 				}
 			} catch (streamError: any) {
-				console.error("Error processing Ollama stream:", streamError)
-				throw new Error(`Ollama stream processing error: ${streamError.message || "Unknown error"}`)
+				console.error("Error processing Ollama stream:", redactApiSecrets(streamError?.message || String(streamError)))
+				throw new Error(redactApiSecrets(`Ollama stream processing error: ${streamError.message || "Unknown error"}`))
+			} finally {
+				// Flush accumulated matcher content on error to avoid losing partial output
+				for (const chunk of matcher.final()) {
+					yield chunk
+				}
 			}
 		} catch (error: any) {
 			// Enhance error reporting
@@ -326,8 +332,8 @@ export class NativeOllamaHandler extends BaseProvider implements SingleCompletio
 				)
 			}
 
-			console.error(`Ollama API error (${statusCode || "unknown"}): ${errorMessage}`)
-			throw error
+			console.error(redactApiSecrets(`Ollama API error (${statusCode || "unknown"}): ${errorMessage}`))
+			throw new Error(redactApiSecrets(`Ollama API error (${statusCode || "unknown"}): ${errorMessage}`))
 		}
 	}
 

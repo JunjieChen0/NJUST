@@ -1,3 +1,4 @@
+import * as fs from "fs/promises"
 import * as path from "path"
 
 import { mentionRegexGlobal, unescapeSpaces } from "../../shared/context-mentions"
@@ -31,7 +32,10 @@ export interface ResolveImageMentionsResult {
 }
 
 function isPathWithinCwd(absPath: string, cwd: string): boolean {
-	const rel = path.relative(cwd, absPath)
+	// Resolve to real paths to prevent Windows short-name / case bypass.
+	const normalizedAbs = path.resolve(absPath)
+	const normalizedCwd = path.resolve(cwd)
+	const rel = path.relative(normalizedCwd, normalizedAbs)
 	return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel)
 }
 
@@ -105,6 +109,17 @@ export async function resolveImageMentions({
 		const relPath = unescapeSpaces(mention.slice(1))
 		const absPath = path.resolve(cwd, relPath)
 		if (!isPathWithinCwd(absPath, cwd)) {
+			continue
+		}
+
+		// Double-check after resolving symlinks (Windows short-name bypass defense).
+		try {
+			const realAbsPath = await fs.realpath(absPath)
+			const realCwd = await fs.realpath(cwd)
+			if (!isPathWithinCwd(realAbsPath, realCwd)) {
+				continue
+			}
+		} catch {
 			continue
 		}
 

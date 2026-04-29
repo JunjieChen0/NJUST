@@ -99,6 +99,14 @@ export async function getBinPath(vscodeAppRoot: string): Promise<string | undefi
 async function execRipgrep(bin: string, args: string[]): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const rgProcess = childProcess.spawn(bin, args)
+
+		// Set a 30-second timeout to prevent hanging on network filesystems
+		const timeout = setTimeout(() => {
+			rgProcess.kill()
+			reject(new Error("ripgrep timed out after 30 seconds"))
+		}, 30_000)
+
+		const cleanup = () => clearTimeout(timeout)
 		// cross-platform alternative to head, which is ripgrep author's recommendation for limiting output.
 		const rl = readline.createInterface({
 			input: rgProcess.stdout,
@@ -124,6 +132,7 @@ async function execRipgrep(bin: string, args: string[]): Promise<string> {
 			errorOutput += data.toString()
 		})
 		rl.on("close", () => {
+			cleanup()
 			if (errorOutput) {
 				reject(new Error(`ripgrep process error: ${errorOutput}`))
 			} else {
@@ -131,6 +140,7 @@ async function execRipgrep(bin: string, args: string[]): Promise<string> {
 			}
 		})
 		rgProcess.on("error", (error) => {
+			cleanup()
 			reject(new Error(`ripgrep process error: ${error.message}`))
 		})
 	})
@@ -158,7 +168,7 @@ export async function regexSearchFiles(
 		args.push("--glob", filePattern)
 	}
 
-	args.push("--context", "1", "--no-messages", directoryPath)
+	args.push("--context", "1", "--no-messages", "--", directoryPath)
 
 	let output: string
 	try {
@@ -218,7 +228,7 @@ export async function regexSearchFiles(
 		}
 	})
 
-	// console.log(results)
+
 
 	// Filter results using RooIgnoreController if provided
 	const filteredResults = rooIgnoreController

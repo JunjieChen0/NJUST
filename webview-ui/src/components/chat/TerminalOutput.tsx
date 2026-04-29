@@ -1,5 +1,6 @@
 import React, { useMemo } from "react"
 import Convert from "ansi-to-html"
+import { sanitizeHtml } from "@/utils/sanitize"
 
 interface TerminalOutputProps {
 	content: string
@@ -42,14 +43,25 @@ const converter = new Convert({
  * The component uses a monospace font and preserves whitespace/newlines
  * to match terminal rendering behavior.
  */
+/** Escape HTML entities in plain text to prevent XSS. */
+function escapeHtml(text: string): string {
+	return text
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+}
+
+
 export const TerminalOutput: React.FC<TerminalOutputProps> = ({ content, className }) => {
 	const html = useMemo(() => {
 		try {
 			return converter.toHtml(content)
 		} catch {
-			// Fallback: if conversion fails, show raw text (stripped of ANSI)
+			// Fallback: if conversion fails, HTML-escape raw text after stripping ANSI escapes
 			// eslint-disable-next-line no-control-regex
-			return content.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "")
+			const stripped = content.replace(/\[[0-9;]*[a-zA-Z]/g, "")
+			return escapeHtml(stripped)
 		}
 	}, [content])
 
@@ -71,7 +83,7 @@ export const TerminalOutput: React.FC<TerminalOutputProps> = ({ content, classNa
 				// Support Unicode box-drawing characters and extended ASCII
 				unicodeBidi: "embed",
 			}}
-			dangerouslySetInnerHTML={{ __html: html }}
+			dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}
 		/>
 	)
 }

@@ -11,13 +11,19 @@ export const WORKSPACE_OPS_MAX_BODY_CHARS = 1_000_000
 
 const writeFileOpSchema = z.object({
 	op: z.literal("write_file"),
-	path: z.string().max(WORKSPACE_OPS_MAX_PATH_LEN),
+	path: z.string().max(WORKSPACE_OPS_MAX_PATH_LEN).refine(
+		(p) => !p.includes(".."),
+		"Path traversal not allowed: '..' sequences are blocked for security",
+	),
 	content: z.string().max(WORKSPACE_OPS_MAX_BODY_CHARS),
 })
 
 const applyDiffOpSchema = z.object({
 	op: z.literal("apply_diff"),
-	path: z.string().max(WORKSPACE_OPS_MAX_PATH_LEN),
+	path: z.string().max(WORKSPACE_OPS_MAX_PATH_LEN).refine(
+		(p) => !p.includes(".."),
+		"Path traversal not allowed: '..' sequences are blocked for security",
+	),
 	diff: z.string().max(WORKSPACE_OPS_MAX_BODY_CHARS),
 })
 

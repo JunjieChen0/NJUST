@@ -1,6 +1,7 @@
 import { Anthropic } from "@anthropic-ai/sdk"
 import { Mistral } from "@mistralai/mistralai"
 import OpenAI from "openai"
+import { redactApiSecrets } from "../../utils/redactApiSecrets"
 
 import {
 	type MistralModelId,
@@ -94,18 +95,17 @@ export class MistralHandler extends BaseProvider implements SingleCompletionHand
 		}
 
 		requestOptions.tools = this.convertToolsForMistral(metadata?.tools ?? [])
-		// Always use "any" to require tool use
-		requestOptions.toolChoice = "any"
+		requestOptions.toolChoice = "required"
 
 		// Temporary debug log for QA
-		// console.log("[MISTRAL DEBUG] Raw API request body:", requestOptions)
+
 
 		let response
 		try {
 			response = await this.client.chat.stream(requestOptions)
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error)
-			throw new Error(`Mistral completion error: ${errorMessage}`)
+			throw new Error(redactApiSecrets(`Mistral completion error: ${errorMessage}`))
 		}
 
 		for await (const event of response) {

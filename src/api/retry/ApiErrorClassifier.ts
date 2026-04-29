@@ -51,7 +51,8 @@ export function getRetryAfterSecondsFromError(error: unknown): number | undefine
 	}
 	const retryDate = Date.parse(raw)
 	if (!Number.isNaN(retryDate)) {
-		return Math.max(0, (retryDate - Date.now()) / 1000)
+		// Enforce minimum 1s delay to prevent retry storms from clock skew
+		return Math.max(1, (retryDate - Date.now()) / 1000)
 	}
 	return undefined
 }

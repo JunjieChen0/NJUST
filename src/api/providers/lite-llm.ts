@@ -13,6 +13,7 @@ import { sanitizeOpenAiCallId } from "../../utils/tool-id"
 
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
 import { RouterProvider } from "./router-provider"
+import { redactApiSecrets } from "../../utils/redactApiSecrets"
 
 /**
  * LiteLLM provider handler
@@ -285,7 +286,7 @@ export class LiteLLMHandler extends RouterProvider implements SingleCompletionHa
 			}
 		} catch (error) {
 			if (error instanceof Error) {
-				throw new Error(`LiteLLM streaming error: ${error.message}`)
+				throw new Error(`LiteLLM streaming error: ${redactApiSecrets(error.message)}`)
 			}
 			throw error
 		}
@@ -318,7 +319,7 @@ export class LiteLLMHandler extends RouterProvider implements SingleCompletionHa
 			return response.choices[0]?.message.content || ""
 		} catch (error) {
 			if (error instanceof Error) {
-				throw new Error(`LiteLLM completion error: ${error.message}`)
+				throw new Error(`LiteLLM completion error: ${redactApiSecrets(error.message)}`)
 			}
 			throw error
 		}

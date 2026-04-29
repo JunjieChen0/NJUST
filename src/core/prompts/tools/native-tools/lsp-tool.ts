@@ -65,7 +65,7 @@ export default {
 					description: 'Symbol name to search for. Required for "symbols" action.',
 				},
 			},
-			required: ["action", "filePath", "line", "character", "symbolName"],
+			required: ["action", "filePath"],
 			additionalProperties: false,
 		},
 	},

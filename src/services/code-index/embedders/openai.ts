@@ -14,6 +14,24 @@ import { withValidationErrorHandling, formatEmbeddingError, HttpError } from "..
 import { handleOpenAIError } from "../../../api/providers/utils/openai-error-handler"
 
 /**
+ * Estimates token count with character-set awareness.
+ * English: ~4 chars/token (0.25 tokens/char). CJK: ~1-2 chars/token (0.6 tokens/char).
+ * Falls back to length/4 for purely ASCII text.
+ */
+function estimateTokens(text: string): number {
+	let asciiChars = 0
+	let nonAsciiChars = 0
+	for (let i = 0; i < text.length; i++) {
+		if (text.charCodeAt(i) <= 127) {
+			asciiChars++
+		} else {
+			nonAsciiChars++
+		}
+	}
+	return Math.ceil(asciiChars / 4 + nonAsciiChars * 0.6)
+}
+
+/**
  * OpenAI implementation of the embedder interface with batching and rate limiting
  */
 export class OpenAiEmbedder extends OpenAiNativeHandler implements IEmbedder {
@@ -57,7 +75,7 @@ export class OpenAiEmbedder extends OpenAiNativeHandler implements IEmbedder {
 						return text
 					}
 					const prefixedText = `${queryPrefix}${text}`
-					const estimatedTokens = Math.ceil(prefixedText.length / 4)
+					const estimatedTokens = estimateTokens(prefixedText)
 					if (estimatedTokens > MAX_ITEM_TOKENS) {
 						console.warn(
 							t("embeddings:textWithPrefixExceedsTokenLimit", {
@@ -73,50 +91,65 @@ export class OpenAiEmbedder extends OpenAiNativeHandler implements IEmbedder {
 				})
 			: texts
 
-		const allEmbeddings: number[][] = []
+		const allEmbeddings: number[][] = new Array(processedTexts.length)
 		const usage = { promptTokens: 0, totalTokens: 0 }
-		const remainingTexts = [...processedTexts]
 
-		while (remainingTexts.length > 0) {
-			const currentBatch: string[] = []
+		// Separate items that exceed the per-item token limit from embeddable ones.
+		// Oversize items get zero-vector placeholders to maintain array alignment.
+		const oversizeItems: Array<{ originalIndex: number }> = []
+		const embeddableQueue: Array<{ originalIndex: number; text: string }> = []
+
+		for (let i = 0; i < processedTexts.length; i++) {
+			const itemTokens = estimateTokens(processedTexts[i])
+			if (itemTokens > MAX_ITEM_TOKENS) {
+				console.warn(
+					t("embeddings:textExceedsTokenLimit", {
+						index: i,
+						itemTokens,
+						maxTokens: MAX_ITEM_TOKENS,
+					}),
+				)
+				oversizeItems.push({ originalIndex: i })
+			} else {
+				embeddableQueue.push({ originalIndex: i, text: processedTexts[i] })
+			}
+		}
+
+		while (embeddableQueue.length > 0) {
+			const currentBatch: Array<{ originalIndex: number; text: string }> = []
 			let currentBatchTokens = 0
-			const processedIndices: number[] = []
 
-			for (let i = 0; i < remainingTexts.length; i++) {
-				const text = remainingTexts[i]
-				const itemTokens = Math.ceil(text.length / 4)
-
-				if (itemTokens > MAX_ITEM_TOKENS) {
-					console.warn(
-						t("embeddings:textExceedsTokenLimit", {
-							index: i,
-							itemTokens,
-							maxTokens: MAX_ITEM_TOKENS,
-						}),
-					)
-					processedIndices.push(i)
-					continue
-				}
-
+			while (embeddableQueue.length > 0) {
+				const item = embeddableQueue[0]
+				const itemTokens = estimateTokens(item.text)
 				if (currentBatchTokens + itemTokens <= MAX_BATCH_TOKENS) {
-					currentBatch.push(text)
+					currentBatch.push(item)
 					currentBatchTokens += itemTokens
-					processedIndices.push(i)
+					embeddableQueue.shift()
 				} else {
 					break
 				}
 			}
 
-			// Remove processed items from remainingTexts (in reverse order to maintain correct indices)
-			for (let i = processedIndices.length - 1; i >= 0; i--) {
-				remainingTexts.splice(processedIndices[i], 1)
-			}
-
 			if (currentBatch.length > 0) {
-				const batchResult = await this._embedBatchWithRetries(currentBatch, modelToUse)
-				allEmbeddings.push(...batchResult.embeddings)
+				const batchResult = await this._embedBatchWithRetries(
+					currentBatch.map((item) => item.text),
+					modelToUse,
+				)
+				for (let j = 0; j < currentBatch.length; j++) {
+					allEmbeddings[currentBatch[j].originalIndex] = batchResult.embeddings[j]
+				}
 				usage.promptTokens += batchResult.usage.promptTokens
 				usage.totalTokens += batchResult.usage.totalTokens
+			}
+		}
+
+		// Fill zero-vector placeholders for oversize items to maintain input/output alignment
+		if (oversizeItems.length > 0) {
+			const vectorSize = allEmbeddings.find((e) => e !== undefined && e.length > 0)?.length ?? 0
+			const zeroVector = new Array(vectorSize).fill(0)
+			for (const item of oversizeItems) {
+				allEmbeddings[item.originalIndex] = zeroVector
 			}
 		}
 

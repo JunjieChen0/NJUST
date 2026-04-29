@@ -4,6 +4,7 @@ import { customToolRegistry } from "@njust-ai-cj/core"
 
 import { type Mode, FileRestrictionError, getModeBySlug, getGroupName } from "../../shared/modes"
 import { TOOL_GROUPS, ALWAYS_AVAILABLE_TOOLS, TOOL_ALIASES } from "../../shared/tools"
+import { isAllowedCangjieCommand } from "../task/CangjieRuntimePolicy"
 
 /**
  * Merge `params` with typed `nativeArgs` for mode and schema validation.
@@ -172,6 +173,9 @@ function getGroupOptions(group: GroupEntry): GroupOptions | undefined {
 }
 
 function doesFileMatchRegex(filePath: string, pattern: string): boolean {
+	// ReDoS protection: reject overly long or potentially catastrophic patterns
+	if (pattern.length > 500) return false
+	if (/([+*?{])\s*\1/.test(pattern)) return false
 	try {
 		const regex = new RegExp(pattern)
 		return regex.test(filePath)
@@ -193,6 +197,18 @@ export function isToolAllowedForMode(
 	// Resolve alias to canonical name (e.g., "search_and_replace" → "edit")
 	const resolvedTool = TOOL_ALIASES[tool] ?? tool
 	const resolvedIncludedTools = includedTools?.map((t) => TOOL_ALIASES[t] ?? t)
+
+	if (modeSlug === "cangjie") {
+		if (resolvedTool === "web_fetch" || resolvedTool === "config" || resolvedTool === "sleep") {
+			return false
+		}
+		if (resolvedTool === "execute_command") {
+			const command = typeof toolParams?.command === "string" ? toolParams.command : undefined
+			if (command && !isAllowedCangjieCommand(command)) {
+				return false
+			}
+		}
+	}
 
 	// Check tool requirements first — explicit disabling takes priority over everything,
 	// including ALWAYS_AVAILABLE_TOOLS. This ensures disabledTools works consistently

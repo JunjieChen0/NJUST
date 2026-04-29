@@ -35,8 +35,6 @@ export enum IpcOrigin {
 
 export const ackSchema = z.object({
 	clientId: z.string(),
-	pid: z.number(),
-	ppid: z.number(),
 	protocolVersion: z.number().int().optional(),
 })
 

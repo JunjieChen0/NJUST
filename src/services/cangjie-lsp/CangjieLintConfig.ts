@@ -143,10 +143,17 @@ export class CangjieLintConfig implements vscode.Disposable {
 		const relPath = vscode.workspace.asRelativePath(filePath).replace(/\\/g, "/")
 		return this.config.exclude.some((pattern) => {
 			if (pattern.includes("*")) {
-				const regex = new RegExp(
-					"^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$",
-				)
-				return regex.test(relPath)
+				// Convert glob to a safe regex: only allow * and ? metacharacters,
+				// escape everything else, and anchor to avoid ReDoS.
+				const escaped = pattern
+					.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+					.replace(/\*/g, "[^/]*")
+					.replace(/\?/g, "[^/]")
+				try {
+					return new RegExp("^" + escaped + "$").test(relPath)
+				} catch {
+					return false
+				}
 			}
 			return relPath.startsWith(pattern)
 		})

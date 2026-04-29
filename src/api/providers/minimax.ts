@@ -66,7 +66,7 @@ export class MiniMaxHandler extends BaseProvider implements SingleCompletionHand
 		// If user provided a /v1 endpoint, convert to /anthropic
 		if (baseURL.endsWith("/v1")) {
 			baseURL = baseURL.replace(/\/v1$/, "/anthropic")
-		} else if (!baseURL.endsWith("/anthropic")) {
+		} else if (!baseURL.toLowerCase().endsWith("/anthropic")) {
 			baseURL = `${baseURL.replace(/\/$/, "")}/anthropic`
 		}
 
@@ -113,7 +113,13 @@ export class MiniMaxHandler extends BaseProvider implements SingleCompletionHand
 			tool_choice: convertOpenAIToolChoice(metadata?.tool_choice),
 		}
 
-		stream = await this.client.messages.create(requestParams)
+		try {
+			stream = await this.client.messages.create(requestParams)
+		} catch (error) {
+			const status = (error as any)?.status
+			const msg = error instanceof Error ? error.message : String(error)
+			throw Object.assign(new Error(`MiniMax API error (HTTP ${status || "?"}): ${msg}`), { status })
+		}
 
 		let inputTokens = 0
 		let outputTokens = 0
@@ -290,11 +296,11 @@ export class MiniMaxHandler extends BaseProvider implements SingleCompletionHand
 	}
 
 	async completePrompt(prompt: string) {
-		const { id: model, temperature } = this.getModel()
+		const { id: model, maxTokens, temperature } = this.getModel()
 
 		const message = await this.client.messages.create({
 			model,
-			max_tokens: 16_384,
+			max_tokens: maxTokens ?? 16_384,
 			temperature: temperature ?? 1.0,
 			messages: [{ role: "user", content: prompt }],
 			stream: false,

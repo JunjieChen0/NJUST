@@ -21,6 +21,11 @@ export interface CjcErrorPattern {
 	 * Compiler / LSP diagnostic codes (e.g. E1234) when stable; fills code → pattern maps.
 	 */
 	diagnosticCodes?: string[]
+	/**
+	 * Categories fully subsumed by this pattern — when this pattern matches,
+	 * those categories are removed from the result set to avoid redundant suggestions.
+	 */
+	subsumes?: string[]
 }
 
 export interface DocMapping {
@@ -95,6 +100,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 			"核对 `@C` / foreign 函数声明是否与 native 库导出符号一致，检查链接参数与 cjpm.toml 中目标平台的 FFI 配置",
 		fixDirective: "检查 FFI 声明、@C 注解与链接配置（库路径、符号名、mangling）是否一致",
 		priority: 72,
+		subsumes: ["未找到符号"],
 	},
 	{
 		pattern: /macro expansion failed|@Macro|宏展开失败|expand macro/i,
@@ -143,6 +149,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		suggestion: "共享可变状态应使用 Mutex、synchronized 或原子类型，避免跨线程裸可变别名",
 		fixDirective: "用 Mutex / synchronized / Atomic 包装共享可变状态，缩小可变作用域",
 		priority: 70,
+		subsumes: ["spawn 捕获可变引用"],
 	},
 	{
 		pattern: /package.*does not match.*directory|package.*目录|directory.*package.*mismatch/i,
@@ -167,6 +174,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		suggestion: "补全接口要求的全部方法，签名（含 mut/async）与泛型须与接口声明一致",
 		fixDirective: "实现接口中缺失的方法并保证签名完全一致（含泛型与 mut）",
 		priority: 66,
+		subsumes: ["接口未实现", "Resource 接口未实现"],
 	},
 	{
 		pattern: /cannot access.*\b(private|protected)\b|无权访问.*私|protected.*access/i,
@@ -175,6 +183,7 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		suggestion: "调整成员可见性为 public，或将调用移入同包/子类可见范围",
 		fixDirective: "检查 public/protected/private/internal，跨包需 public 或调整调用位置",
 		priority: 73,
+		subsumes: ["访问权限错误"],
 	},
 	{
 		pattern: /(?:undeclared|cannot find|not found|未找到符号|unresolved)/i,
@@ -512,6 +521,17 @@ export function getMatchingCjcPatternsByCategory(text: string): CjcErrorPattern[
 		}
 		byCat.set(p.category, pickBestSamePriority(cur, p))
 	}
+	// Remove categories subsumed by higher-priority patterns to avoid
+	// redundant suggestions (e.g. "接口未实现（精确）" suppresses "接口未实现").
+	const suppressed = new Set<string>()
+	for (const [, p] of byCat) {
+		for (const sub of p.subsumes ?? []) {
+			suppressed.add(sub)
+		}
+	}
+	for (const cat of suppressed) {
+		byCat.delete(cat)
+	}
 	return [...byCat.values()].sort((a, b) => {
 		const pa = patternPriority(a)
 		const pb = patternPriority(b)
@@ -522,11 +542,6 @@ export function getMatchingCjcPatternsByCategory(text: string): CjcErrorPattern[
 
 /** Populated from each pattern's optional `diagnosticCodes` when the toolchain documents stable codes. */
 export const CJC_DIAGNOSTIC_CODE_MAP = buildCjcDiagnosticCodeMap(CJC_ERROR_PATTERNS)
-
-/** @deprecated Prefer `CjcErrorPattern.fixDirective`; subset with explicit directives only */
-export const ERROR_FIX_DIRECTIVES: Array<{ pattern: RegExp; directive: string }> = CJC_ERROR_PATTERNS.filter(
-	(p): p is CjcErrorPattern & { fixDirective: string } => Boolean(p.fixDirective),
-).map((p) => ({ pattern: p.pattern, directive: p.fixDirective }))
 
 // ---------------------------------------------------------------------------
 // Analysis API
@@ -560,7 +575,7 @@ export function analyzeCompileOutput(
 
 		for (const stdPkg of stdPackagesInOutput) {
 			for (const mapping of STDLIB_DOC_MAP) {
-				if (stdPkg.startsWith(mapping.prefix) && !relPaths.some((r) => mapping.docPaths.some((d) => r.includes(d)))) {
+				if (stdPkg === mapping.prefix || stdPkg.startsWith(mapping.prefix + ".") && !relPaths.some((r) => mapping.docPaths.some((d) => r.includes(d)))) {
 					const extra = docsBase
 						? mapping.docPaths.map((d) => path.join(docsBase, d).replace(/\\/g, "/"))
 						: mapping.docPaths

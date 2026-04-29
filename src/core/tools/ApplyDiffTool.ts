@@ -1,4 +1,4 @@
-import path from "path"
+﻿import path from "path"
 import fs from "fs/promises"
 
 import { type ClineSayTool, DEFAULT_WRITE_DELAY_MS } from "@njust-ai-cj/types"
@@ -7,6 +7,7 @@ import { TelemetryService } from "@njust-ai-cj/telemetry"
 import { getReadablePath } from "../../utils/path"
 import { ignoreAbortError } from "../../utils/errorHandling"
 import { allowRooIgnorePathAccess } from "../ignore/RooIgnoreController"
+import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { fileExistsAtPath } from "../../utils/fs"
@@ -24,9 +25,8 @@ interface ApplyDiffParams {
 }
 
 /**
- * @deprecated Use ApplyPatchTool (name: "apply_patch") instead. This tool is retained for
- * backward compatibility and will be removed in a future version. All calls are handled by
- * the alias mapping in TOOL_ALIASES: "apply_diff" → "apply_patch".
+ * @deprecated Prefer ApplyPatchTool (name: "apply_patch") for new model-facing calls.
+ * This tool remains registered separately because apply_diff has a different parameter shape.
  */
 export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 	readonly name = "apply_diff" as const
@@ -72,6 +72,19 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 			}
 
 			const absolutePath = path.resolve(task.cwd, relPath)
+
+			// Block writes outside workspace for safety (path traversal attack prevention)
+			if (isPathOutsideWorkspace(absolutePath)) {
+				task.consecutiveMistakeCount++
+				task.recordToolError("apply_diff")
+				pushToolResult(
+					formatResponse.toolError(
+						`Safety: cannot apply diff to path outside workspace: ${getReadablePath(task.cwd, relPath)}`,
+					),
+				)
+				return
+			}
+
 			const fileExists = await fileExistsAtPath(absolutePath)
 
 			if (!fileExists) {
@@ -90,7 +103,9 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 			const diffResult = (await task.diffStrategy?.applyDiff(
 				originalContent,
 				diffContent,
-				parseInt(params.diff.match(/:start_line:(\d+)/)?.[1] ?? ""),
+				Number.isFinite(parseInt(params.diff.match(/:start_line:(\d+)/)?.[1] ?? "", 10))
+				? parseInt(params.diff.match(/:start_line:(\d+)/)?.[1] ?? "", 10)
+				: 1,
 			)) ?? {
 				success: false,
 				error: "No diff strategy available",
@@ -135,6 +150,19 @@ export class ApplyDiffTool extends BaseTool<"apply_diff"> {
 
 			task.consecutiveMistakeCount = 0
 			task.consecutiveMistakeCountForApplyDiff.delete(relPath)
+
+			// Idempotency check: if the applied diff produces no changes,
+			// the patch was likely already applied (retry / duplicate message).
+			if (diffResult.content === originalContent) {
+				task.consecutiveMistakeCountForApplyDiff.delete(relPath)
+				pushToolResult(
+					"No changes applied: the diff appears to have already been " +
+					"applied to this file (result content matches original).",
+				)
+				await task.diffViewProvider.reset()
+				this.resetPartialState()
+				return
+			}
 
 			// Generate backend-unified diff for display in chat/webview
 			const unifiedPatchRaw = formatResponse.createPrettyPatch(relPath, originalContent, diffResult.content)

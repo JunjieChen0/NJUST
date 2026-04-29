@@ -54,8 +54,8 @@ async function safeWriteJson(filePath: string, data: any, options?: SafeWriteJso
 	// Acquire the lock before any file operations
 	try {
 		releaseLock = await lockfile.lock(absoluteFilePath, {
-			stale: 31000, // Stale after 31 seconds
-			update: 10000, // Update mtime every 10 seconds to prevent staleness if operation is long
+			stale: 10000, // Stale after 10s (reduced from 31s to minimize post-crash wait)
+			update: 5000, // Update mtime every 5s to prevent staleness during long writes
 			realpath: false, // the file may not exist yet, which is acceptable
 			retries: {
 				// Configuration for retrying lock acquisition

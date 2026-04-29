@@ -527,6 +527,9 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 		for (const fr of filesToApprove) {
 			const fullPath = path.resolve(task.cwd, fr.path)
 			if (isPathUnderBundledCangjieCorpus(fullPath, extensionPath)) {
+				if (task.taskMode === "cangjie") {
+					task.cangjieRuntimePolicy.noteCorpusReadPath(fullPath)
+				}
 				updateFileResult(fr.path, { status: "approved" })
 			} else {
 				remaining.push(fr)

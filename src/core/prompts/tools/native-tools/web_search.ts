@@ -33,7 +33,7 @@ export default {
 					description: "Number of results to return (1-10, default 5)",
 				},
 			},
-			required: ["search_query", "count"],
+			required: ["search_query"],
 			additionalProperties: false,
 		},
 	},

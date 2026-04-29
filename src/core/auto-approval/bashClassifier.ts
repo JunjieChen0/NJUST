@@ -15,11 +15,14 @@ const SAFE_PREFIXES = [
 ]
 
 const DANGEROUS_PATTERNS: RegExp[] = [
-	/\brm\s+-rf\b/i,
+	/\brm\s+(-[a-zA-Z]*r[a-zA-Z]*\s+-[a-zA-Z]*f|(-[a-zA-Z]*f[a-zA-Z]*\s+-[a-zA-Z]*r)|(-[a-zA-Z]*rf[a-zA-Z]*))\b/i,
 	/\bsudo\b/i,
-	/\bchmod\s+777\b/i,
-	/>\s*\/dev\/(sda|disk\d)/i,
-	/\|\s*(sh|bash|zsh|pwsh|powershell)\b/i,
+	/\bchmod\s+(-[a-zA-Z]*\s+)?[67]77\b/i,
+	/>\s*\/dev\/(sda|disk\d|nvme\w*|[hsv]d[a-z])/i,
+	/\|\s*(sudo\s+)?(sh|bash|zsh|pwsh|powershell)\b/i,
+	/\bmkfs\b/i,
+	/\bdd\s+.*\bof=\//i,
+	/:()\s*\{\s*:\|\s*:&\s*\}/,
 ]
 
 const MEDIUM_PREFIXES = ["git commit", "npm install", "pnpm install", "yarn add", "pip install"]

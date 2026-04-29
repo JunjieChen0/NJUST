@@ -28,7 +28,18 @@ export type AskApproval = (
 
 export type HandleError = (action: string, error: Error) => Promise<void>
 
-export type PushToolResult = (content: ToolResponse) => void
+export interface PushToolResultOptions {
+	/** Explicitly mark the result as an error. When omitted the callee may
+	 *  fall back to heuristic detection (e.g. `content.includes("<error>")`),
+	 *  but callers should prefer the explicit flag. */
+	isError?: boolean
+}
+
+/**
+ * Second argument is either MCP feedback image URLs (string[]) or structured
+ * options (e.g. `isError`). Call sites disambiguate by shape at runtime.
+ */
+export type PushToolResult = (content: ToolResponse, second?: string[] | PushToolResultOptions) => void
 
 export type AskFinishSubTaskApproval = () => Promise<boolean>
 
@@ -100,6 +111,35 @@ export const toolParamNames = [
 	"line_ranges",
 	// search_files semantic search parameter
 	"semantic_query",
+	// grep/glob parameters
+	"pattern",
+	"include",
+	"exclude",
+	"contextLines",
+	// lsp parameters
+	"filePath",
+	"character",
+	"symbolName",
+	// task board parameters
+	"taskId",
+	"status",
+	"title",
+	"description",
+	"priority",
+	// agent/deferred helper parameters
+	"agentType",
+	"maxTurns",
+	"maxLength",
+	// config/web-fetch parameters
+	"key",
+	"value",
+	"format",
+	// sleep/notebook/task-create parameters
+	"seconds",
+	"cellIndex",
+	"cellType",
+	"dependsOn",
+	"targetTaskId",
 ] as const
 
 export type ToolParamName = (typeof toolParamNames)[number]
@@ -115,7 +155,7 @@ export type NativeToolArgs = {
 	attempt_completion: { result: string }
 	execute_command: { command: string; cwd?: string; timeout?: number | null }
 	apply_diff: { path: string; diff: string }
-	edit: { file_path: string; old_string: string; new_string: string; replace_all?: boolean }
+	edit: { file_path: string; old_string: string; new_string: string; replace_all?: boolean; expected_replacements?: number }
 	search_and_replace: { file_path: string; old_string: string; new_string: string; replace_all?: boolean }
 	search_replace: { file_path: string; old_string: string; new_string: string }
 	edit_file: { file_path: string; old_string: string; new_string: string; expected_replacements?: number }
@@ -362,8 +402,8 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 		tools: ["read_file", "search_files", "list_files", "codebase_search", "web_search", "grep", "glob", "lsp", "tool_search", "task_list", "task_get", "brief"],
 	},
 	edit: {
-		tools: ["apply_diff", "write_to_file", "generate_image", "notebook_edit", "task_create", "task_update"],
-		customTools: ["edit", "search_replace", "edit_file", "apply_patch"],
+		tools: ["apply_patch", "write_to_file", "generate_image", "notebook_edit", "task_create", "task_update"],
+		customTools: ["edit"],
 	},
 	command: {
 		tools: ["execute_command", "read_command_output", "sleep", "web_fetch", "config"],
@@ -392,17 +432,15 @@ export const ALWAYS_AVAILABLE_TOOLS: ToolName[] = [
  * Central registry of tool aliases.
  * Maps alias name -> canonical tool name.
  *
- * This allows models to use alternative names for tools (e.g., "edit_file" instead of "apply_diff").
+ * This allows models to use alternative names only when their parameter shape matches the target tool.
  * When a model calls a tool by its alias, the system resolves it to the canonical name for execution,
  * but preserves the alias in API conversation history for consistency.
- *
- * To add a new alias, simply add an entry here. No other files need to be modified.
  */
 export const TOOL_ALIASES: Record<string, ToolName> = {
 	write_file: "write_to_file",
 	search_and_replace: "edit",
-	search_replace: "edit",
 	edit_file: "edit",
+	search_replace: "edit",
 	apply_diff: "apply_patch",
 } as const
 

@@ -29,9 +29,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-      - name: Create .env file
-        run: echo "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" >> .env
       - name: Package Extension
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
         run: |
           current_package_version=$(node -p "require('./src/package.json').version")
           pnpm vsix
@@ -47,7 +47,12 @@ jobs:
           grep -q "extension/webview-ui/build/assets/index.js" /tmp/roo-code-vsix-contents.txt || exit 1
           grep -q "extension/assets/codicons/codicon.ttf" /tmp/roo-code-vsix-contents.txt || exit 1
           grep -q "extension/assets/vscode-material-icons/icons/3d.svg" /tmp/roo-code-vsix-contents.txt || exit 1
-          grep -q ".env" /tmp/roo-code-vsix-contents.txt || exit 1
+
+          # Verify .env file is NOT included in the VSIX (secrets should not be packaged).
+          if grep -q "^.*\.env$" /tmp/roo-code-vsix-contents.txt; then
+            echo "ERROR: .env file found in VSIX package — secrets must not be distributed!"
+            exit 1
+          fi
           
           # Clean up temporary file.
           rm /tmp/roo-code-vsix-contents.txt

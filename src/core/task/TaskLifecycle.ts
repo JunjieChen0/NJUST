@@ -10,7 +10,6 @@
  */
 
 import type { ClineMessage, TaskStatus } from "@njust-ai-cj/types"
-import { taskEventBus } from "../events/TaskEventBus"
 
 // ─── Lifecycle States ────────────────────────────────────────────────────────
 
@@ -140,63 +139,6 @@ const VALID_TRANSITIONS: Record<LifecyclePhase, LifecyclePhase[]> = {
 	[LifecyclePhase.ERRORED]: [LifecyclePhase.INITIALIZING],
 }
 
-/**
- * Manages lifecycle phase transitions for a single Task instance.
- * Validates transitions, emits events via the global TaskEventBus,
- * and exposes the current phase for read-only inspection.
- */
-export class TaskLifecycleManager {
-	private _phase: LifecyclePhase = LifecyclePhase.CREATED
-	private readonly taskId: string
-
-	constructor(taskId: string) {
-		this.taskId = taskId
-	}
-
-	get phase(): LifecyclePhase {
-		return this._phase
-	}
-
-	get isTerminal(): boolean {
-		return this._phase === LifecyclePhase.COMPLETED || this._phase === LifecyclePhase.ERRORED
-	}
-
-	/**
-	 * Transition to a new phase. Throws if the transition is invalid.
-	 */
-	transition(next: LifecyclePhase): void {
-		const allowed = VALID_TRANSITIONS[this._phase]
-		if (!allowed.includes(next)) {
-			throw new Error(
-				`[TaskLifecycle] Invalid transition ${this._phase} → ${next} for task ${this.taskId}`,
-			)
-		}
-		const prev = this._phase
-		this._phase = next
-
-		const eventMap: Partial<Record<LifecyclePhase, "task:started" | "task:completed" | "task:failed" | "task:aborted">> = {
-			[LifecyclePhase.RUNNING]: "task:started",
-			[LifecyclePhase.COMPLETED]: "task:completed",
-			[LifecyclePhase.ERRORED]: "task:failed",
-			[LifecyclePhase.ABORTING]: "task:aborted",
-		}
-		const eventName = eventMap[next]
-		if (eventName) {
-			taskEventBus.emit(eventName, { taskId: this.taskId, data: { from: prev, to: next } })
-		}
-	}
-
-	/**
-	 * Try to transition; return false (without throwing) if invalid.
-	 */
-	tryTransition(next: LifecyclePhase): boolean {
-		if (!VALID_TRANSITIONS[this._phase].includes(next)) {
-			return false
-		}
-		this.transition(next)
-		return true
-	}
-}
 
 // ─── Dispose Helpers ─────────────────────────────────────────────────────────
 

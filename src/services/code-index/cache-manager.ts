@@ -27,7 +27,7 @@ export class CacheManager implements ICacheManager {
 		)
 		this._debouncedSaveCache = debounce(async () => {
 			await this._performSave()
-		}, 1500)
+		}, 500, { maxWait: 2000 })
 	}
 
 	/**

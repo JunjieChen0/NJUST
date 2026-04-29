@@ -1,4 +1,5 @@
 import type { SessionMemory } from "../condense/sessionMemoryCompact"
+import type { CangjieContextIntensity } from "../task/CangjieRuntimePolicy"
 
 /**
  * Settings passed to system prompt generation functions
@@ -24,8 +25,19 @@ export interface SystemPromptSettings {
 	contextWindow?: number
 	/** Current turn index for adaptive prompt pruning (0-based). */
 	turnIndex?: number
+	/** Runtime-selected Cangjie context intensity for efficiency tuning. */
+	cangjieContextIntensity?: CangjieContextIntensity
+	/** Runtime-prioritized root causes from the latest failed Cangjie build. */
+	cangjieRecentBuildRootCauses?: string[]
+	/** Runtime repair directive from the latest failed Cangjie build. */
+	cangjieRepairDirective?: string
 	/** Feature flag to enable turn-aware static prompt pruning. */
 	enableTurnAwarePromptPruning?: boolean
 	/** Cross-session memory from a previous session, injected into the system prompt. */
 	sessionMemory?: SessionMemory
+	/**
+	 * Last user message文本（可选）——与 Ask/Architect 配合，用于检测仓颉相关问题并注入
+	 * Cangjie Dev 动态语料块，而无需切换模式。
+	 */
+	lastUserMessageForCangjieHint?: string
 }

@@ -50,10 +50,12 @@ export type ToolCallStreamEvent = ApiStreamToolCallStartChunk | ApiStreamToolCal
  * This class also handles raw tool call chunk processing, converting
  * provider-level raw chunks into start/delta/end events.
  */
+
 export class NativeToolCallParser {
 	// Streaming state management for argument accumulation (keyed by tool call id)
 	// Note: name is string to accommodate dynamic MCP tools (mcp--serverName--toolName)
-	private static streamingToolCalls = new Map<
+	// Instance-level to prevent cross-task data corruption during concurrent streams.
+	private streamingToolCalls = new Map<
 		string,
 		{
 			id: string
@@ -63,7 +65,7 @@ export class NativeToolCallParser {
 	>()
 
 	// Raw chunk tracking state (keyed by index from API stream)
-	private static rawChunkTracker = new Map<
+	private rawChunkTracker = new Map<
 		number,
 		{
 			id: string
@@ -121,7 +123,7 @@ export class NativeToolCallParser {
 	 * This is the entry point for providers that emit tool_call_partial chunks.
 	 * Returns an array of events to be processed by the consumer.
 	 */
-	public static processRawChunk(chunk: {
+	public processRawChunk(chunk: {
 		index: number
 		id?: string
 		name?: string
@@ -192,7 +194,7 @@ export class NativeToolCallParser {
 	 * Process stream finish reason.
 	 * Emits end events when finish_reason is 'tool_calls'.
 	 */
-	public static processFinishReason(finishReason: string | null | undefined): ToolCallStreamEvent[] {
+	public processFinishReason(finishReason: string | null | undefined): ToolCallStreamEvent[] {
 		const events: ToolCallStreamEvent[] = []
 
 		if (finishReason === "tool_calls" && this.rawChunkTracker.size > 0) {
@@ -211,7 +213,7 @@ export class NativeToolCallParser {
 	 * Finalize any remaining tool calls that weren't explicitly ended.
 	 * Should be called at the end of stream processing.
 	 */
-	public static finalizeRawChunks(): ToolCallStreamEvent[] {
+	public finalizeRawChunks(): ToolCallStreamEvent[] {
 		const events: ToolCallStreamEvent[] = []
 
 		if (this.rawChunkTracker.size > 0) {
@@ -233,7 +235,7 @@ export class NativeToolCallParser {
 	 * Clear all raw chunk tracking state.
 	 * Should be called when a new API request starts.
 	 */
-	public static clearRawChunkState(): void {
+	public clearRawChunkState(): void {
 		this.rawChunkTracker.clear()
 	}
 
@@ -242,7 +244,7 @@ export class NativeToolCallParser {
 	 * Initializes tracking for incremental argument parsing.
 	 * Accepts string to support both ToolName and dynamic MCP tools (mcp--serverName--toolName).
 	 */
-	public static startStreamingToolCall(id: string, name: string): void {
+	public startStreamingToolCall(id: string, name: string): void {
 		this.streamingToolCalls.set(id, {
 			id,
 			name,
@@ -255,7 +257,7 @@ export class NativeToolCallParser {
 	 * Should be called when a new API request starts to prevent memory leaks
 	 * from interrupted streams.
 	 */
-	public static clearAllStreamingToolCalls(): void {
+	public clearAllStreamingToolCalls(): void {
 		this.streamingToolCalls.clear()
 	}
 
@@ -263,7 +265,7 @@ export class NativeToolCallParser {
 	 * Check if there are any active streaming tool calls.
 	 * Useful for debugging and testing.
 	 */
-	public static hasActiveStreamingToolCalls(): boolean {
+	public hasActiveStreamingToolCalls(): boolean {
 		return this.streamingToolCalls.size > 0
 	}
 
@@ -272,7 +274,7 @@ export class NativeToolCallParser {
 	 * Uses partial-json-parser to extract values from incomplete JSON immediately.
 	 * Returns a partial ToolUse with currently parsed parameters.
 	 */
-	public static processStreamingChunk(id: string, chunk: string): ToolUse | null {
+	public processStreamingChunk(id: string, chunk: string): ToolUse | null {
 		const toolCall = this.streamingToolCalls.get(id)
 		if (!toolCall) {
 			return null
@@ -298,7 +300,7 @@ export class NativeToolCallParser {
 			const originalName = toolCall.name !== resolvedName ? toolCall.name : undefined
 
 			// Create partial ToolUse with extracted values
-			return this.createPartialToolUse(
+			return NativeToolCallParser.createPartialToolUse(
 				toolCall.id,
 				resolvedName,
 				partialArgs || {},
@@ -316,7 +318,7 @@ export class NativeToolCallParser {
 	 * Finalize a streaming tool call.
 	 * Parses the complete JSON and returns the final ToolUse or McpToolUse.
 	 */
-	public static finalizeStreamingToolCall(id: string): ToolUse | McpToolUse | null {
+	public finalizeStreamingToolCall(id: string): ToolUse | McpToolUse | null {
 		const toolCall = this.streamingToolCalls.get(id)
 		if (!toolCall) {
 			return null
@@ -324,7 +326,7 @@ export class NativeToolCallParser {
 
 		// Parse the complete accumulated JSON
 		// Cast to any for the name since parseToolCall handles both ToolName and dynamic MCP tools
-		const finalToolUse = this.parseToolCall({
+		const finalToolUse = NativeToolCallParser.parseToolCall({
 			id: toolCall.id,
 			name: toolCall.name as ToolName,
 			arguments: toolCall.argumentsAccumulator,
@@ -567,6 +569,7 @@ export class NativeToolCallParser {
 						path: partialArgs.path,
 						regex: partialArgs.regex,
 						file_pattern: partialArgs.file_pattern,
+						semantic_query: partialArgs.semantic_query,
 					}
 				}
 				break
@@ -673,6 +676,9 @@ export class NativeToolCallParser {
 				break
 
 			default:
+				if (toolNames.includes(name) || customToolRegistry.has(name)) {
+					nativeArgs = partialArgs
+				}
 				break
 		}
 
@@ -925,6 +931,7 @@ export class NativeToolCallParser {
 							path: args.path,
 							regex: args.regex,
 							file_pattern: args.file_pattern,
+							semantic_query: args.semantic_query,
 						} as NativeArgsFor<TName>
 					}
 					break
@@ -1049,7 +1056,7 @@ export class NativeToolCallParser {
 					break
 
 				default:
-					if (customToolRegistry.has(resolvedName)) {
+					if (toolNames.includes(resolvedName as ToolName) || customToolRegistry.has(resolvedName)) {
 						nativeArgs = args as NativeArgsFor<TName>
 					}
 
@@ -1136,4 +1143,59 @@ export class NativeToolCallParser {
 			return null
 		}
 	}
+
+	// ── Backward-compatible static wrappers (delegate to shared instance) ──
+	// Prefer per-task instances for state isolation.
+
+	/** @deprecated Use per-task instance via `new NativeToolCallParser()` */
+	public static clearAllStreamingToolCalls(): void {
+		sharedInstance.clearAllStreamingToolCalls()
+	}
+
+	/** @deprecated Use per-task instance via `new NativeToolCallParser()` */
+	public static clearRawChunkState(): void {
+		sharedInstance.clearRawChunkState()
+	}
+
+	/** @deprecated Use per-task instance via `new NativeToolCallParser()` */
+	public static startStreamingToolCall(id: string, name: string): void {
+		sharedInstance.startStreamingToolCall(id, name)
+	}
+
+	/** @deprecated Use per-task instance via `new NativeToolCallParser()` */
+	public static processRawChunk(chunk: {
+		index: number
+		id: string
+		name: string
+		arguments: string
+	}): ToolCallStreamEvent[] {
+		return sharedInstance.processRawChunk(chunk)
+	}
+
+	/** @deprecated Use per-task instance via `new NativeToolCallParser()` */
+	public static finalizeRawChunks(): ToolCallStreamEvent[] {
+		return sharedInstance.finalizeRawChunks()
+	}
+	/** @deprecated Use per-task instance via `new NativeToolCallParser()` */
+	public static processStreamingChunk(id: string, chunk: string): ToolUse | null {
+		return sharedInstance.processStreamingChunk(id, chunk)
+	}
+
+	/** @deprecated Use per-task instance via `new NativeToolCallParser()` */
+	public static finalizeStreamingToolCall(id: string): ToolUse | McpToolUse | null {
+		return sharedInstance.finalizeStreamingToolCall(id)
+	}
+
+	/** @deprecated Use per-task instance via `new NativeToolCallParser()` */
+	public static hasActiveStreamingToolCalls(): boolean {
+		return sharedInstance.hasActiveStreamingToolCalls()
+	}
+
+	/** @deprecated Use per-task instance via `new NativeToolCallParser()` */
+	public static processFinishReason(finishReason: string | null | undefined): ToolCallStreamEvent[] {
+		return sharedInstance.processFinishReason(finishReason)
+	}
 }
+
+// Shared instance for backward-compatible static method access.
+const sharedInstance = new NativeToolCallParser()

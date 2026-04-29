@@ -587,6 +587,7 @@ export abstract class BaseTool<TName extends ToolName> {
 				formatResponse.toolError(
 					"Tool execution was cancelled (parallel batch aborted or sibling tool failed).",
 				),
+				{ isError: true },
 			)
 			toolSpan.end("error", { stage: "aborted", aborted: true })
 			return
@@ -598,7 +599,7 @@ export abstract class BaseTool<TName extends ToolName> {
 		const pendingPersist: Promise<void>[] = []
 		const wrappedCallbacks: ToolCallbacks = {
 			...callbacks,
-			pushToolResult: (content) => {
+			pushToolResult: (content, opts) => {
 				capturedResult = content
 				if (typeof content === "string" && content.length > 0) {
 					// Phase 1: Persist large results to disk (>100KB)
@@ -612,7 +613,7 @@ export abstract class BaseTool<TName extends ToolName> {
 								if (cacheKey) {
 									toolResultCache.set(cacheKey, message)
 								}
-								originalPushToolResult(message)
+								originalPushToolResult(message, opts)
 							})
 							.catch((err) => {
 								// If persistence fails, fall back to token truncation
@@ -623,12 +624,12 @@ export abstract class BaseTool<TName extends ToolName> {
 									if (cacheKey) {
 										toolResultCache.set(cacheKey, truncated)
 									}
-									originalPushToolResult(truncated)
+									originalPushToolResult(truncated, opts)
 								} else {
 									if (cacheKey) {
 										toolResultCache.set(cacheKey, content)
 									}
-									originalPushToolResult(content)
+									originalPushToolResult(content, opts)
 								}
 							})
 						pendingPersist.push(persistPromise)
@@ -645,7 +646,7 @@ export abstract class BaseTool<TName extends ToolName> {
 						if (cacheKey) {
 							toolResultCache.set(cacheKey, truncated)
 						}
-						originalPushToolResult(truncated)
+						originalPushToolResult(truncated, opts)
 						return
 					}
 					if (cacheKey) {
@@ -653,7 +654,7 @@ export abstract class BaseTool<TName extends ToolName> {
 					}
 				}
 				// For non-string (array with images) or small results, pass through
-				originalPushToolResult(content)
+				originalPushToolResult(content, opts)
 			},
 		}
 

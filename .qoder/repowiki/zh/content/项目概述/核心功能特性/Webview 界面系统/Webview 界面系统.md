@@ -11,9 +11,15 @@
 - [ChatView.tsx](file://webview-ui/src/components/chat/ChatView.tsx)
 - [HistoryView.tsx](file://webview-ui/src/components/history/HistoryView.tsx)
 - [SettingsView.tsx](file://webview-ui/src/components/settings/SettingsView.tsx)
+- [InlineCompletionSettings.tsx](file://webview-ui/src/components/settings/InlineCompletionSettings.tsx)
 - [ChatRow.tsx](file://webview-ui/src/components/chat/ChatRow.tsx)
 - [Tab.tsx](file://webview-ui/src/components/common/Tab.tsx)
 - [useScrollLifecycle.ts](file://webview-ui/src/hooks/useScrollLifecycle.ts)
+- [types.ts](file://webview-ui/src/components/settings/types.ts)
+- [Section.tsx](file://webview-ui/src/components/settings/Section.tsx)
+- [SearchableSetting.tsx](file://webview-ui/src/components/settings/SearchableSetting.tsx)
+- [settings.json](file://webview-ui/src/i18n/locales/en/settings.json)
+- [package.nls.json](file://src/package.nls.json)
 </cite>
 
 ## 目录
@@ -22,16 +28,17 @@
 3. [核心组件](#核心组件)
 4. [架构概览](#架构概览)
 5. [详细组件分析](#详细组件分析)
-6. [依赖关系分析](#依赖关系分析)
-7. [性能考虑](#性能考虑)
-8. [故障排除指南](#故障排除指南)
-9. [结论](#结论)
+6. [内联代码补全设置组件](#内联代码补全设置组件)
+7. [依赖关系分析](#依赖关系分析)
+8. [性能考虑](#性能考虑)
+9. [故障排除指南](#故障排除指南)
+10. [结论](#结论)
 
 ## 简介
 
-Webview 界面系统是 Roo-Code 扩展程序的核心前端架构，基于 React 构建，为用户提供现代化的 AI 对话界面。该系统通过 ClineProvider 作为界面与扩展宿主之间的桥梁，实现了双向的消息通信机制，支持聊天界面、工具调用审批、代码展示、历史管理等多种功能。
+Webview 界面系统是 Roo-Code 扩展程序的核心前端架构，基于 React 构建，为用户提供现代化的 AI 对话界面。该系统通过 ClineProvider 作为界面与扩展宿主之间的桥梁，实现了双向的消息通信机制，支持聊天界面、工具调用审批、代码展示、历史管理、**内联代码补全设置**等多种功能。
 
-系统采用模块化设计，具有清晰的组件层次结构和状态管理模式，能够高效处理复杂的 AI 交互场景，包括实时对话、工具调用、文件操作等。
+系统采用模块化设计，具有清晰的组件层次结构和状态管理模式，能够高效处理复杂的 AI 交互场景，包括实时对话、工具调用、文件操作、**内联代码补全配置**等。
 
 ## 项目结构
 
@@ -44,34 +51,37 @@ A[App.tsx 主应用]
 B[ChatView 聊天视图]
 C[HistoryView 历史视图]
 D[SettingsView 设置视图]
-E[组件库 UI组件]
+E[InlineCompletionSettings 内联补全设置]
+F[组件库 UI组件]
 end
 subgraph "状态管理层"
-F[ExtensionStateContext 扩展状态]
-G[ContextProvider 上下文提供者]
-H[Hook 状态钩子]
+G[ExtensionStateContext 扩展状态]
+H[ContextProvider 上下文提供者]
+I[Hook 状态钩子]
 end
 subgraph "通信层"
-I[ClineProvider 桥梁]
-J[webviewMessageHandler 消息处理器]
-K[vscode 工具包装器]
+J[ClineProvider 桥梁]
+K[webviewMessageHandler 消息处理器]
+L[vscode 工具包装器]
 end
 subgraph "扩展宿主层"
-L[VSCode 扩展]
-M[任务管理器]
-N[工具执行器]
+M[VSCode 扩展]
+N[任务管理器]
+O[工具执行器]
 end
 A --> B
 A --> C
 A --> D
+A --> E
 A --> F
-F --> G
-A --> I
-I --> J
-I --> K
+A --> G
+G --> H
+A --> J
+J --> K
 J --> L
-L --> M
-L --> N
+K --> M
+M --> N
+M --> O
 ```
 
 **图表来源**
@@ -267,7 +277,7 @@ HistoryView --> TaskGroupItem : renders
 
 ### 设置管理组件 (SettingsView)
 
-SettingsView 提供了全面的配置管理界面：
+SettingsView 提供了全面的配置管理界面，**现已包含内联代码补全设置模块**：
 
 #### 功能模块
 
@@ -276,9 +286,10 @@ SettingsView 提供了全面的配置管理界面：
 - **实验性功能**：控制实验性特性的开关
 - **主题和外观**：个性化界面外观
 - **快捷命令**：自定义快捷命令和提示
+- **内联代码补全设置**：**新增** - 管理内联补全功能配置
 
 **章节来源**
-- [SettingsView.tsx:1-965](file://webview-ui/src/components/settings/SettingsView.tsx#L1-L965)
+- [SettingsView.tsx:1-993](file://webview-ui/src/components/settings/SettingsView.tsx#L1-L993)
 
 ### 滚动生命周期管理 (useScrollLifecycle)
 
@@ -307,6 +318,99 @@ USER_BROWSING_HISTORY --> ANCHORED_FOLLOWING : 返回底部
 **章节来源**
 - [useScrollLifecycle.ts:1-490](file://webview-ui/src/hooks/useScrollLifecycle.ts#L1-L490)
 
+## 内联代码补全设置组件
+
+### InlineCompletionSettings - 内联代码补全配置界面
+
+**新增** InlineCompletionSettings 是一个专门用于配置内联代码补全功能的设置组件，提供了完整的内联补全配置选项。
+
+#### 核心功能特性
+
+- **启用/禁用功能**：控制内联补全的整体开关
+- **触发延迟配置**：设置自动触发补全的延迟时间（100-2000ms）
+- **最大补全行数**：限制补全建议的最大行数（1-50行）
+- **Cangjie 增强功能**：为 Cangjie 文件启用增强的 LLM+Grep 补全
+- **触发命令配置**：自定义手动触发内联补全的快捷键
+- **智能数值范围限制**：自动限制输入值在有效范围内
+
+```mermaid
+flowchart TD
+Start([用户访问内联补全设置]) --> CheckEnabled{检查启用状态?}
+CheckEnabled --> |禁用| ShowDisabled[显示禁用状态]
+CheckEnabled --> |启用| ShowAdvanced[显示高级配置]
+ShowDisabled --> End([结束])
+ShowAdvanced --> Delay[触发延迟设置]
+ShowAdvanced --> Lines[最大行数设置]
+ShowAdvanced --> Cangjie[Cangjie 增强设置]
+ShowAdvanced --> Trigger[触发命令设置]
+Delay --> ClampDelay[数值范围限制 100-2000ms]
+Lines --> ClampLines[数值范围限制 1-50]
+ClampDelay --> Save[保存配置]
+ClampLines --> Save
+Cangjie --> Save
+Trigger --> Save
+Save --> End
+```
+
+**图表来源**
+- [InlineCompletionSettings.tsx:29-35](file://webview-ui/src/components/settings/InlineCompletionSettings.tsx#L29-L35)
+- [InlineCompletionSettings.tsx:37-45](file://webview-ui/src/components/settings/InlineCompletionSettings.tsx#L37-L45)
+
+#### 组件架构设计
+
+组件采用了模块化的架构设计，集成了多个辅助组件：
+
+- **SectionHeader**：设置区域标题
+- **Section**：设置容器布局
+- **SearchableSetting**：可搜索的设置项包装器
+- **VSCodeCheckbox**：VSCode 风格的复选框
+- **VSCodeTextField**：VSCode 风格的文本输入框
+
+#### 国际化支持
+
+组件完全支持多语言国际化，包括：
+
+- **英文**：完整的英文翻译
+- **简体中文**：中文本地化支持
+- **繁体中文**：台湾地区本地化支持
+
+**章节来源**
+- [InlineCompletionSettings.tsx:1-167](file://webview-ui/src/components/settings/InlineCompletionSettings.tsx#L1-L167)
+- [types.ts:5-8](file://webview-ui/src/components/settings/types.ts#L5-L8)
+- [Section.tsx:7-9](file://webview-ui/src/components/settings/Section.tsx#L7-L9)
+- [SearchableSetting.tsx:49-79](file://webview-ui/src/components/settings/SearchableSetting.tsx#L49-L79)
+
+### 设置集成与导航
+
+内联补全设置已完全集成到 SettingsView 的设置系统中：
+
+#### 设置标签页注册
+
+组件在设置系统中注册为独立的标签页：
+
+```mermaid
+graph LR
+SettingsView[SettingsView 主设置视图] --> TabList[标签页列表]
+TabList --> InlineTab[内联补全标签页]
+InlineTab --> InlineComponent[InlineCompletionSettings 组件]
+```
+
+**图表来源**
+- [SettingsView.tsx:100-118](file://webview-ui/src/components/settings/SettingsView.tsx#L100-L118)
+- [SettingsView.tsx:883-892](file://webview-ui/src/components/settings/SettingsView.tsx#L883-L892)
+
+#### 状态管理集成
+
+组件通过统一的状态管理接口与设置系统集成：
+
+- **setCachedStateField**：设置缓存状态字段的回调函数
+- **类型安全**：完整的 TypeScript 类型定义
+- **默认值处理**：提供合理的默认配置值
+
+**章节来源**
+- [SettingsView.tsx:163-167](file://webview-ui/src/components/settings/SettingsView.tsx#L163-L167)
+- [SettingsView.tsx:883-892](file://webview-ui/src/components/settings/SettingsView.tsx#L883-L892)
+
 ## 依赖关系分析
 
 系统采用了清晰的依赖层次结构：
@@ -318,28 +422,33 @@ A[React 18]
 B[VSCode Webview API]
 C[TanStack React Query]
 D[React Use Hooks]
+E[VSCode Webview UI Toolkit]
+F[react-i18next]
 end
 subgraph "内部模块"
-E[Webview UI]
-F[Core Extensions]
-G[Shared Utilities]
-H[Services Layer]
+G[Webview UI]
+H[Core Extensions]
+I[Shared Utilities]
+J[Services Layer]
+K[Settings Components]
 end
 subgraph "类型定义"
-I[@njust-ai-cj/types]
-J[@njust-ai-cj/core]
-K[VSCode Types]
+L[@njust-ai-cj/types]
+M[VSCode Types]
+N[Extension State Types]
 end
-A --> E
-B --> E
-C --> E
-D --> E
-E --> F
-F --> G
+A --> G
+B --> G
+C --> G
+D --> G
+E --> K
+F --> K
 G --> H
-I --> E
-J --> F
-K --> B
+H --> I
+I --> J
+L --> G
+M --> B
+N --> K
 ```
 
 **图表来源**
@@ -358,6 +467,7 @@ K --> B
 2. **虚拟滚动**：使用 react-virtuoso 处理大量消息
 3. **懒加载**：延迟加载非关键组件
 4. **状态分离**：避免不必要的状态更新
+5. **数值范围限制**：**新增** - 通过 clamp 函数优化数值输入处理
 
 ### 内存管理
 
@@ -401,18 +511,31 @@ K --> B
 2. 优化组件渲染频率
 3. 减少不必要的状态更新
 
+#### 内联补全设置问题
+
+**问题**：内联补全设置不生效
+**解决方案**：
+1. **新增** 检查数值范围限制函数是否正确工作
+2. **新增** 验证设置缓存机制是否正常
+3. **新增** 确认 VSCode 快捷键绑定是否正确配置
+4. **新增** 检查 Cangjie 增强功能的依赖条件
+
 **章节来源**
 - [ExtensionStateContext.tsx:144-183](file://webview-ui/src/context/ExtensionStateContext.tsx#L144-L183)
 - [ClineProvider.ts:561-620](file://src/core/webview/ClineProvider.ts#L561-L620)
 
 ## 结论
 
-Webview 界面系统展现了现代前端架构的最佳实践，通过精心设计的分层结构和状态管理模式，成功地将复杂的 AI 交互场景抽象为直观易用的用户界面。系统的主要优势包括：
+Webview 界面系统展现了现代前端架构的最佳实践，通过精心设计的分层结构和状态管理模式，成功地将复杂的 AI 交互场景抽象为直观易用的用户界面。**新增的内联代码补全设置组件进一步增强了系统的实用性，为开发者提供了精细的代码补全控制能力。**
+
+系统的主要优势包括：
 
 1. **模块化设计**：清晰的组件边界和职责分离
 2. **类型安全**：完整的 TypeScript 支持
 3. **性能优化**：针对大规模数据处理的优化策略
 4. **可扩展性**：易于添加新功能和组件
 5. **用户体验**：流畅的交互和响应式设计
+6. **国际化支持**：完整的多语言本地化
+7. **配置灵活性**：**新增** - 精细的内联补全配置选项
 
-该系统为开发者提供了良好的扩展基础，可以轻松地添加新的 UI 组件、集成新的 AI 服务，以及实现更复杂的业务逻辑。通过遵循现有的架构模式和最佳实践，开发者可以快速而可靠地扩展系统功能。
+该系统为开发者提供了良好的扩展基础，可以轻松地添加新的 UI 组件、集成新的 AI 服务，以及实现更复杂的业务逻辑。**新增的内联补全设置组件展示了系统的可扩展性和对开发者需求的积极响应能力。** 通过遵循现有的架构模式和最佳实践，开发者可以快速而可靠地扩展系统功能。

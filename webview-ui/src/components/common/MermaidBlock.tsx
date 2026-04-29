@@ -44,7 +44,7 @@ const MERMAID_THEME = {
 
 mermaid.initialize({
 	startOnLoad: false,
-	securityLevel: "loose",
+	securityLevel: "strict",
 	theme: "dark",
 	suppressErrorRendering: true,
 	themeVariables: {
@@ -95,6 +95,15 @@ export default function MermaidBlock({ code }: MermaidBlockProps) {
 	const { showCopyFeedback, copyWithFeedback } = useCopyToClipboard()
 	const { t } = useAppTranslation()
 
+	/** Strip event handlers and script tags from SVG for XSS defense-in-depth. */
+	function sanitizeSvg(svg: string): string {
+		return svg
+			.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+			.replace(/\bon\w+\s*=\s*"[^"]*"/gi, "")
+			.replace(/\bon\w+\s*=\s*'[^']*'/gi, "")
+			.replace(/javascript\s*:/gi, "")
+	}
+
 	// 1) Whenever `code` changes, mark that we need to re-render a new chart
 	useEffect(() => {
 		setIsLoading(true)
@@ -116,7 +125,7 @@ export default function MermaidBlock({ code }: MermaidBlockProps) {
 				})
 				.then(({ svg }) => {
 					if (containerRef.current) {
-						containerRef.current.innerHTML = svg
+						containerRef.current.innerHTML = sanitizeSvg(svg)
 					}
 				})
 				.catch((err) => {

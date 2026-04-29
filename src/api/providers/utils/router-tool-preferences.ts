@@ -4,7 +4,7 @@ import type { ModelInfo } from "@njust-ai-cj/types"
  * Apply tool preferences for models accessed through dynamic routers (OpenRouter, Requesty).
  *
  * Different model families perform better with specific tools:
- * - OpenAI models: Better results with apply_patch instead of apply_diff/write_to_file
+ * - OpenAI models: Better results with apply_patch instead of write_to_file
  *
  * This function modifies the model info to apply these preferences consistently
  * across all dynamic router providers.
@@ -21,7 +21,7 @@ export function applyRouterToolPreferences(modelId: string, info: ModelInfo): Mo
 	if (modelId.includes("openai")) {
 		result = {
 			...result,
-			excludedTools: [...new Set([...(result.excludedTools || []), "apply_diff", "write_to_file"])],
+			excludedTools: [...new Set([...(result.excludedTools || []), "write_to_file"])],
 			includedTools: [...new Set([...(result.includedTools || []), "apply_patch"])],
 		}
 	}

@@ -90,7 +90,12 @@ export class TaskHistoryStore {
 			// 1. Load existing index into the cache
 			await this.loadIndex()
 
-			// 2. Reconcile cache against actual task directories on disk
+			// 2. Reconcile cache against actual task directories on disk.
+			// If a WAL marker exists (unclean shutdown), reconciliation
+			// rebuilds the index from per-task files.
+			if (await this.hasWalMarker()) {
+				console.log("[TaskHistoryStore] WAL marker found — forcing full reconciliation")
+			}
 			await this.reconcile()
 
 			// 3. Start fs.watch for cross-instance reactivity
@@ -431,6 +436,11 @@ export class TaskHistoryStore {
 			return
 		}
 
+		// Write WAL marker immediately to survive crashes during the debounce window
+		this.writeWalMarker().catch((err) => {
+			console.error("[TaskHistoryStore] Failed to write WAL marker:", err)
+		})
+
 		if (this.indexWriteTimer) {
 			clearTimeout(this.indexWriteTimer)
 		}
@@ -439,6 +449,8 @@ export class TaskHistoryStore {
 			this.indexWriteTimer = null
 			try {
 				await this.writeIndex()
+				// Index persisted successfully — clear the WAL marker
+				await this.clearWalMarker()
 			} catch (err) {
 				console.error("[TaskHistoryStore] Failed to write index:", err)
 			}
@@ -455,6 +467,7 @@ export class TaskHistoryStore {
 		}
 
 		await this.writeIndex()
+		await this.clearWalMarker()
 	}
 
 	// ────────────────────────────── Private: Per-task file I/O ──────────────────────────────
@@ -567,6 +580,46 @@ export class TaskHistoryStore {
 			() => {},
 		)
 		return result
+	}
+
+	// ────────────────────────────── Private: WAL (Write-Ahead Log) ──────────────────────────────
+
+	/**
+	 * Write a small WAL marker recording that the index may be stale.
+	 * On startup, if this marker exists, full reconciliation is triggered
+	 * to rebuild the index from per-task files.
+	 */
+	private async writeWalMarker(): Promise<void> {
+		const walPath = await this.getWalPath()
+		await fs.mkdir(path.dirname(walPath), { recursive: true })
+		await fs.writeFile(walPath, String(Date.now()), "utf-8")
+	}
+
+	private async clearWalMarker(): Promise<void> {
+		try {
+			const walPath = await this.getWalPath()
+			await fs.unlink(walPath)
+		} catch {
+			// WAL already cleared or never existed
+		}
+	}
+
+	/**
+	 * Check if WAL marker exists (indicating a previous unclean shutdown).
+	 */
+	private async hasWalMarker(): Promise<boolean> {
+		try {
+			const walPath = await this.getWalPath()
+			await fs.access(walPath)
+			return true
+		} catch {
+			return false
+		}
+	}
+
+	private async getWalPath(): Promise<string> {
+		const tasksDir = await this.getTasksDir()
+		return path.join(tasksDir, "_index.wal")
 	}
 
 	// ────────────────────────────── Private: Path helpers ──────────────────────────────

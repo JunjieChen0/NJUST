@@ -2,12 +2,32 @@ import type { ModelInfo } from "../model.js"
 
 // https://help.aliyun.com/zh/model-studio/getting-started/models
 // Pricing: https://help.aliyun.com/zh/model-studio/billing-overview
-// Updated: March 2026
+// Updated: April 2026
 export type QwenModelId = keyof typeof qwenModels
 
 export const qwenDefaultModelId: QwenModelId = "qwen3.5-plus"
 
 export const qwenModels = {
+	"qwen3-next-80b-a3b-instruct": {
+		maxTokens: 65_536,
+		contextWindow: 262_144,
+		supportsImages: false,
+		supportsPromptCache: false,
+		inputPrice: 0.15,
+		outputPrice: 1.2,
+		description:
+			"Qwen3-Next 80B A3B Instruct (DashScope): sparse MoE, strong coding/reasoning; pricing aligned with Bedrock qwen3-next listing.",
+	},
+	"qwen3-next-80b-a3b-thinking": {
+		maxTokens: 65_536,
+		contextWindow: 262_144,
+		supportsImages: false,
+		supportsPromptCache: false,
+		preserveReasoning: true,
+		inputPrice: 0.15,
+		outputPrice: 1.2,
+		description: "Qwen3-Next 80B A3B Thinking (DashScope): reasoning-optimized variant with chain-of-thought.",
+	},
 	"qwen3.5-plus": {
 		maxTokens: 65_536,
 		contextWindow: 1_000_000,

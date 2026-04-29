@@ -374,6 +374,17 @@ export const vertexModels = {
 			},
 		],
 	},
+	"claude-opus-4-7": {
+		maxTokens: 8192,
+		contextWindow: 1_000_000,
+		supportsImages: true,
+		supportsPromptCache: true,
+		inputPrice: 5.0,
+		outputPrice: 25.0,
+		cacheWritesPrice: 6.25,
+		cacheReadsPrice: 0.5,
+		supportsReasoningBudget: true,
+	},
 	"claude-opus-4-5@20251101": {
 		maxTokens: 8192,
 		contextWindow: 200_000,

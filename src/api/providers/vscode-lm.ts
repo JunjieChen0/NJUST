@@ -14,6 +14,7 @@ import { convertToVsCodeLmMessages, extractTextCountFromMessage } from "../trans
 import { BaseProvider } from "./base-provider"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
 
+import { debugLog } from "../../utils/debugLog"
 /**
  * Converts OpenAI-format tools to VSCode Language Model tools.
  * Normalizes the JSON Schema to draft 2020-12 compliant format required by
@@ -106,12 +107,12 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 		try {
 			// Check if the client is already initialized
 			if (this.client) {
-				console.debug("NJUST_AI_CJ <Language Model API>: Client already initialized")
+				debugLog("NJUST_AI_CJ <Language Model API>: Client already initialized")
 				return
 			}
 			// Create a new client instance
 			this.client = await this.createClient(this.options.vsCodeLmModelSelector || {})
-			console.debug("NJUST_AI_CJ <Language Model API>: Client initialized successfully")
+			debugLog("NJUST_AI_CJ <Language Model API>: Client initialized successfully")
 		} catch (error) {
 			// Handle errors during client initialization
 			const errorMessage = error instanceof Error ? error.message : "Unknown error"
@@ -231,7 +232,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 
 		// Validate input
 		if (!text) {
-			console.debug("NJUST_AI_CJ <Language Model API>: Empty text provided for token counting")
+			debugLog("NJUST_AI_CJ <Language Model API>: Empty text provided for token counting")
 			return 0
 		}
 
@@ -255,7 +256,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 			} else if (text instanceof vscode.LanguageModelChatMessage) {
 				// For chat messages, ensure we have content
 				if (!text.content || (Array.isArray(text.content) && text.content.length === 0)) {
-					console.debug("NJUST_AI_CJ <Language Model API>: Empty chat message content")
+					debugLog("NJUST_AI_CJ <Language Model API>: Empty chat message content")
 					return 0
 				}
 				const countMessage = extractTextCountFromMessage(text)
@@ -280,7 +281,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 		} catch (error) {
 			// Handle specific error types
 			if (error instanceof vscode.CancellationError) {
-				console.debug("NJUST_AI_CJ <Language Model API>: Token counting cancelled by user")
+				debugLog("NJUST_AI_CJ <Language Model API>: Token counting cancelled by user")
 				return 0
 			}
 
@@ -289,7 +290,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 
 			// Log additional error details if available
 			if (error instanceof Error && error.stack) {
-				console.debug("Token counting error stack:", error.stack)
+				debugLog("Token counting error stack:", error.stack)
 			}
 
 			return 0 // Fallback to prevent stream interruption
@@ -317,7 +318,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 
 	private async getClient(): Promise<vscode.LanguageModelChat> {
 		if (!this.client) {
-			console.debug("NJUST_AI_CJ <Language Model API>: Getting client with options:", {
+			debugLog("NJUST_AI_CJ <Language Model API>: Getting client with options:", {
 				vsCodeLmModelSelector: this.options.vsCodeLmModelSelector,
 				hasOptions: !!this.options,
 				selectorKeys: this.options.vsCodeLmModelSelector ? Object.keys(this.options.vsCodeLmModelSelector) : [],
@@ -326,7 +327,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 			try {
 				// Use default empty selector if none provided to get all available models
 				const selector = this.options?.vsCodeLmModelSelector || {}
-				console.debug("NJUST_AI_CJ <Language Model API>: Creating client with selector:", selector)
+				debugLog("NJUST_AI_CJ <Language Model API>: Creating client with selector:", selector)
 				this.client = await this.createClient(selector)
 			} catch (error) {
 				const message = error instanceof Error ? error.message : "Unknown error"
@@ -439,7 +440,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 						}
 
 						// Log tool call for debugging
-						console.debug("NJUST_AI_CJ <Language Model API>: Processing tool call:", {
+						debugLog("NJUST_AI_CJ <Language Model API>: Processing tool call:", {
 							name: chunk.name,
 							callId: chunk.callId,
 							inputSize: JSON.stringify(chunk.input).length,
@@ -551,7 +552,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 			? stringifyVsCodeLmModelSelector(this.options.vsCodeLmModelSelector)
 			: "vscode-lm"
 
-		console.debug("NJUST_AI_CJ <Language Model API>: No client available, using fallback model info")
+		debugLog("NJUST_AI_CJ <Language Model API>: No client available, using fallback model info")
 
 		return {
 			id: fallbackId,

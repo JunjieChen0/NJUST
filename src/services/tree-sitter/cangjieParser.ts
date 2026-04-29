@@ -90,12 +90,12 @@ function scanCangjieTextStateUpTo(s: string, endExclusive: number): {
 	inString: boolean
 	inChar: boolean
 	inLineComment: boolean
-	inBlock: boolean
+	inBlock: number
 } {
 	let inString = false
 	let inChar = false
 	let inLineComment = false
-	let inBlock = false
+	let inBlock = 0 // Counter for nested /* */
 	let i = 0
 	while (i < endExclusive && i < s.length) {
 		const ch = s[i]
@@ -106,9 +106,9 @@ function scanCangjieTextStateUpTo(s: string, endExclusive: number): {
 			i++
 			continue
 		}
-		if (inBlock) {
+		if (inBlock > 0) {
 			if (ch === "*" && next === "/") {
-				inBlock = false
+				inBlock--
 				i += 2
 				continue
 			}
@@ -117,6 +117,9 @@ function scanCangjieTextStateUpTo(s: string, endExclusive: number): {
 		}
 		if (inString) {
 			if (ch === "\\") {
+				// Skip known escape sequences (\", \\, \n, \t, \r, \uXXXX).
+				// Unknown escapes (\z etc.) are treated as literal backslash + char;
+				// they won't cause index out of bounds due to the i+=2 guard.
 				i += 2
 				continue
 			}
@@ -140,7 +143,7 @@ function scanCangjieTextStateUpTo(s: string, endExclusive: number): {
 			continue
 		}
 		if (ch === "/" && next === "*") {
-			inBlock = true
+			inBlock++
 			i += 2
 			continue
 		}
@@ -175,7 +178,7 @@ export function findClosingAngleBracketIndex(s: string, openIdx: number): number
 	let inString = false
 	let inChar = false
 	let inLineComment = false
-	let inBlock = false
+	let inBlock = 0 // Counter for nested /* */ comments
 
 	while (i < s.length) {
 		const ch = s[i]
@@ -188,7 +191,7 @@ export function findClosingAngleBracketIndex(s: string, openIdx: number): number
 		}
 		if (inBlock) {
 			if (ch === "*" && next === "/") {
-				inBlock = false
+				inBlock--
 				i += 2
 				continue
 			}
@@ -220,7 +223,7 @@ export function findClosingAngleBracketIndex(s: string, openIdx: number): number
 			continue
 		}
 		if (ch === "/" && next === "*") {
-			inBlock = true
+			inBlock++
 			i += 2
 			continue
 		}
@@ -306,7 +309,7 @@ const DEF_PATTERNS: { kind: CangjieDefKind; re: RegExp }[] = [
 	{ kind: "macro", re: new RegExp(`^\\s*${MODIFIER_PREFIX}macro\\s+(\\w+)`) },
 	{ kind: "init", re: new RegExp(`^\\s*${MODIFIER_PREFIX}init\\s*\\(`) },
 	{ kind: "prop", re: new RegExp(`^\\s*${MODIFIER_PREFIX}prop\\s+(\\w+)`) },
-	{ kind: "extend", re: new RegExp(`^\\s*${MODIFIER_PREFIX}extend\\s+(\\w[\\w<>, ]*?)\\s*(<:|\\{)`) },
+	{ kind: "extend", re: new RegExp(`^\\s*${MODIFIER_PREFIX}extend\\s+(\\w[\\w<>, ]*?)(?:<:|extends|where|\\{)`) },
 	{ kind: "type_alias", re: new RegExp(`^\\s*${MODIFIER_PREFIX}type\\s+(\\w+)\\s*=`) },
 	{ kind: "var", re: new RegExp(`^\\s*${MODIFIER_PREFIX}var\\s+(\\w+)`) },
 	{ kind: "let", re: new RegExp(`^\\s*${MODIFIER_PREFIX}let\\s+(\\w+)`) },
@@ -358,7 +361,12 @@ function findClosingBrace(lines: string[], openLine: number): number {
 			j++
 		}
 	}
-	return openLine
+	// No matching brace found -- return last line as best-effort boundary.
+	// This prevents the entire file tail from collapsing into one span.
+	console.warn(
+		`[cangjieParser] findClosingBrace: unmatched { at line ${openLine}, treating file end as boundary`,
+	)
+	return Math.max(openLine, lines.length - 1)
 }
 
 /**
@@ -368,25 +376,96 @@ function isBlockDef(kind: CangjieDefKind): boolean {
 	return ["class", "struct", "interface", "enum", "func", "extend", "main", "macro", "init", "prop", "operator"].includes(kind)
 }
 
+function isEnumContainer(kind: CangjieDefKind): boolean {
+	return kind === "enum"
+}
+
+/**
+ * Strip trailing `//` comment from a line, respecting string and character
+ * literal boundaries. Returns the code-only prefix.
+ */
+function stripInlineComment(line: string): string {
+	let inString = false
+	let inChar = false
+	for (let i = 0; i < line.length - 1; i++) {
+		const ch = line[i]
+		if (inString) {
+			if (ch === "\\") { i++; continue }
+			if (ch === '"') { inString = false; continue }
+			continue
+		}
+		if (inChar) {
+			if (ch === "\\") { i++; continue }
+			if (ch === "'") { inChar = false; continue }
+			continue
+		}
+		if (ch === '"') { inString = true; continue }
+		if (ch === "'") { inChar = true; continue }
+		if (ch === "/" && line[i + 1] === "/") return line.slice(0, i)
+	}
+	return line
+}
+
 /**
  * Fast regex-based parser. Returns definitions found in the source.
+ * Tracks multi-line block comment state so declarations inside `/* … *‍/`
+ * are not falsely reported.
  */
 export function parseCangjieDefinitions(content: string): CangjieDef[] {
 	const lines = content.split("\n")
 	const defs: CangjieDef[] = []
 	const processedLines = new Set<number>()
+	let inBlockComment = false
 
 	for (let i = 0; i < lines.length; i++) {
 		if (processedLines.has(i)) continue
-		const line = lines[i]
+		let line = lines[i]
 
-		// Skip blank lines and pure comments
-		const trimmed = line.trim()
-		if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
-			continue
+		// Track multi-line block comments
+		if (inBlockComment) {
+			const endIdx = line.indexOf("*/")
+			if (endIdx === -1) continue // still inside block comment, skip entire line
+			line = line.slice(endIdx + 2) // resume after */
+			inBlockComment = false
 		}
 
+		// Handle block comments on this line
+		const blockStart = line.indexOf("/*")
+		if (blockStart !== -1) {
+			const blockEnd = line.indexOf("*/", blockStart + 2)
+			if (blockEnd !== -1) {
+				// Block comment starts and ends on same line: remove it
+				line = line.slice(0, blockStart) + " " + line.slice(blockEnd + 2)
+			} else {
+				// Block comment starts here and continues to later lines
+				line = line.slice(0, blockStart)
+				inBlockComment = true
+			}
+		}
+
+		// Strip trailing // comment from the remaining code portion
+
+		// Backtrack up to 5 lines for annotations (@Attr) on multi-line declarations.
+		let annotationLine = ""
+		for (let back = i - 1; back >= Math.max(0, i - 5); back--) {
+			const prev = lines[back].trim()
+			if (prev.startsWith("@")) {
+				annotationLine = prev + " " + annotationLine
+			} else if (prev) {
+				break
+			}
+		}
+		const effectiveLine = annotationLine ? annotationLine + " " + line : line
+
+		const trimmed = line.trim()
+		if (!trimmed) continue
+
 		for (const { kind, re } of DEF_PATTERNS) {
+			let match = line.match(re)
+			// If no match on current line, try with backtracked annotation prefix
+			if (!match && annotationLine) {
+				match = effectiveLine.match(re)
+			}
 			const match = line.match(re)
 			if (!match) continue
 
@@ -414,6 +493,18 @@ export function parseCangjieDefinitions(content: string): CangjieDef[] {
 
 			defs.push({ kind, name, startLine: i, endLine })
 
+			// Extract enum variants from the body
+			if (kind === "enum" && endLine > i) {
+				for (let el = i + 1; el <= endLine && el < lines.length; el++) {
+					const elTrim = lines[el].trim()
+					// Match enum variant: identifier (possibly with = value)
+					const variantMatch = elTrim.match(/^(\w+)\s*(?:=|,|$)/)
+					if (variantMatch && !["case", "public", "private", "protected"].includes(variantMatch[1])) {
+						defs.push({ kind: "enum_case", name: variantMatch[1], startLine: el, endLine: el })
+					}
+				}
+			}
+
 			// Only mark the declaration line itself to allow nested types to be discovered
 			processedLines.add(i)
 			break // First matching pattern wins
@@ -427,6 +518,32 @@ export function parseCangjieDefinitions(content: string): CangjieDef[] {
 export const SIGNATURE_SCAN_MAX_LINES_FUNC = 12
 /** Max lines for class / struct / interface / enum / extend / type_alias headers. */
 export const SIGNATURE_SCAN_MAX_LINES_TYPE = 8
+
+/**
+ * Find the first `{` in a line that is NOT inside a string or character literal.
+ * Returns -1 when no such brace exists.
+ */
+function findFirstBraceOutsideString(line: string): number {
+	let inString = false
+	let inChar = false
+	for (let i = 0; i < line.length; i++) {
+		const ch = line[i]
+		if (inString) {
+			if (ch === "\\") { i++; continue }
+			if (ch === '"') { inString = false; continue }
+			continue
+		}
+		if (inChar) {
+			if (ch === "\\") { i++; continue }
+			if (ch === "'") { inChar = false; continue }
+			continue
+		}
+		if (ch === '"') { inString = true; continue }
+		if (ch === "'") { inChar = true; continue }
+		if (ch === "{" ) return i
+	}
+	return -1
+}
 
 /**
  * Build a display signature from source lines: for declarations that may span lines,
@@ -458,7 +575,7 @@ export function computeCangjieSignature(
 	for (let i = def.startLine; i <= lastLine; i++) {
 		const raw = lines[i]
 		if (raw === undefined) break
-		const braceIdx = raw.indexOf("{")
+		const braceIdx = findFirstBraceOutsideString(raw)
 		if (braceIdx !== -1) {
 			const before = raw.slice(0, braceIdx).trim()
 			if (before.length > 0) {
@@ -528,7 +645,7 @@ export function extractTypeMemberSummaries(
 	let openLine = -1
 	const maxSearch = Math.min(declStartLine + 25, lines.length - 1)
 	for (let i = declStartLine; i <= maxSearch; i++) {
-		if (lines[i]?.includes("{")) {
+		if (lines[i] !== undefined && findFirstBraceOutsideString(lines[i]) !== -1) {
 			openLine = i
 			break
 		}

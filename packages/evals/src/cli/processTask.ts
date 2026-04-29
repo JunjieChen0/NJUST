@@ -1,6 +1,12 @@
-import { execa } from "execa"
+import { execFile } from "node:child_process"
+import * as fs from "node:fs"
+import * as os from "node:os"
+import * as path from "node:path"
+import { promisify } from "node:util"
 
 import { type TaskEvent, NJUST_AI_CJEventName } from "@njust-ai-cj/types"
+
+const execFileAsync = promisify(execFile)
 
 import { findRun, findTask, updateTask } from "../db/index"
 
@@ -75,19 +81,14 @@ export const processTaskInContainer = async ({
 	logger: Logger
 	maxRetries?: number
 }) => {
-	const baseArgs = [
-		"--rm",
-		"--network evals_default",
-		"-v /var/run/docker.sock:/var/run/docker.sock",
-		"-v /tmp/evals:/var/log/evals",
-		"-e HOST_EXECUTION_METHOD=docker",
-	]
+	// Write secrets to a temp env-file so they don't appear in `docker inspect`.
+	// The file is removed in the finally block below.
+	const envFileLines = ["HOST_EXECUTION_METHOD=docker"]
 
 	if (jobToken) {
-		baseArgs.push(`-e NJUST_AI_CJ_CLOUD_TOKEN=${jobToken}`)
+		envFileLines.push(`NJUST_AI_CJ_CLOUD_TOKEN=${jobToken}`)
 	}
 
-	// Pass API keys to the container so the CLI can authenticate
 	const apiKeyEnvVars = [
 		"OPENROUTER_API_KEY",
 		"ANTHROPIC_API_KEY",
@@ -99,52 +100,61 @@ export const processTaskInContainer = async ({
 
 	for (const envVar of apiKeyEnvVars) {
 		if (process.env[envVar]) {
-			baseArgs.push(`-e ${envVar}=${process.env[envVar]}`)
+			envFileLines.push(`${envVar}=${process.env[envVar]}`)
 		}
 	}
 
-	const command = `pnpm --filter @njust-ai-cj/evals cli --taskId ${taskId}`
-	logger.info(command)
+	const envFilePath = path.join(os.tmpdir(), `evals-env-${taskId}-${Date.now()}.env`)
+	fs.writeFileSync(envFilePath, envFileLines.join("\n") + "\n", { mode: 0o600 })
 
-	for (let attempt = 0; attempt <= maxRetries; attempt++) {
-		const containerName = `evals-task-${taskId}.${attempt}`
-		const args = [`--name ${containerName}`, `-e EVALS_ATTEMPT=${attempt}`, ...baseArgs]
-		const isRetry = attempt > 0
+	const baseArgs = [
+		"--rm",
+		"--network", "evals_default",
+		"-v", "/tmp/evals:/var/log/evals",
+		"--env-file", envFilePath,
+	]
 
-		if (isRetry) {
-			const delayMs = Math.pow(2, attempt - 1) * 1000 * (0.5 + Math.random())
-			logger.info(`retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries + 1})`)
-			await new Promise((resolve) => setTimeout(resolve, delayMs))
-		}
+	const shellCommand = `pnpm --filter @njust-ai-cj/evals cli --taskId ${taskId}`
+	logger.info(shellCommand)
 
-		logger.info(
-			`${isRetry ? "retrying" : "executing"} container command (attempt ${attempt + 1}/${maxRetries + 1})`,
-		)
+	try {
+		for (let attempt = 0; attempt <= maxRetries; attempt++) {
+			const containerName = `evals-task-${taskId}.${attempt}`
+			const args = ["run", "--name", containerName, "-e", `EVALS_ATTEMPT=${attempt}`, ...baseArgs, "evals-runner", "sh", "-c", shellCommand]
+			const isRetry = attempt > 0
 
-		const subprocess = execa(`docker run ${args.join(" ")} evals-runner sh -c "${command}"`, { shell: true })
-		// subprocess.stdout?.on("data", (data) => console.log(data.toString()))
-		// subprocess.stderr?.on("data", (data) => console.error(data.toString()))
-
-		try {
-			const result = await subprocess
-			logger.info(`container process completed with exit code: ${result.exitCode}`)
-			return
-		} catch (error) {
-			if (error && typeof error === "object" && "exitCode" in error) {
-				logger.error(
-					`container process failed with exit code: ${error.exitCode} (attempt ${attempt + 1}/${maxRetries + 1})`,
-				)
-			} else {
-				logger.error(`container process failed with error: ${error} (attempt ${attempt + 1}/${maxRetries + 1})`)
+			if (isRetry) {
+				const delayMs = Math.pow(2, attempt - 1) * 1000 * (0.5 + Math.random())
+				logger.info(`retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries + 1})`)
+				await new Promise((resolve) => setTimeout(resolve, delayMs))
 			}
 
-			if (attempt === maxRetries) {
-				break
+			logger.info(
+				`${isRetry ? "retrying" : "executing"} container command (attempt ${attempt + 1}/${maxRetries + 1})`,
+			)
+
+			try {
+				await execFileAsync("docker", args, { maxBuffer: 50 * 1024 * 1024 })
+				logger.info(`container process completed successfully`)
+				return
+			} catch (error: any) {
+				const code = error?.code ?? error?.status
+				if (code !== undefined) {
+					logger.error(
+						`container process failed with exit code: ${code} (attempt ${attempt + 1}/${maxRetries + 1})`,
+					)
+				} else {
+					logger.error(`container process failed with error: ${error} (attempt ${attempt + 1}/${maxRetries + 1})`)
+				}
+
+				if (attempt === maxRetries) {
+					break
+				}
 			}
 		}
+
+		logger.error(`all ${maxRetries + 1} attempts failed, giving up`)
+	} finally {
+		try { fs.unlinkSync(envFilePath) } catch {}
 	}
-
-	logger.error(`all ${maxRetries + 1} attempts failed, giving up`)
-
-	// TODO: Mark task as failed.
 }

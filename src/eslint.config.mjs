@@ -5,14 +5,13 @@ export default [
 	...config,
 	{
 		rules: {
-			// TODO: These should be fixed and the rules re-enabled.
-			"no-regex-spaces": "off",
-			"no-useless-escape": "off",
-			"no-empty": "off",
-			"prefer-const": "off",
+			"no-regex-spaces": "warn",
+			"no-useless-escape": "warn",
+			"no-empty": "warn",
+			"prefer-const": "warn",
 
-			"@typescript-eslint/no-unused-vars": "off",
-			"@typescript-eslint/no-explicit-any": "off",
+			"@typescript-eslint/no-unused-vars": "warn",
+			"@typescript-eslint/no-explicit-any": "warn",
 			"@typescript-eslint/no-require-imports": "off",
 			"@typescript-eslint/ban-ts-comment": "off",
 		},

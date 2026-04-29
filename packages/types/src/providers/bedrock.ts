@@ -167,6 +167,23 @@ export const bedrockModels = {
 			},
 		],
 	},
+	// https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html
+	"anthropic.claude-opus-4-7": {
+		maxTokens: 8192,
+		contextWindow: 1_000_000,
+		supportsImages: true,
+		supportsPromptCache: true,
+		supportsReasoningBudget: true,
+		inputPrice: 5.0,
+		outputPrice: 25.0,
+		cacheWritesPrice: 6.25,
+		cacheReadsPrice: 0.5,
+		minTokensPerCachePoint: 1024,
+		maxCachePoints: 4,
+		cachableFields: ["system", "messages", "tools"],
+		description:
+			"Claude Opus 4.7: Bedrock uses thinking.type adaptive only; temperature/top_p/top_k are not supported",
+	},
 	"anthropic.claude-opus-4-5-20251101-v1:0": {
 		maxTokens: 8192,
 		contextWindow: 200_000,
@@ -288,6 +305,28 @@ export const bedrockModels = {
 		supportsPromptCache: false,
 		inputPrice: 1.35,
 		outputPrice: 5.4,
+	},
+	// https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-deepseek-deepseek-v3-2.html
+	"deepseek.v3.2": {
+		maxTokens: 8192,
+		contextWindow: 128_000,
+		supportsImages: true,
+		supportsPromptCache: false,
+		inputPrice: 0.35,
+		outputPrice: 0.95,
+		description:
+			"DeepSeek V3.2 MoE on Bedrock (Converse/Invoke). Multimodal; verify on-demand pricing on AWS Bedrock Pricing.",
+	},
+	// https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-deepseek-deepseek-v3-1.html
+	"deepseek.v3-v1:0": {
+		maxTokens: 8192,
+		contextWindow: 128_000,
+		supportsImages: true,
+		supportsPromptCache: false,
+		inputPrice: 0.3,
+		outputPrice: 0.85,
+		description:
+			"DeepSeek V3.1 MoE on Bedrock (runtime model id deepseek.v3-v1:0). Verify on-demand pricing on AWS Bedrock Pricing.",
 	},
 	"openai.gpt-oss-20b-1:0": {
 		maxTokens: 8192,
@@ -432,6 +471,16 @@ export const bedrockModels = {
 		outputPrice: 2.5,
 		description: "Kimi K2 Thinking (1T parameter MoE model with 32B active parameters)",
 	},
+	// https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k2-5.html
+	"moonshotai.kimi-k2.5": {
+		maxTokens: 16_384,
+		contextWindow: 262_144,
+		supportsImages: true,
+		supportsPromptCache: false,
+		inputPrice: 0.45,
+		outputPrice: 2.2,
+		description: "Kimi K2.5 multimodal on Bedrock (moonshotai.kimi-k2.5). Aligns with Moonshot API kimi-k2.5 list pricing.",
+	},
 	"minimax.minimax-m2": {
 		maxTokens: 16_384,
 		contextWindow: 196_608,
@@ -441,6 +490,18 @@ export const bedrockModels = {
 		inputPrice: 0.3,
 		outputPrice: 1.2,
 		description: "MiniMax M2 (230B parameter MoE model with 10B active parameters)",
+	},
+	// https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-minimax-minimax-m2-1.html
+	"minimax.minimax-m2.1": {
+		maxTokens: 8192,
+		contextWindow: 1_000_000,
+		supportsImages: true,
+		supportsPromptCache: false,
+		preserveReasoning: true,
+		inputPrice: 0.27,
+		outputPrice: 0.95,
+		description:
+			"MiniMax M2.1 on Bedrock: 1M context, multimodal. Pricing aligned with MiniMax-M2.1 API catalog; confirm on AWS Bedrock Pricing.",
 	},
 	"qwen.qwen3-next-80b-a3b": {
 		maxTokens: 8192,
@@ -525,6 +586,7 @@ export const BEDROCK_1M_CONTEXT_MODEL_IDS = [
 	"anthropic.claude-sonnet-4-5-20250929-v1:0",
 	"anthropic.claude-sonnet-4-6",
 	"anthropic.claude-opus-4-6-v1",
+	"anthropic.claude-opus-4-7",
 ] as const
 
 // Amazon Bedrock models that support Global Inference profiles
@@ -542,6 +604,7 @@ export const BEDROCK_GLOBAL_INFERENCE_MODEL_IDS = [
 	"anthropic.claude-haiku-4-5-20251001-v1:0",
 	"anthropic.claude-opus-4-5-20251101-v1:0",
 	"anthropic.claude-opus-4-6-v1",
+	"anthropic.claude-opus-4-7",
 ] as const
 
 // Amazon Bedrock Service Tier types

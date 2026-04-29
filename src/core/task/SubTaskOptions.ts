@@ -22,6 +22,14 @@ export interface SubTaskOptions {
 	tools?: string[]
 	/** Maximum result size to inject back into parent context */
 	maxResultChars?: number
+	/**
+	 * When true, build fork context for prompt cache sharing (byte-identical
+	 * prefix) instead of a text summary. Requires the provider to support
+	 * prompt caching to benefit.
+	 */
+	cacheAwareFork?: boolean
+	/** Cache-safe params for prompt cache sharing (required if cacheAwareFork is true) */
+	cacheSafeParams?: CacheSafeParams
 }
 
 /** Default tool sets per agent type */
@@ -51,6 +59,25 @@ export function getEffectiveTools(options: SubTaskOptions): string[] {
 /** Get effective context budget for a sub-agent type */
 export function getEffectiveContextBudget(options: SubTaskOptions): number {
 	return options.contextBudget ?? AGENT_TYPE_CONTEXT_BUDGET[options.agentType]
+}
+
+/**
+ * Cache-safe parameters for prompt cache sharing between parent and forked agent.
+ * When all five components are byte-identical between parent and fork, the
+ * provider can reuse the cached prompt prefix, dramatically reducing latency
+ * and cache_creation tokens.
+ *
+ * Inspired by Claude Code's CacheSafeParams in forkedAgent.ts.
+ */
+export interface CacheSafeParams {
+	/** Parent's rendered system prompt (not re-rendered, to avoid divergence) */
+	systemPrompt: string
+	/** Parent's user context (CLAUDE.md etc.) */
+	userContext?: string
+	/** Parent's tool definitions (exact same ToolUseBlock params) */
+	toolDefinitions?: string
+	/** Parent's conversation messages up to the fork point */
+	forkContextMessages?: Array<{ role: string; content: any }>
 }
 
 /** Configuration for forked context generation */

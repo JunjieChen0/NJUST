@@ -100,7 +100,17 @@ export class ContextProxy {
 		// Migration: Clear old default condensing prompt so users get the improved v2 default
 		await this.migrateOldDefaultCondensingPrompt()
 
-		this._isInitialized = true
+		// Schedule periodic secret cache refresh to pick up credential rotations.
+	// Without this, rotated API keys would require an extension restart.
+	this.secretRefreshInterval = setInterval(async () => {
+		for (const key of [...SECRET_STATE_KEYS, ...GLOBAL_SECRET_KEYS]) {
+			try {
+				this.secretCache[key] = await this.originalContext.secrets.get(key)
+			} catch { /* ignore individual failures */ }
+		}
+	}, 5 * 60 * 1000) // Refresh every 5 minutes
+
+	this._isInitialized = true
 	}
 
 	/**
@@ -110,6 +120,26 @@ export class ContextProxy {
 	 * Note: Only true customizations are migrated. If the legacy prompt equals the default,
 	 * we skip the migration to avoid pinning users to an old default if the default changes.
 	 */
+		/**
+	 * Migration version marker stored in globalState.
+	 * Incremented atomically after each successful migration step.
+	 * On startup, migrations at or below this version are skipped.
+	 */
+	private static readonly MIGRATION_VERSION_KEY = "__migration_version__"
+
+	private async getMigrationVersion(): Promise<number> {
+		return this.originalContext.globalState.get<number>(
+			ContextProxy.MIGRATION_VERSION_KEY,
+		) ?? 0
+	}
+
+	private async setMigrationVersion(version: number): Promise<void> {
+		await this.originalContext.globalState.update(
+			ContextProxy.MIGRATION_VERSION_KEY,
+			version,
+		)
+	}
+
 	private async migrateLegacyCondensingPrompt() {
 		try {
 			const legacyPrompt = this.originalContext.globalState.get<string>("customCondensingPrompt")
@@ -584,5 +614,13 @@ export class ContextProxy {
 		await this._instance.initialize()
 
 		return this._instance
+	}
+
+	private secretRefreshInterval: ReturnType<typeof setInterval> | undefined
+
+	dispose(): void {
+		if (this.secretRefreshInterval) {
+			clearInterval(this.secretRefreshInterval)
+		}
 	}
 }

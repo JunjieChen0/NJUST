@@ -44,14 +44,23 @@ export function normalizePromptContent(content: string): string {
 	// Remove ISO-8601 timestamps (e.g. 2026-04-12T08:30:00.000Z)
 	normalized = normalized.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?/g, "<TIMESTAMP>")
 
-	// Remove common date strings like "Saturday, April 12, 2026" or "April 12, 2026"
+	// Remove common English date strings like "Saturday, April 12, 2026" or "April 12, 2026"
 	normalized = normalized.replace(
 		/(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}/gi,
 		"<DATE>",
 	)
 
+	// Remove CJK date formats (e.g. "2026年4月27日", "4月27日 14:30")
+	normalized = normalized.replace(/\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日/gi, "<DATE>")
+	normalized = normalized.replace(/\d{1,2}\s*月\s*\d{1,2}\s*日/gi, "<DATE>")
+
+	// Remove numeric date formats (e.g. "2026-04-27", "04/27/2026", "27/04/2026")
+	normalized = normalized.replace(/\d{4}[-/]\d{1,2}[-/]\d{1,2}/g, "<DATE>")
+
 	// Remove time strings like "12:30 PM", "08:30:00"
 	normalized = normalized.replace(/\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?/gi, "<TIME>")
+	// Remove CJK time format (e.g. "14:30", "14时30分")
+	normalized = normalized.replace(/\d{1,2}\s*时\s*\d{1,2}\s*分/gi, "<TIME>")
 
 	// Sort lines that look like MCP tool entries (heuristic: lines starting with "- " inside a tools block)
 	// This handles the common case where MCP tool lists are rendered as markdown lists.

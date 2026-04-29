@@ -289,6 +289,27 @@ export class ErrorRecoveryHandler {
 		const alreadyQueued =
 			last?.role === "user" && typeof last.content === "string" && last.content.includes(continuationCue)
 		if (!hasPendingToolUses && !alreadyQueued) {
+			// Inject error tool_result placeholders for any saved tool_use blocks that
+			// lack corresponding results, preventing API protocol violations.
+			const lastAssistant = [...this.task.apiConversationHistory]
+				.reverse()
+				.find((m) => m.role === "assistant")
+			if (lastAssistant && Array.isArray(lastAssistant.content)) {
+				const orphanedToolUses = lastAssistant.content.filter(
+					(b) => b.type === "tool_use",
+				)
+				if (orphanedToolUses.length > 0) {
+					const toolResults = orphanedToolUses.map((tu) => ({
+						type: "tool_result" as const,
+						tool_use_id: tu.id,
+						content: "[Error: tool execution was interrupted by max_output_tokens limit]",
+					}))
+					await this.task.addToApiConversationHistory({
+						role: "user",
+						content: toolResults,
+					})
+				}
+			}
 			await this.task.addToApiConversationHistory({ role: "user", content: continuationCue })
 		}
 	}

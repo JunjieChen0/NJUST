@@ -32,7 +32,7 @@ export default {
 					description: TODOS_PARAMETER_DESCRIPTION,
 				},
 			},
-			required: ["mode", "message", "todos"],
+			required: ["mode", "message"],
 			additionalProperties: false,
 		},
 	},

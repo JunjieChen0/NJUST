@@ -1,16 +1,20 @@
 import OpenAI from "openai"
 
-export function addCacheBreakpoints(systemPrompt: string, messages: OpenAI.Chat.ChatCompletionMessageParam[]) {
-	messages[0] = {
+export function addCacheBreakpoints(systemPrompt: string, messages: OpenAI.Chat.ChatCompletionMessageParam[]): OpenAI.Chat.ChatCompletionMessageParam[] {
+	// Shallow clone to avoid mutating the caller's array.
+	const result = [...messages]
+
+	result[0] = {
 		role: "system",
 		// @ts-ignore-next-line
 		content: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
 	}
 
-	// Ensure all user messages have content in array format first
-	for (const msg of messages) {
+	// Ensure user messages have content in array format before adding breakpoints
+	for (let i = 0; i < result.length; i++) {
+		const msg = result[i]
 		if (msg.role === "user" && typeof msg.content === "string") {
-			msg.content = [{ type: "text", text: msg.content }]
+			result[i] = { ...msg, content: [{ type: "text" as const, text: msg.content }] }
 		}
 	}
 
@@ -18,7 +22,7 @@ export function addCacheBreakpoints(systemPrompt: string, messages: OpenAI.Chat.
 	// (Note: this works because we only ever add one user message at a
 	// time, but if we added multiple we'd need to mark the user message
 	// before the last assistant message.)
-	messages
+	result
 		.filter((msg) => msg.role === "user")
 		.slice(-2)
 		.forEach((msg) => {
@@ -38,4 +42,6 @@ export function addCacheBreakpoints(systemPrompt: string, messages: OpenAI.Chat.
 				lastTextPart["cache_control"] = { type: "ephemeral" }
 			}
 		})
+
+	return result
 }

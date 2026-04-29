@@ -25,10 +25,26 @@ export function invalidateCangjieToolEnvCache(): void {
 export function detectCangjieHome(): string | undefined {
 	if (homeDetectCache !== null) return homeDetectCache
 
+	// 1. Environment variable
 	if (process.env.CANGJIE_HOME && fs.existsSync(process.env.CANGJIE_HOME)) {
 		homeDetectCache = process.env.CANGJIE_HOME
 		return homeDetectCache
 	}
+
+	// 2. Infer from VS Code LSP serverPath config (aligns with CangjieLspClient)
+	try {
+		const vscodeModule = require("vscode")
+		const serverPath = vscodeModule.workspace
+			.getConfiguration("njust-ai-cj.cangjieLsp")
+			.get<string>("serverPath")
+		if (serverPath && fs.existsSync(serverPath)) {
+			const sdkRoot = path.resolve(serverPath, "..", "..")
+			if (fs.existsSync(path.join(sdkRoot, "bin"))) {
+				homeDetectCache = sdkRoot
+				return homeDetectCache
+			}
+		}
+	} catch { /* vscode not available (tests) */ }
 
 	const wellKnownPaths = process.platform === "win32"
 		? ["D:\\cangjie", "C:\\cangjie", path.join(process.env.LOCALAPPDATA || "", "cangjie")]
@@ -130,6 +146,11 @@ export function resolveCangjieToolPath(
 		}
 	}
 
+	console.warn(
+		`[cangjieToolUtils] Cannot locate ${toolName}: no configured path, ` +
+		`CANGJIE_HOME not set, and not found in well-known install locations. ` +
+		`Falling back to bare "${exeName}" — commands may fail with ENOENT.`,
+	)
 	return exeName
 }
 

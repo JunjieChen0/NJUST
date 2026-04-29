@@ -70,6 +70,16 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 			return
 		}
 
+		if (task.taskMode === "cangjie") {
+			const cangjieBlockReason = task.cangjieRuntimePolicy.getAttemptCompletionBlockReason()
+			if (cangjieBlockReason) {
+				task.consecutiveMistakeCount++
+				task.recordToolError("attempt_completion", cangjieBlockReason)
+				pushToolResult(formatResponse.toolError(cangjieBlockReason))
+				return
+			}
+		}
+
 		try {
 			if (!result) {
 				task.consecutiveMistakeCount++
@@ -215,7 +225,11 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 		task.emitFinalTokenUsageUpdate()
 
 		TelemetryService.instance.captureTaskCompleted(task.taskId)
-		task.emit(NJUST_AI_CJEventName.TaskCompleted, task.taskId, task.getTokenUsage(), task.toolUsage)
+		task.emit(NJUST_AI_CJEventName.TaskCompleted, task.taskId, task.getTokenUsage(), task.toolUsage, { isSubtask: !!task.parentTaskId })
+
+		// Signal the outer loop to stop re-prompting the model with
+		// noToolsUsed() after the user accepts this completion.
+		task.markTaskCompleted()
 	}
 }
 

@@ -36,9 +36,58 @@ import { safeDispose } from "./TaskLifecycle"
 
 // ── Host type ────────────────────────────────────────────────────────────
 // Structural contract: Task implements this shape at runtime.
-// We use `any` to avoid circular dependency on the Task class itself.
+// This avoids a hard import of Task (breaks the circular dependency risk).
 
-export type TaskLifecycleHost = any
+export interface TaskLifecycleHost {
+	readonly taskId: string
+	readonly instanceId: string
+	readonly globalStoragePath: string
+	readonly hostRef: WeakRef<{ off(event: string, listener: () => void): void }>
+	readonly errorRecovery: { resetCompactFailure(): void }
+	readonly messageQueueService: {
+		removeListener(event: string, handler: () => void): void
+		dispose(): void
+	}
+	readonly toolExecution: { dispose(): void }
+	readonly fileContextTracker: { dispose(): void }
+	readonly diffViewProvider: {
+		readonly isEditing: boolean
+		revertChanges(): Promise<void>
+	}
+
+	abort: boolean
+	abandoned: boolean
+	abortReason?: string
+	isInitialized: boolean
+	isDisposed: boolean
+	isStreaming: boolean
+	consecutiveNoToolUseCount: number
+	consecutiveNoAssistantMessagesCount: number
+	persistentRetryHandler?: { cancel(): void } | undefined
+	providerProfileChangeListener?: (() => void) | undefined
+	messageQueueStateChangedHandler?: (() => void) | undefined
+	rooIgnoreController?: { dispose(): void } | undefined
+	clineMessages: any[]
+	apiConversationHistory: any[]
+
+	refreshWebviewState(): Promise<void>
+	say(type: any, text?: string, images?: string[], partial?: boolean, checkpoint?: any, progressStatus?: any, options?: any): Promise<undefined>
+	ask(type: any, text?: string, partial?: boolean): Promise<{ response: string; text?: string; images?: string[] }>
+	emit(event: string, ...args: any[]): boolean
+	getEnabledMcpToolsCount(): Promise<{ enabledToolCount: number; enabledServerCount: number }>
+	getTaskMode(): Promise<string>
+	initiateCloudAgentLoop(message: string, images?: string[]): Promise<void>
+	initiateTaskLoop(userContent: any[]): Promise<void>
+	getSavedClineMessages(): Promise<any[]>
+	getSavedApiConversationHistory(): Promise<any[]>
+	overwriteClineMessages(messages: any[]): Promise<void>
+	overwriteApiConversationHistory(history: any[]): Promise<void>
+	saveClineMessages(): Promise<boolean>
+	emitFinalTokenUsageUpdate(): void
+	dispose(): void
+	cancelCurrentRequest(): void
+	removeAllListeners(): void
+}
 
 // ── Handler ──────────────────────────────────────────────────────────────
 
@@ -48,7 +97,7 @@ export class TaskLifecycleHandler {
 	// ── startTask ────────────────────────────────────────────────────────
 
 	async startTask(task?: string, images?: string[]): Promise<void> {
-		const t = this.host as any
+		const t = this.host
 		try {
 			t.clineMessages = []
 			t.apiConversationHistory = []
@@ -111,7 +160,7 @@ export class TaskLifecycleHandler {
 	// ── resumeTaskFromHistory ────────────────────────────────────────────
 
 	async resumeTaskFromHistory(): Promise<void> {
-		const t = this.host as any
+		const t = this.host
 		try {
 			const modifiedClineMessages = await t.getSavedClineMessages()
 
@@ -315,7 +364,7 @@ export class TaskLifecycleHandler {
 	// ── emitTaskSessionMetricsSummary ────────────────────────────────────
 
 	private emitTaskSessionMetricsSummary(trigger: "abort" | "dispose"): void {
-		const t = this.host as any
+		const t = this.host
 		const cacheSummary = globalCacheMetrics.getSummary()
 		const breakSummary = globalPromptCacheBreakDetector.getBreaksBySource()
 		const payload = {
@@ -347,7 +396,7 @@ export class TaskLifecycleHandler {
 	// ── abortTask ────────────────────────────────────────────────────────
 
 	async abortTask(isAbandoned = false): Promise<void> {
-		const t = this.host as any
+		const t = this.host
 
 		if (isAbandoned) {
 			t.abandoned = true
@@ -365,21 +414,21 @@ export class TaskLifecycleHandler {
 		t.emit(NJUST_AI_CJEventName.TaskAborted)
 
 		try {
-			t.dispose()
-		} catch (error) {
-			console.error(`Error during task ${t.taskId}.${t.instanceId} disposal:`, error)
-		}
-		try {
 			await t.saveClineMessages()
 		} catch (error) {
 			console.error(`Error saving messages during abort for task ${t.taskId}.${t.instanceId}:`, error)
+		}
+		try {
+			t.dispose()
+		} catch (error) {
+			console.error(`Error during task ${t.taskId}.${t.instanceId} disposal:`, error)
 		}
 	}
 
 	// ── dispose ──────────────────────────────────────────────────────────
 
 	dispose(): void {
-		const t = this.host as any
+		const t = this.host
 
 		if (t.isDisposed) {
 			return

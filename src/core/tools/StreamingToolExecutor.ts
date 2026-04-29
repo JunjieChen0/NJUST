@@ -34,12 +34,28 @@ export class StreamingToolExecutor {
 	private readonly executor: ConcurrentToolExecutor
 	private withheldResults: WithheldToolResult[] = []
 
+	/**
+	 * Shared abort controller for sibling tools. Set before running eager batches.
+	 * When one tool in a batch fails (especially bash), all siblings are signaled.
+	 */
+	private siblingAbortController: AbortController | null = null
+
 	constructor(
 		maxConcurrency = 10,
 		concurrencyController?: AdaptiveConcurrencyController,
 		scheduler?: ToolExecutionScheduler,
 	) {
 		this.executor = new ConcurrentToolExecutor({ maxConcurrency, concurrencyController, scheduler })
+	}
+
+	/** Wire in the sibling abort controller for the current batch */
+	setSiblingAbortController(controller: AbortController): void {
+		this.siblingAbortController = controller
+	}
+
+	/** Get the current sibling abort signal, or undefined if none */
+	getSiblingAbortSignal(): AbortSignal | undefined {
+		return this.siblingAbortController?.signal
 	}
 
 	/**
@@ -76,14 +92,35 @@ export class StreamingToolExecutor {
 		batch.forEach((toolUse, index) => {
 			itemCategories.set(index, classifyToolCategory(toolUse.name, false))
 		})
-		await this.executor.run(
-			batch,
-			async (toolUse, _index, ctx) => {
-				if (task.abort || task.didRejectTool || ctx.signal.aborted) return
-				await runOne(toolUse, ctx.signal)
-			},
-			{ failFast: true, itemCategories },
-		)
+		// Reset sibling controller for the new batch
+		this.siblingAbortController = new AbortController()
+
+		try {
+			await this.executor.run(
+				batch,
+				async (toolUse, _index, ctx) => {
+					// Check both the executor's signal and the sibling abort signal
+					const siblingAborted = this.siblingAbortController?.signal.aborted
+					if (task.abort || task.didRejectTool || ctx.signal.aborted || siblingAborted) return
+					try {
+						await runOne(toolUse, ctx.signal)
+					} catch (err) {
+						// Bash failures propagate to sibling tools
+						const category = classifyToolCategory(toolUse.name, false)
+						if (category === "bash") {
+							this.siblingAbortController?.abort("sibling_error")
+						}
+						throw err
+					}
+				},
+				{ abortStrategy: "continueOnError", itemCategories },
+			)
+		} catch (err) {
+			// Each tool in the batch has already pushed its own result (success or error).
+			// Log the aggregate error but don't re-throw — doing so would trigger the
+			// serial fallback path and re-execute already-completed tools.
+			console.error("[StreamingToolExecutor] eager batch completed with errors:", err)
+		}
 	}
 
 	// ── max_output_tokens interruption recovery ──────────────────────

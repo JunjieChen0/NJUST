@@ -27,7 +27,11 @@ import {
 	filterCangjieSkillRoutingRows,
 	getOutputEfficiencySection,
 } from "./sections"
-import { DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET, getCangjieContextSection } from "./sections/cangjie-context"
+import {
+	DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET,
+	detectCangjieRelevanceForAuxiliaryModes,
+	getCangjieContextSection,
+} from "./sections/cangjie-context"
 import { Package } from "../../shared/package"
 import { getMultiFileContextSection } from "./sections/multi-file-context"
 import { applySystemPromptBudget, estimatePromptTokens, trimSectionsByBudget, derivePromptTokenBudget } from "./tokenBudget"
@@ -239,19 +243,35 @@ async function generatePromptImpl(cfg: SystemPromptConfig): Promise<SystemPrompt
 
 	// Tool calling is native-only.
 	const effectiveProtocol = "native"
+	const cangjieSkillTriggerText = settings?.lastUserMessageForCangjieHint
 
 	const [modesSection, skillsSection] = await Promise.all([
 		getModesSection(context),
-		getSkillsSection(skillsManager, mode as string),
+		getSkillsSection(skillsManager, mode as string, cangjieSkillTriggerText),
 	])
 
-	const cangjieTokenBudget = resolveCangjieContextTokenBudget(settings)
+	const pruningEnabled = settings?.enableTurnAwarePromptPruning ?? true
+	const isFollowupTurn = pruningEnabled && (settings?.turnIndex ?? 0) > 0
+
+	let cangjieTokenBudget = resolveCangjieContextTokenBudget(settings)
+	const trimCangjieBlockOnFollowup =
+		isFollowupTurn &&
+		(mode === "cangjie" ||
+			((mode === "ask" || mode === "architect") &&
+				detectCangjieRelevanceForAuxiliaryModes(cwd, settings?.lastUserMessageForCangjieHint)))
+	if (trimCangjieBlockOnFollowup) {
+		cangjieTokenBudget = Math.max(800, Math.floor(cangjieTokenBudget * 0.65))
+	}
 	const cangjieContextSection = await getCangjieContextSection(
 		cwd,
 		mode as string,
 		context.extensionPath,
 		cangjieTokenBudget,
 		context.globalStorageUri.fsPath,
+		settings?.lastUserMessageForCangjieHint,
+		settings?.cangjieContextIntensity,
+		settings?.cangjieRecentBuildRootCauses,
+		settings?.cangjieRepairDirective,
 	)
 	const multiFileContextSection = cangjieContextSection ? "" : getMultiFileContextSection(cwd)
 
@@ -294,8 +314,6 @@ HOW TO USE:
 - Prefer web search results over training data when they conflict (search results are more recent)`
 		: ""
 
-	const pruningEnabled = settings?.enableTurnAwarePromptPruning ?? true
-	const isFollowupTurn = pruningEnabled && (settings?.turnIndex ?? 0) > 0
 	const reducedModesSection = isFollowupTurn ? "" : modesSection
 	const reducedCapabilitiesSection = isFollowupTurn
 		? ""
@@ -367,11 +385,18 @@ HOW TO USE:
 		.filter(Boolean)
 		.join("\n\n")
 
-	const dynamicPart = [sec("sessionMemory"), sec("skillsSection") + sec("cangjieContext") + sec("multiFileContext"), sec("rulesSection"), sec("systemInfo"), sec("objective"), sec("customInstructions")]
-		.filter(Boolean)
-		.join("\n\n")
+	// Priority order: objective/system/customInstructions first so applySystemPromptBudget does not truncate mode workflow or task goal from the tail of a single blob.
+	const skillsCangjieMulti = [sec("skillsSection"), sec("cangjieContext"), sec("multiFileContext")].filter(Boolean).join("")
+	const dynamicSegments = [
+		sec("objective"),
+		sec("systemInfo"),
+		sec("customInstructions"),
+		skillsCangjieMulti,
+		sec("rulesSection"),
+		sec("sessionMemory"),
+	].filter((s) => s.length > 0)
 
-	const budgeted = applySystemPromptBudget(staticPart, dynamicPart, settings?.contextWindow)
+	const budgeted = applySystemPromptBudget(staticPart, dynamicSegments, settings?.contextWindow)
 	const fullPrompt = `${budgeted.staticPart}${SYSTEM_PROMPT_DYNAMIC_BOUNDARY}${budgeted.dynamicPart}`
 	const perToolHashes: Record<string, string> = {
 		toolDescriptions: crypto.createHash("sha256").update(toolUseText).digest("hex").slice(0, 16),

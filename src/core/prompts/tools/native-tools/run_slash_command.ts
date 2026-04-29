@@ -24,7 +24,7 @@ export default {
 					description: ARGS_PARAMETER_DESCRIPTION,
 				},
 			},
-			required: ["command", "args"],
+			required: ["command"],
 			additionalProperties: false,
 		},
 	},

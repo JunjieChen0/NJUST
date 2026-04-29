@@ -194,8 +194,8 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 				const finishReason = chunk.choices?.[0]?.finish_reason
 
 				if (delta.content) {
-					for (const chunk of matcher.update(delta.content)) {
-						yield chunk
+					for (const matchChunk of matcher.update(delta.content)) {
+						yield matchChunk
 					}
 				}
 

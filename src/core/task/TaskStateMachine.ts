@@ -35,9 +35,15 @@ const ALLOWED_TRANSITIONS: Record<TaskState, ReadonlySet<TaskState>> = {
 
 export class TaskStateMachine {
 	private _state: TaskState = TaskState.IDLE
+	private _previousState: TaskState = TaskState.IDLE
+	private _forceLocked = false
 
 	get state(): TaskState {
 		return this._state
+	}
+
+	get previousState(): TaskState {
+		return this._previousState
 	}
 
 	canTransition(to: TaskState): boolean {
@@ -48,10 +54,39 @@ export class TaskStateMachine {
 		if (!this.canTransition(to)) {
 			throw new Error(`Invalid task state transition: ${this._state} -> ${to}`)
 		}
+		this._previousState = this._state
 		this._state = to
 	}
 
-	force(to: TaskState): void {
-		this._state = to
+	rollback(): void {
+		this._state = this._previousState
+	}
+
+	/**
+	 * Force a state transition, skipping validation.
+	 * Concurrency-protected: overlapping force() calls are rejected.
+	 * Prefer {@link transition} for normal flows.
+	 */
+	force(to: TaskState, source?: string): void {
+		if (this._forceLocked) {
+			console.error(
+				`[TaskStateMachine] force() rejected (concurrent): ${this._state} -> ${to}` +
+				(source ? ` [source: ${source}]` : ""),
+			)
+			return
+		}
+		this._forceLocked = true
+		try {
+			if (!this.canTransition(to)) {
+				console.warn(
+					`[TaskStateMachine] Unsafe transition: ${this._state} -> ${to}` +
+					(source ? ` [source: ${source}]` : ""),
+				)
+			}
+			this._previousState = this._state
+			this._state = to
+		} finally {
+			this._forceLocked = false
+		}
 	}
 }

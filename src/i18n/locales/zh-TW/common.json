@@ -248,6 +248,10 @@
 			"description": "當待辦事項清單中有未完成的待辦事項時阻止工作完成"
 		}
 	},
+	"markdown_preview": {
+		"focus_markdown_editor": "請先開啟 Markdown（.md）並將焦點放在編輯器。",
+		"builtin_unavailable": "無法開啟內建 Markdown 預覽，請確認 VS Code 內建 Markdown 功能已啟用。"
+	},
 	"docsLink": {
 		"label": "Docs",
 		"url": "https://docs.njust-ai-cj.local"

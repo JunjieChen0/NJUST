@@ -15,6 +15,11 @@ import { extractCangjieImportPackagePrefixes, posixPathMatchesImportPackage } fr
 
 const INDEX_DIR = ".cangjie-index"
 const INDEX_FILE = "symbols.json"
+interface PrefixTrieNode {
+	children: Map<string, PrefixTrieNode>
+	symbols: SymbolEntry[]
+}
+
 const INDEX_VERSION = 5
 const REFERENCE_RE = /\b([A-Z]\w+|[a-z_]\w*)\b/g
 
@@ -140,14 +145,22 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 	private readonly reindexDebounceMs = 400
 	private reindexTimers = new Map<string, ReturnType<typeof setTimeout>>()
 	private indexing = false
-	/** mtime-scored raw lines for hot-path reference scans */
-	private readFileCache = new Map<string, { mtime: number; lines: string[] }>()
+	/** mtime-scored raw lines for hot-path reference scans. LRU-evicted at MAX_READ_FILE_CACHE. */
+	private static readonly MAX_READ_FILE_CACHE = 200
+	/** Deduplicates reindex error logs (per file, per session). */
+	private _loggedIndexErrors = new Set<string>()
+		private readFileCache = new Map<string, { mtime: number; lines: string[] }>()
 	private referenceIndex = new Map<string, ReferenceEntry[]>()
 	private dependencyCache = new Map<string, string[]>()
 	private reverseDependencyCache = new Map<string, string[]>()
+	/** package name → Set of file paths belonging to that package (for O(1) import resolution). */
+	private packageToFilesIndex = new Map<string, Set<string>>()
 	private directoryIndex = new Map<string, Set<string>>()
 	private _fileCount = 0
 	private _symbolCount = 0
+	/** Prefix-trie index for O(prefix_len) symbol lookups. */
+	private prefixTrie: PrefixTrieNode = { children: new Map(), symbols: [] }
+
 	/** Normalized `from|to` primitive keys → short hint for prompt augmentation */
 	private conversionEdgeMap = new Map<string, string>()
 
@@ -163,26 +176,21 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 	}
 
 	/**
-	 * Prefer the active editor's workspace folder when it contains `cjpm.toml`,
-	 * otherwise the first folder with `cjpm.toml`, else the first folder (aligns
-	 * index primary root with where the user is editing).
+	 * Uses the same strategy as CangjieLspClient.findCjpmRoot(): first
+	 * workspace folder containing `cjpm.toml`. This ensures LSP diagnostics
+	 * and symbol index reference the same project root in multi-root workspaces.
 	 */
 	private pickIndexRootFolder(): vscode.WorkspaceFolder | undefined {
 		const folders = vscode.workspace.workspaceFolders
 		if (!folders?.length) {
 			return undefined
 		}
-		const activeUri = vscode.window.activeTextEditor?.document.uri
-		const activeFolder = activeUri ? vscode.workspace.getWorkspaceFolder(activeUri) : undefined
-		if (activeFolder && fs.existsSync(path.join(activeFolder.uri.fsPath, "cjpm.toml"))) {
-			return activeFolder
-		}
 		for (const folder of folders) {
 			if (fs.existsSync(path.join(folder.uri.fsPath, "cjpm.toml"))) {
 				return folder
 			}
 		}
-		return folders[0]
+		return undefined
 	}
 
 	private static pathUnderWorkspaceFolder(filePath: string, scopeUri: vscode.Uri): boolean {
@@ -196,6 +204,11 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		return fp === root || fp.startsWith(root + sep)
 	}
 
+	/**
+	 * Filter symbols to only those within the given workspace folder.
+	 * In multi-root workspaces this prevents symbols from project A
+	 * appearing in queries scoped to project B.
+	 */
 	private filterSymbolsByScope<T extends { filePath: string }>(items: T[], scopeUri?: vscode.Uri): T[] {
 		if (!scopeUri) {
 			return items
@@ -343,9 +356,25 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		return this.conversionEdgeMap.get(`${fromTypeKey}|${toTypeKey}`) ?? null
 	}
 
+	private rebuildPackageToFilesIndex(): void {
+		this.packageToFilesIndex.clear()
+		for (const [filePath, entry] of Object.entries(this.data.files)) {
+			for (const sym of entry.symbols) {
+				if (sym.kind === "package") {
+					const pkg = sym.name
+					let set = this.packageToFilesIndex.get(pkg)
+					if (!set) { set = new Set(); this.packageToFilesIndex.set(pkg, set) }
+					set.add(filePath)
+				}
+			}
+		}
+	}
+
 	private rebuildDependencyCaches(): void {
 		this.dependencyCache.clear()
 		this.reverseDependencyCache.clear()
+		this.rebuildPackageToFilesIndex()
+		this.rebuildPrefixTrie()
 		for (const filePath of Object.keys(this.data.files)) {
 			this.updateDependenciesForFile(filePath)
 		}
@@ -470,7 +499,17 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		const t0 = Date.now()
 
 		try {
-			const files = await vscode.workspace.findFiles("**/*.cj", "**/target/**", 2000)
+			const MAX_INDEX_FILES = 2000
+		const files = await vscode.workspace.findFiles("**/*.cj", "**/target/**", MAX_INDEX_FILES)
+		if (files.length >= MAX_INDEX_FILES) {
+			this.outputChannel.appendLine(
+				 +
+				,
+			)
+			vscode.window.showWarningMessage(
+				,
+			)
+		}
 			const pending: string[] = []
 
 			for (const uri of files) {
@@ -509,10 +548,25 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 	}
 
 	private get useCjcAst(): boolean {
-		return vscode.workspace.getConfiguration(Package.name).get<boolean>("cangjieTools.useCjcAstForIndex", false)
+		const configured = vscode.workspace.getConfiguration(Package.name).get<boolean>("cangjieTools.useCjcAstForIndex")
+		// Explicit user setting takes precedence over auto-detection.
+		if (typeof configured === "boolean") return configured
+		// Auto-detect: use cjc AST when the compiler is available.
+		try {
+			return resolveCangjieToolPath("cjc") !== undefined
+		} catch {
+			return false
+		}
 	}
 
 	private scheduleReindex(filePath: string): void {
+		// Defer incremental reindex while fullIndex() is in progress
+		// to prevent concurrent writes to the symbol table.
+		if (this.indexing) {
+			clearTimeout(this.reindexTimers.get(filePath))
+			this.reindexTimers.set(filePath, setTimeout(() => this.scheduleReindex(filePath), this.reindexDebounceMs + 200))
+			return
+		}
 		const prev = this.reindexTimers.get(filePath)
 		if (prev) {
 			clearTimeout(prev)
@@ -532,7 +586,8 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		try {
 			const stat = fs.statSync(filePath)
 			const content = fs.readFileSync(filePath, "utf-8")
-			this.readFileCache.set(filePath, { mtime: stat.mtimeMs, lines: content.split("\n") })
+			this.evictOldestFromReadFileCache()
+		this.readFileCache.set(filePath, { mtime: stat.mtimeMs, lines: content.split("\n") })
 			const defs = this.useCjcAst
 				? await parseCangjieWithFallback(filePath, content)
 				: parseCangjieDefinitions(content)
@@ -582,12 +637,20 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 			this.addReferencesToIndex(filePath, refsByName)
 			if (!this.indexing) this.updateDependenciesForFile(filePath)
 			this.scheduleSave()
-		} catch {
+		} catch (err) {
 			// File may have been deleted or be unreadable
+			if (!this._loggedIndexErrors.has(filePath)) {
+				this._loggedIndexErrors.add(filePath)
+				this.outputChannel.appendLine(
+					`[SymbolIndex] Failed to reindex ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+				)
+			}
 		}
 	}
 
 	private removeFile(filePath: string): void {
+		// Skip removal during fullIndex to avoid data race
+		if (this.indexing) return
 		this.readFileCache.delete(filePath)
 		const entry = this.data.files[filePath]
 		if (entry) {
@@ -598,6 +661,13 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 			delete this.data.files[filePath]
 			this._fileCount = Math.max(0, this._fileCount - 1)
 			this.scheduleSave()
+		}
+	}
+
+	private evictOldestFromReadFileCache(): void {
+		if (this.readFileCache.size >= CangjieSymbolIndex.MAX_READ_FILE_CACHE) {
+			const oldest = this.readFileCache.keys().next().value
+			if (oldest !== undefined) this.readFileCache.delete(oldest)
 		}
 	}
 
@@ -633,15 +703,60 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		return this.filterSymbolsByScope(raw, scopeUri)
 	}
 
+	private addToPrefixTrie(symbols: SymbolEntry[]): void {
+		for (const sym of symbols) {
+			const name = sym.name.toLowerCase()
+			let node = this.prefixTrie
+			for (const ch of name) {
+				let child = node.children.get(ch)
+				if (!child) { child = { children: new Map(), symbols: [] }; node.children.set(ch, child) }
+				node = child
+				node.symbols.push(sym)
+			}
+		}
+	}
+
+	private removeFromPrefixTrie(symbols: SymbolEntry[]): void {
+		for (const sym of symbols) {
+			const name = sym.name.toLowerCase()
+			let node = this.prefixTrie
+			for (const ch of name) {
+				const child = node.children.get(ch)
+				if (!child) break
+				// Remove from this node's symbol list (O(n) per node, but lists are small).
+				const idx = child.symbols.findIndex(s => s.filePath === sym.filePath && s.name === sym.name && s.startLine === sym.startLine)
+				if (idx !== -1) child.symbols.splice(idx, 1)
+				node = child
+			}
+		}
+	}
+
+	private rebuildPrefixTrie(): void {
+		this.prefixTrie = { children: new Map(), symbols: [] }
+		for (const entry of Object.values(this.data.files)) {
+			this.addToPrefixTrie(entry.symbols)
+		}
+	}
+
 	findSymbolsByPrefix(prefix: string, limit = 50): SymbolEntry[] {
 		const results: SymbolEntry[] = []
 		const lowerPrefix = prefix.toLowerCase()
-		for (const file of Object.values(this.data.files)) {
-			for (const sym of file.symbols) {
-				if (sym.name.toLowerCase().startsWith(lowerPrefix)) {
-					results.push(sym)
-					if (results.length >= limit) return results
-				}
+		// Walk the trie to the node corresponding to the full prefix
+		let node: PrefixTrieNode | undefined = this.prefixTrie
+		for (const ch of lowerPrefix) {
+			node = node.children.get(ch)
+			if (!node) return [] // No symbols share this prefix
+		}
+		// Collect from this node (symbols at this prefix) and all descendants (BFS)
+		const queue: PrefixTrieNode[] = [node]
+		while (queue.length > 0 && results.length < limit) {
+			const cur = queue.shift()!
+			for (const sym of cur.symbols) {
+				if (results.length >= limit) break
+				results.push(sym)
+			}
+			for (const child of cur.children.values()) {
+				queue.push(child)
 			}
 		}
 		return results
@@ -658,17 +773,33 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 	/**
 	 * Smallest enclosing symbol for a 0-based line in filePath (innermost by line span).
 	 */
+	/**
+	 * O(log N) via binary search over startLine-sorted symbols + span-minimum selection.
+	 */
 	findEnclosingSymbol(filePath: string, line: number): SymbolEntry | null {
 		const fileEntry = this.data.files[filePath]
 		if (!fileEntry) return null
+		const symbols = fileEntry.symbols
 
-		const candidates = fileEntry.symbols.filter(
-			(s) => line >= s.startLine && line <= s.endLine && s.kind !== "import" && s.kind !== "package",
-		)
-		if (candidates.length === 0) return null
-
-		candidates.sort((a, b) => a.endLine - a.startLine - (b.endLine - b.startLine))
-		return candidates[0] ?? null
+		// Binary search for the last symbol with startLine <= line
+		let lo = 0, hi = symbols.length - 1
+		let best: SymbolEntry | null = null
+		let bestSpan = Infinity
+		// Find the insertion point via binary search
+		while (lo <= hi) {
+			const mid = (lo + hi) >> 1
+			const s = symbols[mid]
+			if (s.startLine <= line) {
+				if (line <= s.endLine && s.kind !== "import" && s.kind !== "package") {
+					const span = s.endLine - s.startLine
+					if (span < bestSpan) { best = s; bestSpan = span }
+				}
+				lo = mid + 1
+			} else {
+				hi = mid - 1
+			}
+		}
+		return best
 	}
 
 	getSymbolsByDirectory(dirPath: string): SymbolEntry[] {
@@ -701,25 +832,28 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 
 	// ── Cross-file dependency graph queries ──
 
+	/**
+	 * O(I) lookup using packageToFilesIndex. Each import prefix is matched
+	 * against the package→files reverse index, avoiding the old O(N*M) scan.
+	 */
 	private computeFileDependencies(filePath: string): string[] {
 		try {
 			const raw = this.getFileLinesCached(filePath)
 			if (raw === null) return []
-			const content = raw
-			const importedPackages = new Set(extractCangjieImportPackagePrefixes(content))
+			const importedPackages = new Set(extractCangjieImportPackagePrefixes(raw))
 			if (importedPackages.size === 0) return []
 
 			const depFiles = new Set<string>()
-			for (const [fp, entry] of Object.entries(this.data.files)) {
-				if (fp === filePath) continue
-				for (const sym of entry.symbols) {
-					if (sym.kind === "package") continue
+			// Fast path: iterate only over import package names, use reverse index.
+			for (const pkg of importedPackages) {
+				const candidates = this.packageToFilesIndex.get(pkg)
+				if (!candidates) continue
+				for (const fp of candidates) {
+					if (fp === filePath) continue
+					// Verify the path still matches (guard against stale index entries).
 					const relPath = fp.replace(/\\/g, "/")
-					for (const pkg of importedPackages) {
-						if (posixPathMatchesImportPackage(relPath, pkg)) {
-							depFiles.add(fp)
-							break
-						}
+					if (posixPathMatchesImportPackage(relPath, pkg)) {
+						depFiles.add(fp)
 					}
 				}
 			}

@@ -37,7 +37,7 @@ export default {
 					description: PATH_PARAMETER_DESCRIPTION,
 				},
 			},
-			required: ["pattern", "path"],
+			required: ["pattern"],
 			additionalProperties: false,
 		},
 	},

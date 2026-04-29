@@ -55,7 +55,7 @@ export interface TaskProviderLike {
 export type TaskProviderEvents = {
 	[NJUST_AI_CJEventName.TaskCreated]: [task: TaskLike]
 	[NJUST_AI_CJEventName.TaskStarted]: [taskId: string]
-	[NJUST_AI_CJEventName.TaskCompleted]: [taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage]
+	[NJUST_AI_CJEventName.TaskCompleted]: [taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage, meta: { isSubtask: boolean }]
 	[NJUST_AI_CJEventName.TaskAborted]: [taskId: string]
 	[NJUST_AI_CJEventName.TaskFocused]: [taskId: string]
 	[NJUST_AI_CJEventName.TaskUnfocused]: [taskId: string]
@@ -138,7 +138,7 @@ export interface TaskLike {
 export type TaskEvents = {
 	// Task Lifecycle
 	[NJUST_AI_CJEventName.TaskStarted]: []
-	[NJUST_AI_CJEventName.TaskCompleted]: [taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage]
+	[NJUST_AI_CJEventName.TaskCompleted]: [taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage, meta: { isSubtask: boolean }]
 	[NJUST_AI_CJEventName.TaskAborted]: []
 	[NJUST_AI_CJEventName.TaskFocused]: []
 	[NJUST_AI_CJEventName.TaskUnfocused]: []

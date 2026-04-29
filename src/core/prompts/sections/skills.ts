@@ -2,6 +2,25 @@ import type { SkillsManager } from "../../../services/skills/SkillsManager"
 
 type SkillsManagerLike = Pick<SkillsManager, "getSkillsForMode">
 
+const CANGJIE_CJPM_SKILL = "cangjie-cjpm"
+const CANGJIE_SKILLS_PLAN_SKILL = "skills-enhancement-plan"
+
+function selectCangjieScenarioSkills(triggerText: string | undefined): Set<string> {
+	const selected = new Set<string>()
+	const text = (triggerText ?? "").toLowerCase()
+	if (
+		/\bcjpm\b|\bcjc\b|\bcjfmt\b|\bcjlint\b|\bcjdb\b|\bcjprof\b|build|compile|run|test|package|workspace|toml|构建|编译|运行|测试|包|工作区/.test(
+			text,
+		)
+	) {
+		selected.add(CANGJIE_CJPM_SKILL)
+	}
+	if (/skill|能力|技能|学习|规划|评估|训练|提升|plan|learn|evaluation|framework/.test(text)) {
+		selected.add(CANGJIE_SKILLS_PLAN_SKILL)
+	}
+	return selected
+}
+
 /**
  * Drop markdown table rows in Cangjie mode custom instructions that cite skills not present in the workspace.
  * Matches cells like **`skill-name`** in `| ... | ... |` rows.
@@ -42,11 +61,21 @@ function escapeXml(value: string): string {
 export async function getSkillsSection(
 	skillsManager: SkillsManagerLike | undefined,
 	currentMode: string | undefined,
+	triggerText?: string,
 ): Promise<string> {
 	if (!skillsManager || !currentMode) return ""
 
 	// Get skills filtered by current mode (with override resolution)
-	const skills = skillsManager.getSkillsForMode(currentMode)
+	let skills = skillsManager.getSkillsForMode(currentMode)
+	if (currentMode === "cangjie") {
+		const selected = selectCangjieScenarioSkills(triggerText)
+		skills = skills.filter((skill) => {
+			if (skill.name === CANGJIE_CJPM_SKILL || skill.name === CANGJIE_SKILLS_PLAN_SKILL) {
+				return selected.has(skill.name)
+			}
+			return true
+		})
+	}
 	if (skills.length === 0) return ""
 
 	const skillsXml = skills

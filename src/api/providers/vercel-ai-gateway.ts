@@ -43,13 +43,13 @@ export class VercelAiGatewayHandler extends RouterProvider implements SingleComp
 	): ApiStream {
 		const { id: modelId, info } = await this.fetchModel()
 
-		const openAiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+		let openAiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
 			{ role: "system", content: systemPrompt },
 			...convertToOpenAiMessages(messages),
 		]
 
 		if (VERCEL_AI_GATEWAY_PROMPT_CACHING_MODELS.has(modelId) && info.supportsPromptCache) {
-			addCacheBreakpoints(systemPrompt, openAiMessages)
+			openAiMessages = addCacheBreakpoints(systemPrompt, openAiMessages)
 		}
 
 		const body: OpenAI.Chat.ChatCompletionCreateParams = {

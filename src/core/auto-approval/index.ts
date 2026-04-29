@@ -119,13 +119,15 @@ export async function checkAutoApproval({
 			return { decision: "ask" }
 		}
 
+		// Always classify dangerous commands first — pattern rules cannot override this.
+		const risk = classifyBashCommand(text)
+		if (risk === "dangerous") return { decision: "deny" }
+
 		const patternRules = ((state as any)?.commandPatternRules ?? []) as PatternRule[]
 		const patternDecision = matchPatternRules(text, patternRules)
 		if (patternDecision === "allow") return { decision: "approve" }
 		if (patternDecision === "deny") return { decision: "deny" }
 
-		const risk = classifyBashCommand(text)
-		if (risk === "dangerous") return { decision: "deny" }
 		if (risk === "medium" && state.alwaysAllowExecute !== true) return { decision: "ask" }
 
 		if (state.alwaysAllowExecute === true) {

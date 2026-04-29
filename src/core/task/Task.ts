@@ -112,6 +112,7 @@ import { allowRooIgnorePathAccess, RooIgnoreController } from "../ignore/RooIgno
 import { RooProtectedController } from "../protect/RooProtectedController"
 import { type AssistantMessageContent, presentAssistantMessage } from "../assistant-message"
 import { NativeToolCallParser } from "../assistant-message/NativeToolCallParser"
+import { defaultToolCallParser } from "../assistant-message/ToolCallParserImpl"
 import { ToolExecutionContext } from "./ToolExecutionContext"
 import { manageContext, willManageContext } from "../context-management"
 import { TokenGrowthTracker } from "../context-management/tokenGrowthTracker"
@@ -150,14 +151,15 @@ import { mergeConsecutiveApiMessages } from "./mergeConsecutiveApiMessages"
 import { TaskStateMachine, TaskState } from "./TaskStateMachine"
 import { TaskRequestBuilder } from "./TaskRequestBuilder"
 import { TaskStreamProcessor } from "./TaskStreamProcessor"
-import { generateParentContextSummary } from "./SubTaskContextBuilder"
+import { generateParentContextSummary, buildCacheAwareForkContext, buildForkPlaceholderResult } from "./SubTaskContextBuilder"
 import { AGENT_TYPE_CONTEXT_BUDGET } from "./SubTaskOptions"
-import type { IsolationLevel, ForkedContextConfig } from "./SubTaskOptions"
+import type { IsolationLevel, ForkedContextConfig, CacheSafeParams } from "./SubTaskOptions"
 import { DEFAULT_FORKED_CONTEXT_CONFIG } from "./SubTaskOptions"
 import { TaskMessageManager, type TaskMessageContext } from "./TaskMessageManager"
 import { TaskToolHandler } from "./TaskToolHandler"
-import { TaskExecutor } from "./TaskExecutor"
-import { TaskLifecycleHandler } from "./TaskLifecycleHandler"
+import { TaskExecutor, type TaskExecutorHost } from "./TaskExecutor"
+import { TaskLifecycleHandler, type TaskLifecycleHost } from "./TaskLifecycleHandler"
+import { CangjieRuntimePolicy } from "./CangjieRuntimePolicy"
 
 const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
 const DEFAULT_USAGE_COLLECTION_TIMEOUT_MS = 5000 // 5 seconds
@@ -330,6 +332,18 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	readonly globalStoragePath: string
 	abort: boolean = false
+
+	// ── Foreground→Background switching ──
+	/** Resolved when the user requests this task be moved to background */
+	private _backgroundResolve: ((value: void) => void) | null = null
+	/** Promise that resolves when background switch is requested */
+	private _backgroundSignal: Promise<void> | null = null
+	/** Whether this task has been switched to background */
+	isBackgrounded: boolean = false
+	/** Set true when attempt_completion is accepted. The outer loop in
+	 *  initiateTaskLoop checks this flag to stop re-prompting the model
+	 *  after a completed task. */
+	taskCompleted: boolean = false
 	private persistentRetryHandler?: PersistentRetryManager
 	currentRequestAbortController?: AbortController
 	skipPrevResponseIdOnce: boolean = false
@@ -374,6 +388,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	toolRepetitionDetector: ToolRepetitionDetector
 	rooIgnoreController?: RooIgnoreController
 	rooProtectedController?: RooProtectedController
+	compactFailures: number = 0
+	toolCallParser = new NativeToolCallParser()
 	fileContextTracker: FileContextTracker
 	terminalProcess?: RooTerminalProcess
 
@@ -384,6 +400,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	/** Std library module names observed via `search_files` on bundled Cangjie corpus (cangjie mode). Used for write/edit search-gate warnings. */
 	cangjieSearchHistory: Set<string> = new Set()
+	readonly cangjieRuntimePolicy: CangjieRuntimePolicy
 
 	// LLM Messages & Chat Messages
 	apiConversationHistory: ApiMessage[] = []
@@ -492,6 +509,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private readonly TOKEN_USAGE_EMIT_INTERVAL_MS = 2000 // 2 seconds
 	private debouncedEmitTokenUsage: ReturnType<typeof debounce>
 
+	private queuedMessageTimer?: ReturnType<typeof setTimeout>
 	// Delegate for system prompt generation, caching, and context condensation
 	readonly requestBuilder: TaskRequestBuilder
 
@@ -533,7 +551,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/** @internal API request loop — delegates to TaskExecutor. */
 	private get executor(): TaskExecutor {
 		if (!this._executor) {
-			this._executor = new TaskExecutor(this as any)
+			this._executor = new TaskExecutor(this as unknown as TaskExecutorHost)
 		}
 		return this._executor
 	}
@@ -541,7 +559,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/** @internal Lifecycle operations — delegates to TaskLifecycleHandler. */
 	private get lifecycleHandler(): TaskLifecycleHandler {
 		if (!this._lifecycleHandler) {
-			this._lifecycleHandler = new TaskLifecycleHandler(this as any)
+			this._lifecycleHandler = new TaskLifecycleHandler(this as unknown as TaskLifecycleHost)
 		}
 		return this._lifecycleHandler
 	}
@@ -634,6 +652,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.rooIgnoreController = new RooIgnoreController(this.cwd)
 		this.rooProtectedController = new RooProtectedController(this.cwd)
 		this.fileContextTracker = new FileContextTracker(host, this.taskId)
+		this.cangjieRuntimePolicy = new CangjieRuntimePolicy(this.cwd)
 
 		this.rooIgnoreController.initialize().catch((error) => {
 			console.error("Failed to initialize RooIgnoreController:", error)
@@ -1094,6 +1113,12 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					summary: reasoningSummary ?? ([] as any[]),
 				}
 
+				// Also store reasoning_content as a top-level field so that it
+				// survives content-array transformations (e.g., buildCleanConversationHistory
+				// converting the array to a string when the model doesn't set preserveReasoning).
+				// DeepSeek/Z.ai require this field to be passed back in thinking mode.
+				messageWithTs.reasoning_content = reasoning
+
 				if (typeof messageWithTs.content === "string") {
 					messageWithTs.content = [
 						reasoningBlock,
@@ -1274,8 +1299,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	private async saveApiConversationHistory(): Promise<boolean> {
 		try {
+			const cloned = structuredClone(this.apiConversationHistory)
 			await saveApiMessages({
-				messages: structuredClone(this.apiConversationHistory),
+				messages: cloned,
 				taskId: this.taskId,
 				globalStoragePath: this.globalStoragePath,
 			})
@@ -1317,6 +1343,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	private async addToClineMessages(message: ClineMessage) {
+		// Ensure every message has a unique id for stable lookup.
+		if (!message.id) {
+			message.id = uuidv7()
+		}
 		this.clineMessages.push(message)
 		const provider = this.hostRef.deref()
 		// Avoid resending large, mostly-static fields (notably taskHistory) on every chat message update.
@@ -1329,6 +1359,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	public async overwriteClineMessages(newMessages: ClineMessage[]) {
+		for (const msg of newMessages) {
+			if (!msg.id) msg.id = uuidv7()
+		}
 		this.clineMessages = newMessages
 		restoreTodoListForTask(this)
 		await this.saveClineMessages()
@@ -1381,9 +1414,20 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		}
 	}
 
+	/** @deprecated Prefer findMessageById for new code. */
 	private findMessageByTimestamp(ts: number): ClineMessage | undefined {
 		for (let i = this.clineMessages.length - 1; i >= 0; i--) {
 			if (this.clineMessages[i].ts === ts) {
+				return this.clineMessages[i]
+			}
+		}
+
+		return undefined
+	}
+
+	private findMessageById(id: string): ClineMessage | undefined {
+		for (let i = this.clineMessages.length - 1; i >= 0; i--) {
+			if (this.clineMessages[i].id === id) {
 				return this.clineMessages[i]
 			}
 		}
@@ -1433,7 +1477,6 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					// saves, and only post parts of partial message instead of
 					// whole array in new listener.
 					this.updateClineMessage(lastMessage)
-					// console.log("Task#ask: current ask promise was ignored (#1)")
 					throw new AskIgnoredError("updating existing partial")
 				} else {
 					// This is a new partial message, so add it with partial
@@ -1441,7 +1484,6 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 					askTs = Date.now()
 					this.lastMessageTs = askTs
 					await this.addToClineMessages({ ts: askTs, type: "ask", ask: type, text, partial, isProtected })
-					// console.log("Task#ask: current ask promise was ignored (#2)")
 					throw new AskIgnoredError("new partial")
 				}
 			} else {
@@ -1518,7 +1560,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		const isMessageQueued = !this.messageQueueService.isEmpty()
 		// Keep queued user messages intact during command_output asks. Those asks
 		// are terminal flow-control, not conversational turns.
-		const shouldDrainQueuedMessageForAsk = type !== "command_output"
+		// Idle asks (completion_result, api_req_failed, etc.) must not
+		// auto-drain queued messages — doing so would auto-continue the
+		// task without explicit user action.
+		const shouldDrainQueuedMessageForAsk = type !== "command_output" && !isIdleAsk(type)
 		const isStatusMutable = !partial && isBlocking && !isMessageQueued && approval.decision === "ask"
 
 		if (isStatusMutable) {
@@ -1713,8 +1758,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	public updateApiConfiguration(newApiConfiguration: ProviderSettings): void {
 		this.cancelCurrentRequest()
 		try {
-			NativeToolCallParser.clearAllStreamingToolCalls()
-			NativeToolCallParser.clearRawChunkState()
+			this.toolCallParser.clearAllStreamingToolCalls()
+			this.toolCallParser.clearRawChunkState()
 		} catch {
 			// non-fatal
 		}
@@ -2021,6 +2066,38 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.debouncedEmitTokenUsage.flush()
 	}
 
+	/** Signal the outer loop that the task has reached a terminal completed
+	 *  state via attempt_completion acceptance. */
+	public markTaskCompleted(): void {
+		this.taskCompleted = true
+	}
+
+
+	/** Return a Promise that resolves when background switch is requested */
+	getBackgroundSignal(): Promise<void> {
+		if (!this._backgroundSignal) {
+			this._backgroundSignal = new Promise<void>((resolve) => {
+				this._backgroundResolve = resolve
+			})
+		}
+		return this._backgroundSignal
+	}
+
+	/** Request this task be moved to background. Resolves the signal promise. */
+	requestBackground(): void {
+		if (this._backgroundResolve && !this.isBackgrounded) {
+			this.isBackgrounded = true
+			this._backgroundResolve()
+			this._backgroundResolve = null
+		}
+	}
+
+	/** Reset background state (call when task completes or is reused) */
+	private _resetBackgroundState(): void {
+		this._backgroundSignal = null
+		this._backgroundResolve = null
+		this.isBackgrounded = false
+	}
 	public async abortTask(isAbandoned = false) {
 		return this.lifecycleHandler.abortTask(isAbandoned)
 	}
@@ -2028,6 +2105,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	public isDisposed = false
 
 	public dispose(): void {
+		if (this.isDisposed) return
+		this.isDisposed = true
 		return this.lifecycleHandler.dispose()
 	}
 
@@ -2040,6 +2119,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		mode: string,
 		isolationLevel: IsolationLevel = "shared",
 		forkedConfig?: ForkedContextConfig,
+		cacheSafeParams?: CacheSafeParams,
 	) {
 		const provider = this.hostRef.deref()
 
@@ -2048,15 +2128,22 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		}
 
 		let forkedContextSummary: string | undefined
+		let effectiveCacheSafeParams: CacheSafeParams | undefined
 
 		if (isolationLevel === "forked") {
-			// Generate a concise summary of parent context instead of passing full history
-			const config = forkedConfig ?? DEFAULT_FORKED_CONTEXT_CONFIG
-			forkedContextSummary = generateParentContextSummary(
-				this.apiConversationHistory,
-				config.summaryMaxTokens,
-				config,
-			)
+			if (cacheSafeParams) {
+				// Cache-aware: byte-identical prefix for prompt cache sharing
+				effectiveCacheSafeParams = cacheSafeParams
+				forkedContextSummary = message
+			} else {
+				// Traditional: text summary from parent context
+				const config = forkedConfig ?? DEFAULT_FORKED_CONTEXT_CONFIG
+				forkedContextSummary = generateParentContextSummary(
+					this.apiConversationHistory,
+					config.summaryMaxTokens,
+					config,
+				)
+			}
 		}
 
 		const child = await provider.delegateParentAndOpenChild({
@@ -2066,6 +2153,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			mode,
 			isolationLevel,
 			forkedContextSummary,
+			cacheSafeParams: effectiveCacheSafeParams,
 		})
 		return child
 	}
@@ -2186,28 +2274,23 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 		this.emit(NJUST_AI_CJEventName.TaskStarted)
 
-		while (!this.abort) {
+		while (!this.abort && !this.taskCompleted) {
 			const didEndLoop = await this.recursivelyMakeClineRequests(nextUserContent, includeFileDetails)
-			includeFileDetails = false // We only need file details the first time.
-
-			// The way this agentic loop works is that cline will be given a
-			// task that he then calls tools to complete. Unless there's an
-			// attempt_completion call, we keep responding back to him with his
-			// tool's responses until he either attempt_completion or does not
-			// use anymore tools. If he does not use anymore tools, we ask him
-			// to consider if he's completed the task and then call
-			// attempt_completion, otherwise proceed with completing the task.
-			// There is a MAX_REQUESTS_PER_TASK limit to prevent infinite
-			// requests, but Cline is prompted to finish the task as efficiently
-			// as he can.
+			includeFileDetails = false
 
 			if (didEndLoop) {
-				// For now a task never 'completes'. This will only happen if
-				// the user hits max requests and denies resetting the count.
+				// Only happens when max requests is hit and user denies
+				// resetting the count, or an unexpected error is caught.
 				break
-			} else {
-				nextUserContent = [{ type: "text", text: formatResponse.noToolsUsed() }]
 			}
+
+			if (this.taskCompleted) {
+				// attempt_completion was accepted — stop without
+				// re-prompting the model.
+				break
+			}
+
+			nextUserContent = [{ type: "text", text: formatResponse.noToolsUsed() }]
 		}
 	}
 

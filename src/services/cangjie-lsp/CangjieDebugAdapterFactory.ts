@@ -57,6 +57,11 @@ function findCangjieExecutableInTarget(workspaceRoot: string): string | undefine
 				if (process.platform === "win32") {
 					if (e.name.endsWith(".exe")) return full
 				} else if (e.name === "output" || !e.name.includes(".")) {
+					// Check executable permission on Unix to avoid returning data files.
+					try {
+						const s = fs.statSync(full, { throwIfNoEntry: true } as any)
+						if ((s.mode & 0o111) === 0) continue
+					} catch { continue }
 					return full
 				}
 			}
@@ -106,7 +111,7 @@ export class CangjieDebugAdapterFactory implements vscode.DebugAdapterDescriptor
 		this.activeSession = session
 		this.startHotReloadWatcher(session)
 
-		const args = session.configuration.debuggerArgs as string[] || []
+		const args = (session.configuration.debuggerArgs as string[] || []).filter((a) => typeof a === "string" && /^--[a-zA-Z][a-zA-Z0-9._-]*(?:[=:].+)?$/.test(a))
 		return new vscode.DebugAdapterExecutable(debuggerPath, ["--dap", ...args])
 	}
 

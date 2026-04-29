@@ -31,7 +31,7 @@ export default {
 						"Maximum character length of the output. Default: 500.",
 				},
 			},
-			required: ["content", "maxLength"],
+			required: ["content"],
 			additionalProperties: false,
 		},
 	},

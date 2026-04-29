@@ -201,6 +201,8 @@ describe("OpenAiNativeHandler MCP tool schema handling", () => {
 		expect(tool.strict).toBe(true) // Non-MCP tools should have strict: true
 		expect(tool.parameters.additionalProperties).toBe(false) // Should have additionalProperties: false
 		expect(tool.parameters.required).toEqual(["path", "encoding"]) // Should have all properties as required
+		expect(tool.parameters.properties.path.type).toEqual(["string", "null"])
+		expect(tool.parameters.properties.encoding.type).toEqual(["string", "null"])
 	})
 
 	it("should recursively add additionalProperties: false to nested objects in MCP tools", async () => {

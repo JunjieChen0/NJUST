@@ -1,4 +1,4 @@
-import fs from "fs/promises"
+﻿import fs from "fs/promises"
 import path from "path"
 
 import { type ClineSayTool, DEFAULT_WRITE_DELAY_MS } from "@njust-ai-cj/types"
@@ -22,6 +22,17 @@ import {
 	CRITICAL_SIGNATURE_MODULES,
 	resolveRootPackageName,
 } from "./cangjiePreflightCheck"
+import {
+	countOccurrences,
+	safeLiteralReplace,
+	detectLineEnding,
+	normalizeToLF,
+	restoreLineEnding,
+	buildWhitespaceTolerantRegex,
+	buildTokenRegex,
+	countRegexMatches,
+	type LineEnding,
+} from "./editMatching"
 
 interface EditFileParams {
 	file_path: string
@@ -30,176 +41,9 @@ interface EditFileParams {
 	expected_replacements?: number
 }
 
-type LineEnding = "\r\n" | "\n"
-
 /**
- * Count occurrences of a substring in a string.
- * @param str The string to search in
- * @param substr The substring to count
- * @returns Number of non-overlapping occurrences
- */
-function countOccurrences(str: string, substr: string): number {
-	if (substr === "") return 0
-	let count = 0
-	let pos = str.indexOf(substr)
-	while (pos !== -1) {
-		count++
-		pos = str.indexOf(substr, pos + substr.length)
-	}
-	return count
-}
-
-/**
- * Safely replace all occurrences of a literal string, handling $ escape sequences.
- * Standard String.replaceAll treats $ specially in the replacement string.
- * This function ensures literal replacement.
- *
- * @param str The original string
- * @param oldString The string to replace
- * @param newString The replacement string
- * @returns The string with all occurrences replaced
- */
-function safeLiteralReplace(str: string, oldString: string, newString: string): string {
-	if (oldString === "" || !str.includes(oldString)) {
-		return str
-	}
-
-	// If newString doesn't contain $, we can use replaceAll directly
-	if (!newString.includes("$")) {
-		return str.replaceAll(oldString, newString)
-	}
-
-	// Escape $ to prevent ECMAScript GetSubstitution issues
-	// $$ becomes a single $ in the output, so we double-escape
-	const escapedNewString = newString.replaceAll("$", "$$$$")
-	return str.replaceAll(oldString, escapedNewString)
-}
-
-function detectLineEnding(content: string): LineEnding {
-	return content.includes("\r\n") ? "\r\n" : "\n"
-}
-
-function normalizeToLF(content: string): string {
-	return content.replace(/\r\n/g, "\n")
-}
-
-function restoreLineEnding(contentLF: string, eol: LineEnding): string {
-	if (eol === "\n") return contentLF
-	return contentLF.replace(/\n/g, "\r\n")
-}
-
-function escapeRegExp(input: string): string {
-	return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
-/** Multi-character operators/tokens: do not allow \\s+ to appear between these characters. */
-const CANGJIE_COMPOSITE_OPS_SORTED = [
-	"|>",
-	"::",
-	"<:",
-	":>",
-	"=>",
-	"->",
-	"<<",
-	">>",
-	"==",
-	"!=",
-	"<=",
-	">=",
-	"&&",
-	"||",
-	"++",
-	"--",
-	"+=",
-	"-=",
-	"*=",
-	"/=",
-	"%=",
-	"&=",
-	"|=",
-	"^=",
-	"..",
-	"??",
-].sort((a, b) => b.length - a.length)
-
-function tokenizeCangjieForEditMatch(s: string): string[] {
-	const out: string[] = []
-	let i = 0
-	while (i < s.length) {
-		const c = s[i]
-		if (/\s/.test(c)) {
-			let j = i
-			while (j < s.length && /\s/.test(s[j])) j++
-			out.push(s.slice(i, j))
-			i = j
-			continue
-		}
-		let matched = false
-		for (const op of CANGJIE_COMPOSITE_OPS_SORTED) {
-			if (s.startsWith(op, i)) {
-				out.push(op)
-				i += op.length
-				matched = true
-				break
-			}
-		}
-		if (matched) continue
-		out.push(c)
-		i++
-	}
-	return out
-}
-
-function buildWhitespaceTolerantRegex(oldLF: string, opts?: { cangjie?: boolean }): RegExp {
-	if (oldLF === "") {
-		// Never match empty string
-		return new RegExp("(?!)", "g")
-	}
-
-	const parts = opts?.cangjie ? tokenizeCangjieForEditMatch(oldLF) : (oldLF.match(/(\s+|\S+)/g) ?? [])
-	const whitespacePatternForRun = (run: string): string => {
-		// If the whitespace run includes a newline, allow matching any whitespace (including newlines)
-		// to tolerate wrapping changes across lines.
-		if (run.includes("\n")) {
-			return "\\s+"
-		}
-
-		// Otherwise, limit matching to horizontal whitespace so we don't accidentally consume
-		// line breaks that precede indentation.
-		return "[\\t ]+"
-	}
-
-	const pattern = parts
-		.map((part) => {
-			if (/^\s+$/.test(part)) {
-				return whitespacePatternForRun(part)
-			}
-			return escapeRegExp(part)
-		})
-		.join("")
-
-	return new RegExp(pattern, "g")
-}
-
-function buildTokenRegex(oldLF: string): RegExp {
-	const tokens = oldLF.split(/\s+/).filter(Boolean)
-	if (tokens.length === 0) {
-		return new RegExp("(?!)", "g")
-	}
-
-	const pattern = tokens.map(escapeRegExp).join("\\s+")
-	return new RegExp(pattern, "g")
-}
-
-function countRegexMatches(content: string, regex: RegExp): number {
-	const stable = new RegExp(regex.source, regex.flags)
-	return Array.from(content.matchAll(stable)).length
-}
-
-/**
- * @deprecated Use EditTool (name: "edit") instead. This tool is retained for backward
- * compatibility and will be removed in a future version. All calls are handled by the
- * alias mapping in TOOL_ALIASES: "edit_file" → "edit".
+ * @deprecated Prefer EditTool (name: "edit") for new model-facing calls.
+ * This tool remains registered separately because edit_file has a different parameter shape.
  */
 export class EditFileTool extends BaseTool<"edit_file"> {
 	readonly name = "edit_file" as const
@@ -308,6 +152,15 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 
 			const absolutePath = path.resolve(task.cwd, relPath)
 			const fileExists = await fileExistsAtPath(absolutePath)
+			if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+				const initError = await task.cangjieRuntimePolicy.ensureProjectInitializedForWrite(relPath)
+				if (initError) {
+					await finalizePartialToolAskIfNeeded(relPath)
+					task.recordToolError("edit_file", initError)
+					pushToolResult(formatResponse.toolError(initError))
+					return
+				}
+			}
 
 			let currentContent: string | null = null
 			let currentContentLF: string | null = null
@@ -463,15 +316,22 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 			// Cangjie preflight check for .cj files (only in Cangjie mode)
 			let cangjiePostWriteWarnings = ""
 			if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+				const structureError = await task.cangjieRuntimePolicy.validateProjectStructureForWrite(relPath, newContent)
+				if (structureError) {
+					await finalizePartialToolAskIfNeeded(relPath)
+					task.recordToolError("edit_file", structureError)
+					pushToolResult(formatResponse.toolError(structureError))
+					return
+				}
 				const rootPkg = await resolveRootPackageName(task.cwd)
 				const preflight = cangjiePreflightCheck(newContent, relPath, task.cwd, rootPkg)
 				if (!preflight.pass) {
 					task.consecutiveMistakeCount++
 					task.didToolFailInCurrentTurn = true
 					const errorMsg =
-						`仓颉代码预检失败，编辑未应用：\n` +
+						`Cangjie preflight failed before applying edit:\n` +
 						preflight.errors.map((e) => `- ${e}`).join("\n") +
-						`\n\n请修正以上错误后重试。`
+						`\n\nFix the errors above and try again.`
 					await finalizePartialToolAskIfNeeded(relPath)
 					task.recordToolError("edit_file", errorMsg)
 					pushToolResult(formatResponse.toolError(errorMsg))
@@ -490,6 +350,16 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 				)
 				if (searchGate) {
 					cangjiePostWriteWarnings += searchGate
+				}
+				const missingEvidence = task.cangjieRuntimePolicy.getMissingImportEvidence(currentContent ?? undefined, newContent)
+				if (missingEvidence.length > 0) {
+					const errorMsg =
+						`Missing bundled corpus evidence for newly introduced stdlib modules: ${missingEvidence.join(", ")}. ` +
+						`Use search_files or read_file against the bundled CangjieCorpus before editing this code.`
+					await finalizePartialToolAskIfNeeded(relPath)
+					task.recordToolError("edit_file", errorMsg)
+					pushToolResult(formatResponse.toolError(errorMsg))
+					return
 				}
 			}
 
@@ -521,6 +391,19 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 			const sanitizedDiff = sanitizeUnifiedDiff(diff || "")
 			const diffStats = computeDiffStats(sanitizedDiff) || undefined
 			const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)
+
+			// Block writes outside workspace for safety (path traversal attack prevention)
+			if (isOutsideWorkspace) {
+				task.consecutiveMistakeCount++
+				task.didToolFailInCurrentTurn = true
+				const formattedError =
+					`Safety: cannot edit file outside workspace: ${getReadablePath(task.cwd, relPath)}`
+				await finalizePartialToolAskIfNeeded(relPath)
+				await recordFailureForPathAndMaybeEscalate(relPath, formattedError)
+				task.recordToolError("edit_file", formattedError)
+				pushToolResult(formattedError)
+				return
+			}
 
 			const sharedMessageProps: ClineSayTool = {
 				tool: isNewFile ? "newFileCreated" : "appliedDiff",
@@ -576,6 +459,7 @@ export class EditFileTool extends BaseTool<"edit_file"> {
 			}
 
 			task.didEditFile = true
+			task.cangjieRuntimePolicy.noteWriteApplied(relPath, currentContent ?? undefined, newContent)
 
 			// Get the formatted response message
 			const replacementInfo =

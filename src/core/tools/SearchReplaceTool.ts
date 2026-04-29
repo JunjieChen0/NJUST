@@ -1,4 +1,4 @@
-import fs from "fs/promises"
+﻿import fs from "fs/promises"
 import path from "path"
 
 import { type ClineSayTool, DEFAULT_WRITE_DELAY_MS } from "@njust-ai-cj/types"
@@ -25,9 +25,8 @@ interface SearchReplaceParams {
 }
 
 /**
- * @deprecated Use EditTool (name: "edit") instead. This tool is retained for backward
- * compatibility and will be removed in a future version. All calls are handled by the
- * alias mapping in TOOL_ALIASES: "search_replace" → "edit".
+ * @deprecated Prefer EditTool (name: "edit") for new model-facing calls.
+ * This tool remains registered separately because search_replace has a different parameter shape.
  */
 export class SearchReplaceTool extends BaseTool<"search_replace"> {
 	readonly name = "search_replace" as const

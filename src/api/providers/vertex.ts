@@ -24,11 +24,10 @@ export class VertexHandler extends GeminiHandler implements SingleCompletionHand
 			defaultTemperature: info.defaultTemperature ?? 1,
 		})
 
-		// Vertex Gemini models perform better with the edit tool instead of apply_diff.
+		// Vertex Gemini models perform better with the edit tool.
 		info = {
 			...info,
-			excludedTools: [...new Set([...(info.excludedTools || []), "apply_diff"])],
-			includedTools: [...new Set([...(info.includedTools || []), "edit"])],
+						includedTools: [...new Set([...(info.includedTools || []), "edit"])],
 		}
 
 		// The `:thinking` suffix indicates that the model is a "Hybrid"

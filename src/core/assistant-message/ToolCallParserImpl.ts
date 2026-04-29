@@ -3,19 +3,26 @@ import type { IToolCallParser } from "../../api/interfaces/IToolCallParser"
 import { NativeToolCallParser } from "./NativeToolCallParser"
 
 /**
- * Injectable adapter over {@link NativeToolCallParser} static API (report C.2).
+ * Injectable adapter over {@link NativeToolCallParser}.
+ * Each instance owns its own NativeToolCallParser for per-task isolation.
  */
 export class ToolCallParserImpl implements IToolCallParser {
+	private readonly parser = new NativeToolCallParser()
+
 	processFinishReason(finishReason: string | null | undefined) {
-		return NativeToolCallParser.processFinishReason(finishReason)
+		return this.parser.processFinishReason(finishReason)
 	}
 
 	clearRawChunkState(): void {
-		NativeToolCallParser.clearRawChunkState()
+		this.parser.clearRawChunkState()
 	}
 
 	clearAllStreamingToolCalls(): void {
-		NativeToolCallParser.clearAllStreamingToolCalls()
+		this.parser.clearAllStreamingToolCalls()
+	}
+
+	getNativeParser(): NativeToolCallParser {
+		return this.parser
 	}
 }
 

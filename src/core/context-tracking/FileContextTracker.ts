@@ -29,6 +29,7 @@ export class FileContextTracker {
 	private recentlyModifiedFiles = new Set<string>()
 	private recentlyEditedByRoo = new Set<string>()
 	private checkpointPossibleFiles = new Set<string>()
+	private pendingSave = Promise.resolve()
 
 	constructor(provider: ITaskHost, taskId: string) {
 		this.providerRef = new WeakRef(provider)
@@ -65,10 +66,12 @@ export class FileContextTracker {
 		// Track file changes
 		watcher.onDidChange(() => {
 			if (this.recentlyEditedByRoo.has(filePath)) {
-				this.recentlyEditedByRoo.delete(filePath) // This was an edit by Roo, no need to inform Roo
+				this.recentlyEditedByRoo.delete(filePath)
 			} else {
-				this.recentlyModifiedFiles.add(filePath) // This was a user edit, we will inform Roo
-				this.trackFileContext(filePath, "user_edited") // Update the task metadata with file tracking
+				this.recentlyModifiedFiles.add(filePath)
+				this.pendingSave = this.pendingSave.then(() =>
+					this.trackFileContext(filePath, "user_edited"),
+				)
 			}
 		})
 

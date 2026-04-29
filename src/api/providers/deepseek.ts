@@ -8,13 +8,14 @@ import {
 	OPENAI_AZURE_AI_INFERENCE_PATH,
 } from "@njust-ai-cj/types"
 
-import type { ApiHandlerOptions } from "../../shared/api"
+import { shouldUseReasoningBudget, type ApiHandlerOptions } from "../../shared/api"
 
 import { ApiStream, ApiStreamUsageChunk } from "../transform/stream"
 import { getModelParams } from "../transform/model-params"
 import { convertToR1Format } from "../transform/r1-format"
 
 import { OpenAiHandler } from "./openai"
+import { handleOpenAIError } from "./utils/openai-error-handler"
 import type { ApiHandlerCreateMessageMetadata } from "../index"
 
 // Custom interface for DeepSeek params to support thinking mode
@@ -55,18 +56,22 @@ export class DeepSeekHandler extends OpenAiHandler {
 		const modelId = this.options.apiModelId ?? deepSeekDefaultModelId
 		const { info: modelInfo } = this.getModel()
 
-		// Check if this is a thinking-enabled model (deepseek-reasoner)
-		const isThinkingModel = modelId.includes("deepseek-reasoner")
+		const isLegacyReasoner = modelId.includes("deepseek-reasoner")
+		const isV4Model = modelId === "deepseek-v4-flash" || modelId === "deepseek-v4-pro"
 
 		// Convert messages to R1 format (merges consecutive same-role messages)
 		// This is required for DeepSeek which does not support successive messages with the same role
-		// For thinking models (deepseek-reasoner), enable mergeToolResultText to preserve reasoning_content
+		// For thinking / V4 models, enable mergeToolResultText to preserve reasoning_content
 		// during tool call sequences. Without this, environment_details text after tool_results would
 		// create user messages that cause DeepSeek to drop all previous reasoning_content.
 		// See: https://api-docs.deepseek.com/guides/thinking_mode
 		const convertedMessages = convertToR1Format([{ role: "user", content: systemPrompt }, ...messages], {
-			mergeToolResultText: isThinkingModel,
+			mergeToolResultText: isLegacyReasoner || isV4Model,
 		})
+
+		const useThinkingApi =
+			isLegacyReasoner ||
+			(isV4Model && shouldUseReasoningBudget({ model: modelInfo, settings: this.options }))
 
 		const requestOptions: DeepSeekChatCompletionParams = {
 			model: modelId,
@@ -74,8 +79,8 @@ export class DeepSeekHandler extends OpenAiHandler {
 			messages: convertedMessages,
 			stream: true as const,
 			stream_options: { include_usage: true },
-			// Enable thinking mode for deepseek-reasoner or when tools are used with thinking model
-			...(isThinkingModel && { thinking: { type: "enabled" } }),
+			...(isV4Model && { thinking: { type: useThinkingApi ? "enabled" : "disabled" } }),
+			...(!isV4Model && useThinkingApi && { thinking: { type: "enabled" } }),
 			tools: this.convertToolsForOpenAI(metadata?.tools),
 			tool_choice: metadata?.tool_choice,
 			parallel_tool_calls: metadata?.parallelToolCalls ?? false,
@@ -94,7 +99,6 @@ export class DeepSeekHandler extends OpenAiHandler {
 				isAzureAiInference ? { path: OPENAI_AZURE_AI_INFERENCE_PATH } : {},
 			)
 		} catch (error) {
-			const { handleOpenAIError } = await import("./utils/openai-error-handler")
 			throw handleOpenAIError(error, "DeepSeek")
 		}
 
@@ -145,12 +149,13 @@ export class DeepSeekHandler extends OpenAiHandler {
 
 	// Override to handle DeepSeek's usage metrics, including caching.
 	protected override processUsageMetrics(usage: any, _modelInfo?: any): ApiStreamUsageChunk {
+		const details = usage?.prompt_tokens_details
 		return {
 			type: "usage",
 			inputTokens: usage?.prompt_tokens || 0,
 			outputTokens: usage?.completion_tokens || 0,
-			cacheWriteTokens: usage?.prompt_tokens_details?.cache_miss_tokens,
-			cacheReadTokens: usage?.prompt_tokens_details?.cached_tokens,
+			cacheWriteTokens: details?.cache_write_tokens ?? usage?.cache_creation_input_tokens,
+			cacheReadTokens: details?.cached_tokens ?? usage?.cache_read_input_tokens,
 		}
 	}
 }

@@ -75,9 +75,12 @@ export class CostTracker {
 		const cacheRead = params.cacheReadTokens || 0
 		const cacheWrite = params.cacheWriteTokens || 0
 
+		// inputTokens may include cached tokens; split to avoid double-charging.
+		const nonCachedInput = Math.max(0, params.inputTokens - cacheRead)
+
 		const cost = parseFloat(
 			(
-				(params.inputTokens / 1_000_000) * pricing.input +
+				(nonCachedInput / 1_000_000) * pricing.input +
 				(params.outputTokens / 1_000_000) * pricing.output +
 				(cacheRead / 1_000_000) * pricing.cacheRead +
 				(cacheWrite / 1_000_000) * pricing.cacheWrite

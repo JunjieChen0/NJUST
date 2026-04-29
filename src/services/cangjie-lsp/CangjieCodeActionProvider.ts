@@ -27,6 +27,90 @@ const STDLIB_IMPORT_HINTS: Record<string, string> = {
 	Console: "std.console",
 }
 
+function findLetDeclarationForSymbol(
+	document: vscode.TextDocument,
+	errorLine: number,
+	errorMessage: string,
+): { line: number; letStart: number } | null {
+	// Try to extract the symbol name from the diagnostic message
+	const symMatch = errorMessage.match(/['"`](\w+)['"`]/)
+	const symbolName = symMatch?.[1]
+
+	if (symbolName) {
+		// Search for `let <symbolName>` in code before the error line
+		const text = document.getText(new vscode.Range(0, 0, errorLine, 0))
+		const escaped = symbolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+		const letSymRe = new RegExp(`^(\\s*)let\\s+${escaped}\\b`, "m")
+		const m = text.match(letSymRe)
+		if (m) {
+			const lineIdx = text.slice(0, m.index!).split("\n").length - 1
+			const lineText = document.lineAt(lineIdx).text
+			// Check the "let" is outside a comment or string by verifying the prefix
+			const prefixBeforeLet = lineText.substring(0, lineText.indexOf("let")).trim()
+			const cleanPrefix = prefixBeforeLet.replace(/\/\/.*$/m, "").trim()
+			const letIdx = cleanPrefix ? lineText.indexOf("let", lineText.indexOf(cleanPrefix) + cleanPrefix.length) : lineText.indexOf("let")
+			if (letIdx === -1) return null
+			return { line: lineIdx, letStart: letIdx }
+		}
+	}
+
+	// Fallback: search backwards from the error line for the nearest `let` declaration
+	for (let i = errorLine; i >= 0; i--) {
+		const lineText = document.lineAt(i).text
+		const letMatch = lineText.match(/^(\s*)let\b/)
+		if (letMatch) {
+			return { line: i, letStart: lineText.indexOf("let") }
+		}
+	}
+	return null
+}
+
+function inferReturnValue(returnType: string | null): string {
+	if (!returnType) return "0"
+	const t = returnType.replace(/\s+/g, "").toLowerCase()
+	if (t.includes("int64") || t.includes("int32") || /\bint\b/.test(t)) return "0"
+	if (t.includes("uint64") || t.includes("uint32") || /\buint\b/.test(t)) return "0"
+	if (t.includes("float64") || t.includes("float32")) return "0.0"
+	if (t.includes("string")) return '""'
+	if (t.includes("bool")) return "false"
+	if (t.includes("unit") || t.includes("void")) return ""
+	if (t.includes("?") || t.includes("option")) return "None"
+	// Best-effort: return zero-value constructor for the type name
+	if (t.includes("rune")) return "'\0'"
+	if (t.includes("array") || t.includes("list") || t.includes("vector")) return "[]"
+	if (t.includes("map") || t.includes("hashmap") || t.includes("dictionary")) return "{}"
+	// Fallback: type constructor with default fields
+	const baseName = returnType.replace(/<.*/, "").trim()
+	if (baseName && /^[A-Z]/.test(baseName)) return `${baseName}()`
+	return "throw Exception(\"Not implemented\")"
+}
+
+function extractFunctionReturnType(
+	document: vscode.TextDocument,
+	beforeBraceLine: number,
+): string | null {
+	for (let i = beforeBraceLine; i >= Math.max(0, beforeBraceLine - 5); i--) {
+		const line = document.lineAt(i).text
+		const m = line.match(/\)\s*:\s*(\S[\s\S]*?)\s*(?:\{|$)/)
+		if (m) return m[1].trim()
+	}
+	return null
+}
+
+function inferMatchDefaultValue(document: vscode.TextDocument, matchLine: number): string {
+	for (let i = matchLine; i >= Math.max(0, matchLine - 10); i--) {
+		const line = document.lineAt(i).text
+		if (/\bmatch\b/.test(line)) {
+			const trimmed = line.trim()
+			if (/=\s*$/.test(trimmed) || /\breturn\b/.test(line)) {
+			return `throw Exception("Unhandled case")`
+			}
+			break
+		}
+	}
+	return "()"
+}
+
 function findInsertPosition(document: vscode.TextDocument): vscode.Position {
 	let lastImportLine = -1
 	let packageLine = -1
@@ -62,7 +146,8 @@ const QUICK_FIX_PATTERNS: QuickFixPattern[] = [
 			const pos = findInsertPosition(document)
 
 			const existingText = document.getText()
-			if (existingText.includes(`import ${pkg}`)) return undefined
+			// Word-boundary check: import pkg. or import pkg{ or import pkg\n
+				if (new RegExp(`import\\s+${pkg.replace(/\./g, "\\.")}(?:\\s|\\{|$|\\*)`, "m").test(existingText)) return undefined
 
 			const action = new vscode.CodeAction(
 				`添加 import ${pkg}.*`,
@@ -79,29 +164,23 @@ const QUICK_FIX_PATTERNS: QuickFixPattern[] = [
 	{
 		pattern: /(?:immutable|cannot assign|let.*reassign|不可变|mut.*let|let.*mut)/i,
 		createFix(document, diagnostic) {
-			const line = diagnostic.range.start.line
+			const errorLine = diagnostic.range.start.line
+			const pos = findLetDeclarationForSymbol(document, errorLine, diagnostic.message)
+			if (!pos) return undefined
 
-			for (let i = line; i >= Math.max(0, line - 10); i--) {
-				const lineText = document.lineAt(i).text
-				const letMatch = lineText.match(/^(\s*)let\b/)
-				if (letMatch) {
-					const action = new vscode.CodeAction(
-						`将 let 改为 var`,
-						vscode.CodeActionKind.QuickFix,
-					)
-					action.diagnostics = [diagnostic]
-					const edit = new vscode.WorkspaceEdit()
-					const letStart = lineText.indexOf("let")
-					edit.replace(
-						document.uri,
-						new vscode.Range(i, letStart, i, letStart + 3),
-						"var",
-					)
-					action.edit = edit
-					return action
-				}
-			}
-			return undefined
+			const action = new vscode.CodeAction(
+				`将 let 改为 var`,
+				vscode.CodeActionKind.QuickFix,
+			)
+			action.diagnostics = [diagnostic]
+			const edit = new vscode.WorkspaceEdit()
+			edit.replace(
+				document.uri,
+				new vscode.Range(pos.line, pos.letStart, pos.line, pos.letStart + 3),
+				"var",
+			)
+			action.edit = edit
+			return action
 		},
 	},
 	{
@@ -113,8 +192,12 @@ const QUICK_FIX_PATTERNS: QuickFixPattern[] = [
 				const lineText = document.lineAt(i).text
 				if (lineText.trim() === "}") {
 					const indent = lineText.match(/^(\s*)/)?.[1] || ""
+					const defaultValue = inferMatchDefaultValue(document, matchLine)
+					const label = defaultValue === "()"
+						? `添加 case _ => 通配分支`
+						: `添加 case _ => 通配分支（需检查返回值）`
 					const action = new vscode.CodeAction(
-						`添加 case _ => 通配分支`,
+						label,
 						vscode.CodeActionKind.QuickFix,
 					)
 					action.diagnostics = [diagnostic]
@@ -122,7 +205,7 @@ const QUICK_FIX_PATTERNS: QuickFixPattern[] = [
 					edit.insert(
 						document.uri,
 						new vscode.Position(i, 0),
-						`${indent}\tcase _ => ()\n`,
+						`${indent}\tcase _ => ${defaultValue}\n`,
 					)
 					action.edit = edit
 					return action
@@ -140,17 +223,24 @@ const QUICK_FIX_PATTERNS: QuickFixPattern[] = [
 				const lineText = document.lineAt(i).text
 				if (lineText.trim() === "}") {
 					const indent = lineText.match(/^(\s*)/)?.[1] || ""
+					const returnType = extractFunctionReturnType(document, i)
+					const returnVal = inferReturnValue(returnType)
+					const label = returnType
+						? `在函数末尾添加 return (返回类型: ${returnType})`
+						: `在函数末尾添加 return`
 					const action = new vscode.CodeAction(
-						`在函数末尾添加 return`,
+						label,
 						vscode.CodeActionKind.QuickFix,
 					)
 					action.diagnostics = [diagnostic]
 					const edit = new vscode.WorkspaceEdit()
-					edit.insert(
-						document.uri,
-						new vscode.Position(i, 0),
-						`${indent}\treturn 0\n`,
-					)
+					if (returnVal) {
+						edit.insert(
+							document.uri,
+							new vscode.Position(i, 0),
+							`${indent}\treturn ${returnVal}\n`,
+						)
+					}
 					action.edit = edit
 					return action
 				}
@@ -168,7 +258,8 @@ const QUICK_FIX_PATTERNS: QuickFixPattern[] = [
 			if (!pkg) return undefined
 
 			const existingText = document.getText()
-			if (existingText.includes(`import ${pkg}`)) return undefined
+			// Word-boundary check: import pkg. or import pkg{ or import pkg\n
+				if (new RegExp(`import\\s+${pkg.replace(/\./g, "\\.")}(?:\\s|\\{|$|\\*)`, "m").test(existingText)) return undefined
 
 			const importLine = `import ${pkg}.*\n`
 			const pos = findInsertPosition(document)
@@ -191,8 +282,15 @@ const QUICK_FIX_PATTERNS: QuickFixPattern[] = [
 			const pkg = inferCangjiePackageFromSrcLayout(document.uri)
 			if (!pkg) return undefined
 
-			const firstLine = document.lineAt(0).text.trim()
-			if (firstLine.startsWith("package ")) return undefined
+			// Scan first 10 non-comment lines for package declaration.
+			let hasPackage = false
+			for (let i = 0; i < Math.min(10, document.lineCount); i++) {
+				const l = document.lineAt(i).text.trim()
+				if (!l || l.startsWith("//") || l.startsWith("/*") || l.startsWith("*")) continue
+				if (l.startsWith("package ")) { hasPackage = true; break }
+				if (l.startsWith("import") || l.startsWith("class") || l.startsWith("func")) break
+			}
+			if (hasPackage) return undefined
 
 			const action = new vscode.CodeAction(`添加 package ${pkg}`, vscode.CodeActionKind.QuickFix)
 			action.diagnostics = [diagnostic]

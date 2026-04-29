@@ -189,7 +189,6 @@ export class McpHub implements IMcpHubService {
 	 */
 	public registerClient(): void {
 		this.refCount++
-		// console.log(`McpHub: Client registered. Ref count: ${this.refCount}`)
 	}
 
 	/**
@@ -199,7 +198,6 @@ export class McpHub implements IMcpHubService {
 	public async unregisterClient(): Promise<void> {
 		this.refCount--
 
-		// console.log(`McpHub: Client unregistered. Ref count: ${this.refCount}`)
 
 		if (this.refCount <= 0) {
 			console.log("McpHub: Last client unregistered. Disposing hub.")
@@ -350,7 +348,7 @@ export class McpHub implements IMcpHubService {
 			await this.updateServerConnections(result.data.mcpServers || {}, source)
 		} catch (error) {
 			// Check if the error is because the file doesn't exist
-			if (error.code === "ENOENT" && source === "project") {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT" && source === "project") {
 				// File was deleted, clean up project MCP servers
 				await this.cleanupProjectMcpServers()
 				await this.notifyWebviewOfServerChanges()
@@ -744,17 +742,62 @@ export class McpHub implements IMcpHubService {
 					await this.notifyWebviewOfServerChanges()
 				}
 
+				let streamReconnectAttempts = 0
+				const MAX_STREAM_RECONNECT = 6
 				transport.onclose = async () => {
 					const connection = this.findConnection(name, source)
-					if (connection) {
+					if (!connection) return
+					if (streamReconnectAttempts >= MAX_STREAM_RECONNECT) {
 						connection.server.status = "disconnected"
+						console.error(
+							`[McpHub] Streamable HTTP "${name}" reconnect exhausted ` +
+							`after ${MAX_STREAM_RECONNECT} attempts`,
+						)
+						await this.notifyWebviewOfServerChanges()
+						return
 					}
-					await this.notifyWebviewOfServerChanges()
+					streamReconnectAttempts++
+					const delay = Math.min(1000 * Math.pow(2, streamReconnectAttempts), 60_000)
+						+ Math.floor(Math.random() * 1000)
+					console.warn(
+						`[McpHub] Streamable HTTP "${name}" disconnected, ` +
+						`reconnect attempt ${streamReconnectAttempts}/${MAX_STREAM_RECONNECT} in ${delay}ms`,
+					)
+					setTimeout(async () => {
+						try {
+							await transport.start()
+							if (connection) {
+								connection.server.status = "connected"
+								streamReconnectAttempts = 0
+								await this.notifyWebviewOfServerChanges()
+							}
+						} catch (reconnectErr) {
+							console.error(
+								`[McpHub] Streamable HTTP "${name}" reconnect failed:`,
+								reconnectErr,
+							)
+							// onclose will fire again and trigger the next attempt
+						}
+					}, delay)
 				}
 
 				// transport.stderr is only available after the process has been started. However we can't start it separately from the .connect() call because it also starts the transport. And we can't place this after the connect call since we need to capture the stderr stream before the connection is established, in order to capture errors during the connection process.
 				// As a workaround, we start the transport ourselves, and then monkey-patch the start method to no-op so that .connect() doesn't try to start it again.
 				await transport.start()
+				// Prevent the child process from blocking VS Code exit.
+				const childProcess = (transport as any).process
+				if (childProcess && typeof childProcess.unref === "function") {
+					childProcess.unref()
+					childProcess.on("exit", (code: number | null, signal: string | null) => {
+						console.warn(
+							`[McpHub] Server "${name}" child process exited ` +
+							`(code=${code}, signal=${signal})`,
+						)
+					})
+					childProcess.on("error", (err: Error) => {
+						console.error(`[McpHub] Server "${name}" child process error:`, err)
+					})
+				}
 				const stderrStream = transport.stderr
 				if (stderrStream) {
 					stderrStream.on("data", async (data: Buffer) => {
@@ -813,9 +856,14 @@ export class McpHub implements IMcpHubService {
 						headers: configInjected.headers,
 					},
 				}
-				// Configure ReconnectingEventSource options
+				// Configure ReconnectingEventSource options with exponential
+				// backoff and jitter to avoid thundering-herd on reconnect.
+				const baseRetryMs = 1000
+				const maxRetryMs = 60_000
+				const jitter = Math.floor(Math.random() * 1000)
+				const expBackoff = Math.min(baseRetryMs * Math.pow(2, Math.min(connectionRetries ?? 0, 5)), maxRetryMs)
 				const reconnectingEventSourceOptions = {
-					max_retry_time: 5000, // Maximum retry time in milliseconds
+					max_retry_time: expBackoff + jitter,
 					withCredentials: configInjected.headers?.["Authorization"] ? true : false, // Enable credentials if Authorization header exists
 					fetch: (url: string | URL, init: RequestInit) => {
 						const headers = new Headers({ ...(init?.headers || {}), ...(configInjected.headers || {}) })
@@ -1022,15 +1070,44 @@ export class McpHub implements IMcpHubService {
 				// Continue with empty configs
 			}
 
+			// High-risk tools that never auto-approve, even with "*" wildcard.
+			// Users must explicitly list these in alwaysAllow for them to auto-run.
+			// New tools with destructive or network-access capabilities should be added here.
+			const WILDCARD_DENY_TOOLS = new Set([
+				"execute_command",
+				"apply_diff",
+				"apply_patch",
+				"write_to_file",
+				"new_task",
+				"edit",
+				"edit_file",
+				"search_replace",
+				"web_fetch",
+				"web_search",
+				"generate_image",
+				"agent",
+				"use_mcp_tool",
+				"access_mcp_resource",
+				"send_message",
+			])
 			// Check if wildcard "*" is in the alwaysAllow config
 			const hasWildcard = alwaysAllowConfig.includes("*")
 
 			// Mark tools as always allowed and enabled for prompt based on settings
-			const tools = (response?.tools || []).map((tool) => ({
+			const MAX_MCP_TOOLS_PER_SERVER = 1000
+			let tools = (response?.tools || []).map((tool) => ({
 				...tool,
-				alwaysAllow: hasWildcard || alwaysAllowConfig.includes(tool.name),
+				alwaysAllow: (hasWildcard && !WILDCARD_DENY_TOOLS.has(tool.name)) || alwaysAllowConfig.includes(tool.name),
 				enabledForPrompt: !disabledToolsList.includes(tool.name),
 			}))
+
+			if (tools.length > MAX_MCP_TOOLS_PER_SERVER) {
+				console.warn(
+					`[McpHub] Server "${serverName}" returned ${tools.length} tools, ` +
+					`truncating to ${MAX_MCP_TOOLS_PER_SERVER}.`,
+				)
+				tools = tools.slice(0, MAX_MCP_TOOLS_PER_SERVER)
+			}
 
 			return tools
 		} catch (error) {
@@ -1048,7 +1125,6 @@ export class McpHub implements IMcpHubService {
 			const response = await connection.client.request({ method: "resources/list" }, ListResourcesResultSchema)
 			return response?.resources || []
 		} catch (error) {
-			// console.error(`Failed to fetch resources for ${serverName}:`, error)
 			return []
 		}
 	}
@@ -1068,7 +1144,6 @@ export class McpHub implements IMcpHubService {
 			)
 			return response?.resourceTemplates || []
 		} catch (error) {
-			// console.error(`Failed to fetch resource templates for ${serverName}:`, error)
 			return []
 		}
 	}
@@ -1805,12 +1880,28 @@ export class McpHub implements IMcpHubService {
 			timeout = 60 * 1000
 		}
 
+		// Validate arguments are JSON-serializable before passing to RPC layer.
+		// Circular references, Functions, Symbols, and BigInt values cause
+		// JSON.stringify to throw, which would crash the caller uncaught.
+		let safeArguments: Record<string, unknown> | undefined
+		if (toolArguments !== undefined) {
+			try {
+				safeArguments = JSON.parse(JSON.stringify(toolArguments))
+			} catch (serializeError) {
+				throw new Error(
+					`Cannot serialize tool arguments for "${toolName}" on server "${serverName}": ` +
+					`arguments contain non-JSON-safe values (circular references, functions, etc.). ` +
+					`Original error: ${(serializeError as Error).message}`,
+				)
+			}
+		}
+
 		return await connection.client.request(
 			{
 				method: "tools/call",
 				params: {
 					name: toolName,
-					arguments: toolArguments,
+					arguments: safeArguments,
 				},
 			},
 			CallToolResultSchema,

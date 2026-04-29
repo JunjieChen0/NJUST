@@ -254,7 +254,7 @@ export class ClineProvider
 	private bindTaskEventForwarders(instance: Task): void {
 		const onTaskStarted = () => this.emit(NJUST_AI_CJEventName.TaskStarted, instance.taskId)
 		const onTaskCompleted = (taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage) =>
-			this.emit(NJUST_AI_CJEventName.TaskCompleted, taskId, tokenUsage, toolUsage)
+			this.emit(NJUST_AI_CJEventName.TaskCompleted, taskId, tokenUsage, toolUsage, { isSubtask: false })
 		const onTaskAborted = async () => {
 			this.emit(NJUST_AI_CJEventName.TaskAborted, instance.taskId)
 			try {
@@ -425,8 +425,9 @@ export class ClineProvider
 					)
 				}
 			} catch (error) {
-				this.log(`Failed to load full model details for LM Studio: ${error}`)
-				vscode.window.showErrorMessage(error.message)
+				const msg = error instanceof Error ? error.message : String(error)
+				this.log(`Failed to load full model details for LM Studio: ${msg}`)
+				vscode.window.showErrorMessage(msg)
 			}
 		}
 	}
@@ -454,8 +455,9 @@ export class ClineProvider
 				// all running promises will exit as well.
 				await task.abortTask(true)
 			} catch (e) {
+				const msg = e instanceof Error ? e.message : String(e)
 				this.log(
-					`[ClineProvider#removeClineFromStack] abortTask() failed ${task.taskId}.${task.instanceId}: ${e.message}`,
+					`[ClineProvider#removeClineFromStack] abortTask() failed ${task.taskId}.${task.instanceId}: ${msg}`,
 				)
 			}
 
@@ -1004,8 +1006,9 @@ export class ClineProvider
 		try {
 			await oldTask.abortTask(true)
 		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e)
 			this.log(
-				`[createTaskWithHistoryItem] abortTask() failed for old task ${oldTask.taskId}.${oldTask.instanceId}: ${e.message}`,
+				`[createTaskWithHistoryItem] abortTask() failed for old task ${oldTask.taskId}.${oldTask.instanceId}: ${msg}`,
 			)
 		}
 		const cleanupFunctions = this.taskEventListeners.get(oldTask)
@@ -1128,11 +1131,11 @@ export class ClineProvider
 		const csp = [
 			"default-src 'none'",
 			`font-src ${webview.cspSource} data:`,
-			`style-src ${webview.cspSource} 'unsafe-inline' https://* http://${localServerUrl} http://0.0.0.0:${localPort}`,
+			`style-src ${webview.cspSource} 'unsafe-inline' http://${localServerUrl} http://0.0.0.0:${localPort}`,
 			`img-src ${webview.cspSource} https://storage.googleapis.com https://img.clerk.com data:`,
 			`media-src ${webview.cspSource} blob:`,
-			`script-src 'unsafe-eval' ${webview.cspSource} https://* https://*.posthog.com http://${localServerUrl} http://0.0.0.0:${localPort} 'nonce-${nonce}'`,
-			`connect-src ${webview.cspSource} ${openRouterDomain} https://* https://*.posthog.com ws://${localServerUrl} ws://0.0.0.0:${localPort} http://${localServerUrl} http://0.0.0.0:${localPort}`,
+			`script-src 'unsafe-eval' ${webview.cspSource} http://${localServerUrl} http://0.0.0.0:${localPort} 'nonce-${nonce}'`,
+			`connect-src ${webview.cspSource} ${openRouterDomain} ws://${localServerUrl} ws://0.0.0.0:${localPort} http://${localServerUrl} http://0.0.0.0:${localPort}`,
 		]
 
 		return /*html*/ `

@@ -1,8 +1,8 @@
-// npx vitest run src/core/tools/__tests__/validateToolUse.spec.ts
+﻿// npx vitest run src/core/tools/__tests__/validateToolUse.spec.ts
 
 import type { ModeConfig } from "@njust-ai-cj/types"
 
-import { modes } from "../../../shared/modes"
+import { getToolsForMode, modes } from "../../../shared/modes"
 import { TOOL_GROUPS } from "../../../shared/tools"
 
 import { validateToolUse, isToolAllowedForMode, mergeToolParamsForValidation } from "../validateToolUse"
@@ -11,16 +11,16 @@ import { validateToolParams } from "../toolParamValidator"
 const codeMode = modes.find((m) => m.slug === "code")?.slug || "code"
 const architectMode = modes.find((m) => m.slug === "architect")?.slug || "architect"
 const askMode = modes.find((m) => m.slug === "ask")?.slug || "ask"
+const cangjieMode = modes.find((m) => m.slug === "cangjie")?.slug || "cangjie"
 
 describe("mode-validator", () => {
 	describe("isToolAllowedForMode", () => {
 		describe("code mode", () => {
-			it("allows all code mode tools", () => {
-				// Code mode has all groups
-				Object.entries(TOOL_GROUPS).forEach(([_, config]) => {
-					config.tools.forEach((tool: string) => {
-						expect(isToolAllowedForMode(tool, codeMode, [])).toBe(true)
-					})
+			it("allows configured code mode tools", () => {
+				const codeConfig = modes.find((m) => m.slug === codeMode)
+				expect(codeConfig).toBeDefined()
+				getToolsForMode(codeConfig!.groups).forEach((tool: string) => {
+					expect(isToolAllowedForMode(tool, codeMode, [])).toBe(true)
 				})
 			})
 
@@ -97,6 +97,28 @@ describe("mode-validator", () => {
 
 				// Should allow other edit tools
 				expect(isToolAllowedForMode("write_to_file", "custom-mode", customModes, requirements)).toBe(true)
+			})
+		})
+
+		describe("cangjie mode", () => {
+			it("blocks disallowed auxiliary tools", () => {
+				expect(isToolAllowedForMode("web_fetch", cangjieMode, [])).toBe(false)
+				expect(isToolAllowedForMode("config", cangjieMode, [])).toBe(false)
+				expect(isToolAllowedForMode("sleep", cangjieMode, [])).toBe(false)
+			})
+
+			it("allows whitelisted Cangjie commands and blocks unrelated commands", () => {
+				expect(
+					isToolAllowedForMode("execute_command", cangjieMode, [], undefined, { command: "cjpm build" }),
+				).toBe(true)
+				expect(
+					isToolAllowedForMode("execute_command", cangjieMode, [], undefined, {
+						command: "Get-Content src/main.cj",
+					}),
+				).toBe(true)
+				expect(
+					isToolAllowedForMode("execute_command", cangjieMode, [], undefined, { command: "npm test" }),
+				).toBe(false)
 			})
 		})
 
@@ -191,6 +213,12 @@ describe("mode-validator", () => {
 			expect(() => validateToolUse("read_file", "architect", [])).not.toThrow()
 		})
 
+		it("throws error for disallowed Cangjie commands", () => {
+			expect(() =>
+				validateToolUse("execute_command", cangjieMode, [], undefined, { command: "npm test" }),
+			).toThrow('Tool "execute_command" is not allowed in cangjie mode.')
+		})
+
 		it("throws error when tool requirement is not met", () => {
 			const requirements = { apply_diff: false }
 			expect(() => validateToolUse("apply_diff", codeMode, [], requirements)).toThrow(
@@ -280,7 +308,7 @@ describe("mergeToolParamsForValidation + validateToolParams", () => {
 		expect(validateToolParams("execute_command", cmdMerged).valid).toBe(true)
 	})
 
-	it("resolves tool aliases to the same schema (write_file → write_to_file, search_replace → edit)", () => {
+	it("resolves safe aliases and validates search_replace with its own schema", () => {
 		expect(
 			validateToolParams("write_file", { path: "a.cj", content: "x" }).valid,
 		).toBe(true)

@@ -50,6 +50,17 @@ interface ImportResult {
 	error?: string
 }
 
+
+const DANGEROUS_PROMPT_PATTERN = /ignore\s+(all\s+)?previous\s+instructions/gi
+const MAX_PROMPT_LENGTH = 50000
+
+function sanitizeModeContent(content: string): string {
+	let sanitized = content.replace(DANGEROUS_PROMPT_PATTERN, "[FILTERED]")
+	if (sanitized.length > MAX_PROMPT_LENGTH) {
+		sanitized = sanitized.slice(0, MAX_PROMPT_LENGTH) + "\n[truncated]"
+	}
+	return sanitized
+}
 export class CustomModesManager {
 	private static readonly cacheTTL = 10_000
 
@@ -218,7 +229,12 @@ export class CustomModesManager {
 			const source = isRoomodes ? ("project" as const) : ("global" as const)
 
 			// Add source to each mode
-			return result.data.customModes.map((mode) => ({ ...mode, source }))
+			return result.data.customModes.map((mode) => ({
+			...mode,
+			source,
+			roleDefinition: mode.roleDefinition ? sanitizeModeContent(mode.roleDefinition) : undefined,
+			customInstructions: mode.customInstructions ? sanitizeModeContent(mode.customInstructions) : undefined,
+		}))
 		} catch (error) {
 			// Only log if the error wasn't already handled in parseYamlSafely
 			if (!(error as any).alreadyHandled) {

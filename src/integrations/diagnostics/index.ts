@@ -54,7 +54,7 @@ export function getNewDiagnostics(
 //
 // const newProblems = getNewProblems(oldDiagnostics, newDiagnostics);
 //
-// console.log("New problems:");
+
 // for (const [uri, diagnostics] of newProblems) {
 //     console.log(`File: ${uri.fsPath}`);
 //     for (const diagnostic of diagnostics) {

@@ -112,13 +112,42 @@ export class AgentTool extends BaseTool<"agent"> {
 				isolationLevel: "forked",
 			})
 
-			pushToolResult(
-				`Sub-agent (${agentType}) created with task ID ${child.taskId}. ` +
-					`The agent will work independently with forked context isolation.`,
-			)
+			// Race: child quick-completion vs user background request.
+			// If background signal fires first, child continues asynchronously.
+			const bgSignal = task.getBackgroundSignal()
+			const childCompletion = new Promise<void>((resolve) => {
+				let settled = false
+				const timer = setInterval(() => {
+					if (settled) return
+					if (child.taskCompleted || child.abort) {
+						settled = true
+						clearInterval(timer)
+						resolve()
+					}
+				}, 200)
+				setTimeout(() => {
+					if (!settled) { settled = true; clearInterval(timer); resolve() }
+				}, 30_000)
+			})
+
+			const winner = await Promise.race([
+				childCompletion.then(() => "completed"),
+				bgSignal.then(() => "backgrounded"),
+			])
+
+			if (winner === "backgrounded") {
+				pushToolResult(
+					`Sub-agent (${agentType}) spawned in background. ` +
+					`It will work independently and report when complete.`,
+				)
+			} else {
+				pushToolResult(
+					`Sub-agent (${agentType}) completed with forked isolation.`,
+				)
+			}
 			return
 		} catch (error) {
-			await handleError("creating sub-agent", error)
+			await handleError("creating sub-agent", error instanceof Error ? error : new Error(String(error)))
 			return
 		}
 	}

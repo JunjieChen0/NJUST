@@ -1,5 +1,7 @@
 import axios from "axios"
 import * as cheerio from "cheerio"
+import dns from "node:dns/promises"
+import net from "node:net"
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const TurndownService = require("turndown")
 
@@ -7,10 +9,15 @@ import { BaseTool, type ToolCallbacks } from "./BaseTool"
 import type { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { assertSafeOutboundUrl } from "../security/networkGuard"
+import { assertPublicIp } from "../security/networkGuard"
 
 const MAX_TIMEOUT_MS = 30_000
 const MAX_BODY_BYTES = 5 * 1024 * 1024 // 5 MB
 const DEFAULT_MAX_LENGTH = 100_000
+
+function isIPAddress(hostname: string): boolean {
+	return net.isIP(hostname) !== 0
+}
 
 class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 	readonly name = "web_fetch" as const
@@ -57,13 +64,29 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 			}
 
 			let parsedUrl: URL
+			let hostname: string
 			try {
 				parsedUrl = await assertSafeOutboundUrl(url)
+				hostname = parsedUrl.hostname
 			} catch (error) {
 				pushToolResult(
 					formatResponse.toolError(error instanceof Error ? error.message : `Invalid URL: ${url}`),
 				)
 				return
+			}
+
+			// Capture pre-request DNS resolution for rebinding detection
+			let preRequestIPs: Set<string> | undefined
+			if (!isIPAddress(hostname)) {
+				const preLookup = await dns.lookup(hostname, { all: true, verbatim: true })
+				if (!preLookup.length) {
+					pushToolResult(formatResponse.toolError(`Could not resolve host: ${hostname}`))
+					return
+				}
+				for (const entry of preLookup) {
+					assertPublicIp(entry.address)
+				}
+				preRequestIPs = new Set(preLookup.map((e) => e.address))
 			}
 
 			const approved = await askApproval(
@@ -82,6 +105,13 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 				maxRedirects: 5,
 				maxContentLength: MAX_BODY_BYTES,
 				maxBodyLength: MAX_BODY_BYTES,
+				// Validate each redirect target through the same SSRF guard as the initial URL
+				beforeRedirect: async (_options, responseHeaders) => {
+					const location = (responseHeaders as any)?.location
+					if (location && typeof location === "string") {
+						await assertSafeOutboundUrl(location)
+					}
+				},
 				responseType: format === "json" ? "json" : "text",
 				headers: {
 					"User-Agent": "Mozilla/5.0 (compatible; RooCode/1.0; +https://github.com/RooVetGit/Roo-Code)",
@@ -89,6 +119,26 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 				},
 				validateStatus: (status) => status < 400,
 			})
+
+			// DNS rebinding check: compare pre-request and post-request IPs
+			if (preRequestIPs && preRequestIPs.size > 0) {
+				const postLookup = await dns.lookup(hostname, { all: true, verbatim: true })
+				if (!postLookup.length) {
+					throw new Error(`DNS resolution lost after request for host: ${hostname}`)
+				}
+				for (const entry of postLookup) {
+					assertPublicIp(entry.address)
+				}
+				const postIPs = new Set(postLookup.map((e) => e.address))
+				const changed =
+					preRequestIPs.size !== postIPs.size ||
+					[...preRequestIPs].some((ip) => !postIPs.has(ip))
+				if (changed) {
+					throw new Error(
+						`Potential DNS rebinding detected for host: ${hostname} — request blocked.`,
+					)
+				}
+			}
 
 			let result: string
 

@@ -173,6 +173,24 @@ export class TelemetryService {
 	captureShellIntegrationError(_error: any): void {}
 	updateTelemetryState(_isOptedIn: boolean): void {}
 
+	private static readonly TELEMETRY_ALLOWED_KEYS = new Set([
+		"taskId", "mode", "tool", "provider", "model", "duration",
+		"tokenUsage", "inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens",
+		"isAutomatic", "hasCustomPrompt", "isSubtask", "attempts", "failures",
+		"success", "error_type", "status_code", "event",
+	])
+
+	private sanitizeProperties(props: Record<string, any> | undefined): Record<string, any> {
+		if (!props) return {}
+		const sanitized: Record<string, any> = {}
+		for (const [k, v] of Object.entries(props)) {
+			if (TelemetryService.TELEMETRY_ALLOWED_KEYS.has(k)) {
+				sanitized[k] = v
+			}
+		}
+		return sanitized
+	}
+
 	captureEvent(name: string | { event: string; properties: any }, properties?: Record<string, any>): void {
 		const evtName = typeof name === "string" ? name : name.event
 		const evtProps = typeof name === "string" ? properties : name.properties
@@ -180,11 +198,12 @@ export class TelemetryService {
 			return
 		}
 		try {
+			const safeProps = this.sanitizeProperties(evtProps)
 			const span = this.tracer.startSpan(`event.${evtName}`)
-			for (const [k, v] of Object.entries(evtProps ?? {})) {
+			for (const [k, v] of Object.entries(safeProps)) {
 				span.setAttribute?.(k, v)
 			}
-			span.addEvent(evtName, evtProps ?? {})
+			span.addEvent(evtName, safeProps)
 			span.end()
 		} catch {
 			// no-op

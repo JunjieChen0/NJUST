@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { applySystemPromptBudget, derivePromptTokenBudget } from "../tokenBudget"
+import { applySystemPromptBudget, derivePromptTokenBudget, mergeDynamicPromptSegmentsByTokenBudget } from "../tokenBudget"
 
 describe("prompt token budget", () => {
 	it("derives ratio-based budgets from context window", () => {
@@ -49,5 +49,23 @@ describe("prompt token budget", () => {
 		expect(out.staticPart.length).toBeLessThan(staticPart.length)
 		expect(out.staticPart).toContain("[Prompt section truncated due to token budget]")
 		expect(out.dynamicPart).toBe("[Dynamic prompt omitted due to token budget]")
+	})
+
+	it("preserves higher-priority dynamic segments when budget is tight", () => {
+		const staticPart = "S".repeat(20_000)
+		const hi = "HIGH_PRIORITY".repeat(100)
+		const lo = "LOW_PRIORITY".repeat(10_000)
+		const out = applySystemPromptBudget(staticPart, [hi, lo], 100_000)
+		expect(out.dynamicPart).toContain("HIGH_PRIORITY")
+		expect(out.dynamicPart.indexOf("HIGH_PRIORITY")).toBeLessThan(out.dynamicPart.indexOf("LOW_PRIORITY"))
+	})
+
+	it("mergeDynamicPromptSegmentsByTokenBudget fills earliest segments first", () => {
+		const a = "A".repeat(100)
+		const b = "B".repeat(100)
+		// Exactly enough tokens for the first segment only (~29 tokens for 100 chars)
+		const merged = mergeDynamicPromptSegmentsByTokenBudget([a, b], 29)
+		expect(merged).toBe(a)
+		expect(merged.includes("B")).toBe(false)
 	})
 })

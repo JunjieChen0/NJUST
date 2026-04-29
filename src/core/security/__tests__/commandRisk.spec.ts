@@ -1,29 +1,64 @@
-import { describe, expect, it } from "vitest"
+import { describe, it, expect } from "vitest"
 import { assessCommandRisk } from "../commandRisk"
 
 describe("assessCommandRisk", () => {
-	it("flags high-risk destructive command", () => {
-		const r = assessCommandRisk("rm -rf /tmp/demo")
+	it("returns high risk for empty command", () => {
+		const r = assessCommandRisk("")
 		expect(r.level).toBe("high")
 	})
 
-	it("flags medium-risk compositional command", () => {
-		const r = assessCommandRisk("npm install axios && npm test")
+	it("returns high risk for rm -rf", () => {
+		const r = assessCommandRisk("rm -rf /")
+		expect(r.level).toBe("high")
+	})
+
+	it("returns high risk for git reset --hard", () => {
+		const r = assessCommandRisk("git reset --hard HEAD~1")
+		expect(r.level).toBe("high")
+	})
+
+	it("returns high risk for del on Windows", () => {
+		const r = assessCommandRisk("del /f /q C:\temp\*")
+		expect(r.level).toBe("high")
+	})
+
+	it("detects shell chaining with pipes", () => {
+		const r = assessCommandRisk("cat file | grep foo")
 		expect(r.level).toBe("medium")
 	})
 
-	it("flags low-risk read command", () => {
+	it("detects shell chaining with &&", () => {
+		const r = assessCommandRisk("npm test && npm run build")
+		expect(r.level).toBe("medium")
+	})
+
+	it("returns medium for npm install", () => {
+		const r = assessCommandRisk("npm install express")
+		expect(r.level).toBe("medium")
+	})
+
+	it("returns low for git status", () => {
 		const r = assessCommandRisk("git status")
 		expect(r.level).toBe("low")
 	})
 
-	it("flags powershell policy mutation as high risk", () => {
-		const r = assessCommandRisk("Set-ExecutionPolicy Bypass -Scope Process -Force")
+	it("returns low for ls", () => {
+		const r = assessCommandRisk("ls -la")
+		expect(r.level).toBe("low")
+	})
+
+	it("returns medium for unknown command", () => {
+		const r = assessCommandRisk("some-unknown-command --flag")
+		expect(r.level).toBe("medium")
+	})
+
+	it("handles PowerShell Remove-Item as high risk", () => {
+		const r = assessCommandRisk("Remove-Item -Recurse -Force C:\data")
 		expect(r.level).toBe("high")
 	})
 
-	it("flags service control as medium risk", () => {
-		const r = assessCommandRisk("Restart-Service Spooler")
-		expect(r.level).toBe("medium")
+	it("handles taskkill as high risk", () => {
+		const r = assessCommandRisk("taskkill /F /IM node.exe")
+		expect(r.level).toBe("high")
 	})
 })

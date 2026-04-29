@@ -26,7 +26,7 @@ export default {
 					description: ARGS_PARAMETER_DESCRIPTION,
 				},
 			},
-			required: ["skill", "args"],
+			required: ["skill"],
 			additionalProperties: false,
 		},
 	},

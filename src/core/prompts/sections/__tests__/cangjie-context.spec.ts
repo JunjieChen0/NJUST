@@ -10,6 +10,7 @@ vi.mock("vscode", () => ({
 		getConfiguration: () => ({
 			get: (_key: string, fallback: unknown) => fallback,
 		}),
+		textDocuments: [],
 	},
 	commands: {
 		executeCommand: vi.fn(),
@@ -51,7 +52,20 @@ import {
 	parseCjpmToml,
 	testLearnedFixPatternMatchesMessage,
 	testNormalizeLearnedFixText,
+	userMessageSuggestsCangjie,
 } from "../cangjie-context"
+
+describe("userMessageSuggestsCangjie (Ask/Architect 语料触发)", () => {
+	it("matches toolchain tokens and 仓颉", () => {
+		expect(userMessageSuggestsCangjie("如何用 cjpm build")).toBe(true)
+		expect(userMessageSuggestsCangjie("仓颉的泛型怎么写")).toBe(true)
+		expect(userMessageSuggestsCangjie("read foo.cj file")).toBe(true)
+	})
+	it("returns false for unrelated text", () => {
+		expect(userMessageSuggestsCangjie("hello world")).toBe(false)
+		expect(userMessageSuggestsCangjie(undefined)).toBe(false)
+	})
+})
 
 describe("estimateCangjieContextTokensForTest", () => {
 	it("中英文内容均产生正 token 估计", () => {

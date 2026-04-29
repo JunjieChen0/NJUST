@@ -1,5 +1,5 @@
 import * as http from "http"
-import { randomUUID } from "crypto"
+import crypto, { randomUUID } from "crypto"
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
@@ -15,6 +15,33 @@ import {
 	execApplyDiff,
 } from "./tool-executors"
 
+// ── Token-bucket rate limiter (no external deps) ──────────────────────────
+
+class RateLimiter {
+	private tokens: number
+	private lastRefill: number
+
+	constructor(
+		private maxTokens: number,
+		private refillRate: number,
+	) {
+		this.tokens = maxTokens
+		this.lastRefill = Date.now()
+	}
+
+	tryConsume(): boolean {
+		const now = Date.now()
+		const elapsed = (now - this.lastRefill) / 1000
+		this.tokens = Math.min(this.maxTokens, this.tokens + elapsed * this.refillRate)
+		this.lastRefill = now
+		if (this.tokens >= 1) {
+			this.tokens--
+			return true
+		}
+		return false
+	}
+}
+
 interface RooToolsMcpServerOptions {
 	workspacePath: string
 	port: number
@@ -28,6 +55,8 @@ export class RooToolsMcpServer {
 	private httpServer: http.Server | null = null
 	private transports = new Map<string, StreamableHTTPServerTransport>()
 	private options: RooToolsMcpServerOptions
+	// Global rate limiter: 60 requests burst, refills at 10/s
+	private readonly globalLimiter = new RateLimiter(60, 10)
 
 	constructor(options: RooToolsMcpServerOptions) {
 		this.options = options
@@ -176,7 +205,7 @@ export class RooToolsMcpServer {
 		}
 
 		this.httpServer = http.createServer(async (req, res) => {
-			const allowedOrigin = this.isLocalOnly() ? "*" : (req.headers.origin ?? "*")
+			const allowedOrigin = this.isLocalOnly() ? "null" : (req.headers.origin ?? "null")
 			res.setHeader("Access-Control-Allow-Origin", allowedOrigin)
 			res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 			res.setHeader("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, Authorization")
@@ -191,6 +220,12 @@ export class RooToolsMcpServer {
 			if (authToken && !this.verifyAuth(req, authToken)) {
 				res.writeHead(401, { "Content-Type": "application/json" })
 				res.end(JSON.stringify({ error: "Unauthorized" }))
+				return
+			}
+
+			if (!this.globalLimiter.tryConsume()) {
+				res.writeHead(429, { "Content-Type": "application/json", "Retry-After": "1" })
+				res.end(JSON.stringify({ error: "Rate limit exceeded. Try again later." }))
 				return
 			}
 
@@ -253,13 +288,28 @@ export class RooToolsMcpServer {
 
 	private verifyAuth(req: http.IncomingMessage, token: string): boolean {
 		const authHeader = req.headers["authorization"]
-		return authHeader === `Bearer ${token}`
+		if (!authHeader) return false
+		const expected = `Bearer ${token}`
+		if (authHeader.length !== expected.length) return false
+		const a = Buffer.from(authHeader)
+		const b = Buffer.from(expected)
+		return crypto.timingSafeEqual(a, b)
 	}
 
 	private async parseBody(req: http.IncomingMessage): Promise<unknown> {
 		return new Promise((resolve, reject) => {
+			const MAX_BODY_SIZE = 10 * 1024 * 1024 // 10MB limit
 			let data = ""
-			req.on("data", (chunk) => (data += chunk))
+			let size = 0
+			req.on("data", (chunk) => {
+				size += chunk.length
+				if (size > MAX_BODY_SIZE) {
+					req.destroy()
+					reject(new Error("Request body too large"))
+					return
+				}
+				data += chunk
+			})
 			req.on("end", () => {
 				try {
 					resolve(data ? JSON.parse(data) : undefined)

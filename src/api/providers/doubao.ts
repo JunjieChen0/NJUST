@@ -19,6 +19,7 @@ import { getModelParams } from "../transform/model-params"
 import { convertToR1Format } from "../transform/r1-format"
 
 import { OpenAiHandler } from "./openai"
+import { handleOpenAIError } from "./utils/openai-error-handler"
 import type { ApiHandlerCreateMessageMetadata } from "../index"
 
 const doubaoCustomModelInfo: ModelInfo = {
@@ -105,7 +106,6 @@ export class DoubaoHandler extends OpenAiHandler {
 		try {
 			stream = await this.client.chat.completions.create(requestOptions)
 		} catch (error) {
-			const { handleOpenAIError } = await import("./utils/openai-error-handler")
 			throw handleOpenAIError(error, "Doubao")
 		}
 
@@ -149,7 +149,8 @@ export class DoubaoHandler extends OpenAiHandler {
 			type: "usage",
 			inputTokens: usage?.prompt_tokens || 0,
 			outputTokens: usage?.completion_tokens || 0,
-			cacheReadTokens: usage?.prompt_tokens_details?.cached_tokens,
+			cacheWriteTokens: usage?.cache_creation_input_tokens || undefined,
+			cacheReadTokens: usage?.prompt_tokens_details?.cached_tokens ?? usage?.cache_read_input_tokens,
 		}
 	}
 }

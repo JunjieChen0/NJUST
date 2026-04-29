@@ -97,6 +97,8 @@ const extensions = [
 
 export { extensions }
 
+const MAX_TREE_SITTER_PARSE_SIZE = 10 * 1024 * 1024 // 10MB ceiling to prevent OOM
+
 export async function parseSourceCodeDefinitionsForFile(
 	filePath: string,
 	rooIgnoreController?: RooIgnoreController,
@@ -123,6 +125,7 @@ export async function parseSourceCodeDefinitionsForFile(
 
 		// Read file content
 		const fileContent = await fs.readFile(filePath, "utf8")
+	if (fileContent.length > MAX_TREE_SITTER_PARSE_SIZE) {
 
 		// Split the file content into individual lines
 		const lines = fileContent.split("\n")

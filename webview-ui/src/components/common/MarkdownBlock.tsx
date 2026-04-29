@@ -206,6 +206,11 @@ const MarkdownBlock = memo(({ markdown }: MarkdownBlockProps) => {
 			},
 			a: ({ href, children, ...props }: any) => {
 				const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+					// Block dangerous URI schemes
+					if (href?.startsWith("javascript:") || href?.startsWith("data:")) {
+						e.preventDefault()
+						return
+					}
 					// Only process file:// protocol or local file paths
 					const isLocalPath = href?.startsWith("file://") || href?.startsWith("/") || !href?.includes("://")
 

@@ -6,6 +6,7 @@ import { cleanupAfterTruncation } from "../condense"
 import { OutputInterceptor } from "../../integrations/terminal/OutputInterceptor"
 import { getTaskDirectoryPath } from "../../utils/storage"
 
+import { debugLog } from "../../utils/debugLog"
 export interface RewindOptions {
 	/** Whether to include the target message in deletion (edit=true, delete=false) */
 	includeTargetMessage?: boolean
@@ -265,7 +266,7 @@ export class MessageManager {
 			await OutputInterceptor.cleanupByIds(outputDir, validIds)
 		} catch (error) {
 			// Silently fail - cleanup is best-effort
-			console.debug("[MessageManager] Artifact cleanup skipped:", error)
+			debugLog("[MessageManager] Artifact cleanup skipped:", error)
 		}
 	}
 }

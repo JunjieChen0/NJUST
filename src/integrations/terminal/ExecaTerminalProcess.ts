@@ -170,7 +170,7 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 			// Try to kill using the subprocess object
 			if (this.subprocess) {
 				try {
-					this.subprocess.kill("SIGKILL")
+					this.subprocess.kill("SIGTERM"); setTimeout(() => { try { this.subprocess?.kill("SIGKILL") } catch {} }, 5_000); this.subprocess.kill("SIGKILL")
 				} catch (e) {
 					console.warn(
 						`[ExecaTerminalProcess#abort] Failed to kill subprocess: ${e instanceof Error ? e.message : String(e)}`,
@@ -236,11 +236,6 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 
 		index++
 		this.lastRetrievedIndex += index
-
-		// console.log(
-		// 	`[ExecaTerminalProcess#getUnretrievedOutput] fullOutput.length=${this.fullOutput.length} lastRetrievedIndex=${this.lastRetrievedIndex}`,
-		// 	output.slice(0, index),
-		// )
 
 		return output.slice(0, index)
 	}

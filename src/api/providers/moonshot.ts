@@ -59,7 +59,7 @@ export class MoonshotHandler extends OpenAICompatibleHandler {
 			type: "usage",
 			inputTokens: usage.inputTokens || 0,
 			outputTokens: usage.outputTokens || 0,
-			cacheWriteTokens: 0,
+			cacheWriteTokens: undefined,
 			cacheReadTokens: rawUsage?.cached_tokens ?? usage.details?.cachedInputTokens,
 		}
 	}

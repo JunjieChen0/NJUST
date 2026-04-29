@@ -31,6 +31,7 @@ import { summarizePromptCacheUsage } from "../../core/prompts/cache-monitor"
 import { globalCostTracker } from "../../utils/costTracker"
 import { globalPromptCacheBreakDetector } from "../../core/prompts/promptCacheBreakDetection"
 
+import { debugLog } from "../../utils/debugLog"
 /**
  * Extended Tool type that includes cache_control for prompt caching.
  * The base Anthropic.Tool type in SDK ^0.37.0 does not include cache_control,
@@ -133,6 +134,7 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 			case "claude-sonnet-4-5":
 			case "claude-sonnet-4-20250514":
 			case "claude-opus-4-6":
+			case "claude-opus-4-7":
 			case "claude-opus-4-5-20251101":
 			case "claude-opus-4-1-20250805":
 			case "claude-opus-4-20250514":
@@ -238,12 +240,12 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 					cacheWriteTokens += cache_creation_input_tokens || 0
 					cacheReadTokens += cache_read_input_tokens || 0
 					if ((cache_creation_input_tokens || 0) > 0 || (cache_read_input_tokens || 0) > 0) {
-						console.debug(
+						debugLog(
 							`[AnthropicHandler] ${summarizePromptCacheUsage({ cacheReadInputTokens: cache_read_input_tokens ?? undefined, cacheCreationInputTokens: cache_creation_input_tokens ?? undefined })}`,
 						)
 					}
 					if (cache_read_input_tokens !== undefined) {
-						console.debug(
+						debugLog(
 							`[Anthropic Cache] read: ${cache_read_input_tokens}, ` +
 								`creation: ${cache_creation_input_tokens ?? 0}`,
 						)

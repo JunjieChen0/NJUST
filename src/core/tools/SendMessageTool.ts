@@ -137,8 +137,7 @@ export class SendMessageTool extends BaseTool<"send_message"> {
 					`The message has been queued and will be delivered when the target task processes its next message.`,
 			)
 		} catch (error) {
-			await handleError("sending message to agent", error)
-		}
+			await handleError("sending message to agent", error instanceof Error ? error : new Error(String(error)))}
 	}
 
 	override async handlePartial(task: Task, block: ToolUse<"send_message">): Promise<void> {

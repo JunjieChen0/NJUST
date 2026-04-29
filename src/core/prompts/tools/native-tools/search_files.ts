@@ -56,7 +56,7 @@ export default {
 					description: SEMANTIC_QUERY_PARAMETER_DESCRIPTION,
 				},
 			},
-			required: ["path", "regex", "file_pattern", "semantic_query"],
+			required: ["path", "regex"],
 			additionalProperties: false,
 		},
 	},

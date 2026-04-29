@@ -112,8 +112,10 @@ export class TaskBoard {
 	 * Get a single task by ID.
 	 */
 	async getTask(taskId: string): Promise<TaskBoardItem | undefined> {
-		await this.ensureLoaded()
-		return this.tasks.get(taskId)
+		return this.withLock(async () => {
+			await this.ensureLoaded()
+			return this.tasks.get(taskId)
+		})
 	}
 
 	/**
@@ -121,25 +123,27 @@ export class TaskBoard {
 	 * Results are sorted by updatedAt descending (newest first).
 	 */
 	async listTasks(filter?: TaskFilter): Promise<TaskBoardItem[]> {
-		await this.ensureLoaded()
+		return this.withLock(async () => {
+			await this.ensureLoaded()
 
-		let items = Array.from(this.tasks.values())
+			let items = Array.from(this.tasks.values())
 
-		if (filter?.status) {
-			items = items.filter((t) => t.status === filter.status)
-		}
-		if (filter?.priority) {
-			items = items.filter((t) => t.priority === filter.priority)
-		}
+			if (filter?.status) {
+				items = items.filter((t) => t.status === filter.status)
+			}
+			if (filter?.priority) {
+				items = items.filter((t) => t.priority === filter.priority)
+			}
 
-		// Sort by updatedAt descending
-		items.sort((a, b) => b.updatedAt - a.updatedAt)
+			// Sort by updatedAt descending
+			items.sort((a, b) => b.updatedAt - a.updatedAt)
 
-		if (filter?.limit && filter.limit > 0) {
-			items = items.slice(0, filter.limit)
-		}
+			if (filter?.limit && filter.limit > 0) {
+				items = items.slice(0, filter.limit)
+			}
 
-		return items
+			return items
+		})
 	}
 
 	/**

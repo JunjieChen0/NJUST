@@ -1,8 +1,12 @@
 import OpenAI from "openai"
 
-export function addCacheBreakpoints(systemPrompt: string, messages: OpenAI.Chat.ChatCompletionMessageParam[]) {
+export function addCacheBreakpoints(systemPrompt: string, messages: OpenAI.Chat.ChatCompletionMessageParam[]): OpenAI.Chat.ChatCompletionMessageParam[] {
+	// Shallow clone to avoid mutating the caller's array.
+	// Individual messages are cloned when their content needs to be modified.
+	const result = [...messages]
+
 	// Apply cache_control to system message at the message level
-	messages[0] = {
+	result[0] = {
 		role: "system",
 		content: systemPrompt,
 		// @ts-ignore-next-line
@@ -10,21 +14,29 @@ export function addCacheBreakpoints(systemPrompt: string, messages: OpenAI.Chat.
 	}
 
 	// Add cache_control to the last two user messages for conversation context caching
-	const lastTwoUserMessages = messages.filter((msg) => msg.role === "user").slice(-2)
+	const lastTwoUserIndices: number[] = []
+	for (let i = result.length - 1; i >= 0 && lastTwoUserIndices.length < 2; i--) {
+		if (result[i].role === "user") {
+			lastTwoUserIndices.unshift(i)
+		}
+	}
 
-	lastTwoUserMessages.forEach((msg) => {
+	for (const idx of lastTwoUserIndices) {
+		const msg = result[idx]
 		if (typeof msg.content === "string" && msg.content.length > 0) {
-			msg.content = [{ type: "text", text: msg.content }]
+			result[idx] = { ...msg, content: [{ type: "text" as const, text: msg.content }] } as OpenAI.Chat.ChatCompletionMessageParam
 		}
 
-		if (Array.isArray(msg.content)) {
-			// Find the last text part in the message content
-			let lastTextPart = msg.content.filter((part) => part.type === "text").pop()
+		const content = result[idx].content
+		if (Array.isArray(content)) {
+			let lastTextPart = content.filter((part) => part.type === "text").pop()
 
 			if (lastTextPart && lastTextPart.text && lastTextPart.text.length > 0) {
 				// @ts-ignore-next-line
 				lastTextPart["cache_control"] = { type: "ephemeral" }
 			}
 		}
-	})
+	}
+
+	return result
 }

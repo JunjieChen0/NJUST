@@ -51,7 +51,7 @@ export default {
 					description: "Maximum character length of the returned content. Default: 100000.",
 				},
 			},
-			required: ["url", "format", "maxLength"],
+			required: ["url"],
 			additionalProperties: false,
 		},
 	},

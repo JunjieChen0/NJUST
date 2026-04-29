@@ -95,7 +95,7 @@ describe("getEnvironmentDetails", () => {
 				getAndClearRecentlyModifiedFiles: vi.fn().mockReturnValue([]),
 			} as unknown as FileContextTracker,
 			rooIgnoreController: {
-				filterPaths: vi.fn((paths: string[]) => paths.join("\n")),
+				filterPaths: vi.fn((paths: string[]) => paths),
 				cwd: mockCwd,
 				ignoreInstance: {},
 				disposables: [],

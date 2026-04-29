@@ -1,5 +1,6 @@
 import * as vscode from "vscode"
 
+import { debugLog } from "../../utils/debugLog"
 /** Task-scoped domain events (B.1). */
 export type TaskEventName =
 	| "task:started"
@@ -81,7 +82,7 @@ export const taskEventBus = new TaskEventBus()
 /** Enable verbose logging when NODE_ENV === "development" or TASK_EVENT_BUS_DEBUG=1 */
 export function enableTaskEventBusDebugLogging(): void {
 	taskEventBus.setMiddleware((event, payload, next) => {
-		console.debug("[TaskEventBus]", event, payload)
+		debugLog("[TaskEventBus]", event, payload)
 		next()
 	})
 }

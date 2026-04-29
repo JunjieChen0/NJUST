@@ -5,17 +5,31 @@ export type PromptTokenBudget = {
 }
 
 const MIN_SYSTEM_PROMPT_TOKENS = 1200
+const SYSTEM_PROMPT_BUDGET_RATIO = 0.15
+const TOOL_DEFINITION_BUDGET_RATIO = 0.10
+const DIALOG_HISTORY_BUDGET_RATIO = 0.50
 
 export function estimatePromptTokens(text: string): number {
 	if (!text) return 0
-	return Math.ceil(text.length / 3.5)
+	// Count CJK characters which use ~1.5-2 tokens each vs ~3.5 chars/token for Latin script
+	let cjk = 0
+	let other = 0
+	for (const ch of text) {
+		const cp = ch.codePointAt(0)!
+		if ((cp >= 0x4e00 && cp <= 0x9fff) || (cp >= 0x3400 && cp <= 0x4dbf) || (cp >= 0x3040 && cp <= 0x30ff) || (cp >= 0xac00 && cp <= 0xd7af)) {
+			cjk++
+		} else {
+			other++
+		}
+	}
+	return Math.ceil(cjk * 0.6 + other / 3.5)
 }
 
 export function derivePromptTokenBudget(contextWindow?: number): PromptTokenBudget | null {
 	if (!contextWindow || contextWindow <= 0) return null
-	const systemPromptMaxTokens = Math.max(MIN_SYSTEM_PROMPT_TOKENS, Math.floor(contextWindow * 0.15))
-	const toolDefinitionMaxTokens = Math.max(600, Math.floor(contextWindow * 0.1))
-	const dialogHistoryMinTokens = Math.max(2000, Math.floor(contextWindow * 0.5))
+	const systemPromptMaxTokens = Math.max(MIN_SYSTEM_PROMPT_TOKENS, Math.floor(contextWindow * SYSTEM_PROMPT_BUDGET_RATIO))
+	const toolDefinitionMaxTokens = Math.max(600, Math.floor(contextWindow * TOOL_DEFINITION_BUDGET_RATIO))
+	const dialogHistoryMinTokens = Math.max(2000, Math.floor(contextWindow * DIALOG_HISTORY_BUDGET_RATIO))
 	return {
 		systemPromptMaxTokens,
 		toolDefinitionMaxTokens,
@@ -28,6 +42,30 @@ function trimToTokenBudget(text: string, maxTokens: number): string {
 	if (text.length <= maxChars) return text
 	const head = text.slice(0, Math.max(0, maxChars - 64)).trimEnd()
 	return `${head}\n\n[Prompt section truncated due to token budget]`
+}
+
+/**
+ * Fill dynamic prompt from ordered segments: first segments get tokens first (highest priority).
+ * Use this so mode instructions and objective are not dropped when the tail of a single string would be truncated.
+ */
+export function mergeDynamicPromptSegmentsByTokenBudget(segments: readonly string[], maxTokens: number): string {
+	const parts: string[] = []
+	let remaining = Math.max(0, maxTokens)
+	for (const seg of segments) {
+		const t = seg?.trim()
+		if (!t) continue
+		const need = estimatePromptTokens(t)
+		if (need <= remaining) {
+			parts.push(t)
+			remaining -= need
+		} else {
+			if (remaining > 80) {
+				parts.push(trimToTokenBudget(t, remaining))
+			}
+			break
+		}
+	}
+	return parts.join("\n\n")
 }
 
 export type SectionBudget = {
@@ -63,16 +101,26 @@ export function trimSectionsByBudget(sections: SectionBudget[], maxTokens: numbe
 	return retained
 }
 
-export function applySystemPromptBudget(staticPart: string, dynamicPart: string, contextWindow?: number): {
+export function applySystemPromptBudget(
+	staticPart: string,
+	dynamicPart: string | readonly string[],
+	contextWindow?: number,
+): {
 	staticPart: string
 	dynamicPart: string
 } {
 	const budget = derivePromptTokenBudget(contextWindow)
-	if (!budget) return { staticPart, dynamicPart }
+	let dynamicCombined: string
+	if (Array.isArray(dynamicPart)) {
+		dynamicCombined = mergeDynamicPromptSegmentsByTokenBudget(dynamicPart, Infinity)
+	} else {
+		dynamicCombined = dynamicPart as string
+	}
+	if (!budget) return { staticPart, dynamicPart: dynamicCombined }
 
-	const total = estimatePromptTokens(staticPart) + estimatePromptTokens(dynamicPart)
+	const total = estimatePromptTokens(staticPart) + estimatePromptTokens(dynamicCombined)
 	if (total <= budget.systemPromptMaxTokens) {
-		return { staticPart, dynamicPart }
+		return { staticPart, dynamicPart: dynamicCombined }
 	}
 
 	const staticTokens = estimatePromptTokens(staticPart)
@@ -86,8 +134,11 @@ export function applySystemPromptBudget(staticPart: string, dynamicPart: string,
 	}
 
 	const allowedDynamic = Math.max(200, budget.systemPromptMaxTokens - staticTokens)
+	const trimmedDynamic = Array.isArray(dynamicPart)
+		? mergeDynamicPromptSegmentsByTokenBudget(dynamicPart, allowedDynamic)
+		: trimToTokenBudget(dynamicPart as string, allowedDynamic)
 	return {
 		staticPart,
-		dynamicPart: trimToTokenBudget(dynamicPart, allowedDynamic),
+		dynamicPart: trimmedDynamic,
 	}
 }

@@ -66,7 +66,7 @@ export default {
 					description: CONTEXT_LINES_PARAMETER_DESCRIPTION,
 				},
 			},
-			required: ["pattern", "path", "include", "exclude", "contextLines"],
+			required: ["pattern"],
 			additionalProperties: false,
 		},
 	},

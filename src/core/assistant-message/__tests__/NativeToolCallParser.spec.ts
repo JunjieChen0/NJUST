@@ -1,5 +1,65 @@
 import { describe, it, expect, beforeEach } from "vitest"
+import { toolNames } from "@njust-ai-cj/types"
 import { NativeToolCallParser } from "../NativeToolCallParser"
+import { getNativeTools } from "../../prompts/tools/native-tools"
+import { toolParamNames } from "../../../shared/tools"
+
+function sampleValueForSchema(schema: any): unknown {
+	if (!schema || typeof schema !== "object") {
+		return "value"
+	}
+	if (Array.isArray(schema.enum) && schema.enum.length > 0) {
+		return schema.enum.find((value: unknown) => value !== null) ?? schema.enum[0]
+	}
+	const type = Array.isArray(schema.type) ? schema.type.find((value: string) => value !== "null") : schema.type
+	switch (type) {
+		case "integer":
+		case "number":
+			return 1
+		case "boolean":
+			return false
+		case "array":
+			return [sampleValueForSchema(schema.items)]
+		case "object": {
+			const result: Record<string, unknown> = {}
+			for (const key of schema.required ?? []) {
+				result[key] = sampleValueForSchema(schema.properties?.[key])
+			}
+			return result
+		}
+		case "string":
+		default:
+			return "value"
+	}
+}
+
+function sampleArgsForTool(tool: ReturnType<typeof getNativeTools>[number]): Record<string, unknown> {
+	const parameters = "function" in tool ? tool.function.parameters as any : undefined
+	const result: Record<string, unknown> = {}
+	for (const key of parameters?.required ?? []) {
+		result[key] = sampleValueForSchema(parameters.properties?.[key])
+	}
+
+	switch ("function" in tool ? tool.function.name : "") {
+		case "read_file":
+			result.path = "src/package.json"
+			break
+		case "ask_followup_question":
+			result.question = "Choose an option"
+			result.follow_up = [{ text: "Continue" }]
+			break
+		case "notebook_edit":
+			result.action = "delete"
+			break
+		case "lsp":
+			result.action = "symbols"
+			result.filePath = "."
+			result.symbolName = "Task"
+			break
+	}
+
+	return result
+}
 
 describe("NativeToolCallParser", () => {
 	beforeEach(() => {
@@ -8,6 +68,19 @@ describe("NativeToolCallParser", () => {
 	})
 
 	describe("parseToolCall", () => {
+		it("keeps exposed native tool definitions aligned with shared tool metadata", () => {
+			for (const tool of getNativeTools({ supportsImages: true })) {
+				if (!("function" in tool)) continue
+				const toolName = tool.function.name
+				expect(toolNames, `Tool '${toolName}' must be listed in toolNames`).toContain(toolName)
+
+				const parameters = tool.function.parameters as any
+				for (const key of Object.keys(parameters?.properties ?? {})) {
+					expect(toolParamNames, `Parameter '${key}' for '${toolName}' must be listed in toolParamNames`).toContain(key)
+				}
+			}
+		})
+
 		describe("read_file tool", () => {
 			it("should parse minimal single-file read_file args", () => {
 				const toolCall = {
@@ -324,6 +397,75 @@ describe("NativeToolCallParser", () => {
 					expect(na.recursive).toBe(false)
 				}
 			})
+		})
+
+		describe("registered tools without specialized parser cases", () => {
+			it("preserves nativeArgs for a known deferred tool", () => {
+				const toolCall = {
+					id: "toolu_grep_1",
+					name: "grep" as const,
+					arguments: JSON.stringify({
+						pattern: "TODO",
+						path: "src",
+						include: "*.ts",
+					}),
+				}
+
+				const result = NativeToolCallParser.parseToolCall(toolCall)
+
+				expect(result).not.toBeNull()
+				expect(result?.type).toBe("tool_use")
+				if (result?.type === "tool_use") {
+					expect(result.name).toBe("grep")
+					expect(result.nativeArgs).toEqual({
+						pattern: "TODO",
+						path: "src",
+						include: "*.ts",
+					})
+				}
+			})
+
+			it("does not rewrite existing tool names through compatibility aliases", () => {
+				const toolCall = {
+					id: "toolu_apply_diff_1",
+					name: "apply_diff" as const,
+					arguments: JSON.stringify({
+						path: "src/a.ts",
+						diff: "<<<<<<< SEARCH\nold\n=======\nnew\n>>>>>>> REPLACE",
+					}),
+				}
+
+				const result = NativeToolCallParser.parseToolCall(toolCall)
+
+				expect(result).not.toBeNull()
+				expect(result?.type).toBe("tool_use")
+				if (result?.type === "tool_use") {
+					expect(result.name).toBe("apply_diff")
+					expect(result.nativeArgs).toEqual({
+						path: "src/a.ts",
+						diff: "<<<<<<< SEARCH\nold\n=======\nnew\n>>>>>>> REPLACE",
+					})
+				}
+			})
+		})
+
+		it("constructs nativeArgs for every exposed native tool", () => {
+			const tools = getNativeTools({ supportsImages: true }).filter((tool) => "function" in tool)
+
+			for (const tool of tools) {
+				const toolName = tool.function.name as any
+				const result = NativeToolCallParser.parseToolCall({
+					id: `toolu_${toolName}`,
+					name: toolName,
+					arguments: JSON.stringify(sampleArgsForTool(tool)),
+				})
+
+				expect(result, `Expected ${toolName} to parse`).not.toBeNull()
+				expect(result?.type, `Expected ${toolName} to be a tool_use`).toBe("tool_use")
+				if (result?.type === "tool_use") {
+					expect(result.nativeArgs, `Expected ${toolName} to have nativeArgs`).toBeDefined()
+				}
+			}
 		})
 	})
 

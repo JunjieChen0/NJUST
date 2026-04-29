@@ -4,7 +4,7 @@ import type { ModelInfo } from "../model.js"
 // https://platform.minimax.io/docs/guides/pricing
 // https://platform.minimax.io/docs/api-reference/text-openai-api
 // https://platform.minimax.io/docs/api-reference/text-anthropic-api
-// Updated: March 2026
+// Updated: April 2026 (Bedrock: minimax.minimax-m2.1)
 export type MinimaxModelId = keyof typeof minimaxModels
 export const minimaxDefaultModelId: MinimaxModelId = "MiniMax-M2.7"
 

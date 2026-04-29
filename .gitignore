@@ -64,3 +64,5 @@ plans/
 .specify/specs/
 
 roo-cli-*.tar.gz*
+cangjie_lsp_*.txt
+log.txt

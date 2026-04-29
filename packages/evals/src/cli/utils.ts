@@ -1,3 +1,4 @@
+import * as crypto from "crypto"
 import * as fs from "fs"
 import * as fsp from "fs/promises"
 import * as path from "path"

@@ -128,6 +128,7 @@ export class CjfmtFormatter implements vscode.DocumentFormattingEditProvider, vs
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			this.outputChannel.appendLine(`[CjFmt] Error: ${message}`)
+			vscode.window.showErrorMessage(`Cangjie format failed: ${message}`)
 			return []
 		} finally {
 			try { fs.unlinkSync(tmpInput) } catch {}

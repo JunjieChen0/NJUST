@@ -35,6 +35,21 @@ export type ApiMessage = Anthropic.MessageParam & {
 	truncationParent?: string
 	// Identifies a message as a truncation boundary marker
 	isTruncationMarker?: boolean
+	// Metadata attached to summary messages recording compaction details
+	compactMetadata?: CompactMetadata
+}
+
+export type CompactMetadata = {
+	trigger: "auto" | "manual" | "reactive"
+	preCompactTokenCount: number
+	postCompactTokenCount?: number
+	truePostCompactTokenCount?: number
+	messagesSummarized?: number
+	preservedSegment?: {
+		headIndex: number
+		tailIndex: number
+	}
+	timestamp?: number
 }
 
 export async function readApiMessages({

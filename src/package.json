@@ -3,7 +3,7 @@
 	"displayName": "NJUST_AI_CJ",
 	"description": "AI-powered coding assistant for NJUST",
 	"publisher": "JunjieChen-YuyaoJiang",
-	"version": "2026.4.16",
+	"version": "2026.4.29",
 	"icon": "assets/icons/icon.png",
 	"galleryBanner": {
 		"color": "#617A91",
@@ -62,6 +62,19 @@
 					".cj"
 				],
 				"configuration": "./languages/cangjie-language-configuration.json"
+			},
+			{
+				"id": "matlab",
+				"aliases": [
+					"Matlab",
+					"MATLAB",
+					"Octave"
+				],
+				"extensions": [
+					".m",
+					".mlx"
+				],
+				"configuration": "./languages/matlab-language-configuration.json"
 			}
 		],
 		"grammars": [
@@ -297,6 +310,18 @@
 				"category": "%configuration.title%"
 			},
 			{
+				"command": "njust-ai-cj.openMarkdownPreview",
+				"title": "%command.openMarkdownPreview.title%",
+				"icon": "$(open-preview)",
+				"category": "%configuration.title%"
+			},
+			{
+				"command": "njust-ai-cj.latexCompile",
+				"title": "%command.latexCompile.title%",
+				"icon": "$(output)",
+				"category": "LaTeX"
+			},
+			{
 				"command": "njust-ai-cj.cangjieBuild",
 				"title": "Cangjie: Build (cjpm build)",
 				"category": "Cangjie"
@@ -447,6 +472,10 @@
 			],
 			"commandPalette": [
 				{
+					"command": "njust-ai-cj.latexCompile",
+					"when": "editorLangId == latex || editorLangId == tex"
+				},
+				{
 					"command": "njust-ai-cj.cangjieBuild",
 					"when": "editorLangId == cangjie"
 				},
@@ -534,6 +563,11 @@
 					"command": "njust-ai-cj.popoutButtonClicked",
 					"group": "overflow@2",
 					"when": "activeWebviewPanelId == njust-ai-cj.TabPanelProvider"
+				},
+				{
+					"command": "njust-ai-cj.latexCompile",
+					"group": "navigation@9",
+					"when": "editorTextFocus && (editorLangId == latex || editorLangId == tex)"
 				}
 			]
 		},
@@ -592,6 +626,14 @@
 				"win": "alt+\\",
 				"linux": "alt+\\",
 				"when": "editorTextFocus"
+			},
+			{
+				"command": "njust-ai-cj.openMarkdownPreview",
+				"key": "ctrl+q",
+				"mac": "ctrl+q",
+				"win": "ctrl+q",
+				"linux": "ctrl+q",
+				"when": "editorTextFocus && editorLangId == markdown"
 			}
 		],
 		"submenus": [
@@ -926,6 +968,38 @@
 					"maximum": 12000,
 					"markdownDescription": "Override the Cangjie Dev dynamic context token budget. When set to a positive value, this takes priority over the automatic model-scaled budget. When 0 (default), the budget is derived from the model's context window (e.g. 2400 for 16k, 4800 for 128k, 6000 for 200k+)."
 				},
+				"njust-ai-cj.latex.engine": {
+					"type": "string",
+					"enum": [
+						"latexmk",
+						"pdflatex"
+					],
+					"default": "latexmk",
+					"description": "Local LaTeX compiler driver. Uses TeX Live / MiKTeX on your machine (not Overleaf cloud). latexmk runs multiple passes for references; pdflatex runs a single pass."
+				},
+				"njust-ai-cj.latex.latexmkPath": {
+					"type": "string",
+					"default": "",
+					"description": "Path to latexmk (e.g. ...\\\\MiKTeX\\\\miktex\\\\bin\\\\x64\\\\latexmk.exe on Windows). Empty: try PATH, then common MiKTeX/TeX Live locations on Windows."
+				},
+				"njust-ai-cj.latex.pdflatexPath": {
+					"type": "string",
+					"default": "",
+					"description": "Path to pdflatex. Empty: try PATH, then common MiKTeX/TeX Live locations on Windows."
+				},
+				"njust-ai-cj.latex.openPdfAfterSuccess": {
+					"type": "boolean",
+					"default": true,
+					"description": "Open the generated PDF in VS Code after a successful compile."
+				},
+				"njust-ai-cj.latex.extraArgs": {
+					"type": "array",
+					"default": [],
+					"items": {
+						"type": "string"
+					},
+					"description": "Extra arguments passed to latexmk or pdflatex (after built-in flags)."
+				},
 				"njust-ai-cj.cangjieLsp.enabled": {
 					"type": "boolean",
 					"default": true,
@@ -998,6 +1072,16 @@
 					"default": false,
 					"description": "Use `cjc --dump-ast` for richer symbol indexing when cjc is available. Falls back to the regex parser on failure. Requires Cangjie SDK."
 				},
+				"njust-ai-cj.matlabTools.matlabPath": {
+					"type": "string",
+					"default": "",
+					"description": "MATLAB 可执行文件完整路径（matlab / matlab.exe；留空则自动检测 PATH 与常见安装目录）"
+				},
+				"njust-ai-cj.matlabTools.octavePath": {
+					"type": "string",
+					"default": "",
+					"description": "Octave 可执行文件完整路径（留空则自动检测 PATH；未安装 MATLAB 时使用）"
+				},
 				"njust-ai-cj.cloudAgent.serverUrl": {
 					"type": "string",
 					"default": "http://120.79.250.232:8765",
@@ -1010,8 +1094,8 @@
 				},
 				"njust-ai-cj.cloudAgent.apiKey": {
 					"type": "string",
-					"default": "X-20060507012610261002",
-					"description": "X-API-Key for Cloud Agent (must match server CLOUD_AGENT_MOCK_API_KEY). A default is bundled for zero-configuration installs; clear or override for your own server. Keys ship inside the VSIX—do not treat as a secret for public distribution; prefer unsetting CLOUD_AGENT_MOCK_API_KEY on the server and using network controls, or rotate after releases."
+					"default": "",
+					"description": "X-API-Key for Cloud Agent (must match server CLOUD_AGENT_MOCK_API_KEY). Set this in your user settings before connecting to a Cloud Agent server."
 				},
 				"njust-ai-cj.cloudAgent.requestTimeoutMs": {
 					"type": "number",

@@ -194,7 +194,9 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 		const parsedError = extractErrorFromMetadataRaw(rawString)
 		const rawErrorMessage = parsedError || error?.message || "Unknown error"
 
-		throw new Error(`OpenRouter API Error ${error?.code}: ${rawErrorMessage}`)
+		const orError = new Error(`OpenRouter API Error ${error?.code}: ${rawErrorMessage}`) as Error & { status?: number }
+		if (error?.code) orError.status = error.code
+		throw orError
 	}
 
 	override async *createMessage(
@@ -293,9 +295,9 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 		// TODO: Add a `promptCacheStratey` field to `ModelInfo`.
 		if (OPEN_ROUTER_PROMPT_CACHING_MODELS.has(modelId)) {
 			if (modelId.startsWith("google")) {
-				addGeminiCacheBreakpoints(systemPrompt, openAiMessages)
+				openAiMessages = addGeminiCacheBreakpoints(systemPrompt, openAiMessages)
 			} else {
-				addAnthropicCacheBreakpoints(systemPrompt, openAiMessages)
+				openAiMessages = addAnthropicCacheBreakpoints(systemPrompt, openAiMessages)
 			}
 		}
 
@@ -476,7 +478,7 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 			// Process finish_reason to emit tool_call_end events
 			// This ensures tool calls are finalized even if the stream doesn't properly close
 			if (finishReason) {
-				const endEvents = this.options.toolCallParser!.processFinishReason(finishReason)
+				const endEvents = this.options.toolCallParser?.processFinishReason(finishReason) ?? [ ]
 				for (const event of endEvents) {
 					yield event
 				}

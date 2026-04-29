@@ -3,6 +3,7 @@ import path from "path"
 import { type ClineSayTool } from "@njust-ai-cj/types"
 
 import { Task } from "../task/Task"
+import { validateRegexPattern } from "../../utils/safeRegex"
 import { getReadablePath } from "../../utils/path"
 import { ignoreAbortError } from "../../utils/errorHandling"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
@@ -47,10 +48,9 @@ export class GrepTool extends BaseTool<"grep"> {
 		if (!params.pattern || params.pattern.trim() === "") {
 			return { valid: false, error: "Search pattern is required and cannot be empty." }
 		}
-		try {
-			new RegExp(params.pattern)
-		} catch {
-			return { valid: false, error: `Invalid regex pattern: ${params.pattern}` }
+		const safety = validateRegexPattern(params.pattern)
+		if (!safety.valid) {
+			return { valid: false, error: `Unsafe regex: ${safety.reason}` }
 		}
 		return { valid: true }
 	}

@@ -63,8 +63,9 @@ export class PowerShellTool extends BaseTool<"execute_command"> {
 				return
 			}
 
-			// Wrap the command for PowerShell execution
-			const psCommand = `powershell.exe -NoProfile -NonInteractive -Command "${command.replace(/"/g, '\\"')}"`
+			// Wrap using -EncodedCommand (Base64) to prevent PowerShell metacharacter injection
+			const encoded = Buffer.from(command, "utf-8").toString("base64")
+			const psCommand = `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`
 
 			task.consecutiveMistakeCount = 0
 

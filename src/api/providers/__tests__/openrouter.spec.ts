@@ -165,7 +165,7 @@ describe("OpenRouterHandler", () => {
 
 			const result = await handler.fetchModel()
 			expect(result.id).toBe("openai/gpt-4o")
-			expect(result.info.excludedTools).toContain("apply_diff")
+			
 			expect(result.info.excludedTools).toContain("write_to_file")
 			expect(result.info.includedTools).toContain("apply_patch")
 		})
@@ -179,7 +179,7 @@ describe("OpenRouterHandler", () => {
 			const result = await handler.fetchModel()
 			expect(result.id).toBe("openai/o1")
 			// Should have the new exclusions
-			expect(result.info.excludedTools).toContain("apply_diff")
+			
 			expect(result.info.excludedTools).toContain("write_to_file")
 			// Should preserve existing exclusions
 			expect(result.info.excludedTools).toContain("existing_excluded")

@@ -49,5 +49,4 @@
 !bundled-cangjie-corpus/
 !bundled-cangjie-corpus/**
 
-# Include .env file for telemetry
-!.env
+# .env must NOT be included — secrets are injected via build-time environment variables only.

@@ -18,6 +18,7 @@ import {
 	formatCompileHistoryPromptSection,
 	getCompileHistoryRevision,
 } from "../../../services/cangjie-lsp/cangjieCompileHistory"
+import type { CangjieContextIntensity } from "../../task/CangjieRuntimePolicy"
 
 let corpusSingleton: { instance: CangjieCorpusSemanticIndex; root: string } | null = null
 
@@ -972,7 +973,7 @@ async function parseCjpmTomlWithMeta(cwd: string): Promise<{ info: CjpmProjectIn
 	try {
 		const st = await fs.promises.stat(tomlPath)
 		const cached = cjpmTomlMetaCache.get(cwd)
-		if (cached && cached.mtimeMs === st.mtimeMs && now - cached.time < L1_CONTEXT_CACHE_TTL_MS) {
+		if (cached && cached.mtimeMs === st.mtimeMs && now - cached.time < PROJECT_OVERVIEW_CACHE_TTL_MS) {
 			return cached.value
 		}
 		const content = await fs.promises.readFile(tomlPath, "utf-8")
@@ -1253,6 +1254,7 @@ function learnedPatternMatchesDiagnostics(p: LearnedFixPattern, diagnostics: vsc
 	if (!ep || diagnostics.length === 0) return false
 	const epTypes = primitiveTypeTokens(p.errorPattern)
 	const epPair = extractOrderedPrimitiveTypePair(p.errorPattern)
+	const hasExplicitCode = Boolean(p.diagnosticCode?.trim())
 	return diagnostics.some((d) => {
 		const msg = normalizeForSimilarity(d.message).slice(0, 220)
 		if (!msg) return false
@@ -1265,7 +1267,12 @@ function learnedPatternMatchesDiagnostics(p: LearnedFixPattern, diagnostics: vsc
 		const tagged = p.errorPattern.match(/^\[([^\]]+)\]/)?.[1]?.toLowerCase()
 		if (code && tagged && code !== tagged) return false
 		if (code && (tagged === code || ep.includes(`[${code}]`) || msg.includes(`[${code}]`))) return true
-		if (ep.length >= 10 && (msg.includes(ep) || ep.includes(msg))) return true
+		// Stricter substring match when pattern does not pin a diagnostic code
+		if (!hasExplicitCode && !code) {
+			if (ep.length >= 14 && (msg.includes(ep) || (ep.length <= 80 && ep.includes(msg)))) return true
+		} else if (ep.length >= 14 && (msg.includes(ep) || ep.includes(msg))) {
+			return true
+		}
 		const msgTypes = primitiveTypeTokens(d.message)
 		const msgPair = extractOrderedPrimitiveTypePair(d.message)
 		const typeCtx = /mismatch|不匹配|expected|需要|found|得到|类型|type/.test(ep + msg)
@@ -1285,9 +1292,9 @@ function learnedPatternMatchesDiagnostics(p: LearnedFixPattern, diagnostics: vsc
 			kw > 0 ||
 			[...LEARNED_FIX_CATEGORY_LEXICON].some((w) => w.length >= 2 && ep.includes(w) && msg.includes(w))
 		if (!roughSub) return false
-		let threshold = 0.75
+		let threshold = hasExplicitCode ? 0.75 : 0.82
 		threshold -= Math.min(4, kw) * 0.05
-		threshold = Math.max(0.6, threshold)
+		threshold = Math.max(hasExplicitCode ? 0.6 : 0.68, threshold)
 		return stringSimilarity(ep, msg) >= threshold
 	})
 }
@@ -1398,8 +1405,11 @@ function loadLearnedFixesSection(cwd: string, diagnostics: vscode.Diagnostic[]):
 
 	try {
 		const displayable = effective.filter((p) => {
+			const s = p.successCount ?? 0
+			const f = p.failCount ?? 0
+			if (f >= 3 && f > s) return false
 			const rate = learnedPatternSuccessRate(p)
-			return rate >= 0.4 || (p.successCount ?? 0) + (p.failCount ?? 0) < 3
+			return rate >= 0.4 || s + f < 3
 		})
 		if (displayable.length === 0) return null
 
@@ -2133,12 +2143,8 @@ function buildContextualCodingRules(
 	return parts.join("\n")
 }
 
-/**
- * Generate the Cangjie context section for the system prompt.
- * Only included when mode is "cangjie".
- */
-let l1ContextCache: { key: string; value: string | null; time: number } | null = null
-type L2ContextBundle = {
+let projectOverviewCache: { key: string; value: string | null; time: number } | null = null
+type HeavyContextBundle = {
 	symbols: string | null
 	importedSymbols: string | null
 	stdlibHints: string | null
@@ -2146,10 +2152,12 @@ type L2ContextBundle = {
 	fewShot: string | null
 }
 
-let l2ContextCache: { key: string; value: L2ContextBundle; time: number } | null = null
-let l3ContextCache: { key: string; value: string; time: number } | null = null
-const L1_CONTEXT_CACHE_TTL_MS = 60_000
-const L2_CONTEXT_CACHE_TTL_MS = 30_000
+let heavyContextCache: { key: string; value: HeavyContextBundle; time: number } | null = null
+let contextSectionCache: { key: string; value: string; time: number } | null = null
+/** Concurrent builds for the same full context key share one async computation. */
+const contextSectionInFlightByKey = new Map<string, Promise<string>>()
+const PROJECT_OVERVIEW_CACHE_TTL_MS = 60_000
+const HEAVY_CONTEXT_CACHE_TTL_MS = 30_000
 
 let l3TtlConfigCache: { value: number; fetchedAt: number } | null = null
 const L3_TTL_CONFIG_CACHE_MS = 30_000
@@ -2159,7 +2167,7 @@ export function bumpCangjieL3TtlConfigCache(): void {
 	l3TtlConfigCache = null
 }
 
-function getL3ContextCacheTtlMs(): number {
+function getContextSectionCacheTtlMs(): number {
 	const now = Date.now()
 	if (l3TtlConfigCache && now - l3TtlConfigCache.fetchedAt < L3_TTL_CONFIG_CACHE_MS) {
 		return l3TtlConfigCache.value
@@ -2172,9 +2180,10 @@ function getL3ContextCacheTtlMs(): number {
 
 /** Call when workspace `.njust_ai/rules-cangjie/` (or equivalent) changes so the next prompt rebuild picks up edits. */
 export function invalidateCangjieContextSectionCache(): void {
-	l1ContextCache = null
-	l2ContextCache = null
-	l3ContextCache = null
+	projectOverviewCache = null
+	heavyContextCache = null
+	contextSectionCache = null
+	contextSectionInFlightByKey.clear()
 	styleFewShotCache = null
 	hoverMemo = null
 	contextFileLru.clear()
@@ -2182,9 +2191,10 @@ export function invalidateCangjieContextSectionCache(): void {
 	cjpmTomlMetaCache.clear()
 }
 
-/** Invalidate only the L3 full-context cache (e.g. on save) — lighter than {@link invalidateCangjieContextSectionCache}. */
+/** Invalidate only the assembled full-context cache (e.g. on save) — lighter than {@link invalidateCangjieContextSectionCache}. */
 export function invalidateCangjieL3ContextCache(): void {
-	l3ContextCache = null
+	contextSectionCache = null
+	contextSectionInFlightByKey.clear()
 }
 
 /**
@@ -2434,28 +2444,111 @@ function computeContextCacheKey(cwd: string, diagSummaryHash: number): string {
 	return `${cwd}|${openFiles}|${diagSummaryHash}|ch:${getCompileHistoryRevision(cwd)}`
 }
 
+function findCjpmTomlAncestor(startDir: string, maxHops = 10): string | null {
+	let dir = path.resolve(startDir)
+	for (let i = 0; i < maxHops; i++) {
+		const toml = path.join(dir, "cjpm.toml")
+		if (fs.existsSync(toml)) return toml
+		const parent = path.dirname(dir)
+		if (parent === dir) break
+		dir = parent
+	}
+	return null
+}
+
+function workspaceHasOpenCangjieFile(): boolean {
+	const docs = vscode.workspace.textDocuments ?? []
+	for (const doc of docs) {
+		if (doc.uri.scheme !== "file") continue
+		if (doc.languageId === "cangjie" || doc.fileName.endsWith(".cj")) {
+			return true
+		}
+	}
+	return false
+}
+
+function openCangjieDocumentsSignature(): string {
+	const docs = vscode.workspace.textDocuments ?? []
+	const keys: string[] = []
+	for (const doc of docs) {
+		if (doc.uri.scheme !== "file") continue
+		if (doc.languageId === "cangjie" || doc.fileName.endsWith(".cj")) {
+			keys.push(editorDocumentCacheKey(doc.uri))
+		}
+	}
+	return keys.sort().join("|")
+}
+
+/** 用户消息中是否出现仓颉工具链 / 语言相关关键词（Ask/Architect 注入语料时用）。 */
+const USER_MESSAGE_CANGJIE_HINT = /\b(cjpm|cjc|cjfmt|cjlint|cjdb|cjprof|cjcov)\b|仓颉|\.cj\b|cangjie/i
+
+export function userMessageSuggestsCangjie(text: string | undefined): boolean {
+	if (!text) return false
+	if (text.length > 400_000) return false
+	return USER_MESSAGE_CANGJIE_HINT.test(text)
+}
+
+/**
+ * Ask / Architect 下是否应附加与 Cangjie Dev 相同的动态语料（含语料库检索与工程上下文）。
+ */
+export function detectCangjieRelevanceForAuxiliaryModes(cwd: string, lastUserText?: string): boolean {
+	if (workspaceHasOpenCangjieFile()) return true
+	if (findCjpmTomlAncestor(cwd) != null) return true
+	if (userMessageSuggestsCangjie(lastUserText)) return true
+	return false
+}
+
+/**
+ * 系统提示缓存键片段：Cangjie Dev 恒为 `cj`；Ask/Architect 在命中相关性时为 `on|...`，否则 `off`。
+ */
+export function getCangjieSystemPromptCacheKeySuffix(cwd: string, mode: string, lastUserHint?: string): string {
+	if (mode === "cangjie") return "cj"
+	if (mode !== "ask" && mode !== "architect") return "na"
+	if (!detectCangjieRelevanceForAuxiliaryModes(cwd, lastUserHint)) return "off"
+	const fp = `${openCangjieDocumentsSignature()}|${findCjpmTomlAncestor(cwd) ?? "-"}|${simpleHash(lastUserHint ?? "")}`
+	return `on|${fp}`
+}
+
 // StructuredEditingContextPreparse is now imported from ./CangjieSymbolExtractor
 export type { StructuredEditingContextPreparse } from "./CangjieSymbolExtractor"
 
+/**
+ * Generate the Cangjie context section for the system prompt.
+ * Included for mode `cangjie`, and for `ask` / `architect` when
+ * {@link detectCangjieRelevanceForAuxiliaryModes} is true (same corpus pipeline as Cangjie Dev).
+ */
 export async function getCangjieContextSection(
 	cwd: string,
 	mode: string,
 	extensionPath?: string,
 	tokenBudget: number = DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET,
 	globalStoragePath?: string,
+	lastUserHintForRelevance?: string,
+	contextIntensity: CangjieContextIntensity = "full",
+	recentBuildRootCauses: string[] = [],
+	repairDirective?: string,
 ): Promise<string> {
-	if (mode !== "cangjie") return ""
+	const runCangjieContext =
+		mode === "cangjie" ||
+		((mode === "ask" || mode === "architect") &&
+			detectCangjieRelevanceForAuxiliaryModes(cwd, lastUserHintForRelevance))
+	if (!runCangjieContext) return ""
 
 	const diagSnapshot = collectDiagnosticSnapshot()
-	const l3Key = `${computeContextCacheKey(cwd, diagSnapshot.diagSummaryHash)}|tb:${tokenBudget}`
+	const contextSectionKey = `${computeContextCacheKey(cwd, diagSnapshot.diagSummaryHash)}|tb:${tokenBudget}|m:${mode}|intensity:${contextIntensity}|rc:${simpleHash(recentBuildRootCauses.join("|"))}|rd:${simpleHash(repairDirective ?? "")}`
 	const now = Date.now()
-	const l3Ttl = getL3ContextCacheTtlMs()
-	if (l3ContextCache && l3ContextCache.key === l3Key && now - l3ContextCache.time < l3Ttl) {
-		return l3ContextCache.value
+	const contextSectionTtl = getContextSectionCacheTtlMs()
+	if (contextSectionCache && contextSectionCache.key === contextSectionKey && now - contextSectionCache.time < contextSectionTtl) {
+		return contextSectionCache.value
 	}
 
+	const inflight = contextSectionInFlightByKey.get(contextSectionKey)
+	if (inflight) return inflight
+
+	const p = (async (): Promise<string> => {
 	const docsBase = resolveCangjieDocsBasePath(extensionPath)
 	const docsExist = docsBase != null && fs.existsSync(docsBase)
+	const includeHeavyContext = contextIntensity === "full"
 
 	const prioritized: PrioritizedCangjieSection[] = []
 	let treeSectionPromise: Promise<string | null> = Promise.resolve(null)
@@ -2464,10 +2557,10 @@ export async function getCangjieContextSection(
 
 		// 0a. Project structure context (cjpm.toml) - L1 cache
 	const { info: projectInfo, cjpmRawHash } = await parseCjpmTomlWithMeta(cwd)
-	if (projectInfo) {
-		const l1Key = `${cwd}|${cjpmRawHash}|active:${activeFileInfo?.packageName ?? "-"}`
-		let overview = l1ContextCache && l1ContextCache.key === l1Key && now - l1ContextCache.time < L1_CONTEXT_CACHE_TTL_MS
-			? l1ContextCache.value
+		if (projectInfo) {
+		const projectOverviewKey = `${cwd}|${cjpmRawHash}|active:${activeFileInfo?.packageName ?? "-"}`
+		let overview = projectOverviewCache && projectOverviewCache.key === projectOverviewKey && now - projectOverviewCache.time < PROJECT_OVERVIEW_CACHE_TTL_MS
+			? projectOverviewCache.value
 			: null
 		if (overview === null) {
 			overview = buildCompactProjectOverviewSection(
@@ -2476,13 +2569,13 @@ export async function getCangjieContextSection(
 				activeFileInfo?.packageName ?? null,
 				activeFileInfo?.filePath ?? null,
 			)
-			l1ContextCache = { key: l1Key, value: overview, time: now }
+			projectOverviewCache = { key: projectOverviewKey, value: overview, time: now }
 		}
 		addPrioritized(prioritized, 490, overview)
 	}
 
 	// 0b. package declaration verification + cjpm tree
-	if (projectInfo) {
+	if (projectInfo && includeHeavyContext) {
 		if (!projectInfo.isWorkspace) {
 			const rootPkgName = projectInfo.name || undefined
 			const pkgTree = getCachedPackageHierarchy(cwd, projectInfo.srcDir, rootPkgName)
@@ -2512,37 +2605,39 @@ export async function getCangjieContextSection(
 
 	// Symbol scanning, import analysis, and doc mapping are only performed
 	// when a cjpm.toml project exists, to keep context lightweight otherwise.
-	if (projectInfo) {
+	if (projectInfo && includeHeavyContext) {
 		const idx = CangjieSymbolIndex.getInstance()
 		const importsHash = simpleHash([...imports].sort().join("|"))
 		const learnedFixesMtime = getLearnedFixesFileMtime(cwd)
-		const l2Key = [
+		const heavyContextKey = [
 			cwd,
 			`idx:${idx?.fileCount ?? 0}:${idx?.symbolCount ?? 0}`,
 			`imports:${imports.length}:${importsHash}`,
 			`lf:${learnedFixesMtime}`,
 			`ws:${projectInfo.isWorkspace ? 1 : 0}`,
 		].join("::")
-		let l2Bundle: L2ContextBundle | null = null
-		if (l2ContextCache && l2ContextCache.key === l2Key && now - l2ContextCache.time < L2_CONTEXT_CACHE_TTL_MS) {
-			l2Bundle = l2ContextCache.value
+		let heavyBundle: HeavyContextBundle | null = null
+		if (heavyContextCache && heavyContextCache.key === heavyContextKey && now - heavyContextCache.time < HEAVY_CONTEXT_CACHE_TTL_MS) {
+			heavyBundle = heavyContextCache.value
 		} else {
-			l2Bundle = {
+			heavyBundle = {
 				symbols: editorSymbolsSnapshot,
 				importedSymbols: resolveImportedSymbols(imports, cwd, projectInfo),
 				stdlibHints: buildStdlibSignatureHintsSection(imports, docsBase, globalStoragePath),
 				workspaceSummary: projectInfo.isWorkspace ? buildWorkspaceSymbolSummary(projectInfo, cwd) : null,
 				fewShot: buildCangjieStyleFewShotSection(cwd, imports, rawDiagnostics, cjpmRawHash),
 			}
-			l2ContextCache = { key: l2Key, value: l2Bundle, time: now }
+			heavyContextCache = { key: heavyContextKey, value: heavyBundle, time: now }
 		}
-		addPrioritized(prioritized, 380, l2Bundle.symbols || undefined)
-		addPrioritized(prioritized, 390, l2Bundle.importedSymbols || undefined)
-		addPrioritized(prioritized, 395, l2Bundle.stdlibHints || undefined)
-		addPrioritized(prioritized, 528, l2Bundle.workspaceSummary || undefined)
+		addPrioritized(prioritized, 380, heavyBundle.symbols || undefined)
+		addPrioritized(prioritized, 390, heavyBundle.importedSymbols || undefined)
+		addPrioritized(prioritized, 395, heavyBundle.stdlibHints || undefined)
+		if (includeHeavyContext) {
+			addPrioritized(prioritized, 528, heavyBundle.workspaceSummary || undefined)
+		}
 
 		// 1. Import-based documentation context
-		if (imports.length > 0 && docsBase && docsExist) {
+		if (includeHeavyContext && imports.length > 0 && docsBase && docsExist) {
 			const docMappings = mapImportsToDocPaths(imports)
 			if (docMappings.length > 0) {
 				const importContext = docMappings
@@ -2569,7 +2664,21 @@ export async function getCangjieContextSection(
 			? mapDiagnosticsToDocContext(diagnostics, docsBase, conversionByMessage)
 			: []
 
-	addPrioritized(prioritized, 95, formatCompileHistoryPromptSection(cwd))
+	if (includeHeavyContext) {
+		addPrioritized(prioritized, 95, formatCompileHistoryPromptSection(cwd))
+	}
+
+	if (recentBuildRootCauses.length > 0) {
+		addPrioritized(
+			prioritized,
+			92,
+			`## Recent Cangjie Build Root Causes\n- ${recentBuildRootCauses.slice(0, 4).join("\n- ")}`,
+		)
+	}
+
+	if (repairDirective) {
+		addPrioritized(prioritized, 93, `## Cangjie Compile-Repair Directive\n${repairDirective}`)
+	}
 
 	// 1b. Dynamic coding rules injection (context-aware).
 	addPrioritized(
@@ -2578,7 +2687,9 @@ export async function getCangjieContextSection(
 		buildContextualCodingRules(imports, projectInfo, rawDiagnostics, errorSections.length > 0) ||
 			undefined,
 	)
-	addPrioritized(prioritized, 850, l2ContextCache?.value.fewShot || undefined)
+	if (includeHeavyContext) {
+		addPrioritized(prioritized, 850, heavyContextCache?.value.fewShot || undefined)
+	}
 
 	// 2. Error/diagnostic context (sampled + merged messages for prompt), kept late in final order.
 	let diagnosticSection: string | null = null
@@ -2596,7 +2707,7 @@ export async function getCangjieContextSection(
 	}
 
 	// 2a. Intent-matched few-shot from bundled corpus extra/
-	if (docsBase && docsExist) {
+	if (includeHeavyContext && docsBase && docsExist) {
 		addPrioritized(
 			prioritized,
 			750,
@@ -2605,7 +2716,7 @@ export async function getCangjieContextSection(
 	}
 
 	// 2b. Auto-inject corpus search results based on imports and diagnostics
-	if (docsBase && docsExist) {
+	if (includeHeavyContext && docsBase && docsExist) {
 		try {
 			const corpusIndex = getCorpusSingleton(docsBase)
 			if (corpusIndex.isAvailable) {
@@ -2690,14 +2801,23 @@ export async function getCangjieContextSection(
 	}
 	if (packed.length === 0) return ""
 
+	const auxiliaryNote =
+		mode === "ask" || mode === "architect"
+			? "\n（以下仓颉语料与工程上下文仅供查阅；请保持当前 Ask/Architect 模式的角色与职责。）"
+			: ""
+
 	const result = `====
 
-CANGJIE DEVELOPMENT CONTEXT
+CANGJIE DEVELOPMENT CONTEXT${auxiliaryNote}
 
 ${packed.join("\n\n")}
 `
-	l3ContextCache = { value: result, key: l3Key, time: Date.now() }
+	contextSectionCache = { value: result, key: contextSectionKey, time: Date.now() }
 	return result
+	})()
+	contextSectionInFlightByKey.set(contextSectionKey, p)
+	void p.finally(() => contextSectionInFlightByKey.delete(contextSectionKey))
+	return p
 }
 
 /**

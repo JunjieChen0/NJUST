@@ -357,4 +357,25 @@ export class StaticPatternClassifier implements ClassifierStrategy {
 	): Promise<ClassifyResult> {
 		return this.classifySync(toolName, input, context)
 	}
+
+	/**
+	 * Start speculative classification in background. Call as soon as
+	 * the tool_use block arrives to pre-compute results before the
+	 * permission check. Reduces perceived latency for the user.
+	 */
+	startSpeculativeClassify(
+		toolName: string,
+		input: Record<string, unknown>,
+		context: ClassifierContext,
+	): Promise<ClassifyResult> {
+		return new Promise<ClassifyResult>((resolve) => {
+			setImmediate(() => {
+				try {
+					resolve(this.classifySync(toolName, input, context))
+				} catch {
+					resolve({ action: "allow", reason: "Classifier error", confidence: 0 })
+				}
+			})
+		})
+	}
 }

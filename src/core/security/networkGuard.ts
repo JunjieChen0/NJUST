@@ -35,7 +35,7 @@ function isBlockedIPv6(ip: string): boolean {
 	return false
 }
 
-function assertPublicIp(ip: string): void {
+export function assertPublicIp(ip: string): void {
 	const ipVersion = net.isIP(ip)
 	if (ipVersion === 4) {
 		if (isPrivateIPv4(ip)) {

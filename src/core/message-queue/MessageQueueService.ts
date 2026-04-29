@@ -46,7 +46,7 @@ export class MessageQueueService extends EventEmitter<QueueEvents> {
 		}
 
 		this._messages.push(message)
-		this.emit("stateChanged", this._messages)
+		this.emit("stateChanged", Object.freeze([...this._messages]))
 
 		return message
 	}
@@ -59,7 +59,7 @@ export class MessageQueueService extends EventEmitter<QueueEvents> {
 		}
 
 		this._messages.splice(index, 1)
-		this.emit("stateChanged", this._messages)
+		this.emit("stateChanged", Object.freeze([...this._messages]))
 		return true
 	}
 
@@ -73,13 +73,13 @@ export class MessageQueueService extends EventEmitter<QueueEvents> {
 		message.timestamp = Date.now()
 		message.text = text
 		message.images = images
-		this.emit("stateChanged", this._messages)
+		this.emit("stateChanged", Object.freeze([...this._messages]))
 		return true
 	}
 
 	public dequeueMessage(): QueuedMessage | undefined {
 		const message = this._messages.shift()
-		this.emit("stateChanged", this._messages)
+		this.emit("stateChanged", Object.freeze([...this._messages]))
 		return message
 	}
 

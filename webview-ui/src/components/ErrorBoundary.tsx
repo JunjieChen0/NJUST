@@ -79,6 +79,13 @@ class ErrorBoundary extends Component<ErrorProps, ErrorState> {
 						<pre className="p-2 border rounded text-sm overflow-auto">{componentStackDisplay}</pre>
 					</div>
 				)}
+				<div className="mt-4 flex gap-2">
+					<button
+						onClick={() => this.setState({ error: undefined, componentStack: undefined })}
+						className="px-3 py-1.5 bg-vscode-button-background hover:bg-vscode-button-hoverBackground text-vscode-button-foreground rounded text-sm">
+						Retry
+					</button>
+				</div>
 			</div>
 		)
 	}

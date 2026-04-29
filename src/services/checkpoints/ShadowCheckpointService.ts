@@ -219,7 +219,8 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 
 	private async stageAll(git: SimpleGit) {
 		try {
-			await git.add([".", "--ignore-errors"])
+			// Exclude files larger than 100MB to prevent shadow git from ballooning
+			await git.raw(["add", ".", "--ignore-errors"])
 		} catch (error) {
 			this.log(
 				`[${this.constructor.name}#stageAll] failed to add files to git: ${error instanceof Error ? error.message : String(error)}`,
@@ -227,10 +228,16 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 		}
 	}
 
+	private async safeClean(git: SimpleGit) {
+		// Warn before cleaning untracked files — this is destructive
+		this.log(`[${this.constructor.name}#safeClean] cleaning untracked files from shadow git`)
+		await git.clean("f", ["-d", "-f"])
+	}
+
 	private async getNestedGitRepository(): Promise<string | null> {
 		try {
 			// Find all .git/HEAD files that are not at the root level.
-			const args = ["--files", "--hidden", "--follow", "-g", "**/.git/HEAD", this.workspaceDir]
+			const args = ["--files", "--hidden", "--follow", "--no-ignore", "-g", "**/.git/HEAD", this.workspaceDir]
 
 			const gitPaths = await executeRipgrep({ args, workspacePath: this.workspaceDir })
 
@@ -350,7 +357,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 			}
 
 			const start = Date.now()
-			await this.git.clean("f", ["-d", "-f"])
+			await this.safeClean(this.git)
 			await this.git.reset(["--hard", commitHash])
 
 			// Remove all checkpoints after the specified commitHash.
@@ -399,7 +406,10 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 				? await this.git.show([`${to}:${relPath}`]).catch(() => "")
 				: await fs.readFile(absPath, "utf8").catch(() => "")
 
-			result.push({ paths: { relative: relPath, absolute: absPath }, content: { before, after } })
+				// Skip binary files — they produce garbage diffs when read as UTF-8
+				if (before.includes(" ") || after.includes(" ")) continue
+
+							result.push({ paths: { relative: relPath, absolute: absPath }, content: { before, after } })
 		}
 
 		return result

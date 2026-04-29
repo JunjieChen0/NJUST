@@ -240,14 +240,19 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		reasoningEffort: ReasoningEffortExtended | undefined,
 		metadata?: ApiHandlerCreateMessageMetadata,
 	): any {
-		// Ensure all properties are in the required array for OpenAI's strict mode
-		// This recursively processes nested objects and array items
+		// Ensure all properties are in the required array for OpenAI's strict mode.
+		// Properties that were optional in Roo's schema are made nullable so the model can
+		// explicitly pass null instead of fabricating placeholder values.
 		const ensureAllRequired = (schema: any): any => {
-			if (!schema || typeof schema !== "object" || schema.type !== "object") {
+			const getPrimaryType = (value: any): string | undefined =>
+				Array.isArray(value?.type) ? value.type.find((t: string) => t !== "null") : value?.type
+
+			if (!schema || typeof schema !== "object" || getPrimaryType(schema) !== "object") {
 				return schema
 			}
 
 			const result = { ...schema }
+			const originallyRequired = new Set(Array.isArray(schema.required) ? schema.required : [])
 
 			// OpenAI Responses API requires additionalProperties: false on all object schemas
 			// Only add if not already set to false (to avoid unnecessary mutations)
@@ -263,12 +268,20 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 				const newProps = { ...result.properties }
 				for (const key of allKeys) {
 					const prop = newProps[key]
-					if (prop.type === "object") {
-						newProps[key] = ensureAllRequired(prop)
-					} else if (prop.type === "array" && prop.items?.type === "object") {
+					if (prop && !originallyRequired.has(key)) {
+						const types = Array.isArray(prop.type) ? prop.type : prop.type ? [prop.type] : []
+						if (types.length > 0 && !types.includes("null")) {
+							newProps[key] = { ...prop, type: [...types, "null"] }
+						}
+					}
+					const normalizedProp = newProps[key]
+					const primaryType = getPrimaryType(normalizedProp)
+					if (primaryType === "object") {
+						newProps[key] = ensureAllRequired(normalizedProp)
+					} else if (primaryType === "array" && getPrimaryType(normalizedProp.items) === "object") {
 						newProps[key] = {
-							...prop,
-							items: ensureAllRequired(prop.items),
+							...normalizedProp,
+							items: ensureAllRequired(normalizedProp.items),
 						}
 					}
 				}
@@ -1030,6 +1043,10 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 									)
 								}
 							} else if (parsed.type === "response.completed" || parsed.type === "response.done") {
+								// SSE-only fallback: in the SDK path these events are handled by processEvent
+								// via coreHandledEventTypes, but the raw SSE path below needs its own handling
+								// for metadata extraction and the !hasContent fallback.
+
 								// Capture resolved service tier if present
 								if (parsed.response?.service_tier) {
 									this.lastServiceTier = parsed.response.service_tier as ServiceTier

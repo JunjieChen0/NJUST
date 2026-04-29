@@ -1,10 +1,15 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+vi.mock("../../webview/ClineProvider")
+vi.mock("../../../integrations/terminal/TerminalRegistry", () => ({ TerminalRegistry: { releaseTerminalsForTask: vi.fn() } }))
+vi.mock("../../ignore/RooIgnoreController")
+vi.mock("@njust-ai-cj/telemetry", () => ({ TelemetryService: { instance: { captureTaskCreated: vi.fn() } } }))
 
 describe("attemptApiRequest prefetch", () => {
 	it("keeps prefetch path wired", async () => {
-		// Structural placeholder test to guard file/module presence after refactors.
 		const mod = await import("../Task")
-		expect(mod).toBeTruthy()
 		expect(typeof mod.Task).toBe("function")
+		expect(mod.Task.prototype.ask).toBeInstanceOf(Function)
+		expect(mod.Task.prototype.dispose).toBeInstanceOf(Function)
 	})
 })

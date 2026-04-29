@@ -54,18 +54,21 @@ export abstract class BaseProvider implements ApiHandler {
 	/**
 	 * Converts tool schemas to be compatible with OpenAI's strict mode by:
 	 * - Ensuring all properties are in the required array (strict mode requirement)
-	 * - Converting nullable types (["type", "null"]) to non-nullable ("type")
+	 * - Preserving original optional semantics by allowing null for properties that were
+	 *   not in the original required array
 	 * - Adding additionalProperties: false to all object schemas (required by OpenAI Responses API)
 	 * - Recursively processing nested objects and arrays
-	 *
-	 * This matches the behavior of ensureAllRequired in openai-native.ts
 	 */
 	protected convertToolSchemaForOpenAI(schema: any): any {
-		if (!schema || typeof schema !== "object" || schema.type !== "object") {
+		const getPrimaryType = (value: any): string | undefined =>
+			Array.isArray(value?.type) ? value.type.find((t: string) => t !== "null") : value?.type
+
+		if (!schema || typeof schema !== "object" || getPrimaryType(schema) !== "object") {
 			return schema
 		}
 
 		const result = { ...schema }
+		const originallyRequired = new Set(Array.isArray(schema.required) ? schema.required : [])
 
 		// OpenAI Responses API requires additionalProperties: false on all object schemas
 		// Only add if not already set to false (to avoid unnecessary mutations)
@@ -83,19 +86,22 @@ export abstract class BaseProvider implements ApiHandler {
 			for (const key of allKeys) {
 				const prop = newProps[key]
 
-				// Handle nullable types by removing null
-				if (prop && Array.isArray(prop.type) && prop.type.includes("null")) {
-					const nonNullTypes = prop.type.filter((t: string) => t !== "null")
-					prop.type = nonNullTypes.length === 1 ? nonNullTypes[0] : nonNullTypes
+				if (prop && !originallyRequired.has(key)) {
+					const types = Array.isArray(prop.type) ? prop.type : prop.type ? [prop.type] : []
+					if (types.length > 0 && !types.includes("null")) {
+						newProps[key] = { ...prop, type: [...types, "null"] }
+					}
 				}
 
+				const normalizedProp = newProps[key]
+				const primaryType = getPrimaryType(normalizedProp)
 				// Recursively process nested objects
-				if (prop && prop.type === "object") {
-					newProps[key] = this.convertToolSchemaForOpenAI(prop)
-				} else if (prop && prop.type === "array" && prop.items?.type === "object") {
+				if (normalizedProp && primaryType === "object") {
+					newProps[key] = this.convertToolSchemaForOpenAI(normalizedProp)
+				} else if (normalizedProp && primaryType === "array" && getPrimaryType(normalizedProp.items) === "object") {
 					newProps[key] = {
-						...prop,
-						items: this.convertToolSchemaForOpenAI(prop.items),
+						...normalizedProp,
+						items: this.convertToolSchemaForOpenAI(normalizedProp.items),
 					}
 				}
 			}

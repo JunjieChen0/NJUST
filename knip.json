@@ -20,8 +20,12 @@
 			"entry": ["src/index.tsx"],
 			"project": ["src/**/*.{ts,tsx}", "../src/shared/*.ts"]
 		},
-		"packages/{build,cloud,evals,ipc,telemetry,types}": {
+		"packages/{build,config-eslint,config-typescript,evals,ipc,telemetry,types,vscode-shim}": {
 			"project": ["src/**/*.ts"]
+		},
+		"apps/{cli,web-roo-code}": {
+			"entry": ["src/index.ts"],
+			"project": ["src/**/*.{ts,tsx}"]
 		}
 	}
 }

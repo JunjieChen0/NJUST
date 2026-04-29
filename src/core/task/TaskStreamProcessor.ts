@@ -534,21 +534,53 @@ export class TaskStreamProcessor {
 						}
 					}
 
-					cleanConversationHistory.push({
-						role: "assistant",
-						content: assistantContent,
-					} satisfies Anthropic.Messages.MessageParam)
+					// Propagate reasoning_content as a top-level field when present on the
+					// stored ApiMessage. DeepSeek / Z.ai require it to be passed back in
+					// thinking mode, and convertToR1Format picks it up from the top level.
+					const msgWithReasoning = msg as ApiMessage & { reasoning_content?: string }
+					const topLevelReasoning = msgWithReasoning.reasoning_content
+					if (topLevelReasoning && typeof topLevelReasoning === "string" && topLevelReasoning.trim()) {
+						const msgObj: any = {
+							role: "assistant",
+							content: assistantContent,
+						}
+						// Only set reasoning_content when preserveReasoning signals that the
+						// model / provider requires it. Otherwise keep it out of the request.
+						if (shouldPreserveForApi) {
+							msgObj.reasoning_content = topLevelReasoning
+						}
+						cleanConversationHistory.push(msgObj)
+					} else {
+						cleanConversationHistory.push({
+							role: "assistant",
+							content: assistantContent,
+						} satisfies Anthropic.Messages.MessageParam)
+					}
 
 					continue
 				}
 			}
 
-			// Default path for regular messages (no embedded reasoning)
+			// Default path for regular messages (no embedded reasoning at first content position)
 			if (msg.role) {
-				cleanConversationHistory.push({
-					role: msg.role,
-					content: msg.content as Anthropic.Messages.ContentBlockParam[] | string,
-				})
+				const msgWithReasoning = msg as ApiMessage & { reasoning_content?: string }
+				const topLevelReasoning = msgWithReasoning.reasoning_content
+				if (topLevelReasoning && typeof topLevelReasoning === "string" && topLevelReasoning.trim()) {
+					const shouldPreserveForApi = this.task.api.getModel().info.preserveReasoning === true
+					const msgObj: any = {
+						role: msg.role,
+						content: msg.content as Anthropic.Messages.ContentBlockParam[] | string,
+					}
+					if (shouldPreserveForApi) {
+						msgObj.reasoning_content = topLevelReasoning
+					}
+					cleanConversationHistory.push(msgObj)
+				} else {
+					cleanConversationHistory.push({
+						role: msg.role,
+						content: msg.content as Anthropic.Messages.ContentBlockParam[] | string,
+					})
+				}
 			}
 		}
 

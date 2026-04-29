@@ -41,13 +41,20 @@ interface ExecuteCommandParams {
 	timeout?: number | null
 }
 
+const MIN_CLI_TIMEOUT_MS = 300_000 // 5 minutes floor for CLI mode
+
 export function resolveAgentTimeoutMs(timeoutSeconds: number | null | undefined): number {
 	const requestedAgentTimeout = typeof timeoutSeconds === "number" && timeoutSeconds > 0 ? timeoutSeconds * 1000 : 0
 
-	// In CLI runtime, stdin harnesses expect command lifetime to be governed
-	// solely by commandExecutionTimeout (user setting), not model-provided
-	// background timeouts.
-	return process.env.ROO_CLI_RUNTIME === "1" ? 0 : requestedAgentTimeout
+	// In CLI runtime, apply a minimum timeout to prevent permanent blocking
+	// from malicious or malformed commands. User settings can extend but not
+	// reduce below the floor.
+	if (process.env.ROO_CLI_RUNTIME === "1") {
+		return requestedAgentTimeout > 0
+			? Math.max(requestedAgentTimeout, MIN_CLI_TIMEOUT_MS)
+			: MIN_CLI_TIMEOUT_MS
+	}
+	return requestedAgentTimeout
 }
 
 export class ExecuteCommandTool extends BaseTool<"execute_command"> {
@@ -75,6 +82,15 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 
 			const canonicalCommand = unescapeHtmlEntities(command)
 			await reportProgress?.({ icon: "terminal", text: "Preparing command execution" })
+
+			if (task.taskMode === "cangjie") {
+				const cangjieCommandError = task.cangjieRuntimePolicy.validateCommandSurface(canonicalCommand)
+				if (cangjieCommandError) {
+					task.recordToolError("execute_command", cangjieCommandError)
+					pushToolResult(formatResponse.toolError(cangjieCommandError))
+					return
+				}
+			}
 
 			{
 				const earlyState = await task.providerRef.deref()?.getState()
@@ -170,6 +186,14 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 					task.didRejectTool = true
 				}
 
+				if (task.taskMode === "cangjie") {
+					task.cangjieRuntimePolicy.noteBuildResult(
+						canonicalCommand,
+						!rejected && !/^Command execution failed/i.test(String(result)),
+						String(result),
+					)
+				}
+
 				pushToolResult(result)
 			} catch (error: unknown) {
 				const status: CommandExecutionStatus = { executionId, status: "fallback" }
@@ -187,6 +211,14 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 
 					if (rejected) {
 						task.didRejectTool = true
+					}
+
+					if (task.taskMode === "cangjie") {
+						task.cangjieRuntimePolicy.noteBuildResult(
+							canonicalCommand,
+							!rejected && !/^Command execution failed/i.test(String(result)),
+							String(result),
+						)
 					}
 
 					pushToolResult(result)

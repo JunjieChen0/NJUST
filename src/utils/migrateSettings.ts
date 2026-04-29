@@ -11,7 +11,7 @@ const deprecatedCustomModesJSONFilename = "custom_modes.json"
 /**
  * Migrates old settings files to new file names and removes commands from old defaults
  *
- * TODO: Remove this migration code in September 2025 (6 months after implementation)
+ * TODO: Remove this migration code when all active installations have been migrated (estimated Q3 2026)
  */
 export async function migrateSettings(
 	context: vscode.ExtensionContext,

@@ -53,7 +53,8 @@ export function loadTranslations() {
 
 // Eagerly attach bundles before any React render. Relying only on TranslationProvider's
 // useEffect caused a first-paint race where welcome/empty-state tips could show English
-// until the next language sync.
+// until the next language sync. The TranslationProvider's useEffect also calls this - i18next
+// safely handles duplicate resource additions.
 loadTranslations()
 
 export default i18next

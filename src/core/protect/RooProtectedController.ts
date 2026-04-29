@@ -52,9 +52,9 @@ export class RooProtectedController {
 			// Use ignore library to check if file matches any protected pattern
 			return this.ignoreInstance.ignores(relativePath)
 		} catch (error) {
-			// If there's an error processing the path, err on the side of caution
-			console.error(`Error checking protection for ${filePath}:`, error)
-			return false
+			// Fail-closed: if we can't determine protection status, assume protected
+			console.warn(`Error checking protection for ${filePath} (treating as protected):`, error)
+			return true
 		}
 	}
 

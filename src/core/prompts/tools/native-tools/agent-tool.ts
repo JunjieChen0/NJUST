@@ -53,7 +53,7 @@ export default {
 					description: MAX_TURNS_PARAMETER_DESCRIPTION,
 				},
 			},
-			required: ["task", "agentType", "maxTurns"],
+			required: ["task"],
 			additionalProperties: false,
 		},
 	},

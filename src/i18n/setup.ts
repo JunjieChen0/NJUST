@@ -55,6 +55,12 @@ if (!isTestEnv) {
 						translations[language][namespace] = JSON.parse(content)
 					} catch (error) {
 						console.error(`Error loading translation file ${filePath}:`, error)
+				// Notify user that translations may be incomplete
+				if (typeof vscode !== "undefined" && vscode.window) {
+					vscode.window.showWarningMessage(
+						`Failed to load translation: ${path.basename(filePath)}. Falling back to English for this namespace.`,
+					)
+				}
 					}
 				})
 			})
@@ -69,11 +75,16 @@ if (!isTestEnv) {
 }
 
 // Initialize i18next with configuration
+const isDevMode = process.env.NODE_ENV === "development"
+
 i18next.init({
 	lng: "en",
 	fallbackLng: "en",
 	debug: false,
 	resources: translations,
+	parseMissingKeyHandler: isDevMode
+		? (key: string) => `[MISSING] ${key}`
+		: undefined,
 	interpolation: {
 		escapeValue: false,
 	},

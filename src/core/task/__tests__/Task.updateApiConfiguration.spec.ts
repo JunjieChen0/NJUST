@@ -61,8 +61,8 @@ describe("Task.updateApiConfiguration", () => {
 
 	it("aborts in-flight work, clears parser-related state, invalidates token cache, and rebuilds API handler", () => {
 		const clearSpy = vi.spyOn(tokenCountCache, "clear")
-		const clearToolsSpy = vi.spyOn(NativeToolCallParser, "clearAllStreamingToolCalls")
-		const clearRawSpy = vi.spyOn(NativeToolCallParser, "clearRawChunkState")
+		const clearToolsSpy = vi.spyOn(task.toolCallParser, "clearAllStreamingToolCalls")
+		const clearRawSpy = vi.spyOn(task.toolCallParser, "clearRawChunkState")
 		task.cachedStreamingModel = { id: "old", info: {} as any }
 		;(task as any).tokenUsageSnapshot = { totalTokensIn: 1, totalTokensOut: 0, contextTokens: 0 }
 		task.userMessageContent = [{ type: "text", text: "x" }] as any

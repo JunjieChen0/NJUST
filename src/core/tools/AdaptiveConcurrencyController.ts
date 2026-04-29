@@ -147,10 +147,9 @@ export class AdaptiveConcurrencyController {
 	}
 
 	private clearQueue(category: ToolCategory): void {
+		// Clear without resolving — prevents active[category] overcount
+		// from concurrent resolves after reset().
 		const queue = this.queues[category]
-		while (queue.head < queue.items.length) {
-			queue.items[queue.head++]?.resolve()
-		}
 		queue.items = []
 		queue.head = 0
 	}

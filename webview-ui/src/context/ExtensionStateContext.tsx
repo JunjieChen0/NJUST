@@ -175,6 +175,18 @@ export const mergeExtensionState = (prevState: ExtensionState, newState: Partial
 		rest.clineMessagesSeq = prevState.clineMessagesSeq
 	}
 
+		// Guard asynchronous state fields with a global version counter.
+	// Prevents stale state pushes (apiConfiguration, skills, taskHistory)
+	// from overwriting newer data when independent update channels race.
+	const globalSeq = newState.globalSeq ?? 0
+	const prevGlobalSeq = prevState.globalSeq ?? 0
+	if (globalSeq > 0 && prevGlobalSeq > 0 && globalSeq < prevGlobalSeq) {
+		// Stale push — discard async fields from this update
+		newState.apiConfiguration = prevState.apiConfiguration
+		newState.skills = prevState.skills
+		newState.taskHistory = prevState.taskHistory
+	}
+
 	// Note that we completely replace the previous apiConfiguration and customSupportPrompts objects
 	// with new ones since the state that is broadcast is the entire objects so merging is not necessary.
 	return {
@@ -371,7 +383,7 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 					const clineMessage = message.clineMessage!
 					setState((prevState) => {
 						// worth noting it will never be possible for a more up-to-date message to be sent here or in normal messages post since the presentAssistantContent function uses lock
-						const lastIndex = findLastIndex(prevState.clineMessages, (msg) => msg.ts === clineMessage.ts)
+						const lastIndex = findLastIndex(prevState.clineMessages, (msg) => msg.id === clineMessage.id)
 						if (lastIndex !== -1) {
 							const newClineMessages = [...prevState.clineMessages]
 							newClineMessages[lastIndex] = clineMessage
@@ -382,7 +394,7 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 					// under normal conditions. If it does, it signals a state
 					// synchronization issue worth investigating.
 						console.warn(
-							`[messageUpdated] Received update for unknown message ts=${clineMessage.ts}, dropping. ` +
+							`[messageUpdated] Received update for unknown message id=${clineMessage.id}, dropping. ` +
 								`Frontend has ${prevState.clineMessages.length} messages.`,
 						)
 						return prevState
@@ -458,12 +470,17 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		[setListApiConfigMeta],
 	)
 
+	const handleMessageRef = useRef(handleMessage)
 	useEffect(() => {
-		window.addEventListener("message", handleMessage)
+		handleMessageRef.current = handleMessage
+	})
+	useEffect(() => {
+		const listener = (event: MessageEvent) => handleMessageRef.current(event)
+		window.addEventListener("message", listener)
 		return () => {
-			window.removeEventListener("message", handleMessage)
+			window.removeEventListener("message", listener)
 		}
-	}, [handleMessage])
+	}, [])
 
 	useEffect(() => {
 		vscode.postMessage({ type: "webviewDidLaunch" })

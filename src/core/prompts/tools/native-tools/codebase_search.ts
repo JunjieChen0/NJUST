@@ -36,7 +36,7 @@ export default {
 					description: PATH_PARAMETER_DESCRIPTION,
 				},
 			},
-			required: ["query", "path"],
+			required: ["query"],
 			additionalProperties: false,
 		},
 	},

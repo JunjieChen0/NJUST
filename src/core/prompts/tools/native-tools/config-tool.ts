@@ -46,7 +46,7 @@ export default {
 						'The value to set. Required for "set" action. Use null for "get" and "list".',
 				},
 			},
-			required: ["action", "key", "value"],
+			required: ["action"],
 			additionalProperties: false,
 		},
 	},

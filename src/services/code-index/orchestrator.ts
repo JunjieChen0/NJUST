@@ -265,7 +265,9 @@ export class CodeIndexOrchestrator {
 				}
 
 				// Check for partial failures - if a significant portion of blocks failed
-				const failureRate = (cumulativeBlocksFoundSoFar - cumulativeBlocksIndexed) / cumulativeBlocksFoundSoFar
+				const failureRate = cumulativeBlocksFoundSoFar === 0
+					? 1 // Zero blocks found is total failure
+					: (cumulativeBlocksFoundSoFar - cumulativeBlocksIndexed) / cumulativeBlocksFoundSoFar
 				if (batchErrors.length > 0 && failureRate > 0.1) {
 					// More than 10% of blocks failed to index
 					const firstError = batchErrors[0]

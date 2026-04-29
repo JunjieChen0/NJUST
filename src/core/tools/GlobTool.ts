@@ -64,6 +64,10 @@ export class GlobTool extends BaseTool<"glob"> {
 
 			const absolutePath = path.resolve(task.cwd, effectivePath)
 			const isOutsideWorkspace = isPathOutsideWorkspace(absolutePath)
+			if (isOutsideWorkspace) {
+				pushToolResult("Access denied: path is outside the workspace")
+				return
+			}
 
 			// Run glob – respects .gitignore by default (glob v11)
 			const filteredMatches = await glob(pattern, {
@@ -109,7 +113,7 @@ export class GlobTool extends BaseTool<"glob"> {
 
 			pushToolResult(resultText)
 		} catch (error) {
-			await handleError("glob pattern matching", error)
+			await handleError("glob pattern matching", error instanceof Error ? error : new Error(String(error)))
 		}
 	}
 
