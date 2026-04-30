@@ -2034,10 +2034,11 @@ export class TaskExecutor {
 				return false
 			} catch (error) {
 				// A tool execution or presentAssistantMessage threw an unhandled
+					const h = this.host
 				// exception. Log it, notify the user, and end the task gracefully.
 				const errMsg = error instanceof Error ? error.message : String(error)
 				console.error(
-					`[TaskExecutor#${h.taskId}] Unhandled error in request loop (retry ${retryAttempt}):`,
+					`[TaskExecutor#${h.taskId}] Unhandled error in request loop :`,
 					errMsg,
 					error instanceof Error ? error.stack : "",
 				)

@@ -6,6 +6,7 @@ import type { RooTerminal } from "./types"
 import { BaseTerminal } from "./BaseTerminal"
 import { BaseTerminalProcess } from "./BaseTerminalProcess"
 import { normalizeDotSlashCommandForWindowsShell } from "../../utils/hostShellCommand"
+import { filterSensitiveEnv } from "../../utils/env"
 
 export class ExecaTerminalProcess extends BaseTerminalProcess {
 	private terminalRef: WeakRef<RooTerminal>
@@ -48,12 +49,11 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 				all: true,
 				// Ignore stdin to ensure non-interactive mode and prevent hanging
 				stdin: "ignore",
-				env: {
-					...process.env,
+				env: filterSensitiveEnv({
 					// Ensure UTF-8 encoding for Ruby, CocoaPods, etc.
 					LANG: "en_US.UTF-8",
 					LC_ALL: "en_US.UTF-8",
-				},
+				}),
 			})`${normalizedCommand}`
 
 			this.pid = this.subprocess.pid

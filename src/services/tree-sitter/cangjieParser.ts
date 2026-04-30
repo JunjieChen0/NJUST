@@ -55,12 +55,14 @@ export type CangjieDefKind =
 	| "prop"
 	| "init"
 	| "operator"
+	| "enum_case"
 
 export interface CangjieDef {
 	kind: CangjieDefKind
 	name: string
 	startLine: number // 0-based
 	endLine: number // 0-based
+	signature?: string
 }
 
 export type CangjieSymbolVisibility = "public" | "internal" | "protected" | "private"
@@ -325,7 +327,7 @@ const DEF_PATTERNS: { kind: CangjieDefKind; re: RegExp }[] = [
  * Skips braces inside string literals (`"…"`), character literals (`'…'`),
  * line comments (`//`), and block comments (`/* … * /`).
  */
-function findClosingBrace(lines: string[], openLine: number): number {
+export function findClosingBrace(lines: string[], openLine: number): number {
 	let depth = 0
 	let inBlockComment = false
 	for (let i = openLine; i < lines.length; i++) {
@@ -466,7 +468,6 @@ export function parseCangjieDefinitions(content: string): CangjieDef[] {
 			if (!match && annotationLine) {
 				match = effectiveLine.match(re)
 			}
-			const match = line.match(re)
 			if (!match) continue
 
 			const name = match[1] ?? kind

@@ -586,14 +586,14 @@ export async function activate(context: vscode.ExtensionContext) {
 		context.subscriptions.push(
 			vscode.languages.registerCallHierarchyProvider(
 				{ language: "cangjie", scheme: "file" },
-				new CangjieCallHierarchyProvider(cangjieSymbolIndex),
+				new CangjieCallHierarchyProvider(cangjieSymbolIndex) as any,
 			),
 		)
 
 		context.subscriptions.push(
 			vscode.languages.registerTypeHierarchyProvider(
 				{ language: "cangjie", scheme: "file" },
-				new CangjieTypeHierarchyProvider(cangjieSymbolIndex),
+				new CangjieTypeHierarchyProvider(cangjieSymbolIndex) as any,
 			),
 		)
 

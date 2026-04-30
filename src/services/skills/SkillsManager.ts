@@ -317,7 +317,7 @@ export class SkillsManager {
 			try {
 				const content = await this.getSkillContent(name, currentMode)
 				if (content) {
-					results.push({ name, content: content.text })
+					results.push({ name, content: content.instructions })
 				}
 			} catch {
 				// Silently skip skills that fail to load

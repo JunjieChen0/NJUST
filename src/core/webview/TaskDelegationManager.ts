@@ -369,6 +369,7 @@ export class TaskDelegationManager {
 			say: "subtask_result",
 			text: completionResultSummary,
 			ts,
+			id: crypto.randomUUID(),
 		}
 		parentClineMessages.push(subtaskUiMessage)
 		await saveTaskMessages({ messages: parentClineMessages, taskId: parentTaskId, globalStoragePath })

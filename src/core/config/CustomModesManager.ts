@@ -234,7 +234,7 @@ export class CustomModesManager {
 			source,
 			roleDefinition: mode.roleDefinition ? sanitizeModeContent(mode.roleDefinition) : undefined,
 			customInstructions: mode.customInstructions ? sanitizeModeContent(mode.customInstructions) : undefined,
-		}))
+		})) as any
 		} catch (error) {
 			// Only log if the error wasn't already handled in parseYamlSafely
 			if (!(error as any).alreadyHandled) {

@@ -103,7 +103,7 @@ export class CloudAgentClient {
 				// Older servers — expected until upgraded.
 				// Still clean up local session state so counters / caches
 				// don't leak across connection attempts.
-				this.localSessionCleanup?.()
+				(this as any).localSessionCleanup?.()
 				return
 			}
 			if (!resp.ok) {

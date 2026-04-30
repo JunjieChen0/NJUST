@@ -7,6 +7,7 @@ import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { useCopyToClipboard } from "@src/utils/clipboard"
 import CodeBlock from "./CodeBlock"
 import { MermaidButton } from "@/components/common/MermaidButton"
+import { sanitizeSvg } from "@/utils/sanitize"
 
 // Removed previous attempts at static imports for individual diagram types
 // as the paths were incorrect for Mermaid v11.4.1 and caused errors.
@@ -94,15 +95,6 @@ export default function MermaidBlock({ code }: MermaidBlockProps) {
 	const [isErrorExpanded, setIsErrorExpanded] = useState(false)
 	const { showCopyFeedback, copyWithFeedback } = useCopyToClipboard()
 	const { t } = useAppTranslation()
-
-	/** Strip event handlers and script tags from SVG for XSS defense-in-depth. */
-	function sanitizeSvg(svg: string): string {
-		return svg
-			.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-			.replace(/\bon\w+\s*=\s*"[^"]*"/gi, "")
-			.replace(/\bon\w+\s*=\s*'[^']*'/gi, "")
-			.replace(/javascript\s*:/gi, "")
-	}
 
 	// 1) Whenever `code` changes, mark that we need to re-render a new chart
 	useEffect(() => {

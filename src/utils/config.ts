@@ -46,7 +46,8 @@ export async function injectVariables<C extends InjectableConfigType>(
 		if (typeof value === "string") {
 			// Normalize paths to forward slashes for cross-platform compatibility
 				// JSON-encode replacement value to prevent injection via special characters
-				configString = configString.replace(new RegExp(`\x24{const key}`, "g"), JSON.stringify(value.toPosix()).slice(1, -1))
+				const escaped = JSON.stringify(value.toPosix()).slice(1, -1)
+				configString = configString.replace(new RegExp(`\\$\\{${key}\\}`, "g"), () => escaped)
 		} else {
 			// Handle nested variables (e.g., ${env:VAR_NAME})
 			configString = configString.replace(new RegExp(`\\$\\{${key}:([\\w]+)\\}`, "g"), (match, name) => {

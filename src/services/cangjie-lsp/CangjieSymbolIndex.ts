@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
+import { resolveCangjieToolPath } from "./cangjieToolUtils"
 import {
 	parseCangjieDefinitions,
 	parseCangjieWithFallback,
@@ -499,19 +500,17 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		const t0 = Date.now()
 
 		try {
-			const MAX_INDEX_FILES = 2000
-		const files = await vscode.workspace.findFiles("**/*.cj", "**/target/**", MAX_INDEX_FILES)
-		if (files.length >= MAX_INDEX_FILES) {
-			this.outputChannel.appendLine(
-				 +
-				,
-			)
-			vscode.window.showWarningMessage(
-				,
-			)
-		}
+				const MAX_INDEX_FILES = 2000
+			const files = await vscode.workspace.findFiles("**/*.cj", "**/target/**", MAX_INDEX_FILES)
+			if (files.length >= MAX_INDEX_FILES) {
+				this.outputChannel.appendLine(
+					`Index limit reached: ${files.length} .cj files found, indexing first ${MAX_INDEX_FILES}`
+				)
+				vscode.window.showWarningMessage(
+					`仓颉文件索引达到上限 (${MAX_INDEX_FILES} 个)，部分文件可能未被索引`
+				)
+			}
 			const pending: string[] = []
-
 			for (const uri of files) {
 				const filePath = uri.fsPath
 				const stat = fs.statSync(filePath)

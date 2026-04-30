@@ -248,6 +248,7 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 
 			agent.taskId = task.taskId
 			this.activeTasks.set(agentId, task)
+				let taskResult!: ParallelTaskResult
 			try {
 
 			const result = await this.waitForCompletion(task)

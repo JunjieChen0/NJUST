@@ -413,18 +413,17 @@ export class CangjieCompileGuard implements vscode.Disposable {
 		success: boolean,
 	): void {
 			// Clear only diagnostics under this project root (multi-project safe).
-			if (coll) {
-				for (const [uri] of coll) {
+			if (this.compileDiagnostics) {
+				for (const [uri] of this.compileDiagnostics) {
 					if (uri.fsPath.startsWith(cwd)) {
-						coll.delete(uri)
+						this.compileDiagnostics.delete(uri)
 					}
 				}
 			}
 			
-		}
-		if (!coll) return
+		if (!this.compileDiagnostics) return
 		if (locations.length === 0) {
-			coll.clear()
+			this.compileDiagnostics.clear()
 			return
 		}
 		const byFile = new Map<string, vscode.Diagnostic[]>()
@@ -452,9 +451,9 @@ export class CangjieCompileGuard implements vscode.Disposable {
 			if (!byFile.has(abs)) byFile.set(abs, [])
 			byFile.get(abs)!.push(diag)
 		}
-		coll.clear()
+		this.compileDiagnostics.clear()
 		for (const [filePath, diags] of byFile) {
-			coll.set(vscode.Uri.file(filePath), diags)
+			this.compileDiagnostics.set(vscode.Uri.file(filePath), diags)
 		}
 	}
 

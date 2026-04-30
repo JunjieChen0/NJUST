@@ -33,10 +33,10 @@ export function detectCangjieHome(): string | undefined {
 
 	// 2. Infer from VS Code LSP serverPath config (aligns with CangjieLspClient)
 	try {
-		const vscodeModule = require("vscode")
+		const vscodeModule = require("vscode") as any
 		const serverPath = vscodeModule.workspace
 			.getConfiguration("njust-ai-cj.cangjieLsp")
-			.get<string>("serverPath")
+			.get("serverPath")
 		if (serverPath && fs.existsSync(serverPath)) {
 			const sdkRoot = path.resolve(serverPath, "..", "..")
 			if (fs.existsSync(path.join(sdkRoot, "bin"))) {

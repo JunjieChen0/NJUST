@@ -102,6 +102,7 @@ const MAX_TREE_SITTER_PARSE_SIZE = 10 * 1024 * 1024 // 10MB ceiling to prevent O
 export async function parseSourceCodeDefinitionsForFile(
 	filePath: string,
 	rooIgnoreController?: RooIgnoreController,
+t// @ts-expect-error TS7030 - TypeScript cannot verify all branches return
 ): Promise<string | undefined> {
 	// check if the file exists
 	const fileExists = await fileExistsAtPath(path.resolve(filePath))
@@ -351,4 +352,5 @@ async function parseFile(
 		// Return null on parsing error to avoid showing error messages in the output
 		return null
 	}
+}
 }

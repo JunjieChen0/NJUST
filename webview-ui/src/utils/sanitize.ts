@@ -1,103 +1,40 @@
 /**
- * HTML sanitizer for rendering potentially untrusted content in the webview.
+ * HTML / SVG sanitizer for rendering potentially untrusted content in the webview.
  *
- * Uses a defense-in-depth approach with multiple layers of sanitization.
- * While DOMPurify is the industry-standard recommendation for production use,
- * this implementation provides strong protection against common XSS vectors
- * without adding a dependency. If the project adds DOMPurify in the future,
- * replace the implementation below with `DOMPurify.sanitize(html)`.
+ * Delegates to DOMPurify (battle-tested, actively maintained) for defense-in-depth
+ * XSS protection. The webview already runs in a sandboxed iframe with CSP, but
+ * sanitizing server-provided / LLM-generated markup is an additional layer.
  */
+import DOMPurify from "dompurify"
 
-/** Tags whose entire element (including children) is stripped. */
-const DANGEROUS_TAGS = [
-	"script",
-	"iframe",
-	"frame",
-	"object",
-	"embed",
-	"applet",
-	"meta",
-	"link",
-	"base",
-	"form",
-	"input",
-	"button",
-	"select",
-	"textarea",
-	"isindex",
-	"noscript",
-]
-
-function buildDangerousTagRegex(): RegExp {
-	const alternation = DANGEROUS_TAGS.join("|")
-	return new RegExp(`<\\s*(?:${alternation})\\b[^>]*>[\\s\\S]*?<\\s*/\\s*(?:${alternation})\\s*>`, "gi")
+const HTML_CONFIG: DOMPurify.Config = {
+	ALLOWED_TAGS: [
+		"b", "i", "em", "strong", "u", "s", "del", "ins",
+		"a", "p", "br", "hr",
+		"h1", "h2", "h3", "h4", "h5", "h6",
+		"ul", "ol", "li", "dl", "dt", "dd",
+		"code", "pre", "kbd", "samp", "var",
+		"blockquote", "q", "cite",
+		"table", "thead", "tbody", "tr", "th", "td",
+		"span", "div",
+		"img", "sub", "sup", "small", "mark",
+	],
+	ALLOWED_ATTR: ["href", "src", "alt", "title", "class", "id", "target", "rel"],
+	ALLOW_DATA_ATTR: false,
+	ADD_ATTR: ["target"],
 }
 
-function buildSelfClosingTagRegex(): RegExp {
-	const alternation = DANGEROUS_TAGS.join("|")
-	return new RegExp(`<\\s*(?:${alternation})\\b[^>]*/?\\s*>`, "gi")
+const SVG_CONFIG: DOMPurify.Config = {
+	...HTML_CONFIG,
+	// Allow SVG structural elements so Mermaid diagrams render.
+	ADD_TAGS: ["svg", "g", "path", "circle", "ellipse", "line", "polyline", "polygon", "rect", "text", "tspan", "defs", "use", "image", "marker", "linearGradient", "radialGradient", "stop", "pattern", "symbol", "title", "desc", "style"],
+	ADD_ATTR: ["d", "viewBox", "fill", "stroke", "stroke-width", "transform", "cx", "cy", "r", "rx", "ry", "x", "y", "x1", "y1", "x2", "y2", "points", "text-anchor", "dominant-baseline", "font-family", "font-size", "font-weight", "text-decoration", "marker-end", "marker-start", "clip-path", "clip-rule", "fill-rule", "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "opacity", "visibility", "display", "overflow", "xmlns", "preserveAspectRatio", "width", "height"],
 }
-
-/**
- * Matches event handler attributes in various syntactic forms:
- *   onerror=alert(1)        — unquoted
- *   onerror="alert(1)"      — double-quoted
- *   onerror='alert(1)'      — single-quoted
- *   onerror=`alert(1)`      — backtick-quoted
- *   onerror = alert(1)      — with spaces
- */
-const EVENT_HANDLER = /\bon\w+\s*=\s*(?:"[^"]*"|'[^']*'|`[^`]*`|\S+)/gi
-
-/** Dangerous URL schemes used in href, src, action, formaction, etc. */
-const DANGEROUS_URL_SCHEMES =
-	/(?:javascript|data|vbscript|jscript|behavior|mocha|livescript)\s*:/gi
-
-/** Remove CSS expressions and behavior bindings (legacy IE). */
-const CSS_EXPR = /expression\s*\(/gi
-const CSS_BEHAVIOR = /behavior\s*:/gi
-
-/** SVG-based XSS: onload, onbegin, onend, onrepeat, etc. on SVG elements. */
-const SVG_EVENT = /\bon(?:load|begin|end|repeat|focusin|focusout|activate|scroll|zoom)\s*=/gi
-
-/** Additional dangerous constructs in attribute values. */
-const FORMACTION = /\bformaction\s*=/gi
 
 export function sanitizeHtml(html: string): string {
-	let result = html
-
-	// Layer 1: Remove entire dangerous elements (both self-closing and paired)
-	result = result.replace(buildDangerousTagRegex(), "")
-	result = result.replace(buildSelfClosingTagRegex(), "")
-
-	// Layer 2: Remove remaining <script> fragments (case-insensitive)
-	result = result.replace(
-		/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
-		"",
-	)
-
-	// Layer 3: Strip all inline event handlers (covers quoted, unquoted, backtick)
-	result = result.replace(EVENT_HANDLER, "")
-
-	// Layer 4: Strip SVG-specific event handlers
-	result = result.replace(SVG_EVENT, "")
-
-	// Layer 5: Strip formaction attributes
-	result = result.replace(FORMACTION, "")
-
-	// Layer 6: Neutralize dangerous URL schemes
-	result = result.replace(DANGEROUS_URL_SCHEMES, "blocked:")
-
-	// Layer 7: Neutralize CSS expressions (legacy IE)
-	result = result.replace(CSS_EXPR, "blocked(")
-	result = result.replace(CSS_BEHAVIOR, "blocked:")
-
-	return result
+	return DOMPurify.sanitize(html, HTML_CONFIG)
 }
 
-/**
- * Lightweight SVG sanitizer for Mermaid output.
- * Strips script elements and event handlers from SVG markup.
- */
 export function sanitizeSvg(svg: string): string {
-	return sanitizeHtml(svg)
+	return DOMPurify.sanitize(svg, SVG_CONFIG)
 }

@@ -6,6 +6,7 @@ import { createDirectoriesForFile, fileExistsAtPath } from "../../utils/fs"
 import { regexSearchFiles } from "../../services/ripgrep"
 import { listFiles } from "../../services/glob/list-files"
 import { checkCommandSafety } from "../../core/tools/helpers/commandSafety"
+import { filterSensitiveEnv } from "../../utils/env"
 
 /**
  * Ensures a resolved path stays within the workspace boundary (after realpath, to reduce symlink escape).
@@ -19,16 +20,18 @@ async function ensureWithinWorkspace(cwd: string, relPath: string): Promise<stri
 	} catch {
 		/* use logical cwd if missing */
 	}
-	// Normalize comparison for case-insensitive filesystems (Windows).
-	// startsWith is case-sensitive, but NTFS/FAT are not — so lower-case
-	// both sides before comparing to prevent false negatives or escapes.
+	// Validate the resolved path stays within the workspace boundary.
+	// On Unix, path.relative is the canonical check since filesystems are case-sensitive.
+	// On Windows, NTFS/FAT are case-insensitive so we normalize case before comparing,
+	// as path.relative only compares character-by-character.
 	const isWithin = (parent: string, child: string): boolean => {
 		if (process.platform === "win32") {
 			const p = parent.toLowerCase()
 			const c = child.toLowerCase()
 			return c.startsWith(p + path.sep) || c === p
 		}
-		return child.startsWith(parent + path.sep) || child === parent
+		const rel = path.relative(parent, child)
+		return !rel.startsWith("..") && !path.isAbsolute(rel)
 	}
 
 	let target = resolved
@@ -184,7 +187,7 @@ export async function execCommand(
 
 		const proc = childProcess.spawn(shell, shellArgs, {
 			cwd: execCwd,
-			env: { ...process.env },
+			env: filterSensitiveEnv(),
 			stdio: ["ignore", "pipe", "pipe"],
 		})
 

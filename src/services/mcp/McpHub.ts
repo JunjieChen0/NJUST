@@ -861,7 +861,7 @@ export class McpHub implements IMcpHubService {
 				const baseRetryMs = 1000
 				const maxRetryMs = 60_000
 				const jitter = Math.floor(Math.random() * 1000)
-				const expBackoff = Math.min(baseRetryMs * Math.pow(2, Math.min(connectionRetries ?? 0, 5)), maxRetryMs)
+				const expBackoff = Math.min(baseRetryMs * Math.pow(2, Math.min(0, 5)), maxRetryMs)
 				const reconnectingEventSourceOptions = {
 					max_retry_time: expBackoff + jitter,
 					withCredentials: configInjected.headers?.["Authorization"] ? true : false, // Enable credentials if Authorization header exists

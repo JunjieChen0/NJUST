@@ -10,6 +10,7 @@
  */
 
 import * as fs from "fs/promises"
+import type { Dirent } from "fs"
 import * as path from "path"
 import type {
 	AgentDefinition,
@@ -100,7 +101,7 @@ async function loadMarkdownAgents(
 ): Promise<CustomAgentDefinition[]> {
 	const results: CustomAgentDefinition[] = []
 
-	let entries: fs.Dirent[]
+	let entries: Dirent[]
 	try {
 		entries = await fs.readdir(dir, { withFileTypes: true })
 	} catch {

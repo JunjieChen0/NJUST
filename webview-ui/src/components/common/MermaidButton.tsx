@@ -8,18 +8,10 @@ import { TabButton } from "./TabButton"
 import { IconButton } from "./IconButton"
 import { ZoomControls } from "./ZoomControls"
 import { StandardTooltip } from "@/components/ui"
+import { sanitizeSvg } from "@/utils/sanitize"
 
 const MIN_ZOOM = 0.5
 const MAX_ZOOM = 20
-
-/** Strip script tags, event handlers, and javascript: URIs from SVG for XSS defense-in-depth. */
-function sanitizeSvg(svg: string): string {
-	return svg
-		.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-		.replace(/\bon\w+\s*=\s*"[^"]*"/gi, "")
-		.replace(/\bon\w+\s*=\s*'[^']*'/gi, "")
-		.replace(/javascript\s*:/gi, "")
-}
 
 export interface MermaidButtonProps {
 	containerRef: React.RefObject<HTMLDivElement>

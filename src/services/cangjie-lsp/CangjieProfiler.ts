@@ -155,6 +155,7 @@ export class CangjieProfiler implements vscode.Disposable {
 			const jsonStart = output.indexOf("[{")
 			const jsonEnd = jsonStart >= 0 ? output.indexOf("}]", jsonStart) : -1
 			if (jsonStart >= 0 && jsonEnd > jsonStart) {
+					const json = JSON.parse(output.slice(jsonStart, jsonEnd + 2)) as Array<{
 					function?: string
 					file?: string
 					line?: number

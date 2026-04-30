@@ -86,8 +86,7 @@ export async function saveTaskMessagesIncremental({ messages, taskId, globalStor
 	// Incremental: serialize only the new messages and append to an append log
 	const appendFilePath = filePath + ".append"
 	const newMessages = messages.slice(lastFullCount)
-	const appendLine = JSON.stringify(newMessages) + "
-"
+	const appendLine = JSON.stringify(newMessages) + "\n"
 	await fs.appendFile(appendFilePath, appendLine, "utf-8")
 	await fs.writeFile(countFilePath, String(messages.length), "utf-8")
 }

@@ -11,7 +11,7 @@ export interface MessageQueueState {
 }
 
 export interface QueueEvents {
-	stateChanged: [messages: QueuedMessage[]]
+	stateChanged: [messages: readonly QueuedMessage[]]
 }
 
 export class MessageQueueService extends EventEmitter<QueueEvents> {

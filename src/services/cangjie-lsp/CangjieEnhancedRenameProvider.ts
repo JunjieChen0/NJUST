@@ -156,7 +156,7 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 		return out
 	}
 
-	private isIdentifierUsage(line: string, index: number): boolean {
+	private isIdentifierUsage(line: string, index: number): boolean | undefined {
 		let inString = false
 		let quote = ""
 		let escaped = false
@@ -191,4 +191,5 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 		}
 		return true
 	}
+}
 }

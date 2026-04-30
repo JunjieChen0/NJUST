@@ -11,7 +11,7 @@
 
 import type { AgentDefinition } from "./types"
 import { ToolHookManager } from "../tools/ToolHookManager"
-import type { HookContext } from "../tools/toolHooks"
+import type { HookContext } from "../hooks/types"
 
 // ── MCP Integration ──
 

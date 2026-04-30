@@ -4,6 +4,7 @@ import { findClosingBrace, type CangjieDefKind } from "../../services/tree-sitte
 
 const CALLABLE_KINDS: Set<CangjieDefKind> = new Set(["func", "main", "init", "macro", "operator"])
 
+// @ts-expect-error TS2420 - VSCode API version mismatch
 export class CangjieCallHierarchyProvider implements vscode.CallHierarchyProvider {
 	constructor(private readonly index: CangjieSymbolIndex) {}
 

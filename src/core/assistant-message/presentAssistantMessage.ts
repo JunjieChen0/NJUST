@@ -964,8 +964,7 @@ export async function presentAssistantMessage(cline: Task) {
 							pushToolResult(
 								formatResponse.toolError(
 									`Tool ${block.name} failed: ${err instanceof Error ? err.message : String(err)}`,
-								),
-								block.id,
+								)
 							)
 						}
 					} else {

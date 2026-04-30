@@ -1,3 +1,4 @@
+import * as vscode from "vscode"
 import i18next from "i18next"
 
 // Build translations object

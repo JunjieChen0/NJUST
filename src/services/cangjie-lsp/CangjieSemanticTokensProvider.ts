@@ -23,12 +23,12 @@ const KIND_TO_MODIFIER: Record<string, string[]> = {
 	extend: ["declaration"],
 }
 
-private static readonly _legend = new vscode.SemanticTokensLegend(
-	["type", "function", "macro", "variable", "property", "namespace", "operator", "decorator"],
-	["declaration", "readonly"],
-)
 
 export class CangjieSemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
+	private static readonly _legend = new vscode.SemanticTokensLegend(
+		["type", "function", "macro", "variable", "property", "namespace", "operator", "decorator"],
+		["declaration", "readonly"],
+	)
 	static get legend(): vscode.SemanticTokensLegend { return CangjieSemanticTokensProvider._legend }
 	async provideDocumentSemanticTokens(
 		document: vscode.TextDocument,

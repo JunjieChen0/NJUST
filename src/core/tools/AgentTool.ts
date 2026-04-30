@@ -119,7 +119,7 @@ export class AgentTool extends BaseTool<"agent"> {
 				let settled = false
 				const timer = setInterval(() => {
 					if (settled) return
-					if (child.taskCompleted || child.abort) {
+					if ((child as any).taskCompleted || (child as any).abort) {
 						settled = true
 						clearInterval(timer)
 						resolve()

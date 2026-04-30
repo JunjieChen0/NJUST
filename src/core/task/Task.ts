@@ -1342,17 +1342,17 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		return readTaskMessages({ taskId: this.taskId, globalStoragePath: this.globalStoragePath })
 	}
 
-	private async addToClineMessages(message: ClineMessage) {
+	private async addToClineMessages(message: Omit<ClineMessage, "id"> & { id?: string }) {
 		// Ensure every message has a unique id for stable lookup.
 		if (!message.id) {
 			message.id = uuidv7()
 		}
-		this.clineMessages.push(message)
+		this.clineMessages.push(message as ClineMessage)
 		const provider = this.hostRef.deref()
 		// Avoid resending large, mostly-static fields (notably taskHistory) on every chat message update.
 		// taskHistory is maintained in-memory in the webview and updated via taskHistoryItemUpdated.
 		await provider?.postStateToWebviewWithoutTaskHistory()
-		this.emit(NJUST_AI_CJEventName.Message, { action: "created", message })
+		this.emit(NJUST_AI_CJEventName.Message, { action: "created", message: message as ClineMessage })
 		await this.saveClineMessages()
 
 		// Cloud service disabled - no message capture

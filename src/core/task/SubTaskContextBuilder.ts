@@ -265,7 +265,6 @@ export function buildForkPlaceholderResult(
 		],
 	}
 }
-}
 
 /**
  * Generate a result summary from a completed task for injection into parent context.
