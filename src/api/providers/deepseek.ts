@@ -25,9 +25,14 @@ type DeepSeekChatCompletionParams = OpenAI.Chat.ChatCompletionCreateParamsStream
 
 export class DeepSeekHandler extends OpenAiHandler {
 	constructor(options: ApiHandlerOptions) {
+		// Validate API key before passing to parent
+		const apiKey = options.deepSeekApiKey
+		if (!apiKey) {
+			throw new Error("DeepSeek API key is required. Please configure it in settings.")
+		}
 		super({
 			...options,
-			openAiApiKey: options.deepSeekApiKey ?? "not-provided",
+			openAiApiKey: apiKey,
 			openAiModelId: options.apiModelId ?? deepSeekDefaultModelId,
 			openAiBaseUrl: options.deepSeekBaseUrl || "https://api.deepseek.com",
 			openAiStreamingEnabled: true,

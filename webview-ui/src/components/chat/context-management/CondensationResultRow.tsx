@@ -1,7 +1,7 @@
-import { useState } from "react"
+import { memo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { VSCodeBadge } from "@vscode/webview-ui-toolkit/react"
-import { FoldVertical } from "lucide-react"
+import { FoldVertical, Sparkles } from "lucide-react"
 
 import type { ContextCondense } from "@njust-ai-cj/types"
 
@@ -14,8 +14,9 @@ interface CondensationResultRowProps {
 /**
  * Displays the result of a successful context condensation operation.
  * Shows token reduction, cost, and an expandable summary section.
+ * Uses green/success styling to indicate high-quality compression.
  */
-export function CondensationResultRow({ data }: CondensationResultRowProps) {
+export const CondensationResultRow = memo(({ data }: CondensationResultRowProps) => {
 	const { t } = useTranslation()
 	const [isExpanded, setIsExpanded] = useState(false)
 
@@ -29,12 +30,23 @@ export function CondensationResultRow({ data }: CondensationResultRowProps) {
 	return (
 		<div className="mb-2">
 			<div
-				className="flex items-center justify-between cursor-pointer select-none"
-				onClick={() => setIsExpanded(!isExpanded)}>
+				role="button"
+				tabIndex={0}
+				className="flex items-center justify-between cursor-pointer select-none group"
+				onClick={() => setIsExpanded(!isExpanded)}
+				onKeyDown={(e) => {
+					if (e.key === "Enter" || e.key === " ") {
+						e.preventDefault()
+						setIsExpanded(!isExpanded)
+					}
+				}}>
 				<div className="flex items-center gap-2 flex-grow">
-					<FoldVertical size={16} className="text-vscode-foreground" />
+					<Sparkles size={16} className="text-vscode-charts-green shrink-0" aria-hidden="true" />
 					<span className="font-bold text-vscode-foreground">
 						{t("chat:contextManagement.condensation.title")}
+					</span>
+					<span className="text-vscode-charts-green text-xs font-medium">
+						{t("chat:contextManagement.condensation.subtitle")}
 					</span>
 					<span className="text-vscode-descriptionForeground text-sm">
 						{prevTokens.toLocaleString()} → {newTokens.toLocaleString()}{" "}
@@ -44,14 +56,14 @@ export function CondensationResultRow({ data }: CondensationResultRowProps) {
 						${displayCost.toFixed(2)}
 					</VSCodeBadge>
 				</div>
-				<span className={`codicon codicon-chevron-${isExpanded ? "up" : "down"}`}></span>
+				<span className={`codicon codicon-chevron-${isExpanded ? "up" : "down"} opacity-0 group-hover:opacity-100 transition-opacity`} aria-hidden="true"></span>
 			</div>
 
 			{isExpanded && (
-				<div className="mt-2 ml-0 p-4 bg-vscode-editor-background rounded text-vscode-foreground text-sm">
+				<div className="mt-2 ml-0 p-4 bg-vscode-editor-background rounded text-vscode-foreground text-sm border-l-2 border-vscode-charts-green/40">
 					<Markdown markdown={summary} />
 				</div>
 			)}
 		</div>
 	)
-}
+})

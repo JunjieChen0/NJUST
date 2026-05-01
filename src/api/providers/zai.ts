@@ -16,6 +16,7 @@ import { convertToZAiFormat } from "../transform/zai-format"
 
 import type { ApiHandlerCreateMessageMetadata } from "../index"
 import { BaseOpenAiCompatibleProvider } from "./base-openai-compatible-provider"
+import { requireApiKey } from "../interfaces/api-key-validator"
 
 // Custom interface for Z.ai params to support thinking mode
 type ZAiChatCompletionParams = OpenAI.Chat.ChatCompletionCreateParamsStreaming & {
@@ -32,7 +33,7 @@ export class ZAiHandler extends BaseOpenAiCompatibleProvider<string> {
 			...options,
 			providerName: "Z.ai",
 			baseURL: zaiApiLineConfigs[options.zaiApiLine ?? "international_coding"].baseUrl,
-			apiKey: options.zaiApiKey ?? "not-provided",
+			apiKey: requireApiKey(options.zaiApiKey, "Z.ai"),
 			defaultProviderModelId: defaultModelId,
 			providerModels: models,
 			defaultTemperature: ZAI_DEFAULT_TEMPERATURE,

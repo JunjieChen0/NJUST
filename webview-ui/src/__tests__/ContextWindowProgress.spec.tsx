@@ -7,7 +7,7 @@ import TaskHeader from "@src/components/chat/TaskHeader"
 
 // Mock formatLargeNumber function
 vi.mock("@/utils/format", () => ({
-	formatLargeNumber: vi.fn((num) => num.toString()),
+	formatLargeNumber: vi.fn((num) => num.toLocaleString()),
 }))
 
 // Mock VSCodeBadge component for all tests
@@ -48,7 +48,7 @@ describe("ContextWindowProgress", () => {
 	const renderComponent = (props: Record<string, any>) => {
 		// Create a simple mock of the task that avoids importing the actual types
 		const defaultProps = {
-			task: { ts: Date.now(), type: "say" as const, say: "text" as const, text: "Test task" },
+			task: { id: "test", ts: Date.now(), type: "say" as const, say: "text" as const, text: "Test task" },
 			tokensIn: 100,
 			tokensOut: 50,
 			totalCost: 0.001,

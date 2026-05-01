@@ -8,6 +8,8 @@ import AppWithProviders from "../App"
 vi.mock("@src/utils/vscode", () => ({
 	vscode: {
 		postMessage: vi.fn(),
+		getState: vi.fn(() => ({ njust_login_authenticated: true })),
+		setState: vi.fn(),
 	},
 }))
 

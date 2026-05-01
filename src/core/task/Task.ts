@@ -8,6 +8,7 @@ import EventEmitter from "events"
 
 import { AskIgnoredError } from "./AskIgnoredError"
 import { startAllPrefetch } from "../prefetch"
+import { setLastGlobalApiRequestTime, getLastGlobalApiRequestTime as getGlobalApiTime } from "./globalApiTiming"
 
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI from "openai"
@@ -366,7 +367,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	// API
 	apiConfiguration: ProviderSettings
 	api: ApiHandler
-	private static lastGlobalApiRequestTime?: number
+	// Note: lastGlobalApiRequestTime is now managed in globalApiTiming.ts
 	private autoApprovalHandler: AutoApprovalHandler
 
 	/**
@@ -374,7 +375,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 * @internal
 	 */
 	static resetGlobalApiRequestTime(): void {
-		Task.lastGlobalApiRequestTime = undefined
+		setLastGlobalApiRequestTime(undefined as any)
 	}
 
 	/**
@@ -382,7 +383,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 * Exposed for TaskStreamProcessor (delegation pattern).
 	 */
 	static getLastGlobalApiRequestTime(): number | undefined {
-		return Task.lastGlobalApiRequestTime
+		return getGlobalApiTime()
 	}
 
 	toolRepetitionDetector: ToolRepetitionDetector
@@ -566,12 +567,12 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	/** Accessor for the static lastGlobalApiRequestTime (used by TaskExecutor). */
 	public setLastGlobalApiRequestTime(time: number): void {
-		Task.lastGlobalApiRequestTime = time
+		setLastGlobalApiRequestTime(time)
 	}
 
 	/** Accessor for the static lastGlobalApiRequestTime (used by TaskExecutor). */
 	public getLastGlobalApiRequestTimeValue(): number | undefined {
-		return Task.lastGlobalApiRequestTime
+		return getGlobalApiTime()
 	}
 
 	public get taskState(): TaskState {

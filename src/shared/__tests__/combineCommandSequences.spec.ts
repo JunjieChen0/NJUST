@@ -8,15 +8,16 @@ describe("combineCommandSequences", () => {
 	describe("command sequences", () => {
 		it("should combine command and command_output messages", () => {
 			const messages: ClineMessage[] = [
-				{ type: "ask", ask: "command", text: "ls", ts: 1625097600000 },
-				{ type: "ask", ask: "command_output", text: "file1.txt", ts: 1625097601000 },
-				{ type: "ask", ask: "command_output", text: "file2.txt", ts: 1625097602000 },
+				{ id: 'test', type: "ask", ask: "command", text: "ls", ts: 1625097600000 },
+				{ id: 'test', type: "ask", ask: "command_output", text: "file1.txt", ts: 1625097601000 },
+				{ id: 'test', type: "ask", ask: "command_output", text: "file2.txt", ts: 1625097602000 },
 			]
 
 			const result = combineCommandSequences(messages)
 
 			expect(result).toHaveLength(1)
 			expect(result[0]).toEqual({
+				id: 'test',
 				type: "ask",
 				ask: "command",
 				text: "ls\nOutput:file1.txt\nfile2.txt",
@@ -29,6 +30,7 @@ describe("combineCommandSequences", () => {
 		it("should combine use_mcp_server and mcp_server_response messages", () => {
 			const messages: ClineMessage[] = [
 				{
+					id: 'test',
 					type: "ask",
 					ask: "use_mcp_server",
 					text: JSON.stringify({
@@ -38,13 +40,14 @@ describe("combineCommandSequences", () => {
 					}),
 					ts: 1625097600000,
 				},
-				{ type: "say", say: "mcp_server_response", text: "Response data", ts: 1625097601000 },
+				{ id: 'test', type: "say", say: "mcp_server_response", text: "Response data", ts: 1625097601000 },
 			]
 
 			const result = combineCommandSequences(messages)
 
 			expect(result).toHaveLength(1)
 			expect(result[0]).toEqual({
+				id: 'test',
 				type: "ask",
 				ask: "use_mcp_server",
 				text: JSON.stringify({
@@ -60,6 +63,7 @@ describe("combineCommandSequences", () => {
 		it("should handle multiple mcp_server_response messages", () => {
 			const messages: ClineMessage[] = [
 				{
+					id: 'test',
 					type: "ask",
 					ask: "use_mcp_server",
 					text: JSON.stringify({
@@ -69,14 +73,15 @@ describe("combineCommandSequences", () => {
 					}),
 					ts: 1625097600000,
 				},
-				{ type: "say", say: "mcp_server_response", text: "First response", ts: 1625097601000 },
-				{ type: "say", say: "mcp_server_response", text: "Second response", ts: 1625097602000 },
+				{ id: 'test', type: "say", say: "mcp_server_response", text: "First response", ts: 1625097601000 },
+				{ id: 'test', type: "say", say: "mcp_server_response", text: "Second response", ts: 1625097602000 },
 			]
 
 			const result = combineCommandSequences(messages)
 
 			expect(result).toHaveLength(1)
 			expect(result[0]).toEqual({
+				id: 'test',
 				type: "ask",
 				ask: "use_mcp_server",
 				text: JSON.stringify({
@@ -92,6 +97,7 @@ describe("combineCommandSequences", () => {
 		it("should handle multiple MCP server requests", () => {
 			const messages: ClineMessage[] = [
 				{
+					id: 'test',
 					type: "ask",
 					ask: "use_mcp_server",
 					text: JSON.stringify({
@@ -101,8 +107,9 @@ describe("combineCommandSequences", () => {
 					}),
 					ts: 1625097600000,
 				},
-				{ type: "say", say: "mcp_server_response", text: "Response 1", ts: 1625097601000 },
+				{ id: 'test', type: "say", say: "mcp_server_response", text: "Response 1", ts: 1625097601000 },
 				{
+					id: 'test',
 					type: "ask",
 					ask: "use_mcp_server",
 					text: JSON.stringify({
@@ -112,13 +119,14 @@ describe("combineCommandSequences", () => {
 					}),
 					ts: 1625097602000,
 				},
-				{ type: "say", say: "mcp_server_response", text: "Response 2", ts: 1625097603000 },
+				{ id: 'test', type: "say", say: "mcp_server_response", text: "Response 2", ts: 1625097603000 },
 			]
 
 			const result = combineCommandSequences(messages)
 
 			expect(result).toHaveLength(2)
 			expect(result[0]).toEqual({
+				id: 'test',
 				type: "ask",
 				ask: "use_mcp_server",
 				text: JSON.stringify({
@@ -130,6 +138,7 @@ describe("combineCommandSequences", () => {
 				ts: 1625097600000,
 			})
 			expect(result[1]).toEqual({
+				id: 'test',
 				type: "ask",
 				ask: "use_mcp_server",
 				text: JSON.stringify({
@@ -146,9 +155,10 @@ describe("combineCommandSequences", () => {
 	describe("mixed sequences", () => {
 		it("should handle both command and MCP server sequences", () => {
 			const messages: ClineMessage[] = [
-				{ type: "ask", ask: "command", text: "ls", ts: 1625097600000 },
-				{ type: "ask", ask: "command_output", text: "file1.txt", ts: 1625097601000 },
+				{ id: 'test', type: "ask", ask: "command", text: "ls", ts: 1625097600000 },
+				{ id: 'test', type: "ask", ask: "command_output", text: "file1.txt", ts: 1625097601000 },
 				{
+					id: 'test',
 					type: "ask",
 					ask: "use_mcp_server",
 					text: JSON.stringify({
@@ -158,19 +168,21 @@ describe("combineCommandSequences", () => {
 					}),
 					ts: 1625097602000,
 				},
-				{ type: "say", say: "mcp_server_response", text: "MCP response", ts: 1625097603000 },
+				{ id: 'test', type: "say", say: "mcp_server_response", text: "MCP response", ts: 1625097603000 },
 			]
 
 			const result = combineCommandSequences(messages)
 
 			expect(result).toHaveLength(2)
 			expect(result[0]).toEqual({
+				id: 'test',
 				type: "ask",
 				ask: "command",
 				text: "ls\nOutput:file1.txt",
 				ts: 1625097600000,
 			})
 			expect(result[1]).toEqual({
+				id: 'test',
 				type: "ask",
 				ask: "use_mcp_server",
 				text: JSON.stringify({

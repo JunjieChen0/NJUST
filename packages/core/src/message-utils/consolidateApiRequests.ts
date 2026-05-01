@@ -82,7 +82,23 @@ export function consolidateApiRequests(messages: ClineMessage[]): ClineMessage[]
 				// Ignore JSON parse errors
 			}
 
-			result[startIndex] = { ...startMessage, text: JSON.stringify({ ...startData, ...finishData }) }
+			// Before merging, check that both are valid objects (not null, not arrays, not primitives)
+			const isStartObject = typeof startData === "object" && startData !== null && !Array.isArray(startData)
+			const isFinishObject = typeof finishData === "object" && finishData !== null && !Array.isArray(finishData)
+
+			let mergedText: string
+			if (!isStartObject && isFinishObject) {
+				mergedText = JSON.stringify(finishData)
+			} else if (isStartObject && !isFinishObject) {
+				mergedText = JSON.stringify(startData)
+			} else if (isStartObject && isFinishObject) {
+				mergedText = JSON.stringify({ ...startData, ...finishData })
+			} else {
+				// Neither is an object - prefer finishData if truthy, otherwise startData
+				mergedText = JSON.stringify(finishData ?? startData)
+			}
+
+			result[startIndex] = { ...startMessage, text: mergedText }
 		}
 	}
 

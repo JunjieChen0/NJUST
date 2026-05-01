@@ -358,15 +358,23 @@
 		"tokens": "Token",
 		"condensation": {
 			"title": "上下文已压缩",
+			"subtitle": "AI 智能总结",
 			"inProgress": "正在压缩上下文...",
 			"errorHeader": "上下文压缩失败"
 		},
 		"truncation": {
 			"title": "上下文已截断",
+			"subtitle": "快速截断",
 			"inProgress": "正在截断上下文...",
 			"messagesRemoved": "已移除 {{count}} 条消息",
 			"messagesRemoved_other": "已移除 {{count}} 条消息",
-			"description": "为保持在上下文窗口限制内，已从对话中移除较旧的消息。与压缩相比，这是一种快速但上下文保留较少的方法。"
+			"description": "为保持在上下文窗口限制内，已从对话中移除较旧的消息。与压缩相比，这是一种快速但上下文保留较少的方法。",
+			"suggestion": "如需完整的上下文信息，建议开启一个新对话。"
+		},
+		"circuitBreaker": {
+			"title": "上下文压缩已降级",
+			"description": "上下文压缩连续多次失败，系统已切换到截断模式作为降级方案。此模式保留的对话上下文比正常压缩少。",
+			"suggestion": "建议开启一个新对话以重置上下文窗口。"
 		}
 	},
 	"skill": {

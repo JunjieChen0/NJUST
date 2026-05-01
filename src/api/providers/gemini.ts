@@ -28,6 +28,7 @@ import { getModelParams } from "../transform/model-params"
 
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
 import { BaseProvider } from "./base-provider"
+import { requireApiKey } from "../interfaces/api-key-validator"
 
 type GeminiHandlerOptions = ApiHandlerOptions & {
 	isVertex?: boolean
@@ -48,7 +49,11 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 
 		const project = this.options.vertexProjectId ?? "not-provided"
 		const location = this.options.vertexRegion ?? "not-provided"
-		const apiKey = this.options.geminiApiKey ?? "not-provided"
+		// For Vertex AI, project/location are used instead of API key
+		// For Gemini API, require the API key
+		const apiKey = isVertex
+			? (this.options.geminiApiKey ?? "not-provided")
+			: requireApiKey(this.options.geminiApiKey, "Gemini")
 
 		this.client = this.options.vertexJsonCredentials
 			? new GoogleGenAI({

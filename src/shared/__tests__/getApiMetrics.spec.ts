@@ -10,6 +10,7 @@ describe("getApiMetrics", () => {
 		text: string = '{"tokensIn":10,"tokensOut":20}',
 		ts: number = 1000,
 	): ClineMessage => ({
+		id: 'test',
 		type: "say",
 		say: "api_req_started",
 		text,
@@ -23,6 +24,7 @@ describe("getApiMetrics", () => {
 		prevContextTokens: number = 1000,
 		ts: number = 2000,
 	): ClineMessage => ({
+		id: 'test',
 		type: "say",
 		say: "condense_context",
 		contextCondense: {
@@ -40,6 +42,7 @@ describe("getApiMetrics", () => {
 		text: string = "Hello world",
 		ts: number = 999,
 	): ClineMessage => ({
+		id: 'test',
 		type: "say",
 		say,
 		text,
@@ -156,12 +159,9 @@ describe("getApiMetrics", () => {
 		})
 
 		it("should handle invalid JSON in api_req_started message", () => {
-			// We need to mock console.error to avoid polluting test output
-			const originalConsoleError = console.error
-			console.error = vi.fn()
-
 			const messages: ClineMessage[] = [
 				{
+					id: 'test',
 					type: "say",
 					say: "api_req_started",
 					text: "This is not valid JSON",
@@ -178,14 +178,12 @@ describe("getApiMetrics", () => {
 			expect(result.totalCacheReads).toBeUndefined()
 			expect(result.totalCost).toBe(0)
 			expect(result.contextTokens).toBe(0)
-
-			// Restore console.error
-			console.error = originalConsoleError
 		})
 
 		it("should handle missing text field in api_req_started message", () => {
 			const messages: ClineMessage[] = [
 				{
+					id: 'test',
 					type: "say",
 					say: "api_req_started",
 					ts: 1000,
@@ -207,6 +205,7 @@ describe("getApiMetrics", () => {
 		it("should handle missing contextCondense field in condense_context message", () => {
 			const messages: ClineMessage[] = [
 				{
+					id: 'test',
 					type: "say",
 					say: "condense_context",
 					ts: 1000,
@@ -264,8 +263,8 @@ describe("getApiMetrics", () => {
 			expect(result.totalCacheReads).toBeUndefined()
 			expect(result.totalCost).toBe(0)
 
-			// The implementation concatenates all token values including cache tokens
-			expect(result.contextTokens).toBe("not-a-numbernot-a-number") // tokensIn + tokensOut (OpenAI default)
+			// After fix: Number("not-a-number") returns NaN, NaN || 0 returns 0
+			expect(result.contextTokens).toBe(0) // tokensIn + tokensOut (OpenAI default)
 		})
 	})
 
@@ -309,10 +308,6 @@ describe("getApiMetrics", () => {
 		})
 
 		it("should handle missing values when calculating contextTokens", () => {
-			// We need to mock console.error to avoid polluting test output
-			const originalConsoleError = console.error
-			console.error = vi.fn()
-
 			const messages: ClineMessage[] = [
 				createApiReqStartedMessage('{"tokensIn":null,"cacheWrites":5,"cacheReads":10}', 1000),
 			]
@@ -321,9 +316,6 @@ describe("getApiMetrics", () => {
 
 			// Should handle missing or invalid values
 			expect(result.contextTokens).toBe(0) // 0 + 0 (OpenAI default, no cache tokens)
-
-			// Restore console.error
-			console.error = originalConsoleError
 		})
 	})
 })

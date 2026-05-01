@@ -2,6 +2,7 @@
 const mockCaptureException = vi.hoisted(() => vi.fn())
 vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
+		hasInstance: () => true,
 		instance: {
 			captureException: mockCaptureException,
 		},
@@ -300,7 +301,7 @@ describe("AwsBedrockHandler Error Handling", () => {
 				for await (const chunk of generator) {
 					// Should not yield any chunks for throttling errors
 				}
-			}).rejects.toThrow("Bedrock is unable to process your request")
+			}).rejects.toThrow("Request was throttled or rate limited")
 		})
 
 		it("should yield error chunks for non-throttling errors in streaming context", async () => {
@@ -324,18 +325,22 @@ describe("AwsBedrockHandler Error Handling", () => {
 			const generator = handler.createMessage("system", [{ role: "user", content: "test" }])
 
 			const chunks: any[] = []
+			let thrownError: Error | undefined
 			try {
 				for await (const chunk of generator) {
 					chunks.push(chunk)
 				}
 			} catch (error) {
-				// Expected to throw after yielding chunks
+				thrownError = error as Error
 			}
 
 			// Should have yielded error chunks before throwing for non-throttling errors
 			expect(
 				chunks.some((chunk) => chunk.type === "text" && chunk.text && chunk.text.includes("Some other error")),
 			).toBe(true)
+			expect(thrownError).toBeDefined()
+			expect(thrownError?.message).toContain("Some other error")
+			expect(mockCaptureException).toHaveBeenCalled()
 		})
 	})
 

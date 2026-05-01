@@ -6,6 +6,7 @@ import type { ApiStreamUsageChunk } from "../transform/stream"
 import { getModelParams } from "../transform/model-params"
 
 import { OpenAICompatibleHandler, OpenAICompatibleConfig } from "./openai-compatible"
+import { requireApiKey } from "../interfaces/api-key-validator"
 
 export class GlmHandler extends OpenAICompatibleHandler {
 	constructor(options: ApiHandlerOptions) {
@@ -15,7 +16,7 @@ export class GlmHandler extends OpenAICompatibleHandler {
 		const config: OpenAICompatibleConfig = {
 			providerName: "glm",
 			baseURL: options.glmBaseUrl || "https://open.bigmodel.cn/api/paas/v4",
-			apiKey: options.glmApiKey ?? "not-provided",
+			apiKey: requireApiKey(options.glmApiKey, "GLM"),
 			modelId,
 			modelInfo,
 			modelMaxTokens: options.modelMaxTokens ?? undefined,

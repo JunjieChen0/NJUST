@@ -6,8 +6,9 @@
  * sanitizing server-provided / LLM-generated markup is an additional layer.
  */
 import DOMPurify from "dompurify"
+import type { Config } from "dompurify"
 
-const HTML_CONFIG: DOMPurify.Config = {
+const HTML_CONFIG: Config = {
 	ALLOWED_TAGS: [
 		"b", "i", "em", "strong", "u", "s", "del", "ins",
 		"a", "p", "br", "hr",
@@ -24,7 +25,7 @@ const HTML_CONFIG: DOMPurify.Config = {
 	ADD_ATTR: ["target"],
 }
 
-const SVG_CONFIG: DOMPurify.Config = {
+const SVG_CONFIG: Config = {
 	...HTML_CONFIG,
 	// Allow SVG structural elements so Mermaid diagrams render.
 	ADD_TAGS: ["svg", "g", "path", "circle", "ellipse", "line", "polyline", "polygon", "rect", "text", "tspan", "defs", "use", "image", "marker", "linearGradient", "radialGradient", "stop", "pattern", "symbol", "title", "desc", "style"],
@@ -32,9 +33,9 @@ const SVG_CONFIG: DOMPurify.Config = {
 }
 
 export function sanitizeHtml(html: string): string {
-	return DOMPurify.sanitize(html, HTML_CONFIG)
+	return DOMPurify.sanitize(html, HTML_CONFIG) as string
 }
 
 export function sanitizeSvg(svg: string): string {
-	return DOMPurify.sanitize(svg, SVG_CONFIG)
+	return DOMPurify.sanitize(svg, SVG_CONFIG) as string
 }

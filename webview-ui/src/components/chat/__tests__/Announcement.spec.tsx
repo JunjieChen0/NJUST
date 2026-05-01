@@ -12,7 +12,7 @@ vi.mock("@src/utils/vscode", () => ({
 
 vi.mock("@roo/package", () => ({
 	Package: {
-		version: "3.51.0",
+		version: "2026.4.30",
 	},
 }))
 
@@ -33,10 +33,12 @@ vi.mock("@src/i18n/TranslationContext", () => ({
 		t: (key: string, options?: { version?: string }) => {
 			const translations: Record<string, string> = {
 				"chat:announcement.release.heading": "What's New:",
-				"chat:announcement.release.gpt54":
-					"OpenAI GPT-5.4 Support: Added OpenAI GPT-5.4 and GPT-5.3 Chat Latest so you can use the newest OpenAI chat models in NJUST_AI_CJ.",
-				"chat:announcement.release.slashSkills":
-					"Slash Command Skills: Skills can now be exposed as slash commands with fallback execution for faster workflows.",
+				"chat:announcement.release.cangjieToolchain":
+					"Cangjie toolchain integration: improved cjpm/cjfmt/cjlint workflow support.",
+				"chat:announcement.release.cangjieContext":
+					"Context management enhancements for Cangjie projects with more stable compaction behavior.",
+				"chat:announcement.release.cangjieWelcome":
+					"Updated welcome and onboarding experience for NJUST_AI_CJ.",
 			}
 
 			if (key === "chat:announcement.title") {
@@ -49,25 +51,28 @@ vi.mock("@src/i18n/TranslationContext", () => ({
 }))
 
 describe("Announcement", () => {
-	it("renders the v3.51.0 announcement title and highlights", () => {
+	it("renders current announcement title and highlights", () => {
 		render(<Announcement hideAnnouncement={vi.fn()} />)
 
-		expect(screen.getByText("NJUST_AI_CJ 3.51.0 Released")).toBeInTheDocument()
+		expect(screen.getByText("NJUST_AI_CJ 2026.4.30 Released")).toBeInTheDocument()
 		expect(
 			screen.getByText(
-				"OpenAI GPT-5.4 Support: Added OpenAI GPT-5.4 and GPT-5.3 Chat Latest so you can use the newest OpenAI chat models in NJUST_AI_CJ.",
+				"Cangjie toolchain integration: improved cjpm/cjfmt/cjlint workflow support.",
 			),
 		).toBeInTheDocument()
 		expect(
 			screen.getByText(
-				"Slash Command Skills: Skills can now be exposed as slash commands with fallback execution for faster workflows.",
+				"Context management enhancements for Cangjie projects with more stable compaction behavior.",
 			),
+		).toBeInTheDocument()
+		expect(
+			screen.getByText("Updated welcome and onboarding experience for NJUST_AI_CJ."),
 		).toBeInTheDocument()
 	})
 
-	it("renders exactly two release highlight bullets", () => {
+	it("renders exactly three release highlight bullets", () => {
 		render(<Announcement hideAnnouncement={vi.fn()} />)
 
-		expect(screen.getAllByRole("listitem")).toHaveLength(2)
+		expect(screen.getAllByRole("listitem")).toHaveLength(3)
 	})
 })

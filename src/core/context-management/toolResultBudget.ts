@@ -1,4 +1,5 @@
 import { ApiMessage } from "../task-persistence/apiMessages"
+import { ContextHierarchy, findTurnIndex, computeTurnSelfAttentionMean } from "./contextHierarchy"
 
 // ── Single-result and round-level budget constants ──────────────────
 export const DEFAULT_MAX_SINGLE_RESULT_CHARS = 100_000 // 单个工具结果上限 100KB
@@ -117,11 +118,16 @@ function resolveBudgetByTool(
 	maxCharsByTool: Record<string, number>,
 	defaultMaxChars: number,
 	agePenaltyLevel: number,
+	turnImportance?: number,
 ): number {
 	const tool = (block.name ?? "").toLowerCase()
 	const base = maxCharsByTool[tool] ?? defaultMaxChars
 	const ratio = agePenaltyLevel >= 3 ? 0.4 : agePenaltyLevel === 2 ? 0.55 : agePenaltyLevel === 1 ? 0.75 : 1
-	return Math.max(1200, Math.floor(base * ratio))
+	// HCA: scale by turn importance — high-importance turns retain more content
+	const importanceRatio = turnImportance !== undefined
+		? 0.5 + turnImportance * 0.5
+		: 1.0
+	return Math.max(1200, Math.floor(base * ratio * importanceRatio))
 }
 
 /**
@@ -147,6 +153,7 @@ function buildToolUseIdToNameMap(messages: ApiMessage[]): Map<string, string> {
 export function applyToolResultBudget(
 	messages: ApiMessage[],
 	opts?: ToolResultBudgetOptions,
+	hierarchy?: ContextHierarchy,
 ): ApiMessage[] {
 	if (messages.length === 0) return messages
 
@@ -162,13 +169,21 @@ export function applyToolResultBudget(
 
 		const age = boundary - index
 		const agePenaltyLevel = age >= 18 ? 3 : age >= 10 ? 2 : age >= 5 ? 1 : 0
+		// HCA: compute turn importance for budget scaling
+		let turnImportance: number | undefined
+		if (hierarchy) {
+			const turnIdx = findTurnIndex(hierarchy, index)
+			if (turnIdx >= 0) {
+				turnImportance = computeTurnSelfAttentionMean(hierarchy, turnIdx)
+			}
+		}
 		const blocks = m.content
 		let blockChanged = false
 		const nextBlocks = blocks.map((block) => {
 			if (block.type !== "tool_result") return block
 			const toolUseId = (block as { tool_use_id?: string }).tool_use_id
 			const toolName = (toolUseId && toolUseIdToName.get(toolUseId)) ?? "unknown_tool"
-			const budget = resolveBudgetByTool({ name: toolName }, maxCharsByTool, defaultMaxChars, agePenaltyLevel)
+			const budget = resolveBudgetByTool({ name: toolName }, maxCharsByTool, defaultMaxChars, agePenaltyLevel, turnImportance)
 			if (typeof block.content === "string") {
 				const compacted = compactByToolHeuristic(block.content, toolName, budget)
 				if (compacted !== block.content) {

@@ -82,7 +82,7 @@ describe("postCompactRestore", () => {
 
 	it("restores active skills", () => {
 		const input: ApiMessage[] = [{ role: "user", content: "x", ts: Date.now() }]
-		const out = postCompactRestore(input, { activeSkills: ["skill-a", "skill-b"] })
+		const out = postCompactRestore(input, { activeSkills: [{ name: "skill-a", content: "skill-a content" }, { name: "skill-b", content: "skill-b content" }] })
 		expect(out.length).toBe(input.length + 1)
 		const last = String(out[out.length - 1].content)
 		expect(last).toContain("Active Skill: skill-a")

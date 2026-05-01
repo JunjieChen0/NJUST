@@ -332,6 +332,16 @@ export type ExtensionState = Pick<
 	debug?: boolean
 
 	/**
+	 * Global sequence number for async state push deduplication.
+	 * When set, the frontend guards apiConfiguration, skills, and taskHistory
+	 * against stale overwrites from concurrent async state pushes.
+	 */
+	globalSeq?: number
+
+	/** Available skills metadata */
+	skills?: SkillMetadata[]
+
+	/**
 	 * Monotonically increasing sequence number for clineMessages state pushes.
 	 * When present, the frontend should only apply clineMessages from a state push
 	 * if its seq is greater than the last applied seq. This prevents stale state

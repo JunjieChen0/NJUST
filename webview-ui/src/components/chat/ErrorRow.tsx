@@ -1,7 +1,7 @@
 import React, { useState, useCallback, memo, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { VSCodeButton } from "@vscode/webview-ui-toolkit/react"
-import { BookOpenText, MessageCircleWarning, Copy, Check, Microscope, Info } from "lucide-react"
+import { BookOpenText, MessageCircleWarning, Copy, Check, Microscope, Info, ChevronDown, ChevronRight, Settings, RotateCcw } from "lucide-react"
 
 import { useCopyToClipboard } from "@src/utils/clipboard"
 import { vscode } from "@src/utils/vscode"
@@ -16,6 +16,11 @@ import { PROVIDERS } from "../settings/constants"
  * Unified error display component for all error types in the chat.
  * Provides consistent styling, icons, and optional documentation links across all errors.
  *
+ * Errors are displayed in a tiered fashion:
+ * 1. User-friendly title + message (always visible)
+ * 2. Technical error details (collapsible, hidden by default)
+ * 3. Action buttons for recovery (shown contextually based on error type/code)
+ *
  * @param type - Error type determines default title
  * @param title - Optional custom title (overrides default for error type)
  * @param message - Error message text (required)
@@ -26,28 +31,8 @@ import { PROVIDERS } from "../settings/constants"
  * @param additionalContent - Optional React nodes to render after message
  * @param headerClassName - Custom CSS classes for header section
  * @param messageClassName - Custom CSS classes for message section
- *
- * @example
- * // Simple error
- * <ErrorRow type="error" message="File not found" />
- *
- * @example
- * // Error with documentation link
- * <ErrorRow
- *   type="api_failure"
- *   message="API key missing"
- *   docsURL="https://docs.example.com/api-setup"
- * />
- *
- * @example
- * // Expandable error with code
- * <ErrorRow
- *   type="diff_error"
- *   message="Patch failed to apply"
- *   expandable={true}
- *   defaultExpanded={false}
- *   additionalContent={<pre>{errorDetails}</pre>}
- * />
+ * @param actionLabel - Label for recovery action button (shown alongside error message)
+ * @param onAction - Callback when the recovery action button is clicked
  */
 export interface ErrorRowProps {
 	type:
@@ -69,10 +54,13 @@ export interface ErrorRowProps {
 	code?: number
 	docsURL?: string // Optional documentation link
 	errorDetails?: string // Optional detailed error message shown in modal
+	actionLabel?: string // Label for recovery action button (e.g., "Go to Settings")
+	onAction?: () => void // Callback when the action button is clicked
 }
 
 /**
- * Unified error display component for all error types in the chat
+ * Unified error display component for all error types in the chat.
+ * Shows user-friendly messages by default with technical details available on demand.
  */
 export const ErrorRow = memo(
 	({
@@ -88,15 +76,33 @@ export const ErrorRow = memo(
 		docsURL,
 		code,
 		errorDetails,
+		actionLabel,
+		onAction,
 	}: ErrorRowProps) => {
 		const { t } = useTranslation()
 		const [isExpanded, setIsExpanded] = useState(defaultExpanded)
 		const [showCopySuccess, setShowCopySuccess] = useState(false)
 		const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
 		const [showDetailsCopySuccess, setShowDetailsCopySuccess] = useState(false)
+		const [isTechDetailsExpanded, setIsTechDetailsExpanded] = useState(false)
 		const { copyWithFeedback } = useCopyToClipboard()
 		const { version, apiConfiguration } = useExtensionState()
 		const { provider, id: modelId } = useSelectedModel(apiConfiguration)
+
+		// Validate docsURL to ensure it's a safe protocol
+		const safeDocsURL = useMemo(() => {
+			if (!docsURL) return undefined
+			try {
+				const url = new URL(docsURL)
+				// Only allow http, https, and roocode protocols
+				if (url.protocol === "https:" || url.protocol === "http:" || url.protocol === "roocode:") {
+					return docsURL
+				}
+			} catch {
+				// Invalid URL
+			}
+			return undefined
+		}, [docsURL])
 
 		const usesProxy = PROVIDERS.find((p) => p.value === provider)?.proxy ?? false
 
@@ -132,6 +138,40 @@ export const ErrorRow = memo(
 			},
 			[version, provider, modelId, errorDetails],
 		)
+
+		// Determine if this error has a contextual action suggestion
+		const contextualAction = useMemo(() => {
+			// If explicit action is provided, use it
+			if (actionLabel && onAction) {
+				return { label: actionLabel, action: onAction }
+			}
+
+			// Auto-detect common error patterns
+			if (type === "api_failure" || type === "api_req_retry_delayed") {
+				if (code === 401 || code === 403) {
+					return {
+						label: t("chat:apiRequest.errorMessage.goToSettings", { defaultValue: "Go to Settings" }),
+						action: () =>
+							window.postMessage(
+								{ type: "action", action: "settingsButtonClicked", values: { section: "providers" } },
+								"*",
+							),
+					}
+				}
+				if (code === 429) {
+					return {
+						label: "Retry",
+						action: () =>
+							window.postMessage(
+								{ type: "action", action: "retryButtonClicked" },
+								"*",
+							),
+					}
+				}
+			}
+
+			return null
+		}, [actionLabel, onAction, type, code, t])
 
 		// Default titles for different error types
 		const getDefaultTitle = () => {
@@ -202,7 +242,7 @@ export const ErrorRow = memo(
 					<div
 						className="font-sm text-vscode-editor-foreground flex items-center justify-between cursor-pointer"
 						onClick={handleToggleExpand}>
-						<div className="flex items-center gap-2 flex-grow  text-vscode-errorForeground">
+						<div className="flex items-center gap-2 flex-grow text-vscode-errorForeground">
 							<MessageCircleWarning className="w-4" />
 							<span className="text-vscode-errorForeground font-bold grow cursor-pointer">
 								{errorTitle}
@@ -235,28 +275,27 @@ export const ErrorRow = memo(
 				<div className="group pr-2">
 					{errorTitle && (
 						<div className={headerClassName || "flex items-center justify-between gap-2 break-words"}>
-							<MessageCircleWarning className="w-4 text-vscode-errorForeground" />
+							<MessageCircleWarning className="w-4 text-vscode-errorForeground shrink-0" />
 							<span className="font-bold grow cursor-default">{errorTitle}</span>
 							<div className="flex items-center gap-2">
-								{docsURL && (
+								{safeDocsURL && (
 									<a
-										href={docsURL}
+										href={safeDocsURL}
 										className="text-sm flex items-center gap-1 transition-opacity opacity-0 group-hover:opacity-100"
 										onClick={(e) => {
 											e.preventDefault()
-											// Handle internal navigation to settings
-											if (docsURL.startsWith("roocode://settings")) {
+											if (safeDocsURL.startsWith("roocode://settings")) {
 												vscode.postMessage({
 													type: "switchTab",
 													tab: "settings",
 													values: { section: "providers" },
 												})
 											} else {
-												vscode.postMessage({ type: "openExternal", url: docsURL })
+												vscode.postMessage({ type: "openExternal", url: safeDocsURL })
 											}
 										}}>
 										<BookOpenText className="size-3 mt-[3px]" />
-										{docsURL.startsWith("roocode://settings")
+										{safeDocsURL.startsWith("roocode://settings")
 											? t("chat:apiRequest.errorMessage.goToSettings", {
 													defaultValue: "Settings",
 												})
@@ -282,11 +321,67 @@ export const ErrorRow = memo(
 								</button>
 							)}
 						</p>
+						{/* Action buttons */}
+						{(contextualAction || formattedErrorDetails) && (
+							<div className="flex items-center gap-2 mt-2">
+								{contextualAction && (
+									<button
+										onClick={contextualAction.action}
+										className="cursor-pointer inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded bg-vscode-button-background text-vscode-button-foreground hover:opacity-90 transition-opacity">
+										{contextualAction.label === t("chat:apiRequest.errorMessage.goToSettings", { defaultValue: "Go to Settings" }) ? (
+											<Settings className="size-3" />
+										) : (
+											<RotateCcw className="size-3" />
+										)}
+										{contextualAction.label}
+									</button>
+								)}
+								{formattedErrorDetails && (
+									<button
+										onClick={(e) => {
+											e.stopPropagation()
+											setIsTechDetailsExpanded(!isTechDetailsExpanded)
+										}}
+										className="cursor-pointer inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded text-vscode-descriptionForeground hover:bg-vscode-editor-background transition-colors">
+										{isTechDetailsExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+										{isTechDetailsExpanded ? "Hide technical details" : "Show technical details"}
+									</button>
+								)}
+							</div>
+						)}
+						{/* Inline technical details (tiered disclosure) */}
+						{isTechDetailsExpanded && formattedErrorDetails && (
+							<div className="mt-2 p-3 bg-vscode-editor-background rounded border border-vscode-editorGroup-border">
+								<pre className="font-mono text-xs whitespace-pre-wrap break-words max-h-48 overflow-auto">
+									{formattedErrorDetails}
+								</pre>
+								<div className="flex items-center gap-2 mt-2">
+									<button
+										onClick={handleCopyDetails}
+										className="cursor-pointer inline-flex items-center gap-1 text-xs text-vscode-descriptionForeground hover:text-vscode-foreground transition-colors">
+										{showDetailsCopySuccess ? <Check className="size-3" /> : <Copy className="size-3" />}
+										{showDetailsCopySuccess ? t("chat:errorDetails.copied") : t("chat:errorDetails.copyToClipboard")}
+									</button>
+									<button
+										onClick={handleDownloadDiagnostics}
+										className="cursor-pointer inline-flex items-center gap-1 text-xs text-vscode-descriptionForeground hover:text-vscode-foreground transition-colors">
+										<Microscope className="size-3" />
+										{t("chat:errorDetails.diagnostics")}
+									</button>
+									{usesProxy && (
+										<span className="flex items-center gap-1 text-xs text-vscode-descriptionForeground ml-auto">
+											<Info className="size-3 shrink-0" />
+											{t("chat:errorDetails.proxyProvider")}
+										</span>
+									)}
+								</div>
+							</div>
+						)}
 						{additionalContent}
 					</div>
 				</div>
 
-				{/* Error Details Dialog */}
+				{/* Error Details Dialog (kept for backward compatibility with full-screen modal) */}
 				{formattedErrorDetails && (
 					<Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
 						<DialogContent className="max-w-2xl">

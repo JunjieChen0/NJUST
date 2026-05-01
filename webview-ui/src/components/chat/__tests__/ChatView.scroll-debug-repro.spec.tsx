@@ -208,9 +208,9 @@ const props: ChatViewProps = {
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 
 const buildMessages = (baseTs: number): ClineMessage[] => [
-	{ type: "say", say: "text", ts: baseTs, text: "task" },
-	{ type: "say", say: "text", ts: baseTs + 1, text: "row-1" },
-	{ type: "say", say: "text", ts: baseTs + 2, text: "row-2" },
+	{ id: "msg-1", type: "say", say: "text", ts: baseTs, text: "task" },
+	{ id: "msg-2", type: "say", say: "text", ts: baseTs + 1, text: "row-1" },
+	{ id: "msg-3", type: "say", say: "text", ts: baseTs + 2, text: "row-2" },
 ]
 
 const resolveFollowOutput = (isAtBottom: boolean): "auto" | false => {

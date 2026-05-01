@@ -56,25 +56,15 @@ export const calculateTokenDistribution = (
 	// Calculate sizes directly without buffer display
 	const availableSize = Math.max(0, safeContextWindow - safeContextTokens - reservedForOutput)
 
-	// Calculate percentages - ensure they sum to exactly 100%
-	// Use the ratio of each part to the total context window
-	const total = safeContextTokens + reservedForOutput + availableSize
-
-	// Safeguard against division by zero
-	if (total <= 0) {
-		return {
-			currentPercent: 0,
-			reservedPercent: 0,
-			availablePercent: 0,
-			reservedForOutput,
-			availableSize,
-		}
-	}
+	// Calculate percentages relative to the context window for consistent visualization.
+	// When usage exceeds the window, the bar will overflow (clipped by overflow-hidden
+	// in the UI) giving users an accurate sense of how far over the limit they are.
+	const denominator = safeContextWindow > 0 ? safeContextWindow : 1
 
 	return {
-		currentPercent: (safeContextTokens / total) * 100,
-		reservedPercent: (reservedForOutput / total) * 100,
-		availablePercent: (availableSize / total) * 100,
+		currentPercent: (safeContextTokens / denominator) * 100,
+		reservedPercent: (reservedForOutput / denominator) * 100,
+		availablePercent: (availableSize / denominator) * 100,
 		reservedForOutput,
 		availableSize,
 	}

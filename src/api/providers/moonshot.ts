@@ -6,6 +6,7 @@ import type { ApiStreamUsageChunk } from "../transform/stream"
 import { getModelParams } from "../transform/model-params"
 
 import { OpenAICompatibleHandler, OpenAICompatibleConfig } from "./openai-compatible"
+import { requireApiKey } from "../interfaces/api-key-validator"
 
 export class MoonshotHandler extends OpenAICompatibleHandler {
 	constructor(options: ApiHandlerOptions) {
@@ -16,7 +17,7 @@ export class MoonshotHandler extends OpenAICompatibleHandler {
 		const config: OpenAICompatibleConfig = {
 			providerName: "moonshot",
 			baseURL: options.moonshotBaseUrl || "https://api.moonshot.ai/v1",
-			apiKey: options.moonshotApiKey ?? "not-provided",
+			apiKey: requireApiKey(options.moonshotApiKey, "Moonshot"),
 			modelId,
 			modelInfo,
 			modelMaxTokens: options.modelMaxTokens ?? undefined,

@@ -21,6 +21,7 @@ import { convertToR1Format } from "../transform/r1-format"
 import { OpenAiHandler } from "./openai"
 import { handleOpenAIError } from "./utils/openai-error-handler"
 import type { ApiHandlerCreateMessageMetadata } from "../index"
+import { requireApiKey } from "../interfaces/api-key-validator"
 
 const doubaoCustomModelInfo: ModelInfo = {
 	...openAiModelInfoSaneDefaults,
@@ -52,7 +53,7 @@ export class DoubaoHandler extends OpenAiHandler {
 
 		super({
 			...options,
-			openAiApiKey: options.doubaoApiKey ?? "not-provided",
+			openAiApiKey: requireApiKey(options.doubaoApiKey, "Doubao"),
 			openAiModelId: inferenceModelId,
 			openAiBaseUrl: effectiveBaseUrl,
 			openAiStreamingEnabled: true,

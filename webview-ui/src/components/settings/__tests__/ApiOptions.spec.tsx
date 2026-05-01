@@ -271,6 +271,10 @@ const renderApiOptions = (props: Partial<ApiOptionsProps> = {}) => {
 }
 
 describe("ApiOptions", () => {
+	beforeEach(() => {
+		vi.restoreAllMocks()
+	})
+
 	it("resets model to provider default when switching to openai-codex with an invalid prior apiModelId", () => {
 		const mockSetApiConfigurationField = vi.fn()
 
@@ -570,8 +574,8 @@ describe("ApiOptions", () => {
 	})
 
 	describe("Roo provider tests", () => {
-		it("shows balance display when authenticated", () => {
-			// Mock useExtensionState to return authenticated state
+		it("does not render legacy roo-specific balance UI", () => {
+			// Mock useExtensionState to ensure no filtering
 			const useExtensionStateMock = vi.spyOn(ExtensionStateContext, "useExtensionState")
 			useExtensionStateMock.mockReturnValue({
 				cloudIsAuthenticated: true,
@@ -584,82 +588,7 @@ describe("ApiOptions", () => {
 				},
 			})
 
-			expect(screen.getByTestId("roo-balance-display")).toBeInTheDocument()
-		})
-
-		it("does not show balance display when not authenticated", () => {
-			// Mock useExtensionState to return unauthenticated state
-			const useExtensionStateMock = vi.spyOn(ExtensionStateContext, "useExtensionState")
-			useExtensionStateMock.mockReturnValue({
-				cloudIsAuthenticated: false,
-				organizationAllowList: { providers: {} },
-			} as any)
-
-			renderApiOptions({
-				apiConfiguration: {
-					apiProvider: "roo",
-				},
-			})
-
 			expect(screen.queryByTestId("roo-balance-display")).not.toBeInTheDocument()
-		})
-
-		it("pins roo provider to the top when not on welcome screen", () => {
-			// Mock useExtensionState to ensure no filtering
-			const useExtensionStateMock = vi.spyOn(ExtensionStateContext, "useExtensionState")
-			useExtensionStateMock.mockReturnValue({
-				cloudIsAuthenticated: false,
-				organizationAllowList: { providers: {} },
-			} as any)
-
-			renderApiOptions({
-				apiConfiguration: {},
-				fromWelcomeView: false,
-			})
-
-			const providerSelectContainer = screen.getByTestId("provider-select")
-			const providerSelect = providerSelectContainer.querySelector("select") as HTMLSelectElement
-			const options = Array.from(providerSelect.querySelectorAll("option"))
-
-			// Filter out the placeholder option (empty value)
-			const providerOptions = options.filter((opt) => opt.value !== "")
-
-			// Find the roo option
-			const rooOption = providerOptions.find((opt) => opt.value === "roo")
-
-			// If roo is available, verify it's pinned to the top
-			if (rooOption) {
-				expect(providerOptions[0].value).toBe("roo")
-			}
-
-			useExtensionStateMock.mockRestore()
-		})
-
-		it("filters out roo provider on welcome screen", () => {
-			// Mock useExtensionState to ensure no filtering
-			const useExtensionStateMock = vi.spyOn(ExtensionStateContext, "useExtensionState")
-			useExtensionStateMock.mockReturnValue({
-				cloudIsAuthenticated: false,
-				organizationAllowList: { providers: {} },
-			} as any)
-
-			renderApiOptions({
-				apiConfiguration: {},
-				fromWelcomeView: true,
-			})
-
-			const providerSelectContainer = screen.getByTestId("provider-select")
-			const providerSelect = providerSelectContainer.querySelector("select") as HTMLSelectElement
-			const options = Array.from(providerSelect.querySelectorAll("option"))
-
-			// Filter out the placeholder option (empty value)
-			const providerOptions = options.filter((opt) => opt.value !== "")
-
-			// Check that roo is NOT in the list when on welcome screen
-			const rooOption = providerOptions.find((opt) => opt.value === "roo")
-			expect(rooOption).toBeUndefined()
-
-			useExtensionStateMock.mockRestore()
 		})
 	})
 

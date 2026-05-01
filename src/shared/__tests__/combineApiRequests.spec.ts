@@ -7,6 +7,7 @@ import { combineApiRequests } from "../combineApiRequests"
 describe("combineApiRequests", () => {
 	// Helper function to create a basic api_req_started message
 	const createStartMessage = (text: string = '{"request":"GET /api/data"}', ts: number = 1000): ClineMessage => ({
+		id: 'test',
 		type: "say",
 		say: "api_req_started",
 		text,
@@ -15,6 +16,7 @@ describe("combineApiRequests", () => {
 
 	// Helper function to create a basic api_req_finished message
 	const createFinishMessage = (text: string = '{"cost":0.005}', ts: number = 1001): ClineMessage => ({
+		id: 'test',
 		type: "say",
 		say: "api_req_finished",
 		text,
@@ -26,7 +28,7 @@ describe("combineApiRequests", () => {
 		say: ClineSay = "text",
 		text: string = "Hello world",
 		ts: number = 999,
-	): ClineMessage => ({ type: "say", say, text, ts })
+	): ClineMessage => ({ id: 'test', type: "say", say, text, ts })
 
 	describe("Basic functionality", () => {
 		it("should combine a pair of api_req_started and api_req_finished messages", () => {
@@ -162,6 +164,7 @@ describe("combineApiRequests", () => {
 
 		it("should handle missing text field in api_req_started", () => {
 			const startMessage: ClineMessage = {
+				id: 'test',
 				type: "say",
 				say: "api_req_started",
 				ts: 1000,
@@ -186,6 +189,7 @@ describe("combineApiRequests", () => {
 		it("should handle missing text field in api_req_finished", () => {
 			const startMessage = createStartMessage()
 			const finishMessage: ClineMessage = {
+				id: 'test',
 				type: "say",
 				say: "api_req_finished",
 				ts: 1001,
@@ -256,6 +260,7 @@ describe("combineApiRequests", () => {
 
 		it("should preserve additional properties in the messages", () => {
 			const startMessage: ClineMessage = {
+				id: 'test',
 				type: "say",
 				say: "api_req_started",
 				text: '{"request":"GET /api/data"}',
@@ -265,6 +270,7 @@ describe("combineApiRequests", () => {
 			}
 
 			const finishMessage: ClineMessage = {
+				id: 'test',
 				type: "say",
 				say: "api_req_finished",
 				text: '{"cost":0.005}',
@@ -285,6 +291,7 @@ describe("combineApiRequests", () => {
 
 		it("should handle invalid JSON in api_req_started message", () => {
 			const startMessage: ClineMessage = {
+				id: 'test',
 				type: "say",
 				say: "api_req_started",
 				text: "This is not valid JSON",
@@ -309,6 +316,7 @@ describe("combineApiRequests", () => {
 		it("should handle invalid JSON in api_req_finished message", () => {
 			const startMessage = createStartMessage('{"request":"GET /api/data"}', 1000)
 			const finishMessage: ClineMessage = {
+				id: 'test',
 				type: "say",
 				say: "api_req_finished",
 				text: "This is not valid JSON",
@@ -331,6 +339,7 @@ describe("combineApiRequests", () => {
 
 		it("should handle non-object JSON in api_req_started message", () => {
 			const startMessage: ClineMessage = {
+				id: 'test',
 				type: "say",
 				say: "api_req_started",
 				text: '"just a string"', // Valid JSON, but not an object
@@ -347,6 +356,8 @@ describe("combineApiRequests", () => {
 
 			// The current implementation spreads string characters into the object
 			// This test validates the actual behavior
+			// FIXME: spreading string JSON into object keys is unintended side-effect
+			// of the merge logic; update this test when the implementation is fixed
 			const parsedText = JSON.parse(result[0].text || "{}")
 			// Check that the cost property exists (from finish message)
 			expect(parsedText.cost).toBe(0.005)
@@ -357,6 +368,7 @@ describe("combineApiRequests", () => {
 		it("should handle non-object JSON in api_req_finished message", () => {
 			const startMessage = createStartMessage('{"request":"GET /api/data"}', 1000)
 			const finishMessage: ClineMessage = {
+				id: 'test',
 				type: "say",
 				say: "api_req_finished",
 				text: '"just a string"', // Valid JSON, but not an object
@@ -485,6 +497,7 @@ describe("combineApiRequests", () => {
 		it("should handle undefined text field", () => {
 			const startMessage = createStartMessage('{"request":"GET /api/data"}', 1000)
 			const finishMessage: ClineMessage = {
+				id: 'test',
 				type: "say",
 				say: "api_req_finished",
 				text: undefined, // undefined text field

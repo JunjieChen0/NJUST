@@ -6,6 +6,7 @@ import type { ApiStreamUsageChunk } from "../transform/stream"
 import { getModelParams } from "../transform/model-params"
 
 import { OpenAICompatibleHandler, OpenAICompatibleConfig } from "./openai-compatible"
+import { requireApiKey } from "../interfaces/api-key-validator"
 
 export class QwenHandler extends OpenAICompatibleHandler {
 	constructor(options: ApiHandlerOptions) {
@@ -15,7 +16,7 @@ export class QwenHandler extends OpenAICompatibleHandler {
 		const config: OpenAICompatibleConfig = {
 			providerName: "qwen",
 			baseURL: options.qwenBaseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1",
-			apiKey: options.qwenApiKey ?? "not-provided",
+			apiKey: requireApiKey(options.qwenApiKey, "Qwen"),
 			modelId,
 			modelInfo,
 			modelMaxTokens: options.modelMaxTokens ?? undefined,

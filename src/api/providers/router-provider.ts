@@ -8,6 +8,7 @@ import { BaseProvider } from "./base-provider"
 import { getModels, getModelsFromCache } from "./fetchers/modelCache"
 
 import { DEFAULT_HEADERS } from "./constants"
+import { requireApiKey } from "../interfaces/api-key-validator"
 
 type RouterProviderOptions = {
 	name: RouterName
@@ -32,7 +33,7 @@ export abstract class RouterProvider extends BaseProvider {
 		options,
 		name,
 		baseURL,
-		apiKey = "not-provided",
+		apiKey,
 		modelId,
 		defaultModelId,
 		defaultModelInfo,
@@ -45,9 +46,11 @@ export abstract class RouterProvider extends BaseProvider {
 		this.defaultModelId = defaultModelId
 		this.defaultModelInfo = defaultModelInfo
 
+		const resolvedApiKey = requireApiKey(apiKey, name)
+
 		this.client = new OpenAI({
 			baseURL,
-			apiKey,
+			apiKey: resolvedApiKey,
 			defaultHeaders: {
 				...DEFAULT_HEADERS,
 				...(options.openAiHeaders || {}),

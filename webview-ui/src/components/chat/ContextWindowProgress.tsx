@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { memo, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 
 import { formatLargeNumber } from "@/utils/format"
@@ -11,7 +11,7 @@ interface ContextWindowProgressProps {
 	maxTokens?: number
 }
 
-export const ContextWindowProgress = ({ contextWindow, contextTokens, maxTokens }: ContextWindowProgressProps) => {
+export const ContextWindowProgress = memo(({ contextWindow, contextTokens, maxTokens }: ContextWindowProgressProps) => {
 	const { t } = useTranslation()
 
 	// Use the shared utility function to calculate all token distribution values
@@ -26,6 +26,22 @@ export const ContextWindowProgress = ({ contextWindow, contextTokens, maxTokens 
 	// For display purposes
 	const safeContextWindow = Math.max(0, contextWindow)
 	const safeContextTokens = Math.max(0, contextTokens)
+
+	// Determine warning level for color coding
+	// Uses the actual usage percentage (currentPercent) to determine color
+	const warningLevel = useMemo(() => {
+		if (currentPercent >= 85) return "critical" as const
+		if (currentPercent >= 70) return "warning" as const
+		return "normal" as const
+	}, [currentPercent])
+
+	// Bar color based on warning level
+	const barColor =
+		warningLevel === "critical"
+			? "var(--vscode-charts-red)"
+			: warningLevel === "warning"
+				? "var(--vscode-charts-yellow)"
+				: "var(--vscode-foreground)"
 
 	// Combine all tooltip content into a single tooltip
 	const tooltipContent = (
@@ -50,13 +66,25 @@ export const ContextWindowProgress = ({ contextWindow, contextTokens, maxTokens 
 					})}
 				</div>
 			)}
+			{warningLevel !== "normal" && (
+				<div className={warningLevel === "critical" ? "text-vscode-charts-red pt-1 font-medium" : "text-vscode-charts-yellow pt-1 font-medium"}>
+					{warningLevel === "critical"
+						? t("chat:tokenProgress.criticalWarning", { defaultValue: "Context nearly full — compaction imminent" })
+						: t("chat:tokenProgress.warning", { defaultValue: "Context running high — compaction may trigger soon" })
+					}
+				</div>
+			)}
 		</div>
 	)
 
 	return (
 		<>
 			<div className="flex items-center gap-2 flex-1 whitespace-nowrap">
-				<div data-testid="context-tokens-count">{formatLargeNumber(safeContextTokens)}</div>
+				<div
+					data-testid="context-tokens-count"
+					className={warningLevel === "critical" ? "text-vscode-charts-red" : warningLevel === "warning" ? "text-vscode-charts-yellow" : undefined}>
+					{formatLargeNumber(safeContextTokens)}
+				</div>
 				<StandardTooltip content={tooltipContent} side="top" sideOffset={8}>
 					<div className="flex-1 relative">
 						{/* Main progress bar container */}
@@ -66,8 +94,11 @@ export const ContextWindowProgress = ({ contextWindow, contextTokens, maxTokens 
 								className="relative h-full"
 								style={{ width: `${currentPercent}%` }}
 								data-testid="context-tokens-used">
-								{/* Current tokens used - darkest */}
-								<div className="h-full w-full bg-[var(--vscode-foreground)] transition-width duration-300 ease-out" />
+								{/* Current tokens used - colored by warning level */}
+								<div
+									className="h-full w-full transition-[background-color,width] duration-300 ease-out"
+									style={{ backgroundColor: barColor }}
+								/>
 							</div>
 
 							{/* Container for reserved tokens */}
@@ -95,4 +126,4 @@ export const ContextWindowProgress = ({ contextWindow, contextTokens, maxTokens 
 			</div>
 		</>
 	)
-}
+})

@@ -224,12 +224,14 @@ export type ContextCondense = z.infer<typeof contextCondenseSchema>
  * @property messagesRemoved - Number of conversation messages that were removed
  * @property prevContextTokens - Token count before truncation occurred
  * @property newContextTokens - Token count after truncation occurred
+ * @property reason - Why truncation was used: "sliding_window" (normal) or "circuit_breaker" (fallback after condensation failures)
  */
 export const contextTruncationSchema = z.object({
 	truncationId: z.string(),
 	messagesRemoved: z.number(),
 	prevContextTokens: z.number(),
 	newContextTokens: z.number(),
+	reason: z.enum(["sliding_window", "circuit_breaker"]).optional(),
 })
 
 export type ContextTruncation = z.infer<typeof contextTruncationSchema>

@@ -18,6 +18,7 @@ import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from ".
 import { toRequestyServiceUrl } from "../../shared/utils/requesty"
 import { handleOpenAIError } from "./utils/openai-error-handler"
 import { applyRouterToolPreferences } from "./utils/router-tool-preferences"
+import { requireApiKey } from "../interfaces/api-key-validator"
 
 // Requesty usage includes an extra field for Anthropic use cases.
 // Safely cast the prompt token details section to the appropriate structure.
@@ -62,7 +63,7 @@ export class RequestyHandler extends BaseProvider implements SingleCompletionHan
 		this.options = options
 		this.baseURL = toRequestyServiceUrl(options.requestyBaseUrl)
 
-		const apiKey = this.options.requestyApiKey ?? "not-provided"
+		const apiKey = requireApiKey(this.options.requestyApiKey, "Requesty")
 
 		this.client = new OpenAI({
 			baseURL: this.baseURL,

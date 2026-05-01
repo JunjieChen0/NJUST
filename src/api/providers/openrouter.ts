@@ -37,6 +37,7 @@ import { handleOpenAIError } from "./utils/openai-error-handler"
 import { generateImageWithProvider, ImageGenerationResult } from "./utils/image-generation"
 import { applyRouterToolPreferences } from "./utils/router-tool-preferences"
 import { globalCostTracker } from "../../utils/costTracker"
+import { requireApiKey } from "../interfaces/api-key-validator"
 
 // Add custom interface for OpenRouter params.
 type OpenRouterChatCompletionParams = OpenAI.Chat.ChatCompletionCreateParams & {
@@ -149,7 +150,7 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 		this.options = options
 
 		const baseURL = this.options.openRouterBaseUrl || "https://openrouter.ai/api/v1"
-		const apiKey = this.options.openRouterApiKey ?? "not-provided"
+		const apiKey = requireApiKey(this.options.openRouterApiKey, "OpenRouter")
 
 		this.client = new OpenAI({ baseURL, apiKey, defaultHeaders: DEFAULT_HEADERS })
 

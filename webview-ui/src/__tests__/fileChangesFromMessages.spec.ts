@@ -3,6 +3,7 @@ import { fileChangesFromMessages } from "../components/chat/utils/fileChangesFro
 
 function msg(overrides: Partial<ClineMessage> & { text: string }): ClineMessage {
 	return {
+		id: "test",
 		type: "say",
 		say: "tool",
 		ts: Date.now(),
@@ -31,6 +32,7 @@ describe("fileChangesFromMessages", () => {
 	it("ignores tool messages with non-file-edit tool type", () => {
 		const messages: ClineMessage[] = [
 			msg({
+				id: "test",
 				type: "ask",
 				ask: "tool",
 				text: JSON.stringify({ tool: "read_file", path: "a.ts" }),
@@ -42,6 +44,7 @@ describe("fileChangesFromMessages", () => {
 	it("skips partial messages", () => {
 		const messages: ClineMessage[] = [
 			msg({
+				id: "test",
 				type: "ask",
 				ask: "tool",
 				partial: true,
@@ -70,6 +73,7 @@ describe("fileChangesFromMessages", () => {
 	it("includes ask tool file-edit when isAnswered is true", () => {
 		const messages: ClineMessage[] = [
 			msg({
+				id: "test",
 				type: "ask",
 				ask: "tool",
 				isAnswered: true,
@@ -88,6 +92,7 @@ describe("fileChangesFromMessages", () => {
 	it("extracts single-file edit from ask tool message", () => {
 		const messages: ClineMessage[] = [
 			msg({
+				id: "test",
 				type: "ask",
 				ask: "tool",
 				isAnswered: true,
@@ -111,6 +116,7 @@ describe("fileChangesFromMessages", () => {
 	it("extracts single-file edit from say tool message", () => {
 		const messages: ClineMessage[] = [
 			msg({
+				id: "test",
 				type: "say",
 				say: "tool",
 				text: JSON.stringify({
@@ -129,6 +135,7 @@ describe("fileChangesFromMessages", () => {
 	it("uses content when diff is missing for single-file", () => {
 		const messages: ClineMessage[] = [
 			msg({
+				id: "test",
 				type: "ask",
 				ask: "tool",
 				isAnswered: true,
@@ -147,6 +154,7 @@ describe("fileChangesFromMessages", () => {
 	it("ignores single-file tool when path is missing", () => {
 		const messages: ClineMessage[] = [
 			msg({
+				id: "test",
 				type: "ask",
 				ask: "tool",
 				text: JSON.stringify({
@@ -161,6 +169,7 @@ describe("fileChangesFromMessages", () => {
 	it("ignores single-file tool when diff and content are empty", () => {
 		const messages: ClineMessage[] = [
 			msg({
+				id: "test",
 				type: "ask",
 				ask: "tool",
 				text: JSON.stringify({
@@ -175,6 +184,7 @@ describe("fileChangesFromMessages", () => {
 	it("extracts from batchDiffs", () => {
 		const messages: ClineMessage[] = [
 			msg({
+				id: "test",
 				type: "ask",
 				ask: "tool",
 				isAnswered: true,
@@ -198,6 +208,7 @@ describe("fileChangesFromMessages", () => {
 	it("includes diffStats from batchDiffs when present", () => {
 		const messages: ClineMessage[] = [
 			msg({
+				id: "test",
 				type: "ask",
 				ask: "tool",
 				isAnswered: true,
@@ -222,6 +233,7 @@ describe("fileChangesFromMessages", () => {
 		for (const tool of tools) {
 			const messages: ClineMessage[] = [
 				msg({
+					id: "test",
 					type: "ask",
 					ask: "tool",
 					isAnswered: true,
@@ -241,6 +253,7 @@ describe("fileChangesFromMessages", () => {
 	it("returns multiple entries for multiple file-edit messages", () => {
 		const messages: ClineMessage[] = [
 			msg({
+				id: "test",
 				type: "ask",
 				ask: "tool",
 				isAnswered: true,
@@ -251,6 +264,7 @@ describe("fileChangesFromMessages", () => {
 				}),
 			}),
 			msg({
+				id: "test",
 				type: "ask",
 				ask: "tool",
 				isAnswered: true,
@@ -270,6 +284,7 @@ describe("fileChangesFromMessages", () => {
 	it("skips invalid JSON in message text", () => {
 		const messages: ClineMessage[] = [
 			msg({
+				id: "test",
 				type: "ask",
 				ask: "tool",
 				text: "not json",

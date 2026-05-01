@@ -86,7 +86,7 @@ export function consolidateTokenUsage(messages: ClineMessage[]): TokenUsage {
 				// Since tokensIn now stores TOTAL input tokens (including cache tokens),
 				// we no longer need to add cacheWrites and cacheReads separately.
 				// This applies to both Anthropic and OpenAI protocols.
-				result.contextTokens = (tokensIn || 0) + (tokensOut || 0)
+				result.contextTokens = (Number(tokensIn) || 0) + (Number(tokensOut) || 0)
 			} catch {
 				// Ignore JSON parse errors
 				continue

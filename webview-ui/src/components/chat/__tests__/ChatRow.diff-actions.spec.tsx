@@ -39,6 +39,7 @@ const queryClient = new QueryClient()
 
 function createToolAskMessage(toolPayload: Record<string, unknown>): ClineMessage {
 	return {
+		id: "tool",
 		type: "ask",
 		ask: "tool",
 		ts: Date.now(),

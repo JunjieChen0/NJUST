@@ -710,50 +710,21 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			// The retry logic in Task.ts (around line 1817) expects errors to be thrown
 			// on the first chunk for proper exponential backoff behavior
 			if (errorType === "THROTTLING") {
-				if (error instanceof Error) {
-					throw error
-				} else {
-					throw new Error("Throttling error occurred")
-				}
+				const errorMessage = this.formatErrorMessage(error, errorType, true)
+				throw this.createEnhancedProviderError(error, errorMessage, "createMessage")
 			}
 
-			// For non-throttling errors, use the standard error handling with chunks
+			// For non-throttling errors in streaming context, yield error chunk and return
+			// (don't throw - caller is already iterating the stream)
 			const errorChunks = this.handleBedrockError(error, true) // true for streaming context
 			// Yield each chunk individually to ensure type compatibility
 			for (const chunk of errorChunks) {
 				yield chunk as any // Cast to any to bypass type checking since we know the structure is correct
 			}
 
-			// Re-throw with enhanced error message for retry system
-			const enhancedErrorMessage = this.formatErrorMessage(error, this.getErrorType(error), true)
-			if (error instanceof Error) {
-				const modelId = this.getModel().id
-				if (TelemetryService.hasInstance()) {
-					const forTelemetry = new ApiProviderError(error.message)
-					;(forTelemetry as any).provider = this.providerName
-					;(forTelemetry as any).modelId = modelId
-					;(forTelemetry as any).operation = "createMessage"
-					TelemetryService.instance.captureException(forTelemetry)
-				}
-				const enhancedError = new ApiProviderError(enhancedErrorMessage)
-				// Preserve important properties from the original error
-				enhancedError.name = error.name
-				// Validate and preserve status property
-				if ("status" in error && typeof (error as any).status === "number") {
-					enhancedError.status = (error as any).status
-				}
-				// Preserve AWS-specific metadata if present
-				if (
-					"$metadata" in error &&
-					typeof (error as any).$metadata === "object" &&
-					(error as any).$metadata !== null
-				) {
-					enhancedError.$metadata = (error as any).$metadata
-				}
-				throw enhancedError
-			} else {
-				throw new ApiProviderError("An unknown error occurred")
-			}
+			// Throw enhanced error so stream failures still trigger retry/backoff logic upstream.
+			const enhancedErrorMessage = this.formatErrorMessage(error, errorType, true)
+			throw this.createEnhancedProviderError(error, enhancedErrorMessage, "createMessage")
 		}
 	}
 
@@ -813,37 +784,36 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			const errorResult = this.handleBedrockError(error, false) // false for non-streaming context
 			// Since we're in a non-streaming context, we know the result is a string
 			const errorMessage = errorResult as string
-
-			const modelId = this.getModel().id
-			if (TelemetryService.hasInstance()) {
-				const origMsg = error instanceof Error ? error.message : String(error)
-				const forTelemetry = new ApiProviderError(origMsg)
-				;(forTelemetry as any).provider = this.providerName
-				;(forTelemetry as any).modelId = modelId
-				;(forTelemetry as any).operation = "completePrompt"
-				TelemetryService.instance.captureException(forTelemetry)
-			}
-
-			// Create enhanced error for retry system
-			const enhancedError = new ApiProviderError(errorMessage)
-			if (error instanceof Error) {
-				// Preserve important properties from the original error
-				enhancedError.name = error.name
-				// Validate and preserve status property
-				if ("status" in error && typeof (error as any).status === "number") {
-					enhancedError.status = (error as any).status
-				}
-				// Validate and preserve $metadata property
-				if (
-					"$metadata" in error &&
-					typeof (error as any).$metadata === "object" &&
-					(error as any).$metadata !== null
-				) {
-					enhancedError.$metadata = (error as any).$metadata
-				}
-			}
-			throw enhancedError
+			throw this.createEnhancedProviderError(error, errorMessage, "completePrompt")
 		}
+	}
+
+	private createEnhancedProviderError(
+		error: unknown,
+		errorMessage: string,
+		operation: "createMessage" | "completePrompt",
+	): ApiProviderError {
+		const modelId = this.getModel().id
+		if (TelemetryService.hasInstance()) {
+			const origMsg = error instanceof Error ? error.message : String(error)
+			const forTelemetry = new ApiProviderError(origMsg)
+			;(forTelemetry as any).provider = this.providerName
+			;(forTelemetry as any).modelId = modelId
+			;(forTelemetry as any).operation = operation
+			TelemetryService.instance.captureException(forTelemetry)
+		}
+
+		const enhancedError = new ApiProviderError(errorMessage)
+		if (error instanceof Error) {
+			enhancedError.name = error.name
+			if ("status" in error && typeof (error as any).status === "number") {
+				enhancedError.status = (error as any).status
+			}
+			if ("$metadata" in error && typeof (error as any).$metadata === "object" && (error as any).$metadata !== null) {
+				enhancedError.$metadata = (error as any).$metadata
+			}
+		}
+		return enhancedError
 	}
 
 	/**

@@ -1149,7 +1149,7 @@ describe("ChatTextArea", () => {
 			expect(sendButton).not.toHaveClass("pointer-events-none")
 		})
 
-		it("should hide send button when there is no text and no images", () => {
+		it("should not render send icon when there is no text and no images", () => {
 			const { container } = render(<ChatTextArea {...defaultProps} inputValue="" selectedImages={[]} />)
 
 			// Find the send button by looking for the button with SendHorizontal icon
@@ -1158,13 +1158,7 @@ describe("ChatTextArea", () => {
 				(button) => button.querySelector(".lucide-send-horizontal") !== null,
 			)
 
-			expect(sendButton).toBeInTheDocument()
-
-			// Check that the button is hidden (has opacity-0 class when no content)
-			expect(sendButton).toHaveClass("opacity-0")
-			expect(sendButton).toHaveClass("pointer-events-none")
-			expect(sendButton).not.toHaveClass("opacity-100")
-			expect(sendButton).not.toHaveClass("pointer-events-auto")
+			expect(sendButton).toBeUndefined()
 		})
 
 		it("should show send button when there is text but no images", () => {

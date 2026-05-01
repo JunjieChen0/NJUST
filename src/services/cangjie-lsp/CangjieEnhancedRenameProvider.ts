@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import * as fs from "fs"
+import { promises as fsPromises } from "fs"
 import type { CangjieSymbolIndex } from "./CangjieSymbolIndex"
 
 /**
@@ -48,7 +48,7 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 
 		const lspEdit = await this.tryLspRename(document, position, newName)
 		const rawIndexRefs = this.index.findReferences(oldName, document.uri)
-		const indexRefs = this.filterRenameCandidates(oldName, rawIndexRefs)
+		const indexRefs = await this.filterRenameCandidates(oldName, rawIndexRefs)
 
 		const lspLocCount = lspEdit ? this.countLocations(lspEdit) : 0
 		const indexLocCount = indexRefs.length
@@ -125,10 +125,10 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 		return edit
 	}
 
-	private filterRenameCandidates(
+	private async filterRenameCandidates(
 		name: string,
 		refs: Array<{ filePath: string; line: number; column: number }>,
-	): Array<{ filePath: string; line: number; column: number }> {
+	): Promise<Array<{ filePath: string; line: number; column: number }>> {
 		const useAst = vscode.workspace.getConfiguration("njust-ai-cj").get<boolean>("cangjieTools.useCjcAstForIndex", false)
 		if (!useAst) return refs
 		const fileCache = new Map<string, string[]>()
@@ -140,7 +140,11 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 					const doc = vscode.workspace.textDocuments.find((d) => d.fileName === ref.filePath)
 					const content = doc?.getText()
 					if (content !== undefined) lines = content.split("\n")
-					else lines = fs.readFileSync(ref.filePath, "utf-8").split("\n")
+					else {
+						// Use async fs.promises.readFile instead of sync fs.readFileSync
+						const fileContent = await fsPromises.readFile(ref.filePath, "utf-8")
+						lines = fileContent.split("\n")
+					}
 					fileCache.set(ref.filePath, lines)
 				} catch {
 					continue
@@ -156,7 +160,7 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 		return out
 	}
 
-	private isIdentifierUsage(line: string, index: number): boolean | undefined {
+	private isIdentifierUsage(line: string, index: number): boolean {
 		let inString = false
 		let quote = ""
 		let escaped = false
@@ -176,7 +180,6 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 					continue
 				}
 				if (ch === quote) {
-				if (ch === quote) {
 					inString = false
 					quote = ""
 				}
@@ -191,5 +194,4 @@ export class CangjieEnhancedRenameProvider implements vscode.RenameProvider {
 		}
 		return true
 	}
-}
 }

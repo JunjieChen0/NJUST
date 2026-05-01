@@ -50,6 +50,7 @@ function createFileEditMessage(
 	diffStats?: { added: number; removed: number },
 ): ClineMessage {
 	return {
+		id: "file-edit",
 		type: "ask",
 		ask: "tool",
 		ts: Date.now(),
@@ -90,14 +91,14 @@ describe("FileChangesPanel", () => {
 	it("renders nothing when there are no file-edit messages", () => {
 		const messages: ClineMessage[] = [
 			{
-				type: "say",
+				id: "test", type: "say",
 				say: "text",
 				ts: Date.now(),
 				partial: false,
 				text: "hello",
 			},
 			{
-				type: "ask",
+				id: "test", type: "ask",
 				ask: "tool",
 				ts: Date.now(),
 				partial: false,
@@ -111,7 +112,7 @@ describe("FileChangesPanel", () => {
 	it("renders nothing when file-edit ask tool is not approved (isAnswered false or missing)", () => {
 		const messages: ClineMessage[] = [
 			{
-				type: "ask",
+				id: "test", type: "ask",
 				ask: "tool",
 				ts: Date.now(),
 				partial: false,

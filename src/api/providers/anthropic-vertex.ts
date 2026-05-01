@@ -25,6 +25,7 @@ import {
 
 import { BaseProvider } from "./base-provider"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
+import { requireApiKey } from "../interfaces/api-key-validator"
 
 // https://docs.anthropic.com/en/api/claude-on-vertex-ai
 export class AnthropicVertexHandler extends BaseProvider implements SingleCompletionHandler {
@@ -37,7 +38,7 @@ export class AnthropicVertexHandler extends BaseProvider implements SingleComple
 		this.options = options
 
 		// https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-claude#regions
-		const projectId = this.options.vertexProjectId ?? "not-provided"
+		const projectId = requireApiKey(this.options.vertexProjectId, "Vertex AI Project ID")
 		const region = this.options.vertexRegion ?? "us-east5"
 
 		if (this.options.vertexJsonCredentials) {

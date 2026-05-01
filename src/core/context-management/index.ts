@@ -14,6 +14,16 @@ import { shouldSkipCompactForCache, getAdjustedCompactThreshold } from "../conde
 import { globalCacheMetrics } from "../../utils/cacheMetrics"
 import { expandTruncationToAtomicUnits, hasToolResults } from "./grouping"
 import { globalHookRegistry } from "../hooks"
+import {
+	ContextHierarchy,
+	buildContextHierarchy,
+	findTurnIndex,
+	computeTurnSelfAttentionMean,
+	computeFileHotness,
+	getQueryAttention,
+	tokenizeForRelevance,
+	jaccardSimilarity,
+} from "./contextHierarchy"
 
 /**
  * Context Management
@@ -117,25 +127,6 @@ function isToolUseWithWrite(message: ApiMessage): boolean {
 	)
 }
 
-function tokenizeForRelevance(text: string): Set<string> {
-	return new Set(
-		text
-			.toLowerCase()
-			.split(/[^a-z0-9_]+/)
-			.filter((t) => t.length >= 3),
-	)
-}
-
-function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
-	if (a.size === 0 || b.size === 0) return 0
-	let intersection = 0
-	for (const token of a) {
-		if (b.has(token)) intersection++
-	}
-	const union = a.size + b.size - intersection
-	return union === 0 ? 0 : intersection / union
-}
-
 function getMessageBaseWeight(message: ApiMessage, isRecent: boolean): number {
 	if (isErrorRecoveryMessage(message)) return MESSAGE_WEIGHTS.ERROR_RECOVERY
 	if (hasCodeModification(message) || isToolUseWithWrite(message)) {
@@ -154,6 +145,7 @@ function evaluateMessageWeight(
 	index: number,
 	totalVisible: number,
 	referenceTokens: Set<string>,
+	hierarchy?: ContextHierarchy,
 ): number {
 	const isRecent = index >= totalVisible - PROTECTED_RECENT_TURNS * 2
 	const baseWeight = getMessageBaseWeight(message, isRecent)
@@ -163,7 +155,29 @@ function evaluateMessageWeight(
 	const similarity = jaccardSimilarity(tokenizeForRelevance(text), referenceTokens)
 	const relevanceBoost = similarity * 3
 	const recencyBoost = isRecent ? 0.5 : 0
-	return baseWeight * ageDecay + relevanceBoost + recencyBoost
+
+	// ───── CSA enhancement: cross-turn attention factors ─────
+	let csaBoost = 0
+	if (hierarchy && hierarchy.turnCount > 0) {
+		const turnIdx = findTurnIndex(hierarchy, index)
+		if (turnIdx >= 0) {
+			const ap = hierarchy.adaptiveParams
+
+			// Factor 1: turn self-attention mean (centrality of this turn in the conversation)
+			const selfAttnMean = computeTurnSelfAttentionMean(hierarchy, turnIdx)
+			csaBoost += selfAttnMean * ap.selfAttnMeanMult
+
+			// Factor 2: query attention (similarity of this turn to the last turn)
+			const queryAttn = getQueryAttention(hierarchy, turnIdx)
+			csaBoost += queryAttn * ap.queryAttnMult
+
+			// Factor 3: file hotness (how many other turns share the same files)
+			const fileHotness = computeFileHotness(hierarchy, turnIdx)
+			csaBoost += fileHotness * ap.fileHotnessMult
+		}
+	}
+
+	return baseWeight * ageDecay + relevanceBoost + csaBoost + recencyBoost
 }
 
 /**
@@ -184,9 +198,10 @@ function evaluateMessageWeight(
  * @param {ApiMessage[]} messages - The conversation messages.
  * @param {number} fracToRemove - The fraction (between 0 and 1) of messages (excluding the first) to hide.
  * @param {string} taskId - The task ID for the conversation, used for telemetry
+ * @param {ContextHierarchy} [hierarchy] - Optional hierarchical context for CSA-enhanced scoring
  * @returns {TruncationResult} Object containing the tagged messages, truncation ID, and count of messages removed.
  */
-export function truncateConversation(messages: ApiMessage[], fracToRemove: number, taskId: string): TruncationResult {
+export function truncateConversation(messages: ApiMessage[], fracToRemove: number, taskId: string, hierarchy?: ContextHierarchy): TruncationResult {
 	TelemetryService.instance.captureSlidingWindowTruncation(taskId)
 	const truncationId = crypto.randomUUID()
 
@@ -200,9 +215,9 @@ export function truncateConversation(messages: ApiMessage[], fracToRemove: numbe
 
 	const visibleCount = visibleIndices.length
 	const rawMessagesToRemove = Math.floor((visibleCount - 1) * fracToRemove)
-	const messagesToRemove = rawMessagesToRemove - (rawMessagesToRemove % 2) // Keep even for user/assistant pairs
+	const messagesToRemove = rawMessagesToRemove + (rawMessagesToRemove % 2) // Round up to even for user/assistant pairs
 
-	if (messagesToRemove <= 0) {
+	if (rawMessagesToRemove <= 0) {
 		return { messages, truncationId, messagesRemoved: 0 }
 	}
 
@@ -217,16 +232,27 @@ export function truncateConversation(messages: ApiMessage[], fracToRemove: numbe
 	const candidateWeights: Array<{ visibleIdx: number; originalIdx: number; weight: number }> = []
 	for (let i = 1; i < visibleIndices.length; i++) {
 		const originalIdx = visibleIndices[i]
-		const weight = evaluateMessageWeight(messages[originalIdx], i, visibleCount, referenceTokens)
+		const weight = evaluateMessageWeight(messages[originalIdx], i, visibleCount, referenceTokens, hierarchy)
 		candidateWeights.push({ visibleIdx: i, originalIdx, weight })
 	}
 
 	// Protect last PROTECTED_RECENT_TURNS * 2 messages
 	const protectedStart = visibleCount - PROTECTED_RECENT_TURNS * 2
 
-	// Sort candidates by weight ascending (lowest weight first = truncated first)
-	// For equal weights, prefer older messages (lower index)
+	// Sort candidates by weight ascending (lowest weight first = truncated first).
+	// HCA enhancement: when hierarchy is available, prefer truncating from
+	// low-importance turns first to preserve high-importance turn integrity.
 	candidateWeights.sort((a, b) => {
+		if (hierarchy) {
+			const turnA = findTurnIndex(hierarchy, a.originalIdx)
+			const turnB = findTurnIndex(hierarchy, b.originalIdx)
+			if (turnA >= 0 && turnB >= 0 && turnA !== turnB) {
+				const impA = computeTurnSelfAttentionMean(hierarchy, turnA)
+				const impB = computeTurnSelfAttentionMean(hierarchy, turnB)
+				if (impA !== impB) return impA - impB // low-importance turn = truncated first
+			}
+		}
+		// Same turn (or no hierarchy): sort by weight, ties broken by age
 		if (a.weight !== b.weight) return a.weight - b.weight
 		return a.visibleIdx - b.visibleIdx
 	})
@@ -485,7 +511,6 @@ export async function manageContext({
 	cacheAwareTotalTokens,
 	enableMicroCompact = true,
 	compactFailures: compactFailuresIn = 0,
-t// @ts-expect-error TS2366 - complex control flow
 }: ContextManagementOptions): Promise<ContextManagementResult> {
 	let error: string | undefined
 	let errorDetails: string | undefined
@@ -594,7 +619,11 @@ t// @ts-expect-error TS2366 - complex control flow
 					`(${((effectiveCacheReadTokens / Math.max(1, cacheAwareTokensBase)) * 100).toFixed(1)}%). ` +
 					`Compression would break cache and increase costs.`,
 				)
-				// Fall through to truncation check below if tokens still exceed allowed
+				// Preserve cache by skipping condensation, but do not bypass hard context-window safety.
+				// If already over budget, fall through to truncation logic below.
+				if (prevContextTokens <= allowedTokens) {
+					return { messages: preprocessedMessages, prevContextTokens, summary: "", cost: 0, compactFailures }
+				}
 			}
 			// Circuit breaker: if condensation has failed too many times consecutively,
 			// skip it and fall through to truncation to avoid wasting API calls
@@ -604,9 +633,21 @@ t// @ts-expect-error TS2366 - complex control flow
 					`${compactFailures} consecutive condensation failures. ` +
 					`Falling back to forced truncation.`,
 				)
-				// Force aggressive truncation (75% removal)
-				const truncationResult = truncateConversation(preprocessedMessages, 0.5, taskId)
-				logCompactEvent("compact_truncation", { messagesRemoved: truncationResult.messagesRemoved })
+				// Force aggressive truncation (50% removal) with hierarchy-enhanced scoring
+				const hierarchy = buildContextHierarchy(preprocessedMessages, taskId)
+				const truncationResult = truncateConversation(preprocessedMessages, 0.5, taskId, hierarchy ?? undefined)
+				logCompactEvent("compact_truncation", {
+						messagesRemoved: truncationResult.messagesRemoved,
+						hierarchyEnabled: !!hierarchy,
+						turnCount: hierarchy?.turnCount ?? 0,
+						fileCount: hierarchy ? hierarchy.files.size : 0,
+						adaptiveSelfAttnMult: hierarchy?.adaptiveParams.selfAttnMeanMult,
+						adaptiveQueryAttnMult: hierarchy?.adaptiveParams.queryAttnMult,
+						adaptiveFileHotnessMult: hierarchy?.adaptiveParams.fileHotnessMult,
+						adaptiveAttnWeights: hierarchy
+							? `${hierarchy.adaptiveParams.attnContentWeight.toFixed(2)}/${hierarchy.adaptiveParams.attnFileWeight.toFixed(2)}/${hierarchy.adaptiveParams.attnToolWeight.toFixed(2)}/${hierarchy.adaptiveParams.attnTemporalWeight.toFixed(2)}`
+							: undefined,
+					})
 				return {
 					messages: truncationResult.messages,
 					prevContextTokens,
@@ -618,6 +659,9 @@ t// @ts-expect-error TS2366 - complex control flow
 					compactFailures,
 				}
 			} else {
+				// Build hierarchy to keep adaptive EMA params up-to-date, even when condense succeeds
+				buildContextHierarchy(preprocessedMessages, taskId)
+
 				// Try session memory compaction first — avoids an expensive LLM API
 				// call when structured conversation metadata is sufficient.
 				const smResult = tryBuildLightweightSummary(
@@ -697,10 +741,12 @@ t// @ts-expect-error TS2366 - complex control flow
 			}
 		}
 	}
+	}
 
 	// Fall back to sliding window truncation if needed
 	if (prevContextTokens > allowedTokens) {
-		const truncationResult = truncateConversation(preprocessedMessages, 0.5, taskId)
+		const hierarchy = buildContextHierarchy(preprocessedMessages, taskId)
+		const truncationResult = truncateConversation(preprocessedMessages, 0.5, taskId, hierarchy ?? undefined)
 
 		// Calculate new context tokens after truncation by counting non-truncated messages
 		// Messages with truncationParent are hidden, so we count only those without it
@@ -748,7 +794,6 @@ t// @ts-expect-error TS2366 - complex control flow
 	}
 	// No truncation or condensation needed
 	return { messages: preprocessedMessages, summary: "", cost, prevContextTokens, error, errorDetails , compactFailures }
-}
 }
 
 /**

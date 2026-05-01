@@ -14,6 +14,7 @@ import { DEFAULT_HEADERS } from "./constants"
 import { BaseProvider } from "./base-provider"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
 import { handleOpenAIError } from "./utils/openai-error-handler"
+import { requireApiKey } from "../interfaces/api-key-validator"
 
 const XAI_DEFAULT_TEMPERATURE = 0
 
@@ -26,7 +27,7 @@ export class XAIHandler extends BaseProvider implements SingleCompletionHandler 
 		super()
 		this.options = options
 
-		const apiKey = this.options.xaiApiKey ?? "not-provided"
+		const apiKey = requireApiKey(this.options.xaiApiKey, "xAI")
 
 		this.client = new OpenAI({
 			baseURL: "https://api.x.ai/v1",

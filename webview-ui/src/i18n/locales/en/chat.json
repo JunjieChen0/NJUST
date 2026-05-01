@@ -251,15 +251,23 @@
 		"tokens": "tokens",
 		"condensation": {
 			"title": "Context Condensed",
+			"subtitle": "AI-powered summary",
 			"inProgress": "Condensing context...",
 			"errorHeader": "Failed to condense context"
 		},
 		"truncation": {
 			"title": "Context Truncated",
+			"subtitle": "Fast truncation",
 			"inProgress": "Truncating context...",
 			"messagesRemoved": "{{count}} message removed",
 			"messagesRemoved_other": "{{count}} messages removed",
-			"description": "Older messages were removed from the conversation to stay within the context window limit. This is a fast but less context-preserving approach compared to condensation."
+			"description": "Older messages were removed from the conversation to stay within the context window limit. This is a fast but less context-preserving approach compared to condensation.",
+			"suggestion": "For best results, consider starting a new conversation if you need full context."
+		},
+		"circuitBreaker": {
+			"title": "Context compression degraded",
+			"description": "Context condensation failed repeatedly. The system has switched to truncation mode as a fallback. This preserves less conversation context than normal.",
+			"suggestion": "You may want to start a new conversation to reset the context window."
 		}
 	},
 	"skill": {

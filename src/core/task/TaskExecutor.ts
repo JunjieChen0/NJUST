@@ -851,6 +851,9 @@ export class TaskExecutor {
 			await t.saveClineMessages()
 			await t.refreshWebviewState()
 
+			let assistantMessage = ""
+			let reasoningMessage = ""
+			let pendingGroundingSources: GroundingSource[] = []
 			try {
 				let cacheWriteTokens = 0
 				let cacheReadTokens = 0
@@ -967,9 +970,6 @@ export class TaskExecutor {
 				// allow the user to retry the request (most likely due to rate
 				// limit error, which gets thrown on the first chunk).
 				const stream = t.attemptApiRequest(currentItem.retryAttempt ?? 0, { skipProviderRateLimit: true })
-				let assistantMessage = ""
-				let reasoningMessage = ""
-				let pendingGroundingSources: GroundingSource[] = []
 				t.isStreaming = true
 
 				try {

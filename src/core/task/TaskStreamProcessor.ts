@@ -11,6 +11,7 @@ import {
 	DEFAULT_REQUEST_DELAY_SECONDS,
 } from "@njust-ai-cj/types"
 
+import type { Task } from "./Task"
 import type { ApiHandlerCreateMessageMetadata } from "../../api"
 import { resolveParallelNativeToolCalls } from "../../shared/parallelToolCalls"
 import { calculateApiCostAnthropic, calculateApiCostOpenAI } from "../../shared/cost"
@@ -21,7 +22,7 @@ import { getEnvironmentDetails } from "../environment/getEnvironmentDetails"
 import { buildNativeToolsArrayWithRestrictions } from "./build-tools"
 
 import type { ApiMessage } from "../task-persistence"
-import { Task } from "./Task"
+import { getLastGlobalApiRequestTime } from "./globalApiTiming"
 import { PersistentRetryManager } from "./PersistentRetry"
 
 const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
@@ -72,12 +73,12 @@ export class TaskStreamProcessor {
 		const rateLimitSeconds =
 			state?.apiConfiguration?.rateLimitSeconds ?? this.task.apiConfiguration?.rateLimitSeconds ?? 0
 
-		if (rateLimitSeconds <= 0 || !Task.getLastGlobalApiRequestTime()) {
+		if (rateLimitSeconds <= 0 || !getLastGlobalApiRequestTime()) {
 			return
 		}
 
 		const now = performance.now()
-		const timeSinceLastRequest = now - Task.getLastGlobalApiRequestTime()!
+		const timeSinceLastRequest = now - getLastGlobalApiRequestTime()!
 		const rateLimitDelay = Math.ceil(
 			Math.min(rateLimitSeconds, Math.max(0, rateLimitSeconds * 1000 - timeSinceLastRequest) / 1000),
 		)
@@ -149,8 +150,8 @@ export class TaskStreamProcessor {
 			// Respect provider rate limit window
 			let rateLimitDelay = 0
 			const rateLimit = (state?.apiConfiguration ?? this.task.apiConfiguration)?.rateLimitSeconds || 0
-			if (Task.getLastGlobalApiRequestTime() && rateLimit > 0) {
-				const elapsed = performance.now() - Task.getLastGlobalApiRequestTime()!
+			if (getLastGlobalApiRequestTime() && rateLimit > 0) {
+				const elapsed = performance.now() - getLastGlobalApiRequestTime()!
 				rateLimitDelay = Math.ceil(Math.min(rateLimit, Math.max(0, rateLimit * 1000 - elapsed) / 1000))
 			}
 
@@ -381,11 +382,13 @@ export class TaskStreamProcessor {
 				)
 			} else if (truncateResult.truncationId) {
 				// Sliding window truncation occurred (fallback when condensing fails or is disabled)
+				const isCircuitBreaker = /circuit.breaker/i.test(truncateResult.error ?? "")
 				const contextTruncation: ContextTruncation = {
 					truncationId: truncateResult.truncationId,
 					messagesRemoved: truncateResult.messagesRemoved ?? 0,
 					prevContextTokens: truncateResult.prevContextTokens,
 					newContextTokens: truncateResult.newContextTokensAfterTruncation ?? 0,
+					reason: isCircuitBreaker ? "circuit_breaker" : "sliding_window",
 				}
 				await this.task.say(
 					"sliding_window_truncation",

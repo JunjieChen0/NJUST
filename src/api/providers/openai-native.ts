@@ -30,6 +30,7 @@ import { BaseProvider } from "./base-provider"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
 import { isMcpTool } from "../../utils/mcp-name"
 import { sanitizeOpenAiCallId } from "../../utils/tool-id"
+import { requireApiKey } from "../interfaces/api-key-validator"
 
 export type OpenAiNativeModel = ReturnType<OpenAiNativeHandler["getModel"]>
 
@@ -94,7 +95,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		if (this.options.enableResponsesReasoningSummary === undefined) {
 			this.options.enableResponsesReasoningSummary = true
 		}
-		const apiKey = this.options.openAiNativeApiKey ?? "not-provided"
+		const apiKey = requireApiKey(this.options.openAiNativeApiKey, "OpenAI Native")
 		// Include originator, session_id, and User-Agent headers for API tracking and debugging
 		const userAgent = `roo-code/${Package.version} (${os.platform()} ${os.release()}; ${os.arch()}) node/${process.version.slice(1)}`
 		this.client = new OpenAI({
@@ -469,8 +470,31 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 				}
 			}
 		} catch (sdkErr: any) {
-			// For errors, fallback to manual SSE via fetch
-			yield* this.makeResponsesApiRequest(requestBody, model, metadata, systemPrompt, messages)
+			// Only fallback to manual SSE for connection/stream errors
+			// For auth errors, invalid requests, etc., re-throw
+			const isConnectionError =
+				sdkErr.code === "ECONNREFUSED" ||
+				sdkErr.code === "ECONNRESET" ||
+				sdkErr.code === "ETIMEDOUT" ||
+				sdkErr.code === "ENOTFOUND" ||
+				sdkErr.name === "NetworkError" ||
+				sdkErr.message?.includes("network") ||
+				sdkErr.message?.includes("ECONN") ||
+				sdkErr.message?.includes("stream")
+
+			const isStreamError =
+				sdkErr.status === 502 ||
+				sdkErr.status === 503 ||
+				sdkErr.status === 504 ||
+				sdkErr.message?.includes("stream")
+
+			if (isConnectionError || isStreamError) {
+				// For connection/stream errors, fallback to manual SSE via fetch
+				yield* this.makeResponsesApiRequest(requestBody, model, metadata, systemPrompt, messages)
+			} else {
+				// For auth errors, invalid requests, etc., re-throw
+				throw sdkErr
+			}
 		} finally {
 			this.abortController = undefined
 		}
@@ -577,7 +601,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		systemPrompt?: string,
 		messages?: Anthropic.Messages.MessageParam[],
 	): ApiStream {
-		const apiKey = this.options.openAiNativeApiKey ?? "not-provided"
+		const apiKey = requireApiKey(this.options.openAiNativeApiKey, "OpenAI Native")
 		const baseUrl = this.options.openAiNativeBaseUrl || "https://api.openai.com"
 		const url = `${baseUrl}/v1/responses`
 
