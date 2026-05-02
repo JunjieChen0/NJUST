@@ -168,10 +168,13 @@ export function injectSyntheticToolResults(messages: ApiMessage[]): ApiMessage[]
 		content: "Context condensation triggered. Tool execution deferred.",
 	}))
 
+	// Timestamp is one tick after the last input message so the synthetic
+	// message sits between the original conversation and the summary message.
+	const lastInputTs = messages.length > 0 ? messages[messages.length - 1].ts : Date.now()
 	const syntheticMessage: ApiMessage = {
 		role: "user",
 		content: syntheticResults,
-		ts: Date.now(),
+		ts: lastInputTs + 1,
 	}
 
 	return [...messages, syntheticMessage]
@@ -253,6 +256,74 @@ export type SummarizeConversationOptions = {
  *   because fresh environment details will be injected on the very next turn via
  *   getEnvironmentDetails() in recursivelyMakeClineRequests().
  */
+/**
+ * Shared PTL-retry compaction helper used by both the cache-sharing
+ * (attempt 1) and simplified (attempt 2) paths in summarizeConversation.
+ *
+ * On prompt-too-long (PTL) errors, drops the oldest ~25 % of messages and
+ * retries up to `maxRetries` times. The `prepareFn` callback encapsulates
+ * the path-specific message preparation (image cleaning, tool→text conversion).
+ */
+async function compactWithPTLRetry(
+	messagesForAPI: ApiMessage[],
+	prompt: string,
+	apiHandler: ApiHandler,
+	condenseInstructions: string,
+	prepareFn: (
+		msgs: ApiMessage[],
+		instr: string,
+	) => { role: string; content: string | Anthropic.Messages.ContentBlockParam[] }[],
+	metadata: ApiHandlerCreateMessageMetadata | undefined,
+	maxRetries: number,
+): Promise<{ summary: string; cost: number; outputTokens: number }> {
+	let retryMessages = messagesForAPI
+	for (let retry = 0; retry <= maxRetries; retry++) {
+		try {
+			const requestMessages = prepareFn(retryMessages, condenseInstructions)
+			const stream = apiHandler.createMessage(prompt, requestMessages, metadata)
+
+			let s = ""
+			let c = 0
+			let t = 0
+			for await (const chunk of stream) {
+				if (chunk.type === "text") {
+					s += chunk.text
+				} else if (chunk.type === "usage") {
+					c = chunk.totalCost ?? 0
+					t = chunk.outputTokens ?? 0
+				}
+			}
+			if (s.trim().length > 0) {
+				return { summary: s.trim(), cost: c, outputTokens: t }
+			}
+			return { summary: "", cost: c, outputTokens: t }
+		} catch (err) {
+			const errMsg = err instanceof Error ? err.message : String(err)
+			const errStatus = (err as any)?.status ?? 0
+			const isPTL =
+				errStatus === 413 ||
+				errStatus === 400 ||
+				/prompt.*(too.?long|length)|context.*(length|exceed)|maximum.*(context|token)|reduce.*(length|message)/i.test(
+					errMsg,
+				)
+
+			if (isPTL && retry < maxRetries && retryMessages.length > 2) {
+				const dropCount = Math.max(2, Math.floor(retryMessages.length * 0.25))
+				retryMessages = retryMessages.slice(
+					-Math.max(2, retryMessages.length - dropCount),
+				)
+				console.warn(
+					`[summarizeConversation] PTL retry ${retry + 1}/${maxRetries}: ` +
+						`dropping oldest messages, ${retryMessages.length} remaining`,
+				)
+				continue
+			}
+			throw err
+		}
+	}
+	return { summary: "", cost: 0, outputTokens: 0 }
+}
+
 export async function summarizeConversation(options: SummarizeConversationOptions): Promise<SummarizeResponse> {
 	const {
 		messages,
@@ -302,6 +373,11 @@ export async function summarizeConversation(options: SummarizeConversationOption
 	// (e.g., when user triggers condense after receiving attempt_completion but before responding)
 	const messagesWithToolResults = injectSyntheticToolResults(messagesToSummarize)
 
+	// Filter out previous summary messages to prevent "summary of summary"
+	// information drift. Each condense step should summarize raw conversation
+	// content, not re-distill a prior distillation.
+	const messagesForLLM = messagesWithToolResults.filter((m) => !m.isSummary)
+
 	// Validate that the API handler supports message creation
 	if (!apiHandler || typeof apiHandler.createMessage !== "function") {
 		console.error("API handler is invalid for condensing. Cannot proceed.")
@@ -321,80 +397,32 @@ export async function summarizeConversation(options: SummarizeConversationOption
 	const canAttemptCacheSharing = hasTools && systemPrompt?.length > 0
 
 	if (canAttemptCacheSharing) {
-		// PTL retry within cache-sharing: retry up to 3 times by dropping
-		// oldest messages before falling back to the simplified path.
-		const MAX_CACHE_PTL_RETRIES = 3
-		let cacheRetryMessages = messagesWithToolResults
-		let cacheSummary = ""
-		let cacheCost = 0
-		let cacheOutputTokens = 0
-
-		for (let retry = 0; retry <= MAX_CACHE_PTL_RETRIES; retry++) {
-			let isCacheError = false
-			try {
-				const userMessage: Anthropic.MessageParam = {
-					role: "user",
-					content: condenseInstructions,
-				}
-				const cacheMessages = maybeRemoveImageBlocks(
-					[...cacheRetryMessages, userMessage],
-					apiHandler,
-				)
-				const cacheRequestMessages = cacheMessages.map(({ role, content }) => ({ role, content }))
-				const cacheStream = apiHandler.createMessage(systemPrompt, cacheRequestMessages, metadata)
-
-				let retrySummary = ""
-				let retryCost = 0
-				let retryTokens = 0
-
-				for await (const chunk of cacheStream) {
-					if (chunk.type === "text") {
-						retrySummary += chunk.text
-					} else if (chunk.type === "usage") {
-						retryCost = chunk.totalCost ?? 0
-						retryTokens = chunk.outputTokens ?? 0
-					}
-				}
-
-				if (retrySummary.trim().length > 0) {
-					cacheSummary = retrySummary.trim()
-					cacheCost = retryCost
-					cacheOutputTokens = retryTokens
-					break // success
-				}
-			} catch (err) {
-				const errMsg = err instanceof Error ? err.message : String(err)
-				const errStatus = (err as any)?.status ?? 0
-				const isPTL =
-					errStatus === 413 ||
-					errStatus === 400 ||
-					/prompt.*(too.?long|length)|context.*(length|exceed)|maximum.*(context|token)|reduce.*(length|message)/i.test(errMsg)
-
-				if (isPTL && retry < MAX_CACHE_PTL_RETRIES && cacheRetryMessages.length > 2) {
-					const dropCount = Math.max(2, Math.floor(cacheRetryMessages.length * 0.25))
-					cacheRetryMessages = cacheRetryMessages.slice(-Math.max(2, cacheRetryMessages.length - dropCount))
-					console.warn(
-						`[summarizeConversation] Cache-sharing PTL retry ${retry + 1}/${MAX_CACHE_PTL_RETRIES}: ` +
-						`dropping oldest messages, ${cacheRetryMessages.length} remaining`,
-					)
-					continue
-				}
-
-				isCacheError = true
-				console.warn(
-					"[summarizeConversation] Cache-sharing path failed, falling back to simplified path:",
-					errMsg,
+		try {
+			const cacheResult = await compactWithPTLRetry(
+				messagesForLLM,
+				systemPrompt,
+				apiHandler,
+				condenseInstructions,
+				(msgs, instr) => {
+					const userMessage: Anthropic.MessageParam = { role: "user", content: instr }
+					const cleaned = maybeRemoveImageBlocks([...msgs, userMessage], apiHandler)
+					return cleaned.map(({ role, content }) => ({ role, content }))
+				},
+				metadata,
+				3,
+			)
+			if (cacheResult.summary) {
+				summary = cacheResult.summary
+				cost = cacheResult.cost
+				outputTokens = cacheResult.outputTokens
+				console.log(
+					`[summarizeConversation] Cache-sharing path succeeded: outputTokens=${outputTokens}`,
 				)
 			}
-			if (isCacheError || retry >= MAX_CACHE_PTL_RETRIES) break
-		}
-
-		if (cacheSummary.length > 0) {
-			summary = cacheSummary
-			cost = cacheCost
-			outputTokens = cacheOutputTokens
-			console.log(
-				`[summarizeConversation] Cache-sharing path succeeded: outputTokens=${outputTokens}`,
+		} catch (err) {
+			console.warn(
+				"[summarizeConversation] Cache-sharing path failed, falling back to simplified path:",
+				err instanceof Error ? err.message : String(err),
 			)
 		}
 	}
@@ -402,106 +430,68 @@ export async function summarizeConversation(options: SummarizeConversationOption
 	// --- Simplified fallback path (attempt 2 if cache-sharing failed) ---
 	if (!summary) {
 		const promptToUse = getSummaryPrompt()
-		const MAX_PTL_RETRIES = 3
+		try {
+			const fallbackResult = await compactWithPTLRetry(
+				messagesForLLM,
+				promptToUse,
+				apiHandler,
+				condenseInstructions,
+				(msgs, instr) => {
+					const finalRequestMessage: Anthropic.MessageParam = {
+						role: "user",
+						content: instr,
+					}
+					const transformed = transformMessagesForCondensing(
+						maybeRemoveImageBlocks([...msgs, finalRequestMessage], apiHandler),
+					)
+					return transformed.map(({ role, content }) => ({ role, content }))
+				},
+				undefined,
+				3,
+			)
+			summary = fallbackResult.summary
+			cost = fallbackResult.cost
+			outputTokens = fallbackResult.outputTokens
+		} catch (error) {
+			// Non-PTL error or exhausted retries — fail
+			console.error("Error during condensing API call:", error)
+			const errorMessage = error instanceof Error ? error.message : String(error)
 
-		let streamSummary = ""
-		let streamCost = 0
-		let streamOutputTokens = 0
-		let lastPTLError: Error | null = null
-
-		// Start with the full message set; PTL retries progressively reduce it
-		let retryMessages = messagesWithToolResults
-
-		for (let attempt = 0; attempt <= MAX_PTL_RETRIES; attempt++) {
-			const finalRequestMessage: Anthropic.MessageParam = {
-				role: "user",
-				content: condenseInstructions,
+			let errorDetails = ""
+			if (error instanceof Error) {
+				errorDetails = `Error: ${error.message}`
+				const anyError = error as unknown as Record<string, unknown>
+				if (anyError.status) {
+					errorDetails += `\n\nHTTP Status: ${anyError.status}`
+				}
+				if (anyError.code) {
+					errorDetails += `\nError Code: ${anyError.code}`
+				}
+				if (anyError.response) {
+					try {
+						errorDetails += `\n\nAPI Response:\n${JSON.stringify(anyError.response, null, 2)}`
+					} catch {
+						errorDetails += `\n\nAPI Response: [Unable to serialize]`
+					}
+				}
+				if (anyError.body) {
+					try {
+						errorDetails += `\n\nResponse Body:\n${JSON.stringify(anyError.body, null, 2)}`
+					} catch {
+						errorDetails += `\n\nResponse Body: [Unable to serialize]`
+					}
+				}
+			} else {
+				errorDetails = String(error)
 			}
 
-			const messagesWithTextToolBlocks = transformMessagesForCondensing(
-				maybeRemoveImageBlocks([...retryMessages, finalRequestMessage], apiHandler),
-			)
-			const requestMessages = messagesWithTextToolBlocks.map(({ role, content }) => ({ role, content }))
-
-			try {
-				const stream = apiHandler.createMessage(promptToUse, requestMessages)
-				for await (const chunk of stream) {
-					if (chunk.type === "text") {
-						streamSummary += chunk.text
-					} else if (chunk.type === "usage") {
-						streamCost = chunk.totalCost ?? 0
-						streamOutputTokens = chunk.outputTokens ?? 0
-					}
-				}
-				// Success — clear any PTL tracking and break
-				lastPTLError = null
-				break
-			} catch (error) {
-				const errMsg = error instanceof Error ? error.message : String(error)
-				const errStatus = (error as any)?.status ?? 0
-				const isPTL =
-					errStatus === 413 ||
-					errStatus === 400 ||
-					/prompt.*(too.?long|length)|context.*(length|exceed)|maximum.*(context|token)|reduce.*(length|message)/i.test(errMsg)
-
-				if (isPTL && attempt < MAX_PTL_RETRIES && retryMessages.length > 2) {
-					// PTL retry: drop the oldest ~25% of messages to shrink the request
-					lastPTLError = error instanceof Error ? error : new Error(errMsg)
-					const dropCount = Math.max(2, Math.floor(retryMessages.length * 0.25))
-					const dropped = retryMessages.length - dropCount
-					retryMessages = retryMessages.slice(-Math.max(2, dropped))
-					console.warn(
-						`[summarizeConversation] PTL retry ${attempt + 1}/${MAX_PTL_RETRIES}: ` +
-						`dropping ${dropCount} oldest messages, ${retryMessages.length} remaining`,
-					)
-					streamSummary = ""
-					continue
-				}
-
-				// Non-PTL error or exhausted retries — fail
-				console.error("Error during condensing API call:", error)
-				const errorMessage = error instanceof Error ? error.message : String(error)
-
-				let errorDetails = ""
-				if (error instanceof Error) {
-					errorDetails = `Error: ${error.message}`
-					const anyError = error as unknown as Record<string, unknown>
-					if (anyError.status) {
-						errorDetails += `\n\nHTTP Status: ${anyError.status}`
-					}
-					if (anyError.code) {
-						errorDetails += `\nError Code: ${anyError.code}`
-					}
-					if (anyError.response) {
-						try {
-							errorDetails += `\n\nAPI Response:\n${JSON.stringify(anyError.response, null, 2)}`
-						} catch {
-							errorDetails += `\n\nAPI Response: [Unable to serialize]`
-						}
-					}
-					if (anyError.body) {
-						try {
-							errorDetails += `\n\nResponse Body:\n${JSON.stringify(anyError.body, null, 2)}`
-						} catch {
-							errorDetails += `\n\nResponse Body: [Unable to serialize]`
-						}
-					}
-				} else {
-					errorDetails = String(error)
-				}
-
-				return {
-					...response,
-					cost: streamCost,
-					error: t("common:errors.condense_api_failed", { message: errorMessage }),
-					errorDetails,
-				}
+			return {
+				...response,
+				cost,
+				error: t("common:errors.condense_api_failed", { message: errorMessage }),
+				errorDetails,
 			}
 		}
-
-		summary = streamSummary.trim()
-		cost = streamCost
-		outputTokens = streamOutputTokens
 	}
 
 	// Strip <analysis> scratchpad and format <summary> tags into readable headers
@@ -584,7 +574,7 @@ ${commandBlocks}
 		compactMetadata: {
 			trigger: isAutomaticTrigger ? "auto" : "manual",
 			preCompactTokenCount: messages.length, // message count as rough pre-compact metric
-			messagesSummarized: messagesToSummarize.length,
+			messagesSummarized: messagesForLLM.length,
 			timestamp: Date.now(),
 		},
 	}
@@ -669,6 +659,48 @@ export function getMessagesSinceLastSummary(messages: ApiMessage[]): ApiMessage[
  * @param messages - The full API conversation history including tagged messages
  * @returns The filtered history that should be sent to the API
  */
+/**
+ * Filters orphan tool_result blocks from messages by building a set of valid
+ * tool_use IDs. A tool_result is "orphaned" if its tool_use_id doesn't match
+ * any tool_use block present in the message set. Such orphans cause API errors.
+ *
+ * This is applied in both the fresh-start and the fallback code path so that
+ * orphan tool_results are never leaked to the API.
+ */
+function filterOrphanToolResults(messages: ApiMessage[]): ApiMessage[] {
+	// Collect all tool_use IDs from assistant messages
+	const toolUseIds = new Set<string>()
+	for (const msg of messages) {
+		if (msg.role === "assistant" && Array.isArray(msg.content)) {
+			for (const block of msg.content) {
+				if (block.type === "tool_use" && (block as Anthropic.Messages.ToolUseBlockParam).id) {
+					toolUseIds.add((block as Anthropic.Messages.ToolUseBlockParam).id)
+				}
+			}
+		}
+	}
+
+	if (toolUseIds.size === 0) return messages
+
+	return messages
+		.map((msg) => {
+			if (msg.role === "user" && Array.isArray(msg.content)) {
+				const filteredContent = msg.content.filter((block) => {
+					if (block.type === "tool_result") {
+						return toolUseIds.has((block as Anthropic.Messages.ToolResultBlockParam).tool_use_id)
+					}
+					return true
+				})
+				if (filteredContent.length === 0) return null
+				if (filteredContent.length !== msg.content.length) {
+					return { ...msg, content: filteredContent }
+				}
+			}
+			return msg
+		})
+		.filter((msg): msg is ApiMessage => msg !== null)
+}
+
 export function getEffectiveApiHistory(messages: ApiMessage[]): ApiMessage[] {
 	// Find the most recent summary message
 	const lastSummary = findLast(messages, (msg) => msg.isSummary === true)
@@ -678,42 +710,9 @@ export function getEffectiveApiHistory(messages: ApiMessage[]): ApiMessage[] {
 		const summaryIndex = messages.indexOf(lastSummary)
 		let messagesFromSummary = messages.slice(summaryIndex)
 
-		// Collect all tool_use IDs from assistant messages in the result
-		// This is needed to filter out orphan tool_result blocks that reference
-		// tool_use IDs from messages that were condensed away
-		const toolUseIds = new Set<string>()
-		for (const msg of messagesFromSummary) {
-			if (msg.role === "assistant" && Array.isArray(msg.content)) {
-				for (const block of msg.content) {
-					if (block.type === "tool_use" && (block as Anthropic.Messages.ToolUseBlockParam).id) {
-						toolUseIds.add((block as Anthropic.Messages.ToolUseBlockParam).id)
-					}
-				}
-			}
-		}
-
-		// Filter out orphan tool_result blocks from user messages
-		messagesFromSummary = messagesFromSummary
-			.map((msg) => {
-				if (msg.role === "user" && Array.isArray(msg.content)) {
-					const filteredContent = msg.content.filter((block) => {
-						if (block.type === "tool_result") {
-							return toolUseIds.has((block as Anthropic.Messages.ToolResultBlockParam).tool_use_id)
-						}
-						return true
-					})
-					// If all content was filtered out, mark for removal
-					if (filteredContent.length === 0) {
-						return null
-					}
-					// If some content was filtered, return updated message
-					if (filteredContent.length !== msg.content.length) {
-						return { ...msg, content: filteredContent }
-					}
-				}
-				return msg
-			})
-			.filter((msg): msg is ApiMessage => msg !== null)
+		// Filter out orphan tool_result blocks that reference tool_use IDs from
+		// messages that were condensed away (shared helper).
+		messagesFromSummary = filterOrphanToolResults(messagesFromSummary)
 
 		// Still need to filter out any truncated messages within this range
 		const existingTruncationIds = new Set<string>()
@@ -752,7 +751,7 @@ export function getEffectiveApiHistory(messages: ApiMessage[]): ApiMessage[] {
 	// Filter out messages whose condenseParent points to an existing summary
 	// or whose truncationParent points to an existing truncation marker.
 	// Messages with orphaned parents (summary/marker was deleted) are included.
-	return messages.filter((msg) => {
+	const filteredForParents = messages.filter((msg) => {
 		// Filter out condensed messages if their summary exists
 		if (msg.condenseParent && existingSummaryIds.has(msg.condenseParent)) {
 			return false
@@ -763,6 +762,11 @@ export function getEffectiveApiHistory(messages: ApiMessage[]): ApiMessage[] {
 		}
 		return true
 	})
+
+	// Apply orphan tool_result filtering (defense-in-depth — orphan tool_use
+	// blocks are normally prevented by expandTruncationToAtomicUnits, but
+	// covering both paths guards against edge cases).
+	return filterOrphanToolResults(filteredForParents)
 }
 
 /**

@@ -264,8 +264,9 @@ export function truncateConversation(messages: ApiMessage[], fracToRemove: numbe
 		if (removed >= messagesToRemove) break
 		// Skip protected recent messages
 		if (candidate.visibleIdx >= protectedStart) continue
-		// Skip error recovery messages (weight >= ERROR_RECOVERY)
-		if (candidate.weight >= MESSAGE_WEIGHTS.ERROR_RECOVERY) continue
+		// Explicitly protect error recovery messages — do not rely on
+		// weight alone since CSA boosts can inflate non-error weights.
+		if (isErrorRecoveryMessage(messages[candidate.originalIdx])) continue
 
 		indicesToTruncate.add(candidate.originalIdx)
 		removed++

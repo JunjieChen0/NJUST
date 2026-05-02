@@ -379,22 +379,36 @@ function deriveTargetParams(stats: SessionStats): AdaptiveParams {
 		t.attnToolWeight += delta / 3
 	}
 
-	// Rule 5: chatRatio — text similarity matters more, files less
-	if (stats.chatRatio > 0.5) {
-		const excess = stats.chatRatio - 0.5
-		t.attnContentWeight = Math.min(0.60, t.attnContentWeight + excess * 0.3)
-		t.attnFileWeight = Math.max(0.10, t.attnFileWeight - excess * 0.2)
-		t.fileHotnessMult = Math.max(0.5, t.fileHotnessMult - excess * 0.8)
-	}
+		// Rules 5 & 6: compute chat- and tool-driven adjustments independently,
+		// then apply them simultaneously to eliminate order dependence between
+		// the two rules (they modify contentWeight in opposite directions).
+		const chatExcess = stats.chatRatio > 0.5 ? stats.chatRatio - 0.5 : 0
+		const toolBoost = stats.toolDiversity < 0.3 ? (0.3 - stats.toolDiversity) * 0.4 : 0
 
-	// Rule 6: toolDiversity — low diversity makes tool patterns more meaningful
-	if (stats.toolDiversity < 0.3) {
-		const boost = (0.3 - stats.toolDiversity) * 0.4
-		t.attnToolWeight = Math.min(0.30, t.attnToolWeight + boost)
-		t.attnContentWeight = Math.max(0.20, t.attnContentWeight - boost)
-	}
+		if (chatExcess > 0 || toolBoost > 0) {
+			let cw = t.attnContentWeight
+			let fw = t.attnFileWeight
+			let tw = t.attnToolWeight
 
-	// Rule 7: conversation length — adjust turn-grouping threshold
+			// Rule 5: chatRatio → content ↑, file ↓, hotness ↓
+			if (chatExcess > 0) {
+				cw = Math.min(0.60, cw + chatExcess * 0.3)
+				fw = Math.max(0.10, fw - chatExcess * 0.2)
+				t.fileHotnessMult = Math.max(0.5, t.fileHotnessMult - chatExcess * 0.8)
+			}
+
+			// Rule 6: toolDiversity → tool ↑, content ↓
+			if (toolBoost > 0) {
+				tw = Math.min(0.30, tw + toolBoost)
+				cw = Math.max(0.20, cw - toolBoost)
+			}
+
+			t.attnContentWeight = cw
+			t.attnFileWeight = fw
+			t.attnToolWeight = tw
+		}
+
+		// Rule 7: conversation length — adjust turn-grouping threshold
 	// Short conversations: stronger grouping (fewer turns to protect)
 	// Long conversations: weaker grouping (more turns, rely on per-message weight)
 	if (stats.turnCount < 10) {

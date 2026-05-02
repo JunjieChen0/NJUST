@@ -118,17 +118,36 @@ export function extractSessionMemory(messages: Array<{ role: string; content: st
 	return memory
 }
 
+// Pre-compiled regex patterns for session memory extraction.
+const WRITE_PATTERNS: RegExp[] = [
+	/(?:write_to_file|apply_diff|create_file).*?(?:path|file)['":\s]+([^\s'"<>]+\.\w{1,10})/gi,
+	/(?:Created|Modified|Updated|Wrote to)\s+[`']?([^\s`']+\.\w{1,10})[`']?/gi,
+]
+
+const DECISION_PATTERNS: RegExp[] = [
+	/(?:I(?:'ll| will) (?:use|choose|go with|implement|opt for))\s+(.{10,100}?)(?:\.|$)/gim,
+	/(?:decided to|decision:|approach:)\s+(.{10,100}?)(?:\.|$)/gim,
+]
+
+const READ_FILE_PATTERNS: RegExp[] = [
+	/(?:read_file|search_files|list_files).*?(?:path|file)['": \s]+([^\s'"<>]+\.\w{1,10})/gi,
+	/(?:Reading|Searched|Viewing)\s+[`']?([^\s`']+\.\w{1,10})[`']?/gi,
+]
+
+const TOOLS_USED_PATTERN =
+	/(?:use_mcp_tool|execute_command|read_file|write_to_file|apply_diff|search_files|list_files|ask_followup_question|attempt_completion|browser_action|create_file)/gi
+
+const UNRESOLVED_PATTERNS: RegExp[] = [
+	/(?:TODO|FIXME|HACK|WORKAROUND|unresolved|still need to|hasn't been|not yet)\s*:?\s*(.{10,120}?)(?:\.|$)/gim,
+	/(?:issue|problem|bug)\s+(?:remains|persists|still)\s+(.{10,120}?)(?:\.|$)/gim,
+]
+
 /**
  * Extract file paths that were modified (written to, applied diffs).
  */
 function extractModifiedFiles(content: string, files: string[]): void {
-	// Match write_to_file / apply_diff tool usage patterns
-	const writePatterns = [
-		/(?:write_to_file|apply_diff|create_file).*?(?:path|file)['":\s]+([^\s'"<>]+\.\w{1,10})/gi,
-		/(?:Created|Modified|Updated|Wrote to)\s+[`']?([^\s`']+\.\w{1,10})[`']?/gi,
-	]
-
-	for (const pattern of writePatterns) {
+	for (const pattern of WRITE_PATTERNS) {
+		pattern.lastIndex = 0
 		let match
 		while ((match = pattern.exec(content)) !== null) {
 			if (match[1]) {
@@ -142,13 +161,8 @@ function extractModifiedFiles(content: string, files: string[]): void {
  * Extract key decisions from assistant messages.
  */
 function extractDecisions(content: string, decisions: string[]): void {
-	// Match decision-indicating phrases
-	const decisionPatterns = [
-		/(?:I(?:'ll| will) (?:use|choose|go with|implement|opt for))\s+(.{10,100}?)(?:\.|$)/gim,
-		/(?:decided to|decision:|approach:)\s+(.{10,100}?)(?:\.|$)/gim,
-	]
-
-	for (const pattern of decisionPatterns) {
+	for (const pattern of DECISION_PATTERNS) {
+		pattern.lastIndex = 0
 		let match
 		while ((match = pattern.exec(content)) !== null) {
 			if (match[1]) {
@@ -255,11 +269,8 @@ function getMessageText(msg: ApiMessage): string {
  */
 function extractReadFiles(content: string): string[] {
 	const files: string[] = []
-	const patterns = [
-		/(?:read_file|search_files|list_files).*?(?:path|file)['": \s]+([^\s'"<>]+\.\w{1,10})/gi,
-		/(?:Reading|Searched|Viewing)\s+[`']?([^\s`']+\.\w{1,10})[`']?/gi,
-	]
-	for (const pattern of patterns) {
+	for (const pattern of READ_FILE_PATTERNS) {
+		pattern.lastIndex = 0
 		let match
 		while ((match = pattern.exec(content)) !== null) {
 			if (match[1]) files.push(match[1])
@@ -273,10 +284,9 @@ function extractReadFiles(content: string): string[] {
  */
 function extractToolsUsed(content: string): string[] {
 	const tools: string[] = []
-	const pattern =
-		/(?:use_mcp_tool|execute_command|read_file|write_to_file|apply_diff|search_files|list_files|ask_followup_question|attempt_completion|browser_action|create_file)/gi
+	TOOLS_USED_PATTERN.lastIndex = 0
 	let match
-	while ((match = pattern.exec(content)) !== null) {
+	while ((match = TOOLS_USED_PATTERN.exec(content)) !== null) {
 		tools.push(match[0].toLowerCase())
 	}
 	return tools
@@ -287,11 +297,8 @@ function extractToolsUsed(content: string): string[] {
  */
 function extractUnresolvedIssues(content: string): string[] {
 	const issues: string[] = []
-	const patterns = [
-		/(?:TODO|FIXME|HACK|WORKAROUND|unresolved|still need to|hasn't been|not yet)\s*:?\s*(.{10,120}?)(?:\.|$)/gim,
-		/(?:issue|problem|bug)\s+(?:remains|persists|still)\s+(.{10,120}?)(?:\.|$)/gim,
-	]
-	for (const pattern of patterns) {
+	for (const pattern of UNRESOLVED_PATTERNS) {
+		pattern.lastIndex = 0
 		let match
 		while ((match = pattern.exec(content)) !== null) {
 			if (match[1]) issues.push(match[1].trim())
@@ -380,7 +387,10 @@ export async function persistSessionMemory(
 
 	const filename = `session-${summary.timestamp}-${summary.sessionId.slice(0, 8)}.json`
 	const filePath = path.join(dir, filename)
-	await fs.writeFile(filePath, JSON.stringify(summary, null, 2), "utf-8")
+	// Atomic write: write to temp file then rename to avoid partial writes on crash.
+	const tmpPath = filePath + ".tmp"
+	await fs.writeFile(tmpPath, JSON.stringify(summary, null, 2), "utf-8")
+	await fs.rename(tmpPath, filePath)
 
 	// Prune old sessions beyond MAX_RETAINED_SESSIONS
 	await pruneOldSessions(dir)
@@ -392,7 +402,15 @@ export async function persistSessionMemory(
 async function pruneOldSessions(dir: string): Promise<void> {
 	try {
 		const files = await fs.readdir(dir)
-		const jsonFiles = files.filter((f) => f.startsWith("session-") && f.endsWith(".json")).sort()
+		const jsonFiles = files
+			.filter((f) => f.startsWith("session-") && f.endsWith(".json"))
+			// Sort by numeric timestamp (filename: session-{ts}-{id}.json).
+			// Lexicographic sort works only when timestamps have equal digit counts.
+			.sort((a, b) => {
+				const tsA = parseInt(a.split("-")[1], 10) || 0
+				const tsB = parseInt(b.split("-")[1], 10) || 0
+				return tsA - tsB
+			})
 
 		if (jsonFiles.length > MAX_RETAINED_SESSIONS) {
 			const toRemove = jsonFiles.slice(0, jsonFiles.length - MAX_RETAINED_SESSIONS)

@@ -202,11 +202,27 @@ const SNIP_KEEP_RECENT =
 		? parseInt(process.env.CLAUDE_CODE_SNIP_KEEP_RECENT, 10) || 10
 		: 10
 
+/**
+ * Returns the number of Unicode code points in a string.
+ * String.length counts UTF-16 code units, which breaks for surrogate pairs
+ * (emoji, rare CJK). [...s].length gives the correct code-point count.
+ */
+function codePointLength(s: string): number {
+	return [...s].length
+}
+
+function sliceCodePoints(s: string, start: number, end?: number): string {
+	return [...s].slice(start, end).join("")
+}
+
 function compactLongText(text: string): string {
-	if (text.length <= SNIP_MAX_CHARS) return text
+	if (codePointLength(text) <= SNIP_MAX_CHARS) return text
 	const head = Math.floor(SNIP_MAX_CHARS * 0.7)
 	const tail = SNIP_MAX_CHARS - head
-	return `${text.slice(0, head)}\n...[snip compacted ${text.length - SNIP_MAX_CHARS} chars]...\n${text.slice(-tail)}`
+	const headPart = sliceCodePoints(text, 0, head)
+	const tailPart = sliceCodePoints(text, -tail)
+	const omitted = codePointLength(text) - SNIP_MAX_CHARS
+	return `${headPart}\n...[snip compacted ~${omitted} chars]...\n${tailPart}`
 }
 
 // ── Combined single-pass preprocessor ──

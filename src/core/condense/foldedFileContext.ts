@@ -136,8 +136,10 @@ ${truncatedDefinitions}
 				currentCharCount += truncatedContent.length
 				result.filesProcessed++
 
-				// Stop processing more files since we've hit the limit
-				result.filesSkipped += filePaths.length - result.filesProcessed - result.filesSkipped
+				// Stop processing more files since we've hit the limit.
+				// filesProcessed + filesSkipped == i + 1 after the increment above,
+				// so remaining == filePaths.length - i - 1.
+				result.filesSkipped += filePaths.length - i - 1
 				break
 			}
 

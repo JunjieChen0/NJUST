@@ -34,16 +34,9 @@ const HEAD_RATIO = 0.3
 /** Fraction of preserved content allocated to tail */
 const TAIL_RATIO = 0.2
 
-// ─── Encoder (lazily initialized) ────────────────────────────────────────────
+// ─── Encoder (module-level, init is fast) ──────────────────────────────────────
 
-let _encoder: Tiktoken | null = null
-
-function getEncoder(): Tiktoken {
-	if (!_encoder) {
-		_encoder = new Tiktoken(o200kBase.bpe_ranks, o200kBase.special_tokens, o200kBase.pat_str)
-	}
-	return _encoder
-}
+const _encoder = new Tiktoken(o200kBase.bpe_ranks, o200kBase.special_tokens, o200kBase.pat_str)
 
 /**
  * Estimate token count for a string.
@@ -51,8 +44,7 @@ function getEncoder(): Tiktoken {
  */
 export function estimateTokens(text: string): number {
 	if (!text || text.length === 0) return 0
-	const encoder = getEncoder()
-	return encoder.encode(text, undefined, []).length
+	return _encoder.encode(text, undefined, []).length
 }
 
 // ─── Core Functions ──────────────────────────────────────────────────────────
