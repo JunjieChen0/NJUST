@@ -78,3 +78,27 @@ jobs:
               uses: ./.github/actions/setup-node-pnpm
             - name: Run tests with coverage thresholds
               run: pnpm test:coverage
+
+    check-secrets:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+            - name: Setup Node.js and pnpm
+              uses: ./.github/actions/setup-node-pnpm
+            - name: Scan for secrets
+              run: node scripts/check-secrets.mjs --all-files
+
+    vulnerability-scan:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+            - name: Setup Node.js and pnpm
+              uses: ./.github/actions/setup-node-pnpm
+            - name: Run pnpm audit
+              continue-on-error: true
+              run: pnpm audit --audit-level=high
+            - name: Run src package audit
+              continue-on-error: true
+              run: cd src && pnpm audit --audit-level=high

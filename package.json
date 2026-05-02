@@ -26,6 +26,7 @@
     "changeset:version": "cp CHANGELOG.md src/CHANGELOG.md && changeset version && cp -vf src/CHANGELOG.md .",
     "knip": "knip --include files",
     "syncpack:lint": "syncpack --version",
+    "check-secrets": "git diff --cached --name-only 2>/dev/null | node scripts/check-secrets.mjs || node scripts/check-secrets.mjs --all-files",
     "evals": "dotenvx run -f packages/evals/.env.development packages/evals/.env.local -- docker compose -f packages/evals/docker-compose.yml --profile server --profile runner up --build --scale runner=0",
     "npm:publish:types": "pnpm --filter @njust-ai-cj/types npm:publish"
   },

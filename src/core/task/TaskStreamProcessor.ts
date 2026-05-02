@@ -155,6 +155,15 @@ export class TaskStreamProcessor {
 				rateLimitDelay = Math.ceil(Math.min(rateLimit, Math.max(0, rateLimit * 1000 - elapsed) / 1000))
 			}
 
+			// Drain token bucket on 429 (enforce proactive backoff)
+			if (error?.status === 429) {
+				const providerKey = this.task.apiConfiguration?.apiProvider ?? "default"
+				try {
+					const { TokenBucketRateLimiter } = require("../../services/rate-limiter/TokenBucketRateLimiter")
+					TokenBucketRateLimiter.getInstance().drain(providerKey)
+				} catch { /* best-effort */ }
+			}
+
 			// Prefer RetryInfo on 429 if present
 			if (error?.status === 429) {
 				const retryInfo = error?.errorDetails?.find(

@@ -1,0 +1,123 @@
+#!/usr/bin/env node
+
+/**
+ * Lightweight secrets scanner for pre-commit checks.
+ * Scans staged files for patterns that look like API keys, tokens, or credentials.
+ *
+ * Usage:
+ *   git diff --cached --name-only | node scripts/check-secrets.mjs
+ *
+ * Returns exit code 1 if potential secrets are found.
+ */
+
+import { readFileSync } from "fs"
+import { createInterface } from "readline"
+
+// Patterns that indicate potential secrets
+const SECRET_PATTERNS = [
+	// API keys and tokens
+	{ pattern: /sk-[a-zA-Z0-9]{20,}/, name: "OpenAI API key (sk-...)" },
+	{ pattern: /pk-[a-zA-Z0-9]{20,}/, name: "OpenAI public key (pk-...)" },
+	{ pattern: /xai-[a-zA-Z0-9]{20,}/, name: "xAI API key" },
+	{ pattern: /ant-api[a-zA-Z0-9\-_]{20,}/i, name: "Anthropic API key" },
+	{ pattern: /ghp_[a-zA-Z0-9]{36,}/, name: "GitHub personal access token" },
+	{ pattern: /gho_[a-zA-Z0-9]{36,}/, name: "GitHub OAuth token" },
+	{ pattern: /github_pat_[a-zA-Z0-9]{22,}/, name: "GitHub PAT" },
+	{ pattern: /AKIA[0-9A-Z]{16}/, name: "AWS access key" },
+	{ pattern: /["']password["']\s*:?\s*["'][^"']{6,}["']/i, name: "Password" },
+	{ pattern: /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/, name: "Private key" },
+	{ pattern: /"api[Kk]ey"\s*:\s*"[^"]{8,}"/, name: "JSON API key" },
+	// .env files with secrets (skip if they're .env.sample)
+	{ pattern: /^[A-Z_]+=/, fileName: /\.env$/, name: "Environment variable in .env file" },
+]
+
+const patterns = SECRET_PATTERNS
+
+async function main() {
+	const isAllFiles = process.argv.includes("--all-files")
+	const files = []
+
+	if (isAllFiles) {
+		try {
+			const { execSync } = await import("child_process")
+			const output = execSync("git ls-files", { encoding: "utf-8", stdio: "pipe" })
+			files.push(...output.trim().split("
+").filter(Boolean))
+		} catch {
+			console.log("Not a git repo; scanning src/ directly.")
+			const { readdirSync, statSync } = await import("fs")
+			const { join } = await import("path")
+			function walk(dir) {
+				for (const name of readdirSync(dir)) {
+					const p = join(dir, name)
+					if (name === "node_modules" || name.startsWith(".")) continue
+					if (statSync(p).isDirectory()) walk(p)
+					else files.push(p)
+				}
+			}
+			for (const d of ["src", "packages", "apps", "scripts"]) {
+				try { walk(d) } catch {}
+			}
+		}
+	} else {
+		const stdin = createInterface({ input: process.stdin })
+		for await (const line of stdin) {
+			const file = line.trim()
+			if (file) files.push(file)
+		}
+	}
+
+	if (files.length === 0) {
+		console.log("✅ No files to check.")
+		process.exit(0)
+	}
+
+	let foundIssues = false
+
+	for (const file of files) {
+		// Skip binary files, lock files, and generated files
+		if (
+			file.endsWith(".lock") ||
+			file.endsWith(".png") ||
+			file.endsWith(".jpg") ||
+			file.endsWith(".svg") ||
+			file.endsWith(".vsix") ||
+			file.match(/\.code-workspace$/)
+		) {
+			continue
+		}
+
+		let content
+		try {
+			content = readFileSync(file, "utf-8")
+		} catch {
+			continue // Binary or deleted file
+		}
+
+		// Check each pattern
+		for (const { pattern, name, fileName } of patterns) {
+			// If the pattern has a fileName matcher, check the file name first
+			if (fileName && !fileName.test(file)) continue
+			if (pattern.test(content)) {
+				if (!foundIssues) {
+					console.log("\n⚠️  Potential secrets detected in staged files:\n")
+					foundIssues = true
+				}
+				console.log(`  📄 ${file} — may contain: ${name} (${pattern})`)
+			}
+		}
+	}
+
+	if (foundIssues) {
+		console.log("\n❌ Commit blocked. Please remove secrets before committing.")
+		console.log("   If these are false positives, use `git commit --no-verify` to bypass.\n")
+		process.exit(1)
+	}
+
+	console.log("✅ No secrets detected in staged files.")
+}
+
+main().catch((err) => {
+	console.error("Secret check failed:", err)
+	process.exit(1)
+})

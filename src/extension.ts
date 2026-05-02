@@ -169,6 +169,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	})
 	outputChannel.appendLine(`${Package.name} extension activated - ${JSON.stringify(Package)}`)
 
+	// Initialize telemetry with file-based logging
+	const { TelemetryService } = require("@njust-ai-cj/telemetry") as typeof import("@njust-ai-cj/telemetry")
+	if (!TelemetryService.hasInstance()) {
+		TelemetryService.createInstance({ telemetryDir: context.globalStorageUri.fsPath })
+	}
+
 	initTestCleanup(context.workspaceState)
 	void cleanupOrphanedTestFiles(context.globalStorageUri.fsPath)
 		.then((r) => {
@@ -784,4 +790,9 @@ export async function deactivate() {
 
 	await McpServerManager.cleanup(extensionContext)
 	TerminalRegistry.cleanup()
+
+	// Flush telemetry before exit
+	if (TelemetryService.hasInstance()) {
+		TelemetryService.instance.shutdown()
+	}
 }

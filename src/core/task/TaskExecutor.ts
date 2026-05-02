@@ -553,13 +553,29 @@ export class TaskExecutor {
 		const abortSignal = h.currentRequestAbortController.signal
 		h.skipPrevResponseIdOnce = false
 
+		// Apply proactive rate limiting before the API call
+		const providerKey = h.apiConfiguration?.apiProvider ?? "default"
+		const { TokenBucketRateLimiter } = require("../../services/rate-limiter/TokenBucketRateLimiter") as typeof import("../../services/rate-limiter/TokenBucketRateLimiter")
+		const waitMs = await TokenBucketRateLimiter.getInstance().wait(providerKey)
+		if (waitMs > 0) {
+			debugLog(`[TokenBucket] Waited ${waitMs}ms for ${providerKey}`)
+		}
+
 		const stream = h.api.createMessage(
 			systemPrompt,
 			cleanConversationHistory as unknown as Anthropic.Messages.MessageParam[],
 			metadata,
 		)
 		h.stateMachine.force(TaskState.STREAMING)
-		const iterator = stream[Symbol.asyncIterator]()
+		h.stateMachine.force(TaskState.STREAMING)
+
+		// Wrap with backpressure controller to prevent unbounded buffering
+		const controlledStream = new (require("../../core/stream/BackpressureController").BackpressureController)(
+			stream as unknown as AsyncGenerator<any>,
+			1000,
+			250,
+		)
+		const iterator = controlledStream[Symbol.asyncIterator]()
 
 		abortSignal.addEventListener("abort", () => {
 			console.log(`[Task#${h.taskId}.${h.instanceId}] AbortSignal triggered for current request`)

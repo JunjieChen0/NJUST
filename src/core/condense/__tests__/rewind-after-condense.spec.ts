@@ -22,25 +22,42 @@ describe("Rewind After Condense - Issue #8295", () => {
 	})
 
 	describe("getEffectiveApiHistory", () => {
-		it("should return summary and messages after summary (fresh start model)", () => {
+		it("should return summary only (exclude messages tagged with condenseParent)", () => {
 			const condenseId = "summary-123"
 			const messages: ApiMessage[] = [
 				{ role: "user", content: "First message", ts: 1, condenseParent: condenseId },
 				{ role: "assistant", content: "First response", ts: 2, condenseParent: condenseId },
 				{ role: "user", content: "Second message", ts: 3, condenseParent: condenseId },
 				{ role: "user", content: "Summary", ts: 4, isSummary: true, condenseId },
-				// Messages after summary are included even if they have condenseParent
+				// Messages after summary but still tagged with condenseParent are excluded
+				// (append-based model: only summaries + non-condensed working window)
 				{ role: "user", content: "Third message", ts: 5, condenseParent: condenseId },
 				{ role: "assistant", content: "Third response", ts: 6, condenseParent: condenseId },
 			]
 
 			const effective = getEffectiveApiHistory(messages)
 
-			// Fresh start model: summary + all messages after it
+			// Append-based: only summary is visible; tagged msgs excluded regardless of position
+			expect(effective.length).toBe(1)
+			expect(effective[0].isSummary).toBe(true)
+		})
+
+		it("should include non-condensed messages after summary (working window)", () => {
+			const condenseId = "summary-456"
+			const messages: ApiMessage[] = [
+				{ role: "user", content: "Old message", ts: 1, condenseParent: condenseId },
+				{ role: "user", content: "Summary", ts: 2, isSummary: true, condenseId },
+				// Messages without condenseParent after summary = working window
+				{ role: "user", content: "New question", ts: 3 },
+				{ role: "assistant", content: "New answer", ts: 4 },
+			]
+
+			const effective = getEffectiveApiHistory(messages)
+
 			expect(effective.length).toBe(3)
 			expect(effective[0].isSummary).toBe(true)
-			expect(effective[1].content).toBe("Third message")
-			expect(effective[2].content).toBe("Third response")
+			expect(effective[1].content).toBe("New question")
+			expect(effective[2].content).toBe("New answer")
 		})
 
 		it("should include messages without condenseParent", () => {
@@ -392,14 +409,14 @@ describe("Rewind After Condense - Issue #8295", () => {
 					{ role: "assistant", content: "Set up database", ts: 600, condenseParent: condenseId1 },
 					{ role: "user", content: "Connect them", ts: 700, condenseParent: condenseId1 },
 
-					// First summary - now ALSO tagged with condenseId2 (from second condense)
+					// First summary -- NOT re-tagged in append-based model (stays visible)
 					{
 						role: "user",
 						content: "Summary1: Built auth and database",
 						ts: 799,
 						isSummary: true,
 						condenseId: condenseId1,
-						condenseParent: condenseId2, // Tagged during second condense!
+						// NO condenseParent -- remains in effective history for cache stability
 					},
 
 					// Messages after first condense but before second (tagged with condenseId2)
@@ -431,29 +448,26 @@ describe("Rewind After Condense - Issue #8295", () => {
 
 				const effective = getEffectiveApiHistory(storageAfterDoubleCondense)
 
-				// Should send exactly 4 messages to LLM:
-				// 1. Summary2 (user) - the ACTIVE summary
-				// 2-4. Last 3 kept messages
-				expect(effective.length).toBe(4)
+				// Append-based: ALL summaries visible + working window
+				// [Summary1, Summary2, writing_tests, test_auth, auth_passing] = 5
+				expect(effective.length).toBe(5)
 
-				// Verify exact order and content
+				// First = Summary1 (cache-stable prefix)
 				expect(effective[0].role).toBe("user")
 				expect(effective[0].isSummary).toBe(true)
-				expect(effective[0].condenseId).toBe(condenseId2) // Must be the SECOND summary
-				expect(effective[0].content).toContain("Summary2")
+				expect(effective[0].condenseId).toBe(condenseId1)
+				expect(effective[0].content).toContain("Summary1")
 
-				expect(effective[1].role).toBe("assistant")
-				expect(effective[1].content).toBe("Writing integration tests")
+				// Second = Summary2 (fresh)
+				expect(effective[1].role).toBe("user")
+				expect(effective[1].isSummary).toBe(true)
+				expect(effective[1].condenseId).toBe(condenseId2)
+				expect(effective[1].content).toContain("Summary2")
 
-				expect(effective[2].role).toBe("user")
-				expect(effective[2].content).toBe("Test the auth flow")
-
-				expect(effective[3].role).toBe("assistant")
-				expect(effective[3].content).toBe("Auth tests passing")
-
-				// Verify Summary1 is NOT in effective history (it's tagged with condenseParent)
-				const summary1 = effective.find((m) => m.content?.toString().includes("Summary1"))
-				expect(summary1).toBeUndefined()
+				// Last 3 kept messages (working window)
+				expect(effective[2].content).toBe("Writing integration tests")
+				expect(effective[3].content).toBe("Test the auth flow")
+				expect(effective[4].content).toBe("Auth tests passing")
 
 				// Verify all condensed messages are NOT in effective history
 				const condensedContents = [

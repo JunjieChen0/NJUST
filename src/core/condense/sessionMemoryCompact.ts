@@ -38,7 +38,7 @@ const MAX_RETAINED_SESSIONS = 5
 const CHARS_PER_TOKEN = 4
 
 /** Directory name for session memory storage */
-const SESSION_MEMORIES_DIR = ".roo/session-memories"
+export const SESSION_MEMORIES_DIR = ".roo/session-memories"
 
 // ─── Original SessionMemory interface (kept for backward compatibility) ───
 
@@ -528,4 +528,53 @@ export function formatSessionMemoriesForPrompt(
 	}
 
 	return sections.join("\n\n")
+}
+
+/**
+ * Generate a concise "While you were away..." summary from recent messages.
+ * Triggered when the user returns from a period of inactivity.
+ *
+ * @param messages - Recent conversation messages (since last user interaction)
+ * @returns A short 1-3 sentence summary of what happened
+ */
+export function generateAwaySummary(
+	messages: Array<{ role: string; content: string | Array<{ type: string; text?: string }> }>,
+): string {
+	if (messages.length === 0) return ""
+
+	const parts: string[] = []
+	let fileCount = 0
+	let decisionCount = 0
+	let errorCount = 0
+	let lastTask = ""
+
+	for (const msg of messages) {
+		if (msg.role !== "assistant") continue
+		const text = typeof msg.content === "string" ? msg.content : msg.content.map((b) => b.text ?? "").join(" ")
+
+		// Count file modifications
+		const files = text.match(/(?:write_to_file|apply_diff|create_file)/g)
+		if (files) fileCount += files.length
+
+		// Count decisions
+		const decisions = text.match(/(?:decided to|I'll use|approach:|choice:)/gi)
+		if (decisions) decisionCount += decisions.length
+
+		// Count errors
+		const errors = text.match(/\b(?:error|failed|exception)\b/gi)
+		if (errors) errorCount += errors.length
+
+		// Extract last task description
+		const taskMatch = text.match(/attempt_completion.*?(?:result|output)["':\s]+([^"'\n]{20,100})/is)
+		if (taskMatch) lastTask = taskMatch[1]
+	}
+
+	if (fileCount > 0) parts.push(`Modified ${fileCount} file${fileCount > 1 ? "s" : ""}.`)
+	if (decisionCount > 0) parts.push(`Made ${decisionCount} decision${decisionCount > 1 ? "s" : ""}.`)
+	if (errorCount > 0) parts.push(`Encountered ${errorCount} error${errorCount > 1 ? "s" : ""} that were resolved.`)
+	if (lastTask) parts.push(`Completed: ${lastTask.slice(0, 120)}`)
+
+	return parts.length > 0
+		? `**While you were away:** ${parts.join(" ")}`
+		: "**While you were away:** Work continued on your previous request."
 }

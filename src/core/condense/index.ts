@@ -579,24 +579,30 @@ ${commandBlocks}
 		},
 	}
 
-	// NON-DESTRUCTIVE CONDENSE:
-	// Tag ALL existing messages with condenseParent so they are filtered out when
-	// the effective history is computed. The summary message is the only message
-	// that will be visible to the API after condensing (fresh start model).
+	// NON-DESTRUCTIVE CONDENSE — APPEND-BASED (cache-preserving):
+	// Tag only messages since the LAST summary with condenseParent,
+	// so previous summaries stay visible and form a stable cache prefix.
 	//
 	// Storage structure after condense:
-	// [msg1(parent=X), msg2(parent=X), ..., msgN(parent=X), summary(id=X)]
+	// [msg1(A), ..., msgN(A), summaryA, msgN+1(B), ..., msgM(B), summaryB]
 	//
 	// Effective for API (filtered by getEffectiveApiHistory):
-	// [summary]  ← Fresh start!
+	// [summaryA, summaryB]  ← Append-based! summaryA is cache-stable.
 
-	// Tag ALL messages with condenseParent
+	// Find the last summary before this compaction — its timestamp tells us
+	// which messages are already represented by an existing summary.
+	const lastSummaryBefore = findLast(messages, (m) => m.isSummary)
+	const lastSummaryTs = lastSummaryBefore?.ts ?? 0
+
 	const newMessages = messages.map((msg) => {
-		// If message already has a condenseParent, we leave it - nested condense is handled by filtering
-		if (!msg.condenseParent) {
-			return { ...msg, condenseParent: condenseId }
-		}
-		return msg
+		// Already condensed by a previous summary — leave the chain intact
+		if (msg.condenseParent) return msg
+		// Summary messages stay visible so the cache prefix remains stable
+		if (msg.isSummary) return msg
+		// Message was already covered by the previous summary — don't re-tag
+		if (lastSummaryBefore && typeof msg.ts === "number" && msg.ts <= lastSummaryTs) return msg
+		// Tag this message as condensed by the new summary
+		return { ...msg, condenseParent: condenseId }
 	})
 
 	// Append the summary message at the end
@@ -680,7 +686,8 @@ function filterOrphanToolResults(messages: ApiMessage[]): ApiMessage[] {
 		}
 	}
 
-	if (toolUseIds.size === 0) return messages
+	// When toolUseIds is empty, every tool_result is an orphan
+	// (its tool_use was condensed or truncated away).
 
 	return messages
 		.map((msg) => {
@@ -706,23 +713,35 @@ export function getEffectiveApiHistory(messages: ApiMessage[]): ApiMessage[] {
 	const lastSummary = findLast(messages, (msg) => msg.isSummary === true)
 
 	if (lastSummary) {
-		// Fresh start model: return only messages from the summary onwards
-		const summaryIndex = messages.indexOf(lastSummary)
-		let messagesFromSummary = messages.slice(summaryIndex)
+		// Append-based model: return ALL summary messages (they stay visible
+		// for cache prefix stability) plus any non-condensed messages after
+		// the last summary (the working window).
+		//
+		// Storage: [msg1(A), ..., msgN(A), summaryA, msgN+1(B), ..., msgM(B), summaryB]
+		// Effective: [summaryA, summaryB]   ← all summaries visible, cache-prefix stable
 
-		// Filter out orphan tool_result blocks that reference tool_use IDs from
-		// messages that were condensed away (shared helper).
-		messagesFromSummary = filterOrphanToolResults(messagesFromSummary)
+		const allSummaries = messages.filter((msg) => msg.isSummary && !msg.condenseParent)
+
+		// Working window: messages after the last summary that aren't summaries
+		// and haven't been condensed yet (typically empty right after compaction,
+		// grows as the conversation continues).
+		const summaryIndex = messages.indexOf(lastSummary)
+		const workingWindow = messages.slice(summaryIndex).filter(
+			(msg) => !msg.isSummary && !msg.condenseParent,
+		)
+
+		let effectiveMessages = [...allSummaries, ...workingWindow]
+		effectiveMessages = filterOrphanToolResults(effectiveMessages)
 
 		// Still need to filter out any truncated messages within this range
 		const existingTruncationIds = new Set<string>()
-		for (const msg of messagesFromSummary) {
+		for (const msg of effectiveMessages) {
 			if (msg.isTruncationMarker && msg.truncationId) {
 				existingTruncationIds.add(msg.truncationId)
 			}
 		}
 
-		return messagesFromSummary.filter((msg) => {
+		return effectiveMessages.filter((msg) => {
 			// Filter out truncated messages if their truncation marker exists
 			if (msg.truncationParent && existingTruncationIds.has(msg.truncationParent)) {
 				return false

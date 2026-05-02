@@ -101,7 +101,11 @@
       "Bash(node_modules/.bin/vitest run *)",
       "Bash(xxd)",
       "Bash(sed -i '991s/^\\\\\\(.*\\\\\\)$/\\\\\\(\\\\t\\\\t\\\\t\\\\t\\\\\\)let assistantMessage = \"\"/;992s/.*/\\\\t\\\\t\\\\t\\\\tlet reasoningMessage = \"\"/;993s/.*/\\\\t\\\\t\\\\t\\\\tlet pendingGroundingSources: GroundingSource[] = []/' src/core/task/TaskExecutor.ts)",
-      "Bash(sed -i '990a\\\\\\\\t\\\\t\\\\t\\\\tlet assistantMessage = \"\"\\\\n\\\\t\\\\t\\\\t\\\\tlet reasoningMessage = \"\"\\\\n\\\\t\\\\t\\\\t\\\\tlet pendingGroundingSources: GroundingSource[] = []' src/core/task/TaskExecutor.ts)"
+      "Bash(sed -i '990a\\\\\\\\t\\\\t\\\\t\\\\tlet assistantMessage = \"\"\\\\n\\\\t\\\\t\\\\t\\\\tlet reasoningMessage = \"\"\\\\n\\\\t\\\\t\\\\t\\\\tlet pendingGroundingSources: GroundingSource[] = []' src/core/task/TaskExecutor.ts)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "mcp__claude-vision__extract_text",
+      "Bash(gh repo *)"
     ]
   }
 }

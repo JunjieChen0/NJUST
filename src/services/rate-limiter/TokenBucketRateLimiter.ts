@@ -1,0 +1,189 @@
+/**
+ * Token Bucket Rate Limiter
+ *
+ * Implements a standard token bucket algorithm for proactive rate limiting.
+ * Each provider gets its own bucket with configurable capacity and refill rate.
+ * Multiple concurrent tasks share the same bucket, ensuring coordinated throttling.
+ *
+ * Usage:
+ *   const limiter = TokenBucketRateLimiter.getInstance()
+ *   await limiter.wait("anthropic")  // waits if bucket is empty
+ */
+
+interface BucketConfig {
+	capacity: number       // max tokens the bucket can hold
+	refillPerSec: number   // tokens added per second
+}
+
+interface BucketState {
+	tokens: number
+	lastRefill: number     // timestamp of last refill
+	waiting: Array<{ resolve: () => void; createdAt: number }>
+}
+
+const DEFAULT_CONFIGS: Record<string, BucketConfig> = {
+	anthropic:   { capacity: 10, refillPerSec: 0.5 },   // ~30 RPM
+	openai:      { capacity: 20, refillPerSec: 1.0 },   // ~60 RPM
+	bedrock:     { capacity: 20, refillPerSec: 1.0 },
+	gemini:      { capacity: 30, refillPerSec: 1.5 },   // ~90 RPM
+	openrouter:  { capacity: 15, refillPerSec: 0.75 },
+	mistral:     { capacity: 15, refillPerSec: 0.75 },
+	deepseek:    { capacity: 15, refillPerSec: 0.75 },
+	aws:         { capacity: 20, refillPerSec: 1.0 },
+	vertex:      { capacity: 20, refillPerSec: 1.0 },
+	default:     { capacity: 10, refillPerSec: 0.5 },
+}
+
+export class TokenBucketRateLimiter {
+	private static _instance: TokenBucketRateLimiter
+	private buckets = new Map<string, BucketState>()
+	private configs: Record<string, BucketConfig>
+
+	constructor(customConfigs?: Record<string, Partial<BucketConfig>>) {
+		this.configs = { ...DEFAULT_CONFIGS }
+		if (customConfigs) {
+			for (const [key, cfg] of Object.entries(customConfigs)) {
+				if (this.configs[key]) {
+					this.configs[key] = { ...this.configs[key], ...cfg }
+				} else {
+					this.configs[key] = { capacity: 10, refillPerSec: 0.5, ...cfg }
+				}
+			}
+		}
+	}
+
+	static getInstance(): TokenBucketRateLimiter {
+		if (!TokenBucketRateLimiter._instance) {
+			TokenBucketRateLimiter._instance = new TokenBucketRateLimiter()
+		}
+		return TokenBucketRateLimiter._instance
+	}
+
+	static resetInstance(): void {
+		TokenBucketRateLimiter._instance = undefined as any
+	}
+
+	private getConfig(key: string): BucketConfig {
+		return this.configs[key] ?? this.configs.default!
+	}
+
+	private getBucket(key: string): BucketState {
+		let bucket = this.buckets.get(key)
+		if (!bucket) {
+			const cfg = this.getConfig(key)
+			bucket = { tokens: cfg.capacity, lastRefill: Date.now(), waiting: [] }
+			this.buckets.set(key, bucket)
+		}
+		return bucket
+	}
+
+	private refill(bucket: BucketState, cfg: BucketConfig): void {
+		const now = Date.now()
+		const elapsed = (now - bucket.lastRefill) / 1000
+		if (elapsed <= 0) return
+		const add = elapsed * cfg.refillPerSec
+		bucket.tokens = Math.min(bucket.tokens + add, cfg.capacity)
+		bucket.lastRefill = now
+	}
+
+	/**
+	 * Try to consume a token. Returns true if allowed, false if rate limited.
+	 */
+	tryConsume(provider: string): boolean {
+		const cfg = this.getConfig(provider)
+		const bucket = this.getBucket(provider)
+		this.refill(bucket, cfg)
+
+		if (bucket.tokens >= 1) {
+			bucket.tokens -= 1
+			return true
+		}
+		return false
+	}
+
+	/**
+	 * Wait until a token is available. Resolves as soon as possible.
+	 * Returns the wait time in milliseconds (0 if no wait was needed).
+	 */
+	async wait(provider: string): Promise<number> {
+		const cfg = this.getConfig(provider)
+		const bucket = this.getBucket(provider)
+		this.refill(bucket, cfg)
+
+		if (bucket.tokens >= 1) {
+			bucket.tokens -= 1
+			return 0
+		}
+
+		// Queue: estimate wait time from refill rate
+		return new Promise<number>((resolve) => {
+			const createdAt = Date.now()
+			bucket.waiting.push({ resolve: () => resolve(Date.now() - createdAt), createdAt })
+			this.scheduleRefill(provider)
+		})
+	}
+
+	private scheduleRefill(provider: string): void {
+		const bucket = this.buckets.get(provider)
+		if (!bucket || bucket.waiting.length === 0) return
+
+		const cfg = this.getConfig(provider)
+		const waitMs = Math.ceil(1000 / cfg.refillPerSec)
+
+		setTimeout(() => {
+			const b = this.buckets.get(provider)
+			if (!b || b.waiting.length === 0) return
+			this.refill(b, cfg)
+			while (b.tokens >= 1 && b.waiting.length > 0) {
+				const next = b.waiting.shift()
+				if (next) {
+					b.tokens -= 1
+					next.resolve()
+				}
+			}
+			// If still waiting, schedule next refill
+			if (b.waiting.length > 0) {
+				this.scheduleRefill(provider)
+			}
+		}, waitMs)
+	}
+
+	/**
+	 * Drain all tokens from a provider's bucket (back to zero).
+	 * Used after receiving a 429 to enforce the backoff.
+	 */
+	drain(provider: string): void {
+		const bucket = this.buckets.get(provider)
+		if (bucket) {
+			bucket.tokens = 0
+		}
+	}
+
+	/**
+	 * Override the rate limit config for a provider at runtime.
+	 */
+	setConfig(provider: string, config: Partial<BucketConfig>): void {
+		const existing = this.configs[provider] ?? this.configs.default!
+		this.configs[provider] = { ...existing, ...config }
+	}
+
+	/**
+	 * Get current stats for a provider (for monitoring).
+	 */
+	getStats(provider: string): { tokens: number; waiting: number; capacity: number; refillPerSec: number } | null {
+		const bucket = this.buckets.get(provider)
+		if (!bucket) return null
+		const cfg = this.getConfig(provider)
+		return {
+			tokens: bucket.tokens,
+			waiting: bucket.waiting.length,
+			capacity: cfg.capacity,
+			refillPerSec: cfg.refillPerSec,
+		}
+	}
+
+	/** Reset all buckets (for testing). */
+	reset(): void {
+		this.buckets.clear()
+	}
+}

@@ -29,6 +29,12 @@ jobs:
           - os: ubuntu-24.04-arm
             platform: linux-arm64
             runs-on: ubuntu-24.04-arm
+          - os: windows-latest
+            platform: win32-x64
+            runs-on: windows-latest
+          - os: windows-11-arm
+            platform: win32-arm64
+            runs-on: windows-11-arm
 
     runs-on: ${{ matrix.runs-on }}
 
@@ -349,6 +355,8 @@ jobs:
           echo '- `roo-cli-darwin-arm64.tar.gz` - macOS Apple Silicon (M1/M2/M3)' >> "$NOTES_FILE"
           echo '- `roo-cli-linux-x64.tar.gz` - Linux x64' >> "$NOTES_FILE"
           echo '- `roo-cli-linux-arm64.tar.gz` - Linux ARM64' >> "$NOTES_FILE"
+          echo '- `roo-cli-win32-x64.tar.gz` - Windows x64' >> "$NOTES_FILE"
+          echo '- `roo-cli-win32-arm64.tar.gz` - Windows ARM64' >> "$NOTES_FILE"
           echo "" >> "$NOTES_FILE"
           echo "## Checksums" >> "$NOTES_FILE"
           echo "" >> "$NOTES_FILE"
