@@ -11,8 +11,11 @@ import { RooIgnoreController } from "../ignore/RooIgnoreController"
 import { preprocessMessages } from "./preprocess"
 import { postCompactRestore } from "./postCompactRestore"
 import { shouldSkipCompactForCache, getAdjustedCompactThreshold } from "../condense/cacheAwareCompact"
+import { loadSessionMemories, formatSessionMemoriesForPrompt } from "../condense/sessionMemoryCompact"
 import { globalCacheMetrics } from "../../utils/cacheMetrics"
 import { expandTruncationToAtomicUnits, hasToolResults } from "./grouping"
+import { analyzeContextTokens } from "./contextAnalysis"
+import { generateSuggestions, formatSuggestions } from "./contextSuggestions"
 import { globalHookRegistry } from "../hooks"
 import {
 	ContextHierarchy,
@@ -115,15 +118,15 @@ function isErrorRecoveryMessage(message: ApiMessage): boolean {
 
 function isToolResult(message: ApiMessage): boolean {
 	if (!Array.isArray(message.content)) return false
-	return message.content.some((block: any) => block.type === "tool_result")
+	return message.content.some((block: Anthropic.Messages.ContentBlockParam): boolean => block.type === "tool_result")
 }
 
 function isToolUseWithWrite(message: ApiMessage): boolean {
 	if (!Array.isArray(message.content)) return false
 	return message.content.some(
-		(block: any) =>
+		(block: Anthropic.Messages.ContentBlockParam): boolean =>
 			block.type === "tool_use" &&
-			/write_to_file|apply_diff|insert_content|search_and_replace/.test(block.name || ""),
+			/write_to_file|apply_diff|insert_content|search_and_replace/.test((block as Anthropic.Messages.ToolUseBlockParam).name || ""),
 	)
 }
 
@@ -460,6 +463,10 @@ export type ContextManagementOptions = {
 	enableMicroCompact?: boolean
 	/** Per-task count of consecutive compact failures (for circuit breaker isolation between tasks) */
 	compactFailures?: number
+	/** When true, skips LLM-based condensation and session-memory compaction.
+	 * Used for sub-agents with small context budgets where LLM compression
+	 * would waste API calls and risk recursion deadlocks. */
+	isSubAgent?: boolean
 }
 
 export type ContextManagementResult = SummarizeResponse & {
@@ -512,6 +519,7 @@ export async function manageContext({
 	cacheAwareTotalTokens,
 	enableMicroCompact = true,
 	compactFailures: compactFailuresIn = 0,
+	isSubAgent = false,
 }: ContextManagementOptions): Promise<ContextManagementResult> {
 	let error: string | undefined
 	let errorDetails: string | undefined
@@ -523,7 +531,7 @@ export async function manageContext({
 	// Collect assistant message timestamps for time-based microcompact trigger
 	const assistantTimestamps = messages
 		.filter((m) => m.role === "assistant")
-		.map((m) => (typeof m.ts === "number" ? new Date(m.ts).toISOString() : (m.ts as any as string)))
+		.map((m) => (typeof m.ts === "number" ? new Date(m.ts).toISOString() : String(m.ts ?? "")))
 	const preprocessed = preprocessMessages(messages, { contextPercent, enableMicroCompact, assistantTimestamps })
 	const preprocessedMessages = preprocessed.messages
 
@@ -561,7 +569,51 @@ export async function manageContext({
 	}
 	// If no specific threshold is found for the profile, fall back to global setting
 
+	// Run context analysis for observability before compaction decisions
+	(function() {
+		const analysisResult = analyzeContextTokens(preprocessedMessages, 0)
+		const suggestions = generateSuggestions(
+			analysisResult.breakdown,
+			analysisResult.duplicateReads,
+			analysisResult.estimatedDuplicateReadTokens,
+			analysisResult.largeToolResults,
+			analysisResult.summaryMessageCount,
+		)
+		logCompactEvent("context_analysis", {
+			toolResultPct: Math.round((analysisResult.breakdown.toolResultTokens / Math.max(1, analysisResult.breakdown.totalTokens)) * 100),
+			summaryPct: Math.round((analysisResult.breakdown.summaryTokens / Math.max(1, analysisResult.breakdown.totalTokens)) * 100),
+			totalTokens: analysisResult.breakdown.totalTokens,
+			summaryCount: analysisResult.summaryMessageCount,
+			duplicateReads: analysisResult.duplicateReads.length,
+			duplicateReadTokens: analysisResult.estimatedDuplicateReadTokens,
+			largeResults: analysisResult.largeToolResults.length,
+			messageCount: analysisResult.totalMessageCount,
+			suggestions: formatSuggestions(suggestions),
+		})
+	})()
+
 	if (autoCondenseContext) {
+		// Sub-agent guard: skip LLM condensation and session memory compaction.
+		// Sub-agents have small context budgets (32K-64K) and LLM compression
+		// would waste API calls and risk recursion deadlocks.
+		if (isSubAgent) {
+			if (prevContextTokens > allowedTokens) {
+				logCompactEvent("compact_subagent_truncation", { prevContextTokens, allowedTokens })
+				const hierarchy = buildContextHierarchy(preprocessedMessages, taskId)
+				const truncationResult = truncateConversation(preprocessedMessages, 0.5, taskId, hierarchy ?? undefined)
+				return {
+					messages: truncationResult.messages,
+					prevContextTokens,
+					summary: "",
+					cost: 0,
+					truncationId: truncationResult.truncationId,
+					messagesRemoved: truncationResult.messagesRemoved,
+					compactFailures,
+				}
+			}
+			return { messages: preprocessedMessages, prevContextTokens, summary: "", cost: 0, compactFailures }
+		}
+
 		const contextPercent = contextWindow > 0 ? Math.round((100 * prevContextTokens) / contextWindow) : 0
 
 		// Cache-aware threshold adjustment: if prompt cache is being utilized well,
@@ -690,6 +742,37 @@ export async function manageContext({
 						messages: restored,
 						prevContextTokens,
 						summary: smResult.summary,
+						cost: 0,
+						compactFailures,
+					}
+				}
+
+				// Try persisted cross-session memories as zero-cost summary
+				const smMemoryResult = await trySessionMemoryCompaction(
+					preprocessedMessages,
+					cwd,
+					allowedTokens,
+				)
+				if (smMemoryResult) {
+					logCompactEvent("compact_sm_success", { method: "session_memory" })
+					// Post-compact hooks (fire-and-forget)
+					globalHookRegistry.execute({
+						hookType: "postCompact",
+						timestamp: Date.now(),
+						taskId,
+						messageCountBefore: preprocessedMessages.length,
+						messageCountAfter: smMemoryResult.messages.length,
+						tokenCountBefore: prevContextTokens,
+						tokenCountAfter: 0,
+					}).catch(() => {})
+					compactFailures = 0
+					const restored = postCompactRestore(smMemoryResult.messages, {
+						recentFiles: filesReadByRoo?.slice(-5),
+					})
+					return {
+						messages: restored,
+						prevContextTokens,
+						summary: smMemoryResult.summary,
 						cost: 0,
 						compactFailures,
 					}
@@ -840,13 +923,13 @@ function tryBuildLightweightSummary(
 								block.name,
 							)
 						) {
-							const input = (block as any).input
-							if (input?.filePath) fileOps.push(input.filePath)
-							else if (input?.path) fileOps.push(input.path)
+							const input = (block as Anthropic.Messages.ToolUseBlockParam).input as Record<string, unknown> | undefined
+							if (typeof input?.filePath === "string") fileOps.push(input.filePath)
+							else if (typeof input?.path === "string") fileOps.push(input.path)
 						}
 					}
 					if (block.type === "text") {
-						lastAssistantText = (block as any).text || ""
+						lastAssistantText = (block as Anthropic.Messages.TextBlockParam).text || ""
 					}
 				}
 			}
@@ -900,7 +983,66 @@ function tryBuildLightweightSummary(
 		condenseId,
 		compactMetadata: {
 			trigger: "auto",
+			source: "lightweight",
 			preCompactTokenCount: messages.length,
+			messagesSummarized: messages.filter((m) => !m.isSummary && !m.condenseParent).length,
+			timestamp: Date.now(),
+		},
+	}
+
+	const newMessages = messages.map((msg) => {
+		if (!msg.condenseParent && !msg.isSummary) {
+			return { ...msg, condenseParent: condenseId }
+		}
+		return msg
+	})
+	newMessages.push(summaryMessage)
+
+	return { messages: newMessages, summary: summaryText }
+}
+
+/**
+ * Try to use persisted cross-session memories as a zero-cost compact summary.
+ *
+ * Loads session memories saved by persistSessionMemory() from previous sessions
+ * and formats them as a structured summary, avoiding an expensive LLM API call.
+ *
+ * Returns null if no session memories are available or the budget is exceeded.
+ */
+async function trySessionMemoryCompaction(
+	messages: ApiMessage[],
+	workspaceDir: string | undefined,
+	allowedTokens: number,
+): Promise<{ messages: ApiMessage[]; summary: string } | null> {
+	if (!workspaceDir) return null
+
+	// Need at least a few messages to compact
+	if (messages.length < 4) return null
+
+	const memories = await loadSessionMemories(workspaceDir)
+	if (memories.length === 0) return null
+
+	// Budget: use up to 30% of allowed tokens (same ratio as tryBuildLightweightSummary)
+	const budget = Math.floor(allowedTokens * 0.3)
+	const summaryText = formatSessionMemoriesForPrompt(memories, budget)
+	if (!summaryText) return null
+
+	// Rough token estimate -- skip if too verbose
+	const estimatedSummaryTokens = summaryText.length / 4
+	if (estimatedSummaryTokens > allowedTokens * 0.3) return null
+
+	const condenseId = crypto.randomUUID()
+	const summaryMessage: ApiMessage = {
+		role: "user",
+		content: summaryText,
+		ts: Date.now(),
+		isSummary: true,
+		condenseId,
+		compactMetadata: {
+			trigger: "auto",
+			source: "session_memory",
+			preCompactTokenCount: messages.length,
+			messagesSummarized: messages.filter((m) => !m.isSummary && !m.condenseParent).length,
 			timestamp: Date.now(),
 		},
 	}

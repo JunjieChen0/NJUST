@@ -19,6 +19,7 @@ if (fs.existsSync(envPath)) {
 
 import type { } from "@njust-ai-cj/types"
 import { customToolRegistry } from "@njust-ai-cj/core"
+import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import "./utils/path" // Necessary to have access to String.prototype.toPosix.
 import { createOutputChannelLogger } from "./utils/outputChannelLogger"
@@ -170,7 +171,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	outputChannel.appendLine(`${Package.name} extension activated - ${JSON.stringify(Package)}`)
 
 	// Initialize telemetry with file-based logging
-	const { TelemetryService } = require("@njust-ai-cj/telemetry") as typeof import("@njust-ai-cj/telemetry")
 	if (!TelemetryService.hasInstance()) {
 		TelemetryService.createInstance({ telemetryDir: context.globalStorageUri.fsPath })
 	}

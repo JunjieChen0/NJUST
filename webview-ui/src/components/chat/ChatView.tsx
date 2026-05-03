@@ -45,6 +45,29 @@ import { QueuedMessages } from "./QueuedMessages"
 import FileChangesPanel from "./FileChangesPanel"
 import { useScrollLifecycle } from "@src/hooks/useScrollLifecycle"
 
+/**
+ * Extension posts these on `window`; ExtensionStateContext, code-index UI, or
+ * settings hooks handle them. ChatView listens to the same channel for chat-only
+ * messages and should not treat these as missing handlers in dev.
+ */
+const EXTENSION_MESSAGES_HANDLED_ELSEWHERE = new Set<ExtensionMessage["type"]>([
+	"state",
+	"theme",
+	"mcpServers",
+	"listApiConfig",
+	"workspaceUpdated",
+	"commands",
+	"messageUpdated",
+	"skills",
+	"currentCheckpointUpdated",
+	"routerModels",
+	"taskHistoryUpdated",
+	"taskHistoryItemUpdated",
+	"taskMetrics",
+	"indexingStatusUpdate",
+	"codeIndexSecretStatus",
+])
+
 export interface ChatViewProps {
 	isHidden: boolean
 	showAnnouncement: boolean
@@ -974,7 +997,10 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 					}
 					break
 				default:
-					if (import.meta.env.DEV) {
+					if (
+						import.meta.env.DEV &&
+						!EXTENSION_MESSAGES_HANDLED_ELSEWHERE.has(message.type)
+					) {
 						console.warn("[ChatView] Unhandled extension message type:", message.type, message)
 					}
 					break

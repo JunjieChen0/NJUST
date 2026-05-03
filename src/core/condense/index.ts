@@ -170,7 +170,8 @@ export function injectSyntheticToolResults(messages: ApiMessage[]): ApiMessage[]
 
 	// Timestamp is one tick after the last input message so the synthetic
 	// message sits between the original conversation and the summary message.
-	const lastInputTs = messages.length > 0 ? messages[messages.length - 1].ts : Date.now()
+	const lastInputTs =
+		messages.length > 0 ? (messages[messages.length - 1].ts ?? Date.now()) : Date.now()
 	const syntheticMessage: ApiMessage = {
 		role: "user",
 		content: syntheticResults,
@@ -280,7 +281,11 @@ async function compactWithPTLRetry(
 	for (let retry = 0; retry <= maxRetries; retry++) {
 		try {
 			const requestMessages = prepareFn(retryMessages, condenseInstructions)
-			const stream = apiHandler.createMessage(prompt, requestMessages, metadata)
+			const stream = apiHandler.createMessage(
+				prompt,
+				requestMessages as Anthropic.Messages.MessageParam[],
+				metadata,
+			)
 
 			let s = ""
 			let c = 0
@@ -573,6 +578,7 @@ ${commandBlocks}
 		condenseId, // Unique ID for this summary, used to track which messages it replaces
 		compactMetadata: {
 			trigger: isAutomaticTrigger ? "auto" : "manual",
+			source: "llm",
 			preCompactTokenCount: messages.length, // message count as rough pre-compact metric
 			messagesSummarized: messagesForLLM.length,
 			timestamp: Date.now(),
@@ -591,7 +597,7 @@ ${commandBlocks}
 
 	// Find the last summary before this compaction — its timestamp tells us
 	// which messages are already represented by an existing summary.
-	const lastSummaryBefore = findLast(messages, (m) => m.isSummary)
+	const lastSummaryBefore = findLast(messages, (m) => m.isSummary === true)
 	const lastSummaryTs = lastSummaryBefore?.ts ?? 0
 
 	const newMessages = messages.map((msg) => {
@@ -978,6 +984,7 @@ export async function summarizePartialConversation(
 		condenseId,
 		compactMetadata: {
 			trigger: "manual",
+			source: "llm",
 			preCompactTokenCount: messages.length,
 			messagesSummarized: messagesToSummarize.length,
 			preservedSegment:
@@ -1013,3 +1020,4 @@ export async function summarizePartialConversation(
 		condenseId,
 	}
 }
+

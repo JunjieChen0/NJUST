@@ -56,7 +56,7 @@ const TaskHeader = ({
 	todos,
 }: TaskHeaderProps) => {
 	const { t } = useTranslation()
-	const { apiConfiguration, currentTaskItem, clineMessages: _clineMessages } = useExtensionState()
+	const { apiConfiguration, currentTaskItem, clineMessages: _clineMessages, autoCondenseContextPercent } = useExtensionState()
 	const { id: modelId, info: model } = useSelectedModel(apiConfiguration)
 	const [isTaskExpanded, setIsTaskExpanded] = useState(false)
 
@@ -313,6 +313,7 @@ const TaskHeader = ({
 														contextWindow={contextWindow}
 														contextTokens={contextTokens || 0}
 														maxTokens={maxTokens || undefined}
+														autoCompactPercent={autoCondenseContextPercent}
 													/>
 													{condenseButton}
 												</div>

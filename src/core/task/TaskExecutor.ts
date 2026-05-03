@@ -427,6 +427,7 @@ export class TaskExecutor {
 					cacheReadTokens,
 					cacheAwareTotalTokens,
 					compactFailures: h.compactFailures,
+					isSubAgent: h.parentTask !== undefined,
 				})
 				h.compactFailures = truncateResult.compactFailures ?? 0
 				if (truncateResult.messages !== h.apiConversationHistory) {

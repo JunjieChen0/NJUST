@@ -9,9 +9,10 @@ interface ContextWindowProgressProps {
 	contextWindow: number
 	contextTokens: number
 	maxTokens?: number
+	autoCompactPercent?: number
 }
 
-export const ContextWindowProgress = memo(({ contextWindow, contextTokens, maxTokens }: ContextWindowProgressProps) => {
+export const ContextWindowProgress = memo(({ contextWindow, contextTokens, maxTokens, autoCompactPercent }: ContextWindowProgressProps) => {
 	const { t } = useTranslation()
 
 	// Use the shared utility function to calculate all token distribution values
@@ -85,6 +86,14 @@ export const ContextWindowProgress = memo(({ contextWindow, contextTokens, maxTo
 					className={warningLevel === "critical" ? "text-vscode-charts-red" : warningLevel === "warning" ? "text-vscode-charts-yellow" : undefined}>
 					{formatLargeNumber(safeContextTokens)}
 				</div>
+				{autoCompactPercent !== undefined && currentPercent >= Math.max(autoCompactPercent - 10, 50) && (
+					<div
+						className="text-[10px] px-1 rounded whitespace-nowrap opacity-70"
+						style={{ backgroundColor: "color-mix(in srgb, var(--vscode-foreground) 15%, transparent)" }}
+						title={`Auto-compact triggers at ${autoCompactPercent}% context usage`}>
+						≃{autoCompactPercent}%
+					</div>
+				)}
 				<StandardTooltip content={tooltipContent} side="top" sideOffset={8}>
 					<div className="flex-1 relative">
 						{/* Main progress bar container */}

@@ -41,6 +41,8 @@ export type ApiMessage = Anthropic.MessageParam & {
 
 export type CompactMetadata = {
 	trigger: "auto" | "manual" | "reactive"
+	/** Source of the compaction content: lightweight extraction, session memory, or LLM */
+	source?: "lightweight" | "session_memory" | "llm"
 	preCompactTokenCount: number
 	postCompactTokenCount?: number
 	truePostCompactTokenCount?: number
