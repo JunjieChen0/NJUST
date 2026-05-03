@@ -70,6 +70,9 @@ import { t as i18nT } from "../../i18n"
 import { processUserContentMentions } from "../mentions/processUserContentMentions"
 
 import { debugLog } from "../../utils/debugLog"
+import { TokenBucketRateLimiter } from "../../services/rate-limiter/TokenBucketRateLimiter"
+import { BackpressureController } from "../stream/BackpressureController"
+
 const DEFAULT_USAGE_COLLECTION_TIMEOUT_MS = 5000
 
 /**
@@ -556,7 +559,6 @@ export class TaskExecutor {
 
 		// Apply proactive rate limiting before the API call
 		const providerKey = h.apiConfiguration?.apiProvider ?? "default"
-		const { TokenBucketRateLimiter } = require("../../services/rate-limiter/TokenBucketRateLimiter") as typeof import("../../services/rate-limiter/TokenBucketRateLimiter")
 		const waitMs = await TokenBucketRateLimiter.getInstance().wait(providerKey)
 		if (waitMs > 0) {
 			debugLog(`[TokenBucket] Waited ${waitMs}ms for ${providerKey}`)
@@ -571,11 +573,7 @@ export class TaskExecutor {
 		h.stateMachine.force(TaskState.STREAMING)
 
 		// Wrap with backpressure controller to prevent unbounded buffering
-		const controlledStream = new (require("../../core/stream/BackpressureController").BackpressureController)(
-			stream as unknown as AsyncGenerator<any>,
-			1000,
-			250,
-		)
+		const controlledStream = new BackpressureController(stream as unknown as AsyncGenerator<any>, 1000, 250)
 		const iterator = controlledStream[Symbol.asyncIterator]()
 
 		abortSignal.addEventListener("abort", () => {
@@ -682,7 +680,12 @@ export class TaskExecutor {
 			}
 		}
 
-		yield* iterator
+		// Delegate remainder: yield* requires AsyncIterable; reuse same iterator state after first manual next().
+		yield* {
+			[Symbol.asyncIterator]() {
+				return iterator
+			},
+		}
 		h.stateMachine.force(TaskState.COMPLETED)
 	}
 
