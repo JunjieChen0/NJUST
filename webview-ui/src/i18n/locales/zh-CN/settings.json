@@ -1054,9 +1054,9 @@
 		},
 		"triggerCommand": {
 			"label": "手动触发（说明）",
-			"description": "默认快捷键的文字说明；实际按键请在「键盘快捷方式」中修改。"
-		},
-		"triggerCommand.shortcutHint": "打开 <ShortcutLink>键盘快捷方式</ShortcutLink> 可自定义手动触发命令。"
+			"description": "默认快捷键的文字说明；实际按键请在「键盘快捷方式」中修改。",
+			"shortcutHint": "打开 <ShortcutLink>键盘快捷方式</ShortcutLink> 可自定义手动触发命令。"
+		}
 	},
 	"webSearch": {
 		"enable": {

@@ -877,7 +877,9 @@
         "searchPlaceholder": "搜尋",
         "noMatchFound": "找不到符合的結果",
         "useCustomModel": "使用自訂模型：{{modelId}}",
-        "simplifiedExplanation": "你可以稍後調整詳細的模型設定。"
+        "simplifiedExplanation": "你可以稍後調整詳細的模型設定。",
+        "directModelIdLabel": "模型 ID（選填）",
+        "directModelIdPlaceholder": "如 ep-… 或控制台 Model ID，與上方下拉同步"
     },
     "footer": {
         "telemetry": {
@@ -910,7 +912,9 @@
         "providerNotAllowed": "供應商 '{{provider}}' 不允許用於您的組織。",
         "modelNotAllowed": "模型 '{{model}}' 不允許用於供應商 '{{provider}}'，此設定已被組織禁止",
         "profileInvalid": "此設定檔包含您的組織不允許的供應商或模型",
-        "qwenCodeOauthPath": "您必須提供有效的 OAuth 憑證路徑"
+        "qwenCodeOauthPath": "您必須提供有效的 OAuth 憑證路徑",
+        "providerRequired": "請選擇一個 AI 供應商。",
+        "configurationRequired": "請完成 API 設定。"
     },
     "placeholders": {
         "apiKey": "請輸入 API 金鑰...",
@@ -1028,7 +1032,8 @@
             "descriptionRequired": "說明為必填",
             "descriptionTooLong": "說明不得超過1024個字元"
         },
-        "footer": "使用技能編寫器模式建立您自己的技能，可在 <MarketplaceLink>模式市集</MarketplaceLink> 中取得。"
+        "footer": "使用技能編寫器模式建立您自己的技能，可在 <MarketplaceLink>模式市集</MarketplaceLink> 中取得。",
+        "footerSimple": "使用技能編寫器模式建立您自己的技能。"
     },
     "inlineCompletion": {
         "enabled": {
@@ -1049,9 +1054,9 @@
         },
         "triggerCommand": {
             "label": "手動觸發（說明）",
-            "description": "預設快捷鍵的文字說明；實際按鍵請在「鍵盤快捷方式」中修改。"
-        },
-        "triggerCommand.shortcutHint": "開啟 <ShortcutLink>鍵盤快捷方式</ShortcutLink> 可自訂手動觸發命令。"
+            "description": "預設快捷鍵的文字說明；實際按鍵請在「鍵盤快捷方式」中修改。",
+            "shortcutHint": "開啟 <ShortcutLink>鍵盤快捷方式</ShortcutLink> 可自訂手動觸發命令。"
+        }
     },
     "webSearch": {
         "enable": {

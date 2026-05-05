@@ -251,15 +251,23 @@
 		"tokens": "Token",
 		"condensation": {
 			"title": "上下文已壓縮",
+			"subtitle": "AI 智慧摘要",
 			"inProgress": "正在壓縮上下文...",
 			"errorHeader": "壓縮上下文失敗"
 		},
 		"truncation": {
 			"title": "上下文已截斷",
+			"subtitle": "快速截斷",
 			"inProgress": "正在截斷上下文...",
 			"messagesRemoved": "已移除 {{count}} 則訊息",
 			"messagesRemoved_other": "已移除 {{count}} 則訊息",
-			"description": "為保持在上下文視窗限制內，已從對話中移除較舊的訊息。與壓縮相比，這是一種快速但上下文保留較少的方法。"
+			"description": "為保持在上下文視窗限制內，已從對話中移除較舊的訊息。與壓縮相比，這是一種快速但上下文保留較少的方法。",
+			"suggestion": "為獲得最佳效果，如需完整上下文，建議開始新的對話。"
+		},
+		"circuitBreaker": {
+			"title": "上下文壓縮已降級",
+			"description": "上下文壓縮多次失敗。系統已切換至截斷模式作為備用方案。這保留的對話上下文較正常情況為少。",
+			"suggestion": "您可能需要開始新的對話以重設上下文視窗。"
 		}
 	},
 	"skill": {

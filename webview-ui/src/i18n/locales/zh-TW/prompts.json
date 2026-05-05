@@ -16,6 +16,13 @@
 		"title": "API 設定",
 		"select": "選擇此模式要使用的 API 設定"
 	},
+	"cloudAgent": {
+		"serverUrl": {
+			"title": "伺服器地址",
+			"description": "輸入 Cloud Agent 伺服器的 REST 地址",
+			"placeholder": "http://120.79.250.232:8765"
+		}
+	},
 	"tools": {
 		"title": "可用工具",
 		"builtInModesText": "內建模式的工具無法修改",

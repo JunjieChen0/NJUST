@@ -1054,9 +1054,9 @@
 		},
 		"triggerCommand": {
 			"label": "Manual trigger (reference)",
-			"description": "Default shortcut label for documentation. Change the real keybinding in Keyboard Shortcuts."
-		},
-		"triggerCommand.shortcutHint": "Open <ShortcutLink>keyboard shortcuts</ShortcutLink> to customize the manual trigger command."
+			"description": "Default shortcut label for documentation. Change the real keybinding in Keyboard Shortcuts.",
+			"shortcutHint": "Open <ShortcutLink>keyboard shortcuts</ShortcutLink> to customize the manual trigger command."
+		}
 	},
 	"webSearch": {
 		"enable": {
