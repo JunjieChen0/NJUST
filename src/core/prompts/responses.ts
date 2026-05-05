@@ -54,6 +54,31 @@ Otherwise, if you have not completed the task and do not need additional informa
 (This is an automated message, so do not respond to it conversationally.)`
 	},
 
+	noToolsUsedWithInterruptHint: () => {
+		const instructions = getToolInstructionsReminder()
+
+		return `[ERROR] You did not use a tool in your previous response! This may be because your previous tool use was interrupted.
+Please try a DIFFERENT approach:
+
+- If you were reading a file, try listing the directory first
+- If a tool keeps failing, try using a simpler alternative
+- If you believe the task is complete, use attempt_completion
+
+${instructions}`
+	},
+
+	toolRetryThrottled: () =>
+		`[ERROR] Too many consecutive tool failures. Please stop and assess the situation:
+
+- The previous tool calls were not completing successfully
+- You should NOT retry the same tool again
+- Either try a fundamentally different approach, or ask the user for guidance
+
+# Next Steps
+
+If you have completed the user's task, use the attempt_completion tool.
+If you require additional information from the user, use the ask_followup_question tool.`,
+
 	tooManyMistakes: (feedback?: string) =>
 		JSON.stringify({
 			status: "guidance",

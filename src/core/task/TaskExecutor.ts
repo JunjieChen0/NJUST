@@ -1922,18 +1922,46 @@ export class TaskExecutor {
 						// Increment consecutive no-tool-use counter
 						t.consecutiveNoToolUseCount++
 
-						// Only show error and count toward mistake limit after 2 consecutive failures
-						if (t.consecutiveNoToolUseCount >= 2) {
+						if (t.consecutiveNoToolUseCount >= 3) {
+							// Severe throttling: force the model to stop retrying
 							await t.say("error", "MODEL_NO_TOOLS_USED")
-							// Only count toward mistake limit after second consecutive failure
+							t.consecutiveMistakeCount += 2
+							t.userMessageContent.push({
+								type: "text",
+								text: formatResponse.toolRetryThrottled(),
+							})
+							t.consecutiveNoToolUseCount = 0
+						} else if (t.consecutiveNoToolUseCount >= 2) {
+							await t.say("error", "MODEL_NO_TOOLS_USED")
 							t.consecutiveMistakeCount++
-						}
 
-						// Use the task's locked protocol for consistent behavior
-						t.userMessageContent.push({
-							type: "text",
-							text: formatResponse.noToolsUsed(),
-						})
+							// Check if the previous tool result was an interruption
+							const lastUserMsg = t.apiConversationHistory
+								.filter((m: any) => m.role === "user")
+								.pop()
+							const wasInterrupted =
+								lastUserMsg &&
+								Array.isArray(lastUserMsg.content) &&
+								lastUserMsg.content.some(
+									(block: any) =>
+										block.type === "tool_result" &&
+										typeof block.content === "string" &&
+										block.content.includes("interrupted"),
+								)
+
+							t.userMessageContent.push({
+								type: "text",
+								text: wasInterrupted
+									? formatResponse.noToolsUsedWithInterruptHint()
+									: formatResponse.noToolsUsed(),
+							})
+						} else {
+							// First failure: silent retry
+							t.userMessageContent.push({
+								type: "text",
+								text: formatResponse.noToolsUsed(),
+							})
+						}
 					} else {
 						// Reset counter when tools are used successfully
 						t.consecutiveNoToolUseCount = 0
