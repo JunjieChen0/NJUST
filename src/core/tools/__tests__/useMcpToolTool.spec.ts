@@ -4,6 +4,30 @@ import { useMcpToolTool } from "../UseMcpToolTool"
 import { Task } from "../../task/Task"
 import { ToolUse } from "../../../shared/tools"
 
+vi.mock("@njust-ai-cj/telemetry", () => ({
+	TelemetryService: {
+		instance: {
+			captureEvent: vi.fn(),
+			startSpan: vi.fn(() => ({ traceId: "t", spanId: "s" })),
+			endSpan: vi.fn(),
+			captureTaskCompleted: vi.fn(),
+		},
+	},
+}))
+
+vi.mock("../../security/metrics", async (importOriginal) => {
+	const actual = (await importOriginal()) as Record<string, unknown>
+	return {
+		...actual,
+		recordSecurityMetric: vi.fn(),
+		startTraceSpan: vi.fn(() => ({
+			traceId: "test-trace",
+			spanId: "test-span",
+			end: vi.fn(),
+		})),
+	}
+})
+
 // Mock dependencies
 vi.mock("../../prompts/responses", () => ({
 	formatResponse: {
@@ -50,7 +74,7 @@ describe("useMcpToolTool", () => {
 	let mockProviderRef: any
 
 	beforeEach(() => {
-		mockAskApproval = vi.fn()
+		mockAskApproval = vi.fn().mockResolvedValue(true)
 		mockHandleError = vi.fn()
 		mockPushToolResult = vi.fn()
 		mockRemoveClosingTag = vi.fn((tag: string, value?: string) => value || "")
@@ -110,7 +134,7 @@ describe("useMcpToolTool", () => {
 			expect(mockTask.consecutiveMistakeCount).toBe(1)
 			expect(mockTask.recordToolError).toHaveBeenCalledWith("use_mcp_tool")
 			expect(mockTask.sayAndCreateMissingParamError).toHaveBeenCalledWith("use_mcp_tool", "server_name")
-			expect(mockPushToolResult).toHaveBeenCalledWith("Missing server_name error")
+			expect(mockPushToolResult).toHaveBeenCalledWith("Missing server_name error", undefined)
 		})
 
 		it("should handle missing tool_name", async () => {
@@ -140,7 +164,7 @@ describe("useMcpToolTool", () => {
 			expect(mockTask.consecutiveMistakeCount).toBe(1)
 			expect(mockTask.recordToolError).toHaveBeenCalledWith("use_mcp_tool")
 			expect(mockTask.sayAndCreateMissingParamError).toHaveBeenCalledWith("use_mcp_tool", "tool_name")
-			expect(mockPushToolResult).toHaveBeenCalledWith("Missing tool_name error")
+			expect(mockPushToolResult).toHaveBeenCalledWith("Missing tool_name error", undefined)
 		})
 
 		it("should handle invalid arguments type", async () => {
@@ -186,7 +210,7 @@ describe("useMcpToolTool", () => {
 			expect(mockTask.consecutiveMistakeCount).toBe(1)
 			expect(mockTask.recordToolError).toHaveBeenCalledWith("use_mcp_tool")
 			expect(mockTask.say).toHaveBeenCalledWith("error", expect.stringContaining("invalid JSON argument"))
-			expect(mockPushToolResult).toHaveBeenCalledWith("Tool error: Invalid args for test_server:test_tool")
+			expect(mockPushToolResult).toHaveBeenCalledWith("Tool error: Invalid args for test_server:test_tool", undefined)
 		})
 	})
 
@@ -242,6 +266,9 @@ describe("useMcpToolTool", () => {
 
 			mockProviderRef.deref.mockReturnValue({
 				getMcpHub: () => ({
+					getAllServers: vi
+						.fn()
+						.mockReturnValue([{ name: "test_server", tools: [{ name: "test_tool", description: "desc" }] }]),
 					callTool: vi.fn().mockResolvedValue(mockToolResult),
 				}),
 				postMessageToWebview: vi.fn(),
@@ -257,7 +284,7 @@ describe("useMcpToolTool", () => {
 			expect(mockAskApproval).toHaveBeenCalled()
 			expect(mockTask.say).toHaveBeenCalledWith("mcp_server_request_started")
 			expect(mockTask.say).toHaveBeenCalledWith("mcp_server_response", "Tool executed successfully", [])
-			expect(mockPushToolResult).toHaveBeenCalledWith("Tool result: Tool executed successfully")
+			expect(mockPushToolResult).toHaveBeenCalledWith("Tool result: Tool executed successfully", undefined)
 		})
 
 		it("should handle user rejection", async () => {
@@ -290,7 +317,9 @@ describe("useMcpToolTool", () => {
 				postMessageToWebview: vi.fn(),
 			})
 
-			mockAskApproval.mockResolvedValue(false)
+			mockAskApproval.mockImplementation((type: string) =>
+				type === "tool" ? Promise.resolve(true) : Promise.resolve(false),
+			)
 
 			await useMcpToolTool.handle(mockTask as Task, block as any, {
 				askApproval: mockAskApproval,
@@ -334,7 +363,10 @@ describe("useMcpToolTool", () => {
 			})
 
 			const error = new Error("Unexpected error")
-			mockAskApproval.mockRejectedValue(error)
+			mockAskApproval.mockImplementation((type: string) => {
+				if (type === "tool") return Promise.resolve(true)
+				return Promise.reject(error)
+			})
 
 			await useMcpToolTool.handle(mockTask as Task, block as any, {
 				askApproval: mockAskApproval,
@@ -393,8 +425,8 @@ describe("useMcpToolTool", () => {
 			expect(mockTask.recordToolError).toHaveBeenCalledWith("use_mcp_tool")
 			expect(mockTask.say).toHaveBeenCalledWith("error", expect.stringContaining("does not exist"))
 			// Check that the error message contains available tools
-			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("existing-tool-1"))
-			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("existing-tool-2"))
+			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("existing-tool-1"), undefined)
+			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("existing-tool-2"), undefined)
 		})
 
 		it("should handle server with no tools", async () => {
@@ -441,7 +473,7 @@ describe("useMcpToolTool", () => {
 			expect(mockTask.consecutiveMistakeCount).toBe(1)
 			expect(mockTask.recordToolError).toHaveBeenCalledWith("use_mcp_tool")
 			expect(mockTask.say).toHaveBeenCalledWith("error", expect.stringContaining("does not exist"))
-			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("No tools available"))
+			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("No tools available"), undefined)
 		})
 
 		it("should allow valid tool names", async () => {
@@ -539,9 +571,9 @@ describe("useMcpToolTool", () => {
 			expect(mockTask.consecutiveMistakeCount).toBe(1)
 			expect(mockTask.recordToolError).toHaveBeenCalledWith("use_mcp_tool")
 			expect(mockTask.say).toHaveBeenCalledWith("error", expect.stringContaining("not configured"))
-			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("s1"))
+			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("s1"), undefined)
 			expect(callToolMock).not.toHaveBeenCalled()
-			expect(mockAskApproval).not.toHaveBeenCalled()
+			expect(mockAskApproval.mock.calls.some((c) => c[0] === "use_mcp_server")).toBe(false)
 		})
 
 		it("should reject unknown server names when no servers are available", async () => {
@@ -584,9 +616,9 @@ describe("useMcpToolTool", () => {
 			expect(mockTask.consecutiveMistakeCount).toBe(1)
 			expect(mockTask.recordToolError).toHaveBeenCalledWith("use_mcp_tool")
 			expect(mockTask.say).toHaveBeenCalledWith("error", expect.stringContaining("not configured"))
-			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("No servers available"))
+			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("No servers available"), undefined)
 			expect(callToolMock).not.toHaveBeenCalled()
-			expect(mockAskApproval).not.toHaveBeenCalled()
+			expect(mockAskApproval.mock.calls.some((c) => c[0] === "use_mcp_server")).toBe(false)
 		})
 
 		it("should match tool names using fuzzy matching (hyphens vs underscores)", async () => {
@@ -702,7 +734,7 @@ describe("useMcpToolTool", () => {
 			expect(mockTask.say).toHaveBeenCalledWith("mcp_server_response", "[1 image(s) received]", [
 				"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ",
 			])
-			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("with 1 image(s)"))
+			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("with 1 image(s)"), undefined)
 		})
 
 		it("should handle tool response with both text and image content", async () => {
@@ -758,7 +790,7 @@ describe("useMcpToolTool", () => {
 			expect(mockTask.say).toHaveBeenCalledWith("mcp_server_response", "Node name: Button", [
 				"data:image/png;base64,base64imagedata",
 			])
-			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("with 1 image(s)"))
+			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("with 1 image(s)"), undefined)
 		})
 
 		it("should handle image with data URL already formatted", async () => {
@@ -874,7 +906,7 @@ describe("useMcpToolTool", () => {
 				"data:image/png;base64,image1data",
 				"data:image/png;base64,image2data",
 			])
-			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("with 2 image(s)"))
+			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("with 2 image(s)"), undefined)
 		})
 	})
 })

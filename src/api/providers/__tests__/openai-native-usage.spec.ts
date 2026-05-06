@@ -292,14 +292,13 @@ describe("OpenAiNativeHandler - normalizeUsage", () => {
 
 			const result = (handler as any).normalizeUsage(usage, mockModel)
 
-			// The implementation uses nullish coalescing, so it will use the first non-nullish value:
-			// cache_read_input_tokens ?? cache_read_tokens ?? cached_tokens ?? cachedFromDetails
-			// Since none of the first two exist, it falls back to cached_tokens (20) before cachedFromDetails
+			// The implementation uses the detailed shape cached_tokens (30) as the primary source
+			// when input_tokens_details is present, falling back to legacy fields otherwise.
 			expect(result).toMatchObject({
 				type: "usage",
 				inputTokens: 100,
 				outputTokens: 50,
-				cacheReadTokens: 20, // From cached_tokens (legacy field comes before details in fallback chain)
+				cacheReadTokens: 30, // From input_tokens_details.cached_tokens (detailed shape takes precedence)
 				cacheWriteTokens: 0, // miss tokens are NOT cache writes
 			})
 		})

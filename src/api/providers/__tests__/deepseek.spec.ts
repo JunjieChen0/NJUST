@@ -106,7 +106,7 @@ vi.mock("openai", () => {
 										completion_tokens: 5,
 										total_tokens: 15,
 										prompt_tokens_details: {
-											cache_miss_tokens: 8,
+											cache_write_tokens: 8,
 											cached_tokens: 2,
 										},
 									},

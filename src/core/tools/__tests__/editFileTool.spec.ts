@@ -120,8 +120,14 @@ describe("editFileTool", () => {
 		mockTask.rooIgnoreController = {
 			validateAccess: vi.fn().mockReturnValue(true),
 		}
-		mockTask.njust_aiProtectedController = {
+		mockTask.rooProtectedController = {
 			isWriteProtected: vi.fn().mockReturnValue(false),
+		}
+		mockTask.cangjieRuntimePolicy = {
+			noteWriteApplied: vi.fn(),
+			ensureProjectInitializedForWrite: vi.fn().mockResolvedValue(undefined),
+			validateProjectStructureForWrite: vi.fn().mockResolvedValue(undefined),
+			getMissingImportEvidence: vi.fn().mockReturnValue([]),
 		}
 		mockTask.diffViewProvider = {
 			editType: undefined,
@@ -553,7 +559,9 @@ describe("editFileTool", () => {
 
 	describe("approval workflow", () => {
 		it("saves changes when user approves", async () => {
-			mockAskApproval.mockResolvedValue(true)
+			mockAskApproval.mockImplementation((...args: any[]) =>
+				args.length === 1 ? Promise.resolve(true) : Promise.resolve(true),
+			)
 
 			await executeEditFileTool()
 
@@ -563,7 +571,9 @@ describe("editFileTool", () => {
 		})
 
 		it("reverts changes when user rejects", async () => {
-			mockAskApproval.mockResolvedValue(false)
+			mockAskApproval.mockImplementation((...args: any[]) =>
+				args.length === 1 ? Promise.resolve(true) : Promise.resolve(false),
+			)
 
 			const result = await executeEditFileTool()
 

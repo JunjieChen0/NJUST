@@ -42,6 +42,9 @@ describe("executeCommand", () => {
 			getState: vitest.fn().mockResolvedValue({
 				terminalShellIntegrationDisabled: false,
 			}),
+			context: {
+				extensionPath: "/mock/extension/path",
+			},
 		}
 
 		// Create mock task
@@ -49,7 +52,7 @@ describe("executeCommand", () => {
 			cwd: "/test/project",
 			taskId: "test-task-123",
 			providerRef: {
-				deref: vitest.fn().mockResolvedValue(mockProvider),
+				deref: vitest.fn().mockReturnValue(mockProvider),
 			},
 			say: vitest.fn().mockResolvedValue(undefined),
 			terminalProcess: undefined,

@@ -59,7 +59,7 @@ describe("runSlashCommandTool", () => {
 		expect(mockTask.consecutiveMistakeCount).toBe(1)
 		expect(mockTask.recordToolError).toHaveBeenCalledWith("run_slash_command")
 		expect(mockTask.sayAndCreateMissingParamError).toHaveBeenCalledWith("run_slash_command", "command")
-		expect(mockCallbacks.pushToolResult).toHaveBeenCalledWith("Missing parameter error")
+		expect(mockCallbacks.pushToolResult).toHaveBeenCalledWith("Missing parameter error", undefined)
 	})
 
 	it("should handle command not found", async () => {
@@ -81,6 +81,7 @@ describe("runSlashCommandTool", () => {
 		expect(mockTask.recordToolError).toHaveBeenCalledWith("run_slash_command")
 		expect(mockCallbacks.pushToolResult).toHaveBeenCalledWith(
 			formatResponse.toolError("Command 'nonexistent' not found. Available commands: init, test, deploy"),
+			undefined,
 		)
 	})
 
@@ -140,6 +141,7 @@ Source: project
 --- Skill Instructions ---
 
 Use skill workflow`,
+			undefined,
 		)
 		expect(mockTask.recordToolError).not.toHaveBeenCalledWith("run_slash_command")
 		expect(getCommandNames).not.toHaveBeenCalled()
@@ -197,6 +199,7 @@ Source: project
 --- Command Content ---
 
 Command content`,
+			undefined,
 		)
 	})
 
@@ -220,7 +223,9 @@ Command content`,
 		}
 
 		vi.mocked(getCommand).mockResolvedValue(mockCommand)
-		mockCallbacks.askApproval.mockResolvedValue(false)
+		mockCallbacks.askApproval.mockImplementation((...args: any[]) =>
+			args.length === 1 ? Promise.resolve(true) : Promise.resolve(false),
+		)
 
 		await runSlashCommandTool.handle(mockTask as Task, block, mockCallbacks)
 
@@ -270,6 +275,7 @@ Source: built-in
 --- Command Content ---
 
 Initialize project content here`,
+			undefined,
 		)
 	})
 
@@ -308,6 +314,7 @@ Source: project
 --- Command Content ---
 
 Run tests with specific focus`,
+			undefined,
 		)
 	})
 
@@ -340,6 +347,7 @@ Source: global
 --- Command Content ---
 
 Deploy application to production`,
+			undefined,
 		)
 	})
 
@@ -406,6 +414,7 @@ Deploy application to production`,
 
 		expect(mockCallbacks.pushToolResult).toHaveBeenCalledWith(
 			formatResponse.toolError("Command 'nonexistent' not found. Available commands: (none)"),
+			undefined,
 		)
 	})
 
@@ -481,6 +490,7 @@ Source: project
 --- Command Content ---
 
 Start debugging the application`,
+			undefined,
 		)
 	})
 

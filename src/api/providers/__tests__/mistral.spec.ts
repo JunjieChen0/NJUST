@@ -127,7 +127,7 @@ describe("MistralHandler", () => {
 					temperature: 0,
 					// Tools are now always present (minimum 6 from ALWAYS_AVAILABLE_TOOLS)
 					tools: expect.any(Array),
-					toolChoice: "any",
+					toolChoice: "required",
 				}),
 			)
 
@@ -288,7 +288,7 @@ describe("MistralHandler", () => {
 							}),
 						}),
 					]),
-					toolChoice: "any",
+					toolChoice: "required",
 				}),
 			)
 		})
@@ -305,7 +305,7 @@ describe("MistralHandler", () => {
 			expect(mockCreate).toHaveBeenCalledWith(
 				expect.objectContaining({
 					tools: expect.any(Array),
-					toolChoice: "any",
+					toolChoice: "required",
 				}),
 			)
 		})
@@ -435,8 +435,8 @@ describe("MistralHandler", () => {
 			})
 		})
 
-		it("should always set toolChoice to 'any' when tools are provided", async () => {
-			// Even if tool_choice is provided in metadata, we override it to "any"
+		it("should always set toolChoice to 'required' when tools are provided", async () => {
+			// Even if tool_choice is provided in metadata, we override it to "required"
 			const metadata: ApiHandlerCreateMessageMetadata = {
 				taskId: "test-task",
 				tools: mockTools,
@@ -448,7 +448,7 @@ describe("MistralHandler", () => {
 
 			expect(mockCreate).toHaveBeenCalledWith(
 				expect.objectContaining({
-					toolChoice: "any",
+					toolChoice: "required",
 				}),
 			)
 		})

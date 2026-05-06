@@ -131,6 +131,7 @@ describe("OpenAiHandler timeout configuration", () => {
 		const options: ApiHandlerOptions = {
 			apiModelId: "gpt-4",
 			openAiModelId: "gpt-4",
+			openAiApiKey: "test-key",
 		}
 
 		new OpenAiHandler(options)

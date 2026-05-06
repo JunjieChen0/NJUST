@@ -38,7 +38,7 @@ describe("XAIHandler", () => {
 		mockCaptureException.mockClear()
 
 		// Create handler with mock
-		handler = new XAIHandler({})
+		handler = new XAIHandler({ xaiApiKey: "test-api-key" })
 	})
 
 	it("should use the correct X.AI base URL", () => {
@@ -73,7 +73,7 @@ describe("XAIHandler", () => {
 
 	test("should return specified model when valid model is provided", () => {
 		const testModelId = "grok-3"
-		const handlerWithModel = new XAIHandler({ apiModelId: testModelId })
+		const handlerWithModel = new XAIHandler({ xaiApiKey: "test-api-key", apiModelId: testModelId })
 		const model = handlerWithModel.getModel()
 
 		expect(model.id).toBe(testModelId)
@@ -82,6 +82,7 @@ describe("XAIHandler", () => {
 
 	it("should include reasoning_effort parameter for mini models", async () => {
 		const miniModelHandler = new XAIHandler({
+			xaiApiKey: "test-api-key",
 			apiModelId: "grok-3-mini",
 			reasoningEffort: "high",
 		})
@@ -111,6 +112,7 @@ describe("XAIHandler", () => {
 
 	it("should not include reasoning_effort parameter for non-mini models", async () => {
 		const regularModelHandler = new XAIHandler({
+			xaiApiKey: "test-api-key",
 			apiModelId: "grok-3",
 			reasoningEffort: "high",
 		})
@@ -258,7 +260,7 @@ describe("XAIHandler", () => {
 		// Setup a handler with specific model
 		const modelId = "grok-3"
 		const modelInfo = xaiModels[modelId]
-		const handlerWithModel = new XAIHandler({ apiModelId: modelId })
+		const handlerWithModel = new XAIHandler({ xaiApiKey: "test-api-key", apiModelId: modelId })
 
 		// Setup mock for streaming response
 		mockCreate.mockImplementationOnce(() => {
@@ -311,7 +313,7 @@ describe("XAIHandler", () => {
 		]
 
 		it("should include tools in request when model supports native tools and tools are provided (native is default)", async () => {
-			const handlerWithTools = new XAIHandler({ apiModelId: "grok-3" })
+			const handlerWithTools = new XAIHandler({ xaiApiKey: "test-api-key", apiModelId: "grok-3" })
 
 			mockCreate.mockImplementationOnce(() => {
 				return {
@@ -345,7 +347,7 @@ describe("XAIHandler", () => {
 		})
 
 		it("should include tool_choice when provided", async () => {
-			const handlerWithTools = new XAIHandler({ apiModelId: "grok-3" })
+			const handlerWithTools = new XAIHandler({ xaiApiKey: "test-api-key", apiModelId: "grok-3" })
 
 			mockCreate.mockImplementationOnce(() => {
 				return {
@@ -372,7 +374,7 @@ describe("XAIHandler", () => {
 		})
 
 		it("should always include tools and tool_choice (tools are guaranteed to be present after ALWAYS_AVAILABLE_TOOLS)", async () => {
-			const handlerWithTools = new XAIHandler({ apiModelId: "grok-3" })
+			const handlerWithTools = new XAIHandler({ xaiApiKey: "test-api-key", apiModelId: "grok-3" })
 
 			mockCreate.mockImplementationOnce(() => {
 				return {
@@ -397,7 +399,7 @@ describe("XAIHandler", () => {
 		})
 
 		it("should yield tool_call_partial chunks during streaming", async () => {
-			const handlerWithTools = new XAIHandler({ apiModelId: "grok-3" })
+			const handlerWithTools = new XAIHandler({ xaiApiKey: "test-api-key", apiModelId: "grok-3" })
 
 			mockCreate.mockImplementationOnce(() => {
 				return {
@@ -477,7 +479,7 @@ describe("XAIHandler", () => {
 		})
 
 		it("should set parallel_tool_calls based on metadata", async () => {
-			const handlerWithTools = new XAIHandler({ apiModelId: "grok-3" })
+			const handlerWithTools = new XAIHandler({ xaiApiKey: "test-api-key", apiModelId: "grok-3" })
 
 			mockCreate.mockImplementationOnce(() => {
 				return {
@@ -507,10 +509,12 @@ describe("XAIHandler", () => {
 			// Import NativeToolCallParser to set up state
 			const { NativeToolCallParser } = await import("../../../core/assistant-message/NativeToolCallParser")
 
-			// Clear any previous state
-			NativeToolCallParser.clearRawChunkState()
-
-			const handlerWithTools = new XAIHandler({ apiModelId: "grok-3" })
+			const toolCallParser = new NativeToolCallParser()
+			const handlerWithTools = new XAIHandler({
+				xaiApiKey: "test-api-key",
+				apiModelId: "grok-3",
+				toolCallParser,
+			})
 
 			mockCreate.mockImplementationOnce(() => {
 				return {
@@ -565,7 +569,7 @@ describe("XAIHandler", () => {
 				// Simulate what Task.ts does: when we receive tool_call_partial,
 				// process it through NativeToolCallParser to populate rawChunkTracker
 				if (chunk.type === "tool_call_partial") {
-					NativeToolCallParser.processRawChunk({
+					toolCallParser.processRawChunk({
 						index: chunk.index,
 						id: chunk.id,
 						name: chunk.name,

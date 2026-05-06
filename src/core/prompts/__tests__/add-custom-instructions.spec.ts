@@ -126,6 +126,9 @@ vi.mock("vscode", () => ({
 	workspace: {
 		workspaceFolders: [{ uri: { fsPath: "/test/path" } }],
 		getWorkspaceFolder: vi.fn().mockReturnValue({ uri: { fsPath: "/test/path" } }),
+		getConfiguration: vi.fn(() => ({
+			get: vi.fn(),
+		})),
 	},
 	window: {
 		activeTextEditor: undefined,

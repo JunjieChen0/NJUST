@@ -116,7 +116,7 @@ describe("VercelAiGatewayHandler", () => {
 		})
 
 		it("returns default model info when options are not provided", async () => {
-			const handler = new VercelAiGatewayHandler({})
+			const handler = new VercelAiGatewayHandler({ vercelAiGatewayApiKey: "test-key" })
 			const result = await handler.fetchModel()
 			expect(result.id).toBe(vercelAiGatewayDefaultModelId)
 			expect(result.info.supportsPromptCache).toBe(true)

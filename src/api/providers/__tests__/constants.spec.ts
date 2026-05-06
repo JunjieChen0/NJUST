@@ -23,7 +23,7 @@ describe("DEFAULT_HEADERS", () => {
 		expect(userAgent).toBe(`NJUST_AI_CJ/${Package.version}`)
 
 		// Verify it follows the tool_name/version pattern
-		expect(userAgent).toMatch(/^[a-zA-Z-]+\/\d+\.\d+\.\d+$/)
+		expect(userAgent).toMatch(/^[a-zA-Z_-]+\/\d+\.\d+\.\d+$/)
 	})
 
 	it("should have User-Agent with correct tool name", () => {

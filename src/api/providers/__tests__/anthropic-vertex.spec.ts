@@ -845,6 +845,8 @@ describe("VertexHandler", () => {
 			const handler = new AnthropicVertexHandler({
 				apiKey: "test-api-key",
 				apiModelId: "claude-3-7-sonnet@20250219:thinking",
+				vertexProjectId: "test-project",
+				vertexRegion: "us-central1",
 				modelMaxTokens: 32_768,
 				modelMaxThinkingTokens: 16_384,
 			})
@@ -859,6 +861,8 @@ describe("VertexHandler", () => {
 			const handler = new AnthropicVertexHandler({
 				apiKey: "test-api-key",
 				apiModelId: "claude-3-7-sonnet@20250219",
+				vertexProjectId: "test-project",
+				vertexRegion: "us-central1",
 				modelMaxTokens: 32_768,
 				modelMaxThinkingTokens: 16_384,
 			})

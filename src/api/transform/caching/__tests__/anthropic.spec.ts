@@ -13,9 +13,9 @@ describe("addCacheBreakpoints (Anthropic)", () => {
 			{ role: "user", content: "Hello" },
 		]
 
-		addCacheBreakpoints(systemPrompt, messages)
+		const result = addCacheBreakpoints(systemPrompt, messages)
 
-		expect(messages[0].content).toEqual([
+		expect(result[0].content).toEqual([
 			{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
 		])
 	})
@@ -24,13 +24,13 @@ describe("addCacheBreakpoints (Anthropic)", () => {
 		const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [{ role: "system", content: systemPrompt }]
 		const originalMessages = JSON.parse(JSON.stringify(messages))
 
-		addCacheBreakpoints(systemPrompt, messages)
+		const result = addCacheBreakpoints(systemPrompt, messages)
 
-		expect(messages[0].content).toEqual([
+		expect(result[0].content).toEqual([
 			{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
 		])
 
-		expect(messages.length).toBe(originalMessages.length)
+		expect(result.length).toBe(originalMessages.length)
 	})
 
 	it("should add a breakpoint to the only user message if only one exists", () => {
@@ -39,9 +39,9 @@ describe("addCacheBreakpoints (Anthropic)", () => {
 			{ role: "user", content: "User message 1" },
 		]
 
-		addCacheBreakpoints(systemPrompt, messages)
+		const result = addCacheBreakpoints(systemPrompt, messages)
 
-		expect(messages[1].content).toEqual([
+		expect(result[1].content).toEqual([
 			{ type: "text", text: "User message 1", cache_control: { type: "ephemeral" } },
 		])
 	})
@@ -53,13 +53,13 @@ describe("addCacheBreakpoints (Anthropic)", () => {
 			{ role: "user", content: "User message 2" },
 		]
 
-		addCacheBreakpoints(systemPrompt, messages)
+		const result = addCacheBreakpoints(systemPrompt, messages)
 
-		expect(messages[1].content).toEqual([
+		expect(result[1].content).toEqual([
 			{ type: "text", text: "User message 1", cache_control: { type: "ephemeral" } },
 		])
 
-		expect(messages[2].content).toEqual([
+		expect(result[2].content).toEqual([
 			{ type: "text", text: "User message 2", cache_control: { type: "ephemeral" } },
 		])
 	})
@@ -71,15 +71,15 @@ describe("addCacheBreakpoints (Anthropic)", () => {
 			{ role: "user", content: "User message 2" }, // Should get breakpoint.
 			{ role: "user", content: "User message 3" }, // Should get breakpoint.
 		]
-		addCacheBreakpoints(systemPrompt, messages)
+		const result = addCacheBreakpoints(systemPrompt, messages)
 
-		expect(messages[1].content).toEqual([{ type: "text", text: "User message 1" }])
+		expect(result[1].content).toEqual([{ type: "text", text: "User message 1" }])
 
-		expect(messages[2].content).toEqual([
+		expect(result[2].content).toEqual([
 			{ type: "text", text: "User message 2", cache_control: { type: "ephemeral" } },
 		])
 
-		expect(messages[3].content).toEqual([
+		expect(result[3].content).toEqual([
 			{ type: "text", text: "User message 3", cache_control: { type: "ephemeral" } },
 		])
 	})
@@ -94,9 +94,9 @@ describe("addCacheBreakpoints (Anthropic)", () => {
 			{ role: "user", content: "User message 3" }, // Should get breakpoint (last user).
 			{ role: "assistant", content: "Assistant response 3" },
 		]
-		addCacheBreakpoints(systemPrompt, messages)
+		const result = addCacheBreakpoints(systemPrompt, messages)
 
-		const userMessages = messages.filter((m) => m.role === "user")
+		const userMessages = result.filter((m) => m.role === "user")
 
 		expect(userMessages[0].content).toEqual([{ type: "text", text: "User message 1" }])
 
@@ -123,13 +123,13 @@ describe("addCacheBreakpoints (Anthropic)", () => {
 			},
 		]
 
-		addCacheBreakpoints(systemPrompt, messages)
+		const result = addCacheBreakpoints(systemPrompt, messages)
 
-		expect(messages[1].content).toEqual([
+		expect(result[1].content).toEqual([
 			{ type: "text", text: "User message 1", cache_control: { type: "ephemeral" } },
 		])
 
-		expect(messages[2].content).toEqual([
+		expect(result[2].content).toEqual([
 			{ type: "text", text: "This is the last user message." },
 			{ type: "image_url", image_url: { url: "data:image/png;base64,..." } },
 			{ type: "text", text: "This part should get the breakpoint.", cache_control: { type: "ephemeral" } },
@@ -146,13 +146,13 @@ describe("addCacheBreakpoints (Anthropic)", () => {
 			},
 		]
 
-		addCacheBreakpoints(systemPrompt, messages)
+		const result = addCacheBreakpoints(systemPrompt, messages)
 
-		expect(messages[1].content).toEqual([
+		expect(result[1].content).toEqual([
 			{ type: "text", text: "User message 1", cache_control: { type: "ephemeral" } },
 		])
 
-		expect(messages[2].content).toEqual([
+		expect(result[2].content).toEqual([
 			{ type: "image_url", image_url: { url: "data:image/png;base64,..." } },
 			{ type: "text", text: "...", cache_control: { type: "ephemeral" } }, // Placeholder added.
 		])
@@ -166,15 +166,15 @@ describe("addCacheBreakpoints (Anthropic)", () => {
 			{ role: "user", content: "User message 3" }, // Gets breakpoint.
 		]
 
-		addCacheBreakpoints(systemPrompt, messages)
+		const result = addCacheBreakpoints(systemPrompt, messages)
 
-		expect(messages[1].content).toEqual([{ type: "text", text: "User message 1" }])
+		expect(result[1].content).toEqual([{ type: "text", text: "User message 1" }])
 
-		expect(messages[2].content).toEqual([
+		expect(result[2].content).toEqual([
 			{ type: "text", text: "User message 2", cache_control: { type: "ephemeral" } },
 		])
 
-		expect(messages[3].content).toEqual([
+		expect(result[3].content).toEqual([
 			{ type: "text", text: "User message 3", cache_control: { type: "ephemeral" } },
 		])
 	})

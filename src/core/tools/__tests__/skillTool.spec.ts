@@ -4,6 +4,30 @@ import { Task } from "../../task/Task"
 import { formatResponse } from "../../prompts/responses"
 import type { ToolUse } from "../../../shared/tools"
 
+vi.mock("@njust-ai-cj/telemetry", () => ({
+	TelemetryService: {
+		instance: {
+			captureEvent: vi.fn(),
+			startSpan: vi.fn(() => ({ traceId: "t", spanId: "s" })),
+			endSpan: vi.fn(),
+			captureTaskCompleted: vi.fn(),
+		},
+	},
+}))
+
+vi.mock("../../security/metrics", async (importOriginal) => {
+	const actual = (await importOriginal()) as Record<string, unknown>
+	return {
+		...actual,
+		recordSecurityMetric: vi.fn(),
+		startTraceSpan: vi.fn(() => ({
+			traceId: "test-trace",
+			spanId: "test-span",
+			end: vi.fn(),
+		})),
+	}
+})
+
 describe("skillTool", () => {
 	let mockTask: any
 	let mockCallbacks: any
@@ -18,6 +42,7 @@ describe("skillTool", () => {
 		}
 
 		mockTask = {
+			taskId: "test-task",
 			consecutiveMistakeCount: 0,
 			recordToolError: vi.fn(),
 			didToolFailInCurrentTurn: false,
@@ -60,7 +85,7 @@ describe("skillTool", () => {
 		expect(mockTask.consecutiveMistakeCount).toBe(1)
 		expect(mockTask.recordToolError).toHaveBeenCalledWith("skill")
 		expect(mockTask.sayAndCreateMissingParamError).toHaveBeenCalledWith("skill", "skill")
-		expect(mockCallbacks.pushToolResult).toHaveBeenCalledWith("Missing parameter error")
+		expect(mockCallbacks.pushToolResult).toHaveBeenCalledWith("Missing parameter error", undefined)
 	})
 
 	it("should handle skill not found", async () => {
@@ -81,6 +106,7 @@ describe("skillTool", () => {
 
 		expect(mockCallbacks.pushToolResult).toHaveBeenCalledWith(
 			formatResponse.toolError("Skill 'non-existent' not found. Available skills: create-mcp-server"),
+			undefined,
 		)
 	})
 
@@ -102,6 +128,7 @@ describe("skillTool", () => {
 
 		expect(mockCallbacks.pushToolResult).toHaveBeenCalledWith(
 			formatResponse.toolError("Skill 'non-existent' not found. Available skills: (none)"),
+			undefined,
 		)
 	})
 
@@ -146,6 +173,7 @@ Source: global
 --- Skill Instructions ---
 
 Step 1: Create the server...`,
+			undefined,
 		)
 	})
 
@@ -181,6 +209,7 @@ Source: global
 --- Skill Instructions ---
 
 Step 1: Create the server...`,
+			undefined,
 		)
 	})
 
@@ -202,7 +231,9 @@ Step 1: Create the server...`,
 			instructions: "Test instructions",
 		})
 
-		mockCallbacks.askApproval.mockResolvedValue(false)
+		mockCallbacks.askApproval.mockImplementation((_type: string, msg?: string) =>
+			msg === undefined ? Promise.resolve(true) : Promise.resolve(false),
+		)
 
 		await skillTool.handle(mockTask as Task, block, mockCallbacks)
 
@@ -302,6 +333,7 @@ Step 1: Create the server...`,
 		expect(mockTask.recordToolError).toHaveBeenCalledWith("skill")
 		expect(mockCallbacks.pushToolResult).toHaveBeenCalledWith(
 			formatResponse.toolError("Skills Manager not available"),
+			undefined,
 		)
 	})
 
@@ -346,6 +378,7 @@ Source: project
 --- Skill Instructions ---
 
 Follow these project-specific instructions...`,
+			undefined,
 		)
 	})
 })

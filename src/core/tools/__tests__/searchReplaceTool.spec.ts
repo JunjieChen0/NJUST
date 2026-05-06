@@ -309,7 +309,9 @@ describe("searchReplaceTool", () => {
 
 	describe("approval workflow", () => {
 		it("saves changes when user approves", async () => {
-			mockAskApproval.mockResolvedValue(true)
+			mockAskApproval.mockImplementation((...args: any[]) =>
+				args.length === 1 ? Promise.resolve(true) : Promise.resolve(true),
+			)
 
 			await executeSearchReplaceTool()
 
@@ -319,7 +321,9 @@ describe("searchReplaceTool", () => {
 		})
 
 		it("reverts changes when user rejects", async () => {
-			mockAskApproval.mockResolvedValue(false)
+			mockAskApproval.mockImplementation((...args: any[]) =>
+				args.length === 1 ? Promise.resolve(true) : Promise.resolve(false),
+			)
 
 			const result = await executeSearchReplaceTool()
 

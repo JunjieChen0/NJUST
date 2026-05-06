@@ -139,6 +139,15 @@ describe("writeToFileTool", () => {
 		mockCline.rooIgnoreController = {
 			validateAccess: vi.fn().mockReturnValue(true),
 		}
+		mockCline.rooProtectedController = {
+			isWriteProtected: vi.fn().mockReturnValue(false),
+		}
+		mockCline.cangjieRuntimePolicy = {
+			noteWriteApplied: vi.fn(),
+			ensureProjectInitializedForWrite: vi.fn().mockResolvedValue(undefined),
+			validateProjectStructureForWrite: vi.fn().mockResolvedValue(undefined),
+			getMissingImportEvidence: vi.fn().mockReturnValue([]),
+		}
 		mockCline.diffViewProvider = {
 			editType: undefined,
 			isEditing: false,
@@ -422,7 +431,9 @@ describe("writeToFileTool", () => {
 
 	describe("user interaction", () => {
 		it("reverts changes when user rejects approval", async () => {
-			mockAskApproval.mockResolvedValue(false)
+			mockAskApproval.mockImplementation((...args: any[]) =>
+				args.length === 1 ? Promise.resolve(true) : Promise.resolve(false),
+			)
 
 			await executeWriteFileTool({})
 
@@ -432,12 +443,14 @@ describe("writeToFileTool", () => {
 
 		it("reports user edits with diff feedback", async () => {
 			const userEditsValue = "- old line\n+ new line"
-			mockCline.diffViewProvider.saveChanges.mockResolvedValue({
-				newProblemsMessage: " with warnings",
-				userEdits: userEditsValue,
-				finalContent: "modified content",
+			mockCline.diffViewProvider.saveChanges.mockImplementation(async function (this: any) {
+				this.userEdits = userEditsValue
+				return {
+					newProblemsMessage: " with warnings",
+					userEdits: userEditsValue,
+					finalContent: "modified content",
+				}
 			})
-			// Set the userEdits property on the diffViewProvider mock to simulate user edits
 			mockCline.diffViewProvider.userEdits = userEditsValue
 
 			await executeWriteFileTool({}, { fileExists: true })

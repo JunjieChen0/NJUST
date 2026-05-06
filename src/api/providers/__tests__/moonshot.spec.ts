@@ -84,7 +84,7 @@ describe("MoonshotHandler", () => {
 			expect(model.info).toBeDefined()
 			expect(model.info.maxTokens).toBe(16384)
 			expect(model.info.contextWindow).toBe(262144)
-			expect(model.info.supportsImages).toBe(false)
+			expect(model.info.supportsImages).toBe(true)
 			expect(model.info.supportsPromptCache).toBe(true)
 		})
 
@@ -218,7 +218,7 @@ describe("MoonshotHandler", () => {
 
 			const usageChunks = chunks.filter((chunk) => chunk.type === "usage")
 			expect(usageChunks.length).toBeGreaterThan(0)
-			expect(usageChunks[0].cacheWriteTokens).toBe(0)
+			expect(usageChunks[0].cacheWriteTokens).toBeUndefined()
 			expect(usageChunks[0].cacheReadTokens).toBe(2)
 		})
 	})
@@ -265,7 +265,7 @@ describe("MoonshotHandler", () => {
 			expect(result.type).toBe("usage")
 			expect(result.inputTokens).toBe(100)
 			expect(result.outputTokens).toBe(50)
-			expect(result.cacheWriteTokens).toBe(0)
+			expect(result.cacheWriteTokens).toBeUndefined()
 			expect(result.cacheReadTokens).toBe(20)
 		})
 
@@ -290,7 +290,7 @@ describe("MoonshotHandler", () => {
 			expect(result.type).toBe("usage")
 			expect(result.inputTokens).toBe(100)
 			expect(result.outputTokens).toBe(50)
-			expect(result.cacheWriteTokens).toBe(0)
+			expect(result.cacheWriteTokens).toBeUndefined()
 			expect(result.cacheReadTokens).toBeUndefined()
 		})
 	})

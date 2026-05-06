@@ -17,6 +17,7 @@ describe("TaskStopTool", () => {
 			getAllTaskInstances: vi.fn().mockReturnValue([{ taskId: "t-1", abortTask }]),
 		}
 		const task = {
+			taskId: "t-1",
 			providerRef: { deref: () => provider },
 			sayAndCreateMissingParamError: vi.fn(),
 		} as any

@@ -588,12 +588,15 @@ describe("OpenAiHandler", () => {
 	})
 
 	describe("Azure AI Inference Service", () => {
-		const azureOptions = {
-			...mockOptions,
-			openAiBaseUrl: "https://test.services.ai.azure.com",
-			openAiModelId: "deepseek-v3",
-			azureApiVersion: "2024-05-01-preview",
-		}
+		let azureOptions: any
+		beforeEach(() => {
+			azureOptions = {
+				...mockOptions,
+				openAiBaseUrl: "https://test.services.ai.azure.com",
+				openAiModelId: "deepseek-v3",
+				azureApiVersion: "2024-05-01-preview",
+			}
+		})
 
 		it("should initialize with Azure AI Inference Service configuration", () => {
 			const azureHandler = new OpenAiHandler(azureOptions)
@@ -713,11 +716,14 @@ describe("OpenAiHandler", () => {
 	})
 
 	describe("Grok xAI Provider", () => {
-		const grokOptions = {
-			...mockOptions,
-			openAiBaseUrl: "https://api.x.ai/v1",
-			openAiModelId: "grok-1",
-		}
+		let grokOptions: any
+		beforeEach(() => {
+			grokOptions = {
+				...mockOptions,
+				openAiBaseUrl: "https://api.x.ai/v1",
+				openAiModelId: "grok-1",
+			}
+		})
 
 		it("should initialize with Grok xAI configuration", () => {
 			const grokHandler = new OpenAiHandler(grokOptions)
@@ -753,16 +759,19 @@ describe("OpenAiHandler", () => {
 	})
 
 	describe("O3 Family Models", () => {
-		const o3Options = {
-			...mockOptions,
-			openAiModelId: "o3-mini",
-			openAiCustomModelInfo: {
-				contextWindow: 128_000,
-				maxTokens: 65536,
-				supportsPromptCache: false,
-				reasoningEffort: "medium" as "low" | "medium" | "high",
-			},
-		}
+		let o3Options: any
+		beforeEach(() => {
+			o3Options = {
+				...mockOptions,
+				openAiModelId: "o3-mini",
+				openAiCustomModelInfo: {
+					contextWindow: 128_000,
+					maxTokens: 65536,
+					supportsPromptCache: false,
+					reasoningEffort: "medium" as "low" | "medium" | "high",
+				},
+			}
+		})
 
 		it("should handle O3 model with streaming and include max_completion_tokens when includeMaxTokens is true", async () => {
 			const o3Handler = new OpenAiHandler({

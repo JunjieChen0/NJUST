@@ -2,12 +2,19 @@ import { describe, expect, it, vi } from "vitest"
 import type { ToolUse } from "../../../shared/tools"
 import { BaseTool, type ToolCallbacks } from "../BaseTool"
 
-const recordSecurityMetricMock = vi.fn()
+const { recordSecurityMetricMock } = vi.hoisted(() => ({
+	recordSecurityMetricMock: vi.fn(),
+}))
 vi.mock("../../security/metrics", async (importOriginal) => {
-	const actual = (await importOriginal()) as object
+	const actual = (await importOriginal()) as Record<string, unknown>
 	return {
 		...actual,
 		recordSecurityMetric: recordSecurityMetricMock,
+		startTraceSpan: vi.fn(() => ({
+			traceId: "test-trace",
+			spanId: "test-span",
+			end: vi.fn(),
+		})),
 	}
 })
 

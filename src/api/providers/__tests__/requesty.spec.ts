@@ -102,7 +102,7 @@ describe("RequestyHandler", () => {
 		})
 
 		it("returns default model info when options are not provided", async () => {
-			const handler = new RequestyHandler({})
+			const handler = new RequestyHandler({ requestyApiKey: "test-key" })
 			const result = await handler.fetchModel()
 
 			expect(result).toMatchObject({

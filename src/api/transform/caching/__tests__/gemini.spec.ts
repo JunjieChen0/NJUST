@@ -12,8 +12,8 @@ describe("addCacheBreakpoints", () => {
 			{ role: "system", content: systemPrompt },
 			{ role: "user", content: "Hello" },
 		]
-		addCacheBreakpoints(systemPrompt, messages, 10) // Pass frequency
-		expect(messages[0].content).toEqual([
+		const result = addCacheBreakpoints(systemPrompt, messages, 10) // Pass frequency
+		expect(result[0].content).toEqual([
 			{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
 		])
 	})
@@ -31,19 +31,19 @@ describe("addCacheBreakpoints", () => {
 
 		const originalMessages = JSON.parse(JSON.stringify(messages))
 
-		addCacheBreakpoints(systemPrompt, messages, frequency)
+		const result = addCacheBreakpoints(systemPrompt, messages, frequency)
 
-		expect(messages[0].content).toEqual([
+		expect(result[0].content).toEqual([
 			{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
 		])
 
-		for (let i = 1; i < messages.length; i++) {
+		for (let i = 1; i < result.length; i++) {
 			const originalContent = originalMessages[i].content
 
 			const expectedContent =
 				typeof originalContent === "string" ? [{ type: "text", text: originalContent }] : originalContent
 
-			expect(messages[i].content).toEqual(expectedContent)
+			expect(result[i].content).toEqual(expectedContent)
 		}
 	})
 
@@ -58,15 +58,15 @@ describe("addCacheBreakpoints", () => {
 			})),
 		]
 
-		addCacheBreakpoints(systemPrompt, messages, frequency)
+		const result = addCacheBreakpoints(systemPrompt, messages, frequency)
 
 		// Check Nth user message (index 'frequency' in the full array).
-		expect(messages[frequency].content).toEqual([
+		expect(result[frequency].content).toEqual([
 			{ type: "text", text: `User message ${frequency}`, cache_control: { type: "ephemeral" } },
 		])
 
 		// Check (N-1)th user message (index frequency-1) - should be unchanged.
-		expect(messages[frequency - 1].content).toEqual([{ type: "text", text: `User message ${frequency - 1}` }])
+		expect(result[frequency - 1].content).toEqual([{ type: "text", text: `User message ${frequency - 1}` }])
 	})
 
 	it("should add breakpoints to the Nth and 2*Nth user messages", () => {
@@ -82,12 +82,12 @@ describe("addCacheBreakpoints", () => {
 
 		expect(messages.length).toEqual(frequency * 2 + 1)
 
-		addCacheBreakpoints(systemPrompt, messages, frequency)
+		const result = addCacheBreakpoints(systemPrompt, messages, frequency)
 
 		const indices = []
 
-		for (let i = 0; i < messages.length; i++) {
-			const content = messages[i].content?.[0]
+		for (let i = 0; i < result.length; i++) {
+			const content = result[i].content?.[0]
 
 			if (typeof content === "object" && "cache_control" in content) {
 				indices.push(i)
@@ -97,17 +97,17 @@ describe("addCacheBreakpoints", () => {
 		expect(indices).toEqual([0, 5, 10])
 
 		// Check Nth user message (index frequency)
-		expect(messages[frequency].content).toEqual([
+		expect(result[frequency].content).toEqual([
 			{ type: "text", text: `User message ${frequency}`, cache_control: { type: "ephemeral" } },
 		])
 
 		// Check (2*N-1)th user message (index 2*frequency-1) - unchanged
-		expect(messages[frequency * 2 - 1].content).toEqual([
+		expect(result[frequency * 2 - 1].content).toEqual([
 			{ type: "text", text: `User message ${frequency * 2 - 1}` },
 		])
 
 		// Check 2*Nth user message (index 2*frequency)
-		expect(messages[frequency * 2].content).toEqual([
+		expect(result[frequency * 2].content).toEqual([
 			{ type: "text", text: `User message ${frequency * 2}`, cache_control: { type: "ephemeral" } },
 		])
 	})
@@ -128,16 +128,16 @@ describe("addCacheBreakpoints", () => {
 			{ role: "user", content: `User message ${frequency + 1}` },
 		]
 
-		addCacheBreakpoints(systemPrompt, messages, frequency)
+		const result = addCacheBreakpoints(systemPrompt, messages, frequency)
 
 		// Find the Nth user message.
-		const nthUserMessage = messages.filter((m) => m.role === "user")[frequency - 1]
+		const nthUserMessage = result.filter((m) => m.role === "user")[frequency - 1]
 		expect(nthUserMessage.content).toEqual([
 			{ type: "text", text: `User message ${frequency}`, cache_control: { type: "ephemeral" } },
 		])
 
 		// Check the (N+1)th user message is unchanged.
-		const nPlusOneUserMessage = messages.filter((m) => m.role === "user")[frequency]
+		const nPlusOneUserMessage = result.filter((m) => m.role === "user")[frequency]
 		expect(nPlusOneUserMessage.content).toEqual([{ type: "text", text: `User message ${frequency + 1}` }])
 	})
 
@@ -160,9 +160,9 @@ describe("addCacheBreakpoints", () => {
 			},
 		]
 
-		addCacheBreakpoints(systemPrompt, messages, frequency)
+		const result = addCacheBreakpoints(systemPrompt, messages, frequency)
 
-		expect(messages[frequency].content).toEqual([
+		expect(result[frequency].content).toEqual([
 			{ type: "text", text: `This is the ${frequency}th user message.` },
 			{ type: "image_url", image_url: { url: "data:image/png;base64,..." } },
 			{ type: "text", text: "This part should get the breakpoint.", cache_control: { type: "ephemeral" } },
@@ -184,9 +184,9 @@ describe("addCacheBreakpoints", () => {
 			},
 		]
 
-		addCacheBreakpoints(systemPrompt, messages, frequency)
+		const result = addCacheBreakpoints(systemPrompt, messages, frequency)
 
-		expect(messages[frequency].content).toEqual([
+		expect(result[frequency].content).toEqual([
 			{ type: "image_url", image_url: { url: "data:image/png;base64,..." } },
 			{ type: "text", text: "...", cache_control: { type: "ephemeral" } },
 		])
@@ -203,23 +203,23 @@ describe("addCacheBreakpoints", () => {
 			})),
 		]
 
-		addCacheBreakpoints(systemPrompt, messages, frequency)
+		const result = addCacheBreakpoints(systemPrompt, messages, frequency)
 
 		// Check 5th user message (index 5).
-		expect(messages[5].content).toEqual([
+		expect(result[5].content).toEqual([
 			{ type: "text", text: "User message 5", cache_control: { type: "ephemeral" } },
 		])
 
 		// Check 9th user message (index 9) - unchanged
-		expect(messages[9].content).toEqual([{ type: "text", text: "User message 9" }])
+		expect(result[9].content).toEqual([{ type: "text", text: "User message 9" }])
 
 		// Check 10th user message (index 10).
-		expect(messages[10].content).toEqual([
+		expect(result[10].content).toEqual([
 			{ type: "text", text: "User message 10", cache_control: { type: "ephemeral" } },
 		])
 
 		// Check 11th user message (index 11) - unchanged
-		expect(messages[11].content).toEqual([{ type: "text", text: "User message 11" }])
+		expect(result[11].content).toEqual([{ type: "text", text: "User message 11" }])
 	})
 
 	it("should not add breakpoints (except system) if frequency is 0", () => {
@@ -233,24 +233,24 @@ describe("addCacheBreakpoints", () => {
 		]
 		const originalMessages = JSON.parse(JSON.stringify(messages))
 
-		addCacheBreakpoints(systemPrompt, messages, frequency)
+		const result = addCacheBreakpoints(systemPrompt, messages, frequency)
 
 		// Check system prompt.
-		expect(messages[0].content).toEqual([
+		expect(result[0].content).toEqual([
 			{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
 		])
 
 		// Check all user messages - none should have cache_control
-		for (let i = 1; i < messages.length; i++) {
+		for (let i = 1; i < result.length; i++) {
 			const originalContent = originalMessages[i].content
 
 			const expectedContent =
 				typeof originalContent === "string" ? [{ type: "text", text: originalContent }] : originalContent
 
-			expect(messages[i].content).toEqual(expectedContent) // Should match original (after string->array conversion).
+			expect(result[i].content).toEqual(expectedContent) // Should match original (after string->array conversion).
 
 			// Ensure no cache_control was added to user messages.
-			const content = messages[i].content
+			const content = result[i].content
 
 			if (Array.isArray(content)) {
 				// Assign to new variable after type check.

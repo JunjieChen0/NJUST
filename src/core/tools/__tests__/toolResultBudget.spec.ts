@@ -28,7 +28,8 @@ describe("tools/toolResultBudget", () => {
 			{ role: "user", content: [{ type: "tool_result", tool_use_id: "b", content: huge }] }, // current turn
 		]
 
-		const out = applyToolResultBudget(messages as any, 200_000, 3)
+		// Use a small context window so historical tool_result blocks exceed per-turn budget and compress.
+		const out = applyToolResultBudget(messages as any, 12_000, 3)
 		const hist = out[1].content[0].content as string
 		const current = out[3].content[0].content as string
 

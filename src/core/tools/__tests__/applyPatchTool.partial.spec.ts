@@ -5,6 +5,7 @@ import type { MockedFunction } from "vitest"
 import type { ToolUse } from "../../../shared/tools"
 import { isPathOutsideWorkspace } from "../../../utils/pathUtils"
 import type { Task } from "../../task/Task"
+import { AskIgnoredError } from "../../task/AskIgnoredError"
 import { ApplyPatchTool } from "../ApplyPatchTool"
 
 vi.mock("../../../utils/pathUtils", () => ({
@@ -46,9 +47,7 @@ describe("ApplyPatchTool.handlePartial", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 
-		askSpy = vi.fn().mockRejectedValue(new Error("ask() rejection is ignored for partial rows")) as MockedFunction<
-			Task["ask"]
-		>
+		askSpy = vi.fn().mockRejectedValue(new AskIgnoredError("new partial")) as MockedFunction<Task["ask"]>
 		mockTask = {
 			cwd,
 			ask: askSpy,

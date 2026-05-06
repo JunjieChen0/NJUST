@@ -66,6 +66,14 @@ describe("QwenCodeHandler Native Tools", () => {
 
 		mockOptions = {
 			apiModelId: "qwen3-coder-plus",
+			toolCallParser: {
+				processFinishReason: (finishReason) => {
+					if (finishReason === "tool_calls") {
+						return [{ type: "tool_call_end", id: "call_qwen_test" }]
+					}
+					return []
+				},
+			},
 		}
 		handler = new QwenCodeHandler(mockOptions)
 

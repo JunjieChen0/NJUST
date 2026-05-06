@@ -3,6 +3,7 @@ import * as path from "path"
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest"
 
 import { ReadCommandOutputTool } from "../ReadCommandOutputTool"
+import { toolResultCache } from "../helpers/ToolResultCache"
 import { Task } from "../../task/Task"
 
 // Mock filesystem operations
@@ -36,6 +37,7 @@ describe("ReadCommandOutputTool", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.spyOn(toolResultCache, "get").mockReturnValue(undefined)
 
 		tool = new ReadCommandOutputTool()
 		globalStoragePath = "/mock/global/storage"
@@ -139,7 +141,7 @@ describe("ReadCommandOutputTool", () => {
 			const result = mockCallbacks.pushToolResult.mock.calls[0][0]
 			expect(result).toContain(`[Command Output: ${artifactId}]`)
 			expect(result).toContain("Total size:")
-			expect(result).toMatch(/\d+(\.\d+)?(bytes|KB|MB)/)
+			expect(result).toMatch(/\d+(\.\d+)?\s*(bytes|KB|MB)/)
 		})
 
 		it("should close file handle after reading", async () => {

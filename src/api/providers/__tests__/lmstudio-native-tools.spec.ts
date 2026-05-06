@@ -47,6 +47,14 @@ describe("LmStudioHandler Native Tools", () => {
 			apiModelId: "local-model",
 			lmStudioModelId: "local-model",
 			lmStudioBaseUrl: "http://localhost:1234",
+			toolCallParser: {
+				processFinishReason: (finishReason) => {
+					if (finishReason === "tool_calls") {
+						return [{ type: "tool_call_end", id: "call_lmstudio_test" }]
+					}
+					return []
+				},
+			},
 		}
 		handler = new LmStudioHandler(mockOptions)
 

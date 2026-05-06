@@ -18,6 +18,9 @@ vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
 		instance: {
 			captureTaskCompleted: mockCaptureTaskCompleted,
+			captureEvent: vi.fn(),
+			startSpan: vi.fn(() => ({ traceId: "test-trace", spanId: "test-span" })),
+			endSpan: vi.fn(),
 		},
 	},
 }))
@@ -54,7 +57,7 @@ describe("attemptCompletionTool", () => {
 	beforeEach(() => {
 		mockCaptureTaskCompleted.mockReset()
 		mockPushToolResult = vi.fn()
-		mockAskApproval = vi.fn()
+		mockAskApproval = vi.fn().mockResolvedValue(true)
 		mockHandleError = vi.fn()
 		mockToolDescription = vi.fn()
 		mockAskFinishSubTaskApproval = vi.fn()
@@ -83,6 +86,7 @@ describe("attemptCompletionTool", () => {
 			taskId: "task_1",
 			apiConfiguration: { apiProvider: "test" } as any,
 			api: { getModel: vi.fn().mockReturnValue({ id: "test-model", info: {} }) } as any,
+			markTaskCompleted: vi.fn(),
 		}
 	})
 
@@ -204,6 +208,7 @@ describe("attemptCompletionTool", () => {
 			expect(mockTask.recordToolError).toHaveBeenCalledWith("attempt_completion")
 			expect(mockPushToolResult).toHaveBeenCalledWith(
 				expect.stringContaining("Cannot complete task while there are incomplete todos"),
+				undefined,
 			)
 		})
 
@@ -246,6 +251,7 @@ describe("attemptCompletionTool", () => {
 			expect(mockTask.recordToolError).toHaveBeenCalledWith("attempt_completion")
 			expect(mockPushToolResult).toHaveBeenCalledWith(
 				expect.stringContaining("Cannot complete task while there are incomplete todos"),
+				undefined,
 			)
 		})
 
@@ -289,6 +295,7 @@ describe("attemptCompletionTool", () => {
 			expect(mockTask.recordToolError).toHaveBeenCalledWith("attempt_completion")
 			expect(mockPushToolResult).toHaveBeenCalledWith(
 				expect.stringContaining("Cannot complete task while there are incomplete todos"),
+				undefined,
 			)
 		})
 
@@ -375,6 +382,7 @@ describe("attemptCompletionTool", () => {
 			expect(mockTask.recordToolError).toHaveBeenCalledWith("attempt_completion")
 			expect(mockPushToolResult).toHaveBeenCalledWith(
 				expect.stringContaining("Cannot complete task while there are incomplete todos"),
+				undefined,
 			)
 		})
 
@@ -453,6 +461,7 @@ describe("attemptCompletionTool", () => {
 				)
 				expect(mockPushToolResult).toHaveBeenCalledWith(
 					expect.stringContaining("errors.attempt_completion_tool_failed"),
+					undefined,
 				)
 			})
 
@@ -512,6 +521,7 @@ describe("attemptCompletionTool", () => {
 					"task_1",
 					expect.anything(),
 					expect.anything(),
+					{ isSubtask: false },
 				)
 			})
 
@@ -547,8 +557,9 @@ describe("attemptCompletionTool", () => {
 					expect.anything(),
 					expect.anything(),
 					expect.anything(),
+					expect.anything(),
 				)
-				expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("<user_message>"))
+				expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("<user_message>"), undefined)
 			})
 		})
 	})

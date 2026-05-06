@@ -287,9 +287,10 @@ describe("ZAiHandler", () => {
 			expect(model.info).toEqual(internationalZAiModels[internationalZAiDefaultModelId])
 		})
 
-		it("should use 'not-provided' as default API key when none is specified", () => {
-			new ZAiHandler({ zaiApiLine: "international_coding" })
-			expect(OpenAI).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "not-provided" }))
+		it("should throw when no API key is specified", () => {
+			expect(() => new ZAiHandler({ zaiApiLine: "international_coding" })).toThrow(
+				/Z.ai API key is required/,
+			)
 		})
 	})
 

@@ -102,9 +102,11 @@ vitest.mock("../../providers/fetchers/modelCache", () => ({
 
 // Import after mocks are set up
 import { RooHandler } from "../roo"
+import { NativeToolCallParser } from "../../../core/assistant-message/NativeToolCallParser"
 
 describe("RooHandler", () => {
 	let handler: RooHandler
+	let toolCallParser: NativeToolCallParser
 	let mockOptions: ApiHandlerOptions
 	const systemPrompt = "You are a helpful assistant."
 	const messages: Anthropic.Messages.MessageParam[] = [
@@ -115,8 +117,10 @@ describe("RooHandler", () => {
 	]
 
 	beforeEach(() => {
+		toolCallParser = new NativeToolCallParser()
 		mockOptions = {
 			apiModelId: "xai/grok-code-fast-1",
+			toolCallParser,
 		}
 		mockCreate.mockClear()
 		vitest.clearAllMocks()
@@ -868,11 +872,8 @@ describe("RooHandler", () => {
 		})
 
 		it("should yield tool_call_end events when finish_reason is tool_calls", async () => {
-			// Import NativeToolCallParser to set up state
-			const { NativeToolCallParser } = await import("../../../core/assistant-message/NativeToolCallParser")
-
-			// Clear any previous state
-			NativeToolCallParser.clearRawChunkState()
+			// Clear any previous state on the injected parser instance
+			toolCallParser.clearRawChunkState()
 
 			mockCreate.mockResolvedValueOnce({
 				[Symbol.asyncIterator]: async function* () {
@@ -911,7 +912,7 @@ describe("RooHandler", () => {
 				// Simulate what Task.ts does: when we receive tool_call_partial,
 				// process it through NativeToolCallParser to populate rawChunkTracker
 				if (chunk.type === "tool_call_partial") {
-					NativeToolCallParser.processRawChunk({
+					toolCallParser.processRawChunk({
 						index: chunk.index,
 						id: chunk.id,
 						name: chunk.name,

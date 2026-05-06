@@ -245,7 +245,7 @@ describe("generateImageTool", () => {
 			expect(mockCline.consecutiveMistakeCount).toBe(1)
 			expect(mockCline.recordToolError).toHaveBeenCalledWith("generate_image")
 			expect(mockCline.sayAndCreateMissingParamError).toHaveBeenCalledWith("generate_image", "prompt")
-			expect(mockPushToolResult).toHaveBeenCalledWith("Missing parameter error")
+			expect(mockPushToolResult).toHaveBeenCalledWith("Missing parameter error", undefined)
 		})
 
 		it("should handle missing path parameter", async () => {
@@ -270,7 +270,7 @@ describe("generateImageTool", () => {
 			expect(mockCline.consecutiveMistakeCount).toBe(1)
 			expect(mockCline.recordToolError).toHaveBeenCalledWith("generate_image")
 			expect(mockCline.sayAndCreateMissingParamError).toHaveBeenCalledWith("generate_image", "path")
-			expect(mockPushToolResult).toHaveBeenCalledWith("Missing parameter error")
+			expect(mockPushToolResult).toHaveBeenCalledWith("Missing parameter error", undefined)
 		})
 	})
 
@@ -307,6 +307,7 @@ describe("generateImageTool", () => {
 				formatResponse.toolError(
 					"Image generation is an experimental feature that must be enabled in settings. Please enable 'Image Generation' in the Experimental Settings section.",
 				),
+				undefined,
 			)
 		})
 	})
@@ -338,7 +339,7 @@ describe("generateImageTool", () => {
 			})
 
 			expect(mockCline.say).toHaveBeenCalledWith("error", expect.stringContaining("Input image not found"))
-			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("Input image not found"))
+			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("Input image not found"), undefined)
 		})
 
 		it("should handle unsupported image format", async () => {
@@ -365,7 +366,7 @@ describe("generateImageTool", () => {
 			})
 
 			expect(mockCline.say).toHaveBeenCalledWith("error", expect.stringContaining("Unsupported image format"))
-			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("Unsupported image format"))
+			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("Unsupported image format"), undefined)
 		})
 	})
 })

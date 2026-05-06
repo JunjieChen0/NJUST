@@ -12,9 +12,9 @@ describe("Vercel AI Gateway Caching", () => {
 				{ role: "user", content: "Hello" },
 			]
 
-			addCacheBreakpoints(systemPrompt, messages)
+			const result = addCacheBreakpoints(systemPrompt, messages)
 
-			expect(messages[0]).toEqual({
+			expect(result[0]).toEqual({
 				role: "system",
 				content: systemPrompt,
 				cache_control: { type: "ephemeral" },
@@ -34,9 +34,9 @@ describe("Vercel AI Gateway Caching", () => {
 				{ role: "user", content: "Fourth message" },
 			]
 
-			addCacheBreakpoints(systemPrompt, messages)
+			const result = addCacheBreakpoints(systemPrompt, messages)
 
-			const lastUserMessage = messages[7]
+			const lastUserMessage = result[7]
 			expect(Array.isArray(lastUserMessage.content)).toBe(true)
 			if (Array.isArray(lastUserMessage.content)) {
 				const textPart = lastUserMessage.content.find((part) => part.type === "text")
@@ -47,7 +47,7 @@ describe("Vercel AI Gateway Caching", () => {
 				})
 			}
 
-			const secondLastUserMessage = messages[5]
+			const secondLastUserMessage = result[5]
 			expect(Array.isArray(secondLastUserMessage.content)).toBe(true)
 			if (Array.isArray(secondLastUserMessage.content)) {
 				const textPart = secondLastUserMessage.content.find((part) => part.type === "text")
@@ -72,9 +72,9 @@ describe("Vercel AI Gateway Caching", () => {
 				},
 			]
 
-			addCacheBreakpoints(systemPrompt, messages)
+			const result = addCacheBreakpoints(systemPrompt, messages)
 
-			const userMessage = messages[1]
+			const userMessage = result[1]
 			expect(Array.isArray(userMessage.content)).toBe(true)
 			if (Array.isArray(userMessage.content)) {
 				const textPart = userMessage.content.find((part) => part.type === "text")
@@ -99,9 +99,9 @@ describe("Vercel AI Gateway Caching", () => {
 				{ role: "user", content: "" },
 			]
 
-			addCacheBreakpoints(systemPrompt, messages)
+			const result = addCacheBreakpoints(systemPrompt, messages)
 
-			const userMessage = messages[1]
+			const userMessage = result[1]
 			expect(userMessage.content).toBe("")
 		})
 
@@ -115,9 +115,9 @@ describe("Vercel AI Gateway Caching", () => {
 				},
 			]
 
-			addCacheBreakpoints(systemPrompt, messages)
+			const result = addCacheBreakpoints(systemPrompt, messages)
 
-			const userMessage = messages[1]
+			const userMessage = result[1]
 			expect(Array.isArray(userMessage.content)).toBe(true)
 			if (Array.isArray(userMessage.content)) {
 				const textPart = userMessage.content.find((part) => part.type === "text")
@@ -140,15 +140,15 @@ describe("Vercel AI Gateway Caching", () => {
 				{ role: "user", content: "Second user" },
 			]
 
-			addCacheBreakpoints(systemPrompt, messages)
+			const result = addCacheBreakpoints(systemPrompt, messages)
 
-			expect(messages[2]).toEqual({
+			expect(result[2]).toEqual({
 				role: "assistant",
 				content: "Assistant response",
 			})
 
-			const firstUser = messages[1]
-			const secondUser = messages[3]
+			const firstUser = result[1]
+			const secondUser = result[3]
 
 			expect(Array.isArray(firstUser.content)).toBe(true)
 			expect(Array.isArray(secondUser.content)).toBe(true)
@@ -161,9 +161,9 @@ describe("Vercel AI Gateway Caching", () => {
 				{ role: "user", content: "Only message" },
 			]
 
-			addCacheBreakpoints(systemPrompt, messages)
+			const result = addCacheBreakpoints(systemPrompt, messages)
 
-			const userMessage = messages[1]
+			const userMessage = result[1]
 			expect(Array.isArray(userMessage.content)).toBe(true)
 			if (Array.isArray(userMessage.content)) {
 				const textPart = userMessage.content.find((part) => part.type === "text")
@@ -182,15 +182,15 @@ describe("Vercel AI Gateway Caching", () => {
 				{ role: "assistant", content: "Assistant only" },
 			]
 
-			addCacheBreakpoints(systemPrompt, messages)
+			const result = addCacheBreakpoints(systemPrompt, messages)
 
-			expect(messages[0]).toEqual({
+			expect(result[0]).toEqual({
 				role: "system",
 				content: systemPrompt,
 				cache_control: { type: "ephemeral" },
 			})
 
-			expect(messages[1]).toEqual({
+			expect(result[1]).toEqual({
 				role: "assistant",
 				content: "Assistant only",
 			})
@@ -210,9 +210,9 @@ describe("Vercel AI Gateway Caching", () => {
 				},
 			]
 
-			addCacheBreakpoints(systemPrompt, messages)
+			const result = addCacheBreakpoints(systemPrompt, messages)
 
-			const userMessage = messages[1]
+			const userMessage = result[1]
 			if (Array.isArray(userMessage.content)) {
 				const textParts = userMessage.content.filter((part) => part.type === "text")
 				expect(textParts).toHaveLength(2)

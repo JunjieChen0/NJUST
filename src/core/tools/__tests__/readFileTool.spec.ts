@@ -17,6 +17,7 @@ import path from "path"
 import { isBinaryFile } from "isbinaryfile"
 
 import { readFileTool, ReadFileTool } from "../ReadFileTool"
+import { toolResultCache } from "../helpers/ToolResultCache"
 import { formatResponse } from "../../prompts/responses"
 import {
 	validateImageForProcessing,
@@ -163,6 +164,9 @@ function createMockTask(options: MockTaskOptions = {}) {
 					maxImageFileSize,
 					maxTotalImageSize,
 				}),
+				context: {
+					extensionPath: "/mock/extension",
+				},
 			}),
 		},
 	}
@@ -181,6 +185,7 @@ function createMockCallbacks() {
 describe("ReadFileTool", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.spyOn(toolResultCache, "get").mockReturnValue(undefined)
 
 		// Default mock implementations
 		mockedFsStat.mockResolvedValue({ isDirectory: () => false } as any)
@@ -535,12 +540,10 @@ describe("ReadFileTool", () => {
 				callbacks,
 			)
 
-			expect(mockedReadWithIndentation).toHaveBeenCalledWith(
-				content,
-				expect.objectContaining({
-					anchorLine: 3,
-				}),
-			)
+			expect(mockedReadWithIndentation).toHaveBeenCalled()
+			const indentCall = mockedReadWithIndentation.mock.calls[0]
+			expect(typeof indentCall[0]).toBe("string")
+			expect(indentCall[1]).toMatchObject({ anchorLine: 3 })
 		})
 
 		it("should merge paginated slice reads in one tool invocation (single approval)", async () => {
