@@ -89,7 +89,7 @@ export async function getTheme() {
 		) as any
 
 		return converted
-	} catch (e) {
+	} catch {
 		// Theme loading can fail for non-standard themes; this is non-fatal.
 	}
 	return undefined
@@ -138,7 +138,7 @@ export function mergeJson(
 			}
 		}
 		return copyOfFirst
-	} catch (e) {
+	} catch {
 		logger.error("MergeJson", "Error merging JSON", e, copyOfFirst, second)
 		return {
 			...copyOfFirst,

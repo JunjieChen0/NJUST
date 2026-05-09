@@ -247,7 +247,7 @@ export class RooToolsMcpServer {
 					res.writeHead(405, { "Content-Type": "application/json" })
 					res.end(JSON.stringify({ error: "Method not allowed" }))
 				}
-			} catch (error: any) {
+			} catch (_error: unknown) {
 				if (!res.headersSent) {
 					res.writeHead(500, { "Content-Type": "application/json" })
 					res.end(
@@ -270,7 +270,7 @@ export class RooToolsMcpServer {
 	}
 
 	async stop(): Promise<void> {
-		for (const [sessionId, transport] of this.transports) {
+		for (const [_sessionId, transport] of this.transports) {
 			try {
 				await transport.close()
 			} catch {
@@ -313,7 +313,7 @@ export class RooToolsMcpServer {
 			req.on("end", () => {
 				try {
 					resolve(data ? JSON.parse(data) : undefined)
-				} catch (e) {
+				} catch {
 					reject(new Error("Invalid JSON body"))
 				}
 			})

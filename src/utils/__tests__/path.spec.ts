@@ -1,5 +1,7 @@
 // npx vitest utils/__tests__/path.spec.ts
 
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+
 import os from "os"
 import * as path from "path"
 

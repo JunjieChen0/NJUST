@@ -2,6 +2,8 @@
 // Full edit tool tests are in editTool.spec.ts.
 // This file only verifies the backward-compatible re-export.
 
+import { describe, it, expect } from "vitest"
+
 import { searchAndReplaceTool } from "../SearchAndReplaceTool"
 import { editTool } from "../EditTool"
 

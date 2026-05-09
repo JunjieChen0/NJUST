@@ -266,7 +266,7 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 		}
 	}
 
-	override async handlePartial(task: Task, block: ToolUse<"generate_image">): Promise<void> {
+	override async handlePartial(_task: Task, _block: ToolUse<"generate_image">): Promise<void> {
 		return
 	}
 }

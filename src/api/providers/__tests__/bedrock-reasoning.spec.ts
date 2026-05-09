@@ -1,5 +1,7 @@
 // npx vitest api/providers/__tests__/bedrock-reasoning.test.ts
 
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+
 import { AwsBedrockHandler } from "../bedrock"
 import { BedrockRuntimeClient, ConverseStreamCommand } from "@aws-sdk/client-bedrock-runtime"
 import { logger } from "../../../utils/logging"
@@ -84,7 +86,7 @@ describe("AwsBedrockHandler - Extended Thinking", () => {
 			const stream = handler.createMessage("System prompt", messages)
 
 			const chunks = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -133,7 +135,7 @@ describe("AwsBedrockHandler - Extended Thinking", () => {
 
 			const stream = handler.createMessage("System prompt", messages, metadata)
 			const chunks = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -168,7 +170,7 @@ describe("AwsBedrockHandler - Extended Thinking", () => {
 			const messages = [{ role: "user" as const, content: "Test" }]
 			const stream = handler.createMessage("System prompt", messages)
 
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				// consume stream
 			}
 
@@ -212,7 +214,7 @@ describe("AwsBedrockHandler - Extended Thinking", () => {
 			const stream = handler.createMessage("System prompt", messages)
 
 			const chunks = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -259,7 +261,7 @@ describe("AwsBedrockHandler - Extended Thinking", () => {
 			const stream = handler.createMessage("System prompt", messages)
 
 			const chunks = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -308,7 +310,7 @@ describe("AwsBedrockHandler - Extended Thinking", () => {
 			const stream = handler.createMessage("System prompt", messages)
 
 			const chunks = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 

@@ -1,5 +1,7 @@
 // npx vitest run src/api/transform/caching/__tests__/gemini.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import OpenAI from "openai"
 
 import { addCacheBreakpoints } from "../gemini"

@@ -79,7 +79,7 @@ export class PendingEditManager {
 	 * Clears all pending edit operations
 	 */
 	clearAll(): void {
-		for (const [operationId, operation] of this.pendingOperations) {
+		for (const [_operationId, operation] of this.pendingOperations) {
 			clearTimeout(operation.timeoutId)
 		}
 		this.pendingOperations.clear()

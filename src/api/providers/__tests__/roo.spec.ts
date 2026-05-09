@@ -1,5 +1,7 @@
 // npx vitest run api/providers/__tests__/roo.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 import { Anthropic } from "@anthropic-ai/sdk"
 import { rooDefaultModelId } from "@njust-ai-cj/types"
 

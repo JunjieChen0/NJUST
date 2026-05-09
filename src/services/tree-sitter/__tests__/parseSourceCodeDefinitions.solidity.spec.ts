@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeAll } from "vitest"
+
 import { testParseSourceCodeDefinitions } from "./helpers"
 import { solidityQuery } from "../queries"
 import { sampleSolidity } from "./fixtures/sample-solidity"

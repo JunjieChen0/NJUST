@@ -1,3 +1,5 @@
+import { describe, it } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import { tlaPlusQuery } from "../queries"
 import sampleTLAPlusContent from "./fixtures/sample-tlaplus"

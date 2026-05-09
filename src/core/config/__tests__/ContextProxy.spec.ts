@@ -1,5 +1,7 @@
 // npx vitest core/config/__tests__/ContextProxy.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import * as vscode from "vscode"
 
 import { GLOBAL_STATE_KEYS, SECRET_STATE_KEYS, GLOBAL_SECRET_KEYS } from "@njust-ai-cj/types"

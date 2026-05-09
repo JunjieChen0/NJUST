@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { GlobalState, ClineMessage } from "@njust-ai-cj/types"
 
 import { getApiMetrics } from "../../../shared/getApiMetrics"

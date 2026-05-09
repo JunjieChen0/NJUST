@@ -1,5 +1,7 @@
 // npx vitest run src/api/providers/__tests__/bedrock-invokedModelId.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 import { ApiHandlerOptions } from "../../../shared/api"
 
 import { AwsBedrockHandler, StreamEvent } from "../bedrock"

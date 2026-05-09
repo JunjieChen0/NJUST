@@ -1,8 +1,9 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { DEFAULT_WRITE_DELAY_MS } from "@njust-ai-cj/types"
 
 import { DiffViewProvider, DIFF_VIEW_URI_SCHEME, DIFF_VIEW_LABEL_CHANGES } from "../DiffViewProvider"
 import * as vscode from "vscode"
-import * as path from "path"
 import delay from "delay"
 
 // Mock delay
@@ -89,7 +90,7 @@ vi.mock("vscode", () => ({
 	TabInputTextDiff: class TabInputTextDiff {},
 	Uri: {
 		file: vi.fn((path) => ({ fsPath: path })),
-		parse: vi.fn((uri) => ({ with: vi.fn(() => ({})) })),
+		parse: vi.fn((_uri) => ({ with: vi.fn(() => ({})) })),
 	},
 }))
 
@@ -512,7 +513,7 @@ describe("DiffViewProvider", () => {
 			// Mock closeAllDiffViews
 			;(diffViewProvider as any).closeAllDiffViews = vi.fn().mockResolvedValue(undefined)
 
-			const result = await diffViewProvider.saveChanges(true, 5000)
+			diffViewProvider.saveChanges(true, 5000)
 
 			// Verify custom delay was used
 			expect(mockDelay).toHaveBeenCalledWith(5000)

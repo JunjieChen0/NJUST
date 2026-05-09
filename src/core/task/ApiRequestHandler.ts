@@ -11,11 +11,8 @@
  * is deferred to Phase 2 once the delegation surface is stable.
  */
 
-import type { Anthropic } from "@anthropic-ai/sdk"
-import type { Task } from "./Task"
-import type { ApiHandler } from "../../api"
 import type { ApiMessage } from "../task-persistence/apiMessages"
-import type { TokenUsage, ModelInfo } from "@njust-ai-cj/types"
+import type { TokenUsage } from "@njust-ai-cj/types"
 
 // ─── Request Metadata ────────────────────────────────────────────────────────
 

@@ -1,5 +1,7 @@
 // npx vitest run api/providers/fetchers/__tests__/openrouter.spec.ts
 
+import { describe, it, expect, vi } from "vitest"
+
 import * as path from "path"
 
 import { back as nockBack } from "nock"

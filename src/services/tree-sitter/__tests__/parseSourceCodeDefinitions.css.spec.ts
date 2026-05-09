@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest"
+
 import { testParseSourceCodeDefinitions, debugLog } from "./helpers"
 import { cssQuery } from "../queries"
 import sampleCSSContent from "./fixtures/sample-css"

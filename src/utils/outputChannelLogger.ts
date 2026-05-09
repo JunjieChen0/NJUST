@@ -33,7 +33,7 @@ export function createOutputChannelLogger(outputChannel: vscode.OutputChannel): 
 							2,
 						),
 					)
-				} catch (error) {
+				} catch {
 					outputChannel.appendLine(`[Non-serializable object: ${Object.prototype.toString.call(arg)}]`)
 				}
 			}

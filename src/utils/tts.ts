@@ -34,7 +34,7 @@ export const playTts = async (message: string, options: PlayTtsOptions = {}) => 
 	try {
 		queue.push({ message, options })
 		await processQueue()
-	} catch (error) {
+	} catch {
 		// TTS playback errors are non-critical — log but don't throw
 		logger.warn("Tts", `TTS playback interrupted: ${error instanceof Error ? error.message : String(error)}`)
 	}
@@ -79,7 +79,7 @@ const processQueue = async (): Promise<void> => {
 		})
 
 		await processQueue()
-	} catch (error: any) {
+	} catch (_error: unknown) {
 		sayInstance = undefined
 		await processQueue()
 	}

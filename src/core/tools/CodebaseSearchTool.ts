@@ -1,5 +1,4 @@
 import * as vscode from "vscode"
-import path from "path"
 
 import { Task } from "../task/Task"
 import { CodeIndexManager } from "../../services/code-index/manager"
@@ -145,8 +144,8 @@ Code Chunk: ${result.codeChunk}
 
 			toolResultCache.set(cacheKey, output)
 			pushToolResult(output)
-		} catch (error: any) {
-			await handleError("codebase_search", error)
+		} catch (error: unknown) {
+			await handleError("codebase_search", error instanceof Error ? error : new Error(String(error)))
 		}
 	}
 

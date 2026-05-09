@@ -51,7 +51,7 @@ export class ZAiHandler extends BaseOpenAiCompatibleProvider<string> {
 		metadata?: ApiHandlerCreateMessageMetadata,
 		requestOptions?: OpenAI.RequestOptions,
 	) {
-		const { id: modelId, info } = this.getModel()
+		const { id: _modelId, info } = this.getModel()
 
 		// Check if this is a model with thinking support (e.g. GLM-4.7, GLM-5)
 		const isThinkingModel = Array.isArray(info.supportsReasoningEffort)

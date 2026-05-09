@@ -1,5 +1,7 @@
 // npx vitest services/tree-sitter/__tests__/languageParser.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import * as path from "path"
 import { loadRequiredLanguageParsers } from "../languageParser"
 

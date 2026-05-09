@@ -1,4 +1,6 @@
 // Mock dependencies
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+
 vi.mock("vscode", () => ({
 	workspace: {
 		getConfiguration: vi.fn(),
@@ -81,7 +83,7 @@ describe("autoImportSettings", () => {
 	let mockContextProxy: any
 	let mockCustomModesManager: any
 	let mockOutputChannel: any
-	let mockProvider: any
+	let _mockProvider: any
 
 	beforeEach(() => {
 		// Reset all mocks

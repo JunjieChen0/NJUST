@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { parsePatch, ParseError } from "../parser"
 
 describe("apply_patch parser", () => {

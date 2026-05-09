@@ -84,7 +84,7 @@ export async function checkAutoApproval({
 				} else {
 					return { decision: "ask" }
 				}
-			} catch (error) {
+			} catch {
 				return { decision: "ask" }
 			}
 		} else {
@@ -107,7 +107,7 @@ export async function checkAutoApproval({
 			} else if (mcpServerUse.type === "access_mcp_resource") {
 				return state.alwaysAllowMcp === true ? { decision: "approve" } : { decision: "ask" }
 			}
-		} catch (error) {
+		} catch {
 			return { decision: "ask" }
 		}
 
@@ -148,7 +148,7 @@ export async function checkAutoApproval({
 
 		try {
 			tool = JSON.parse(text || "{}")
-		} catch (error) {
+		} catch {
 			console.error("Failed to parse tool:", error)
 		}
 

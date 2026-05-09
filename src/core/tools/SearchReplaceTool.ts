@@ -116,7 +116,7 @@ export class SearchReplaceTool extends BaseTool<"search_replace"> {
 				fileContent = await fs.readFile(absolutePath, "utf8")
 				// Normalize line endings to LF for consistent matching
 				fileContent = fileContent.replace(/\r\n/g, "\n")
-			} catch (error) {
+			} catch {
 				task.consecutiveMistakeCount++
 				task.recordToolError("search_replace")
 				const errorMessage = `Failed to read file '${relPath}'. Please verify file permissions and try again.`
@@ -251,7 +251,7 @@ export class SearchReplaceTool extends BaseTool<"search_replace"> {
 
 			// Process any queued messages after file edit completes
 			task.processQueuedMessages()
-		} catch (error) {
+		} catch {
 			await handleError("search and replace", error as Error)
 			await task.diffViewProvider.reset()
 			this.resetPartialState()

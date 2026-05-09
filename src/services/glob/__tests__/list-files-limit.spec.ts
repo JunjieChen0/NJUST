@@ -1,4 +1,6 @@
-import * as path from "path"
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
+import * as _path from "path"
 import * as fs from "fs"
 import { listFiles } from "../list-files"
 
@@ -94,7 +96,7 @@ describe("listFiles limit handling for large projects", () => {
 		// The key test: this should complete without throwing a stack overflow error
 		let error: Error | null = null
 		let results: string[] = []
-		let limitReached = false
+		let _limitReached = false
 
 		try {
 			const startTime = Date.now()
@@ -102,7 +104,7 @@ describe("listFiles limit handling for large projects", () => {
 			const endTime = Date.now()
 
 			results = res
-			limitReached = didHitLimit
+			_limitReached = didHitLimit
 
 			// Should complete in reasonable time
 			expect(endTime - startTime).toBeLessThan(10000) // 10 seconds max
@@ -140,7 +142,7 @@ describe("listFiles limit handling for large projects", () => {
 
 		// Mock directory structure
 		let directoriesScanned = 0
-		mockReaddir.mockImplementation(async (dirPath: string) => {
+		mockReaddir.mockImplementation(async (_dirPath: string) => {
 			directoriesScanned++
 
 			// Root directory has many subdirectories

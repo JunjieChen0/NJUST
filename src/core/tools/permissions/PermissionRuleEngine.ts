@@ -1,9 +1,9 @@
 import * as fs from "fs/promises"
 import { PermissionRule, PermissionAction, PermissionSource, SOURCE_PRIORITY } from "./PermissionRule"
 import { recordSecurityMetric } from "../../security/metrics"
-import { BashCommandAnalyzer, StaticPatternClassifier, type RiskLevel } from "./BashCommandAnalyzer"
+import { StaticPatternClassifier } from "./BashCommandAnalyzer"
 import { logger } from "../../../shared/logger"
-import type { ClassifierStrategy, ClassifierContext, ClassifyResult, ClassifierChainConfig } from "./ClassifierStrategy"
+import type { ClassifierStrategy, ClassifierContext, ClassifierChainConfig } from "./ClassifierStrategy"
 
 function summarizeParamsForAudit(toolName: string, params: Record<string, unknown>): string {
 	try {

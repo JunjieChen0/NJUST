@@ -96,7 +96,7 @@ export class API extends EventEmitter<NJUST_AI_CJEvents> implements NJUST_AI_CJA
 						this.log(`[API] ResumeTask -> ${command.data}`)
 						try {
 							await this.resumeTask(command.data)
-						} catch (error) {
+						} catch {
 							const errorMessage = error instanceof Error ? error.message : String(error)
 							this.log(`[API] ResumeTask failed for taskId ${command.data}: ${errorMessage}`)
 							// Don't rethrow - we want to prevent IPC server crashes.
@@ -120,7 +120,7 @@ export class API extends EventEmitter<NJUST_AI_CJEvents> implements NJUST_AI_CJA
 									argumentHint: cmd.argumentHint,
 								})),
 							])
-						} catch (error) {
+						} catch {
 							sendResponse(NJUST_AI_CJEventName.CommandsResponse, [[]])
 						}
 
@@ -129,7 +129,7 @@ export class API extends EventEmitter<NJUST_AI_CJEvents> implements NJUST_AI_CJA
 						try {
 							const modes = await this.sidebarProvider.getModes()
 							sendResponse(NJUST_AI_CJEventName.ModesResponse, [modes])
-						} catch (error) {
+						} catch {
 							sendResponse(NJUST_AI_CJEventName.ModesResponse, [[]])
 						}
 
@@ -143,7 +143,7 @@ export class API extends EventEmitter<NJUST_AI_CJEvents> implements NJUST_AI_CJA
 							})
 
 							sendResponse(NJUST_AI_CJEventName.ModelsResponse, [models])
-						} catch (error) {
+						} catch {
 							sendResponse(NJUST_AI_CJEventName.ModelsResponse, [{}])
 						}
 
@@ -152,7 +152,7 @@ export class API extends EventEmitter<NJUST_AI_CJEvents> implements NJUST_AI_CJA
 						this.log(`[API] DeleteQueuedMessage -> ${command.data}`)
 						try {
 							this.deleteQueuedMessage(command.data)
-						} catch (error) {
+						} catch {
 							const errorMessage = error instanceof Error ? error.message : String(error)
 							this.log(`[API] DeleteQueuedMessage failed for messageId ${command.data}: ${errorMessage}`)
 						}
@@ -446,7 +446,7 @@ export class API extends EventEmitter<NJUST_AI_CJEvents> implements NJUST_AI_CJA
 							2,
 						),
 					)
-				} catch (error) {
+				} catch {
 					this.outputChannel.appendLine(`[Non-serializable object: ${Object.prototype.toString.call(arg)}]`)
 				}
 			}

@@ -1,5 +1,7 @@
 // cd src && npx vitest run core/task-persistence/__tests__/apiMessages.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 import * as os from "os"
 import * as path from "path"
 import * as fs from "fs/promises"

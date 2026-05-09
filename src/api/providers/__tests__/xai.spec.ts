@@ -1,6 +1,8 @@
 // npx vitest api/providers/__tests__/xai.spec.ts
 
 // Mock TelemetryService - must come before other imports
+import { describe, it, test, expect, vi, beforeEach } from "vitest"
+
 const mockCaptureException = vitest.hoisted(() => vitest.fn())
 vitest.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {

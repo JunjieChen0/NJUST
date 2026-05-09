@@ -116,9 +116,10 @@ export async function directoryExists(dirPath: string): Promise<boolean> {
 	try {
 		const stat = await fs.stat(dirPath)
 		return stat.isDirectory()
-	} catch (error: any) {
+	} catch (error: unknown) {
+		const err = error as Record<string, unknown>
 		// Only catch expected "not found" errors
-		if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+		if (err.code === "ENOENT" || err.code === "ENOTDIR") {
 			return false
 		}
 		// Re-throw unexpected errors (permission, I/O, etc.)
@@ -133,9 +134,10 @@ export async function fileExists(filePath: string): Promise<boolean> {
 	try {
 		const stat = await fs.stat(filePath)
 		return stat.isFile()
-	} catch (error: any) {
+	} catch (error: unknown) {
+		const err = error as Record<string, unknown>
 		// Only catch expected "not found" errors
-		if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+		if (err.code === "ENOENT" || err.code === "ENOTDIR") {
 			return false
 		}
 		// Re-throw unexpected errors (permission, I/O, etc.)
@@ -149,9 +151,10 @@ export async function fileExists(filePath: string): Promise<boolean> {
 export async function readFileIfExists(filePath: string): Promise<string | null> {
 	try {
 		return await fs.readFile(filePath, "utf-8")
-	} catch (error: any) {
+	} catch (error: unknown) {
+		const err = error as Record<string, unknown>
 		// Only catch expected "not found" errors
-		if (error.code === "ENOENT" || error.code === "ENOTDIR" || error.code === "EISDIR") {
+		if (err.code === "ENOENT" || err.code === "ENOTDIR" || err.code === "EISDIR") {
 			return null
 		}
 		// Re-throw unexpected errors (permission, I/O, etc.)
@@ -235,7 +238,7 @@ export async function discoverSubfolderRooDirectories(cwd: string): Promise<stri
 
 		// Return sorted alphabetically
 		return Array.from(rooDirs).sort()
-	} catch (error) {
+	} catch {
 		// If discovery fails (e.g., ripgrep not available), return empty array
 		return []
 	}

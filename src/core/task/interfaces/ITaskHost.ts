@@ -1,6 +1,5 @@
-import type * as vscode from "vscode"
 
-import type { HistoryItem, TaskLike, TodoItem } from "@njust-ai-cj/types"
+import type {  TaskLike, TodoItem } from "@njust-ai-cj/types"
 import { NJUST_AI_CJEventName } from "@njust-ai-cj/types"
 
 import type { IMcpHubClient } from "../../../services/mcp/interfaces/IMcpHubClient"

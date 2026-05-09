@@ -7,7 +7,7 @@ import {
 	parseCangjieWithFallback,
 	computeCangjieSignature,
 	extractCangjieDeclarationMeta,
-	type CangjieDef,
+	type _CangjieDef,
 	type CangjieDefKind,
 	type CangjieSymbolVisibility,
 } from "../tree-sitter/cangjieParser"
@@ -64,7 +64,7 @@ function isCodeTokenPosition(line: string, index: number): boolean {
 }
 
 /** Avoid `"Map"` matching `"HashMap"` / false positives in comments or string literals. */
-function symbolNameUsedInSource(symName: string, content: string): boolean {
+function _symbolNameUsedInSource(symName: string, content: string): boolean {
 	if (!symName) return false
 	const lines = content.split("\n")
 	if (!/^[A-Za-z_]\w*$/.test(symName)) {
@@ -494,7 +494,7 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		}
 	}
 
-	private async fullIndex(root: string): Promise<void> {
+	private async fullIndex(_root: string): Promise<void> {
 		if (this.indexing) return
 		this.indexing = true
 		const t0 = Date.now()

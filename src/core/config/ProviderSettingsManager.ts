@@ -253,7 +253,7 @@ export class ProviderSettingsManager {
 
 	private async migrateConsecutiveMistakeLimit(providerProfiles: ProviderProfiles) {
 		try {
-			for (const [name, apiConfig] of Object.entries(providerProfiles.apiConfigs)) {
+			for (const [_name, apiConfig] of Object.entries(providerProfiles.apiConfigs)) {
 				if (apiConfig.consecutiveMistakeLimit == null) {
 					apiConfig.consecutiveMistakeLimit = DEFAULT_CONSECUTIVE_MISTAKE_LIMIT
 				}
@@ -659,7 +659,7 @@ export class ProviderSettingsManager {
 			)
 			// Return a new config object without the invalid apiProvider
 			// This effectively resets the profile so the user can select a valid provider
-			const { apiProvider, ...restConfig } = config
+			const { _apiProvider, ...restConfig } = config
 			return restConfig
 		}
 

@@ -1,4 +1,6 @@
 // Use vi.hoisted to define mock functions that can be referenced in hoisted vi.mock() calls
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 const { mockStreamText, mockGenerateText } = vi.hoisted(() => ({
 	mockStreamText: vi.fn(),
 	mockGenerateText: vi.fn(),

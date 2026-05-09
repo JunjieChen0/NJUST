@@ -1,5 +1,7 @@
 // npx vitest run core/webview/__tests__/ClineProvider.lockApiConfig.spec.ts
 
+
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import * as vscode from "vscode"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 import { ClineProvider } from "../ClineProvider"
@@ -213,7 +215,7 @@ describe("ClineProvider - Lock API Config Across Modes", () => {
 		vi.clearAllMocks()
 
 		if (!TelemetryService.hasInstance()) {
-			TelemetryService.createInstance([])
+			TelemetryService.createInstance()
 		}
 
 		const globalState: Record<string, unknown> = {

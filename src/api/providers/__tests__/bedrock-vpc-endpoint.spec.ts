@@ -1,4 +1,6 @@
 // Mock AWS SDK credential providers
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 vi.mock("@aws-sdk/credential-providers", () => {
 	const mockFromIni = vi.fn().mockReturnValue({
 		accessKeyId: "profile-access-key",
@@ -178,7 +180,7 @@ describe("Amazon Bedrock VPC Endpoint Functionality", () => {
 			// Make a request to ensure the endpoint configuration persists
 			try {
 				await handler.completePrompt("Test prompt")
-			} catch (error) {
+			} catch {
 				// Ignore errors, we're just testing the client configuration persistence
 			}
 

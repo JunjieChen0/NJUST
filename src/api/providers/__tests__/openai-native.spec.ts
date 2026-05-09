@@ -1,5 +1,7 @@
 // npx vitest run api/providers/__tests__/openai-native.spec.ts
 
+import { describe, it, expect, beforeEach, afterEach } from "vitest"
+
 const mockCaptureException = vitest.fn()
 
 vitest.mock("@njust-ai-cj/telemetry", () => ({
@@ -134,7 +136,7 @@ describe("OpenAiNativeHandler", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -374,7 +376,7 @@ describe("OpenAiNativeHandler", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -441,7 +443,7 @@ describe("OpenAiNativeHandler", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -493,7 +495,7 @@ describe("OpenAiNativeHandler", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -544,7 +546,7 @@ describe("OpenAiNativeHandler", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -585,7 +587,7 @@ describe("OpenAiNativeHandler", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -628,7 +630,7 @@ describe("OpenAiNativeHandler", () => {
 			// Create a message to verify verbosity is passed
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -670,7 +672,7 @@ describe("OpenAiNativeHandler", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -790,7 +792,7 @@ describe("OpenAiNativeHandler", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -842,7 +844,7 @@ describe("OpenAiNativeHandler", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -918,7 +920,7 @@ describe("OpenAiNativeHandler", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -976,7 +978,7 @@ describe("OpenAiNativeHandler", () => {
 			const chunks: any[] = []
 
 			// Should not throw, just warn
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -1022,7 +1024,7 @@ describe("OpenAiNativeHandler", () => {
 			const errors: any[] = []
 
 			try {
-				for await (const chunk of stream) {
+				for await (const _chunk of stream) {
 					chunks.push(chunk)
 				}
 			} catch (error) {
@@ -1061,7 +1063,7 @@ describe("OpenAiNativeHandler", () => {
 			const stream = gpt5Handler.createMessage(systemPrompt, messages, {
 				taskId: "task1",
 			})
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				// consume
 			}
 
@@ -1106,7 +1108,7 @@ describe("OpenAiNativeHandler", () => {
 				const stream = handler.createMessage(systemPrompt, messages)
 
 				await expect(async () => {
-					for await (const chunk of stream) {
+					for await (const _chunk of stream) {
 						// Should throw before yielding anything
 					}
 				}).rejects.toThrow(expectedMessage)
@@ -1461,7 +1463,7 @@ describe("GPT-5 streaming event coverage (additional)", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -1572,7 +1574,7 @@ describe("GPT-5 streaming event coverage (additional)", () => {
 
 			// Should throw an error (using the same error format as GPT-5)
 			await expect(async () => {
-				for await (const chunk of stream) {
+				for await (const _chunk of stream) {
 					// consume stream
 				}
 			}).rejects.toThrow("Rate limit exceeded")
@@ -1614,7 +1616,7 @@ describe("GPT-5 streaming event coverage (additional)", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			const chunks: any[] = []
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				chunks.push(chunk)
 			}
 
@@ -1676,7 +1678,7 @@ describe("GPT-5 streaming event coverage (additional)", () => {
 			// Should throw an error when encountering error event
 			await expect(async () => {
 				const chunks = []
-				for await (const chunk of stream) {
+				for await (const _chunk of stream) {
 					chunks.push(chunk)
 				}
 			}).rejects.toThrow("Responses API error: Model overloaded")

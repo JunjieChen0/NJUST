@@ -1,5 +1,6 @@
 // npx vitest core/webview/__tests__/webviewMessageHandler.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { Mock } from "vitest"
 
 // Mock dependencies - must come before imports
@@ -37,7 +38,7 @@ vi.mock("../diagnosticsHandler", () => ({
 	generateErrorDiagnostics: vi.fn().mockResolvedValue({ success: true, filePath: "/tmp/diagnostics.json" }),
 }))
 
-import type { ModelRecord } from "@njust-ai-cj/types"
+import type { ModelRecord, ExtensionMessage, Command } from "@njust-ai-cj/types"
 
 import { webviewMessageHandler } from "../webviewMessageHandler"
 import type { ClineProvider } from "../ClineProvider"
@@ -103,7 +104,7 @@ vi.mock("vscode", () => {
 })
 
 vi.mock("../../../i18n", () => ({
-	t: vi.fn((key: string, args?: Record<string, any>) => {
+	t: vi.fn((key: string, args?: Record<string, unknown>) => {
 		// For the delete confirmation with rules, we need to return the interpolated string
 		if (key === "common:confirmation.delete_custom_mode_with_rules" && args) {
 			return `Are you sure you want to delete this ${args.scope} mode?\n\nThis will also delete the associated rules folder at:\n${args.rulesFolderPath}`
@@ -784,7 +785,7 @@ describe("webviewMessageHandler - message dialog preferences", () => {
 })
 
 describe("webviewMessageHandler - mcpEnabled", () => {
-	let mockMcpHub: any
+	let mockMcpHub: { handleMcpEnabledChange: ReturnType<typeof vi.fn> }
 
 	beforeEach(() => {
 		vi.clearAllMocks()
@@ -881,7 +882,7 @@ describe("webviewMessageHandler - requestCommands", () => {
 
 		const commandMessageCall = vi
 			.mocked(mockClineProvider.postMessageToWebview)
-			.mock.calls.find(([postedMessage]) => postedMessage.type === "commands")
+			.mock.calls.find(([postedMessage]: [ExtensionMessage]) => postedMessage.type === "commands")
 		expect(commandMessageCall).toBeDefined()
 
 		const commandMessage = commandMessageCall?.[0]
@@ -902,7 +903,7 @@ describe("webviewMessageHandler - requestCommands", () => {
 			]),
 		)
 
-		expect(commandMessage?.commands?.filter((command) => command.name === "skill-slug-entry")).toHaveLength(1)
+		expect(commandMessage?.commands?.filter((command: Command) => command.name === "skill-slug-entry")).toHaveLength(1)
 	})
 
 	it("adds skill-backed command entries without overriding existing command names", async () => {
@@ -969,11 +970,11 @@ describe("webviewMessageHandler - requestCommands", () => {
 
 		const commandMessageCall = vi
 			.mocked(mockClineProvider.postMessageToWebview)
-			.mock.calls.find(([postedMessage]) => postedMessage.type === "commands")
+			.mock.calls.find(([postedMessage]: [ExtensionMessage]) => postedMessage.type === "commands")
 		expect(commandMessageCall).toBeDefined()
 
 		const commandMessage = commandMessageCall?.[0]
-		expect(commandMessage?.commands?.filter((command) => command.name === "deploy")).toHaveLength(1)
+		expect(commandMessage?.commands?.filter((command: Command) => command.name === "deploy")).toHaveLength(1)
 	})
 
 	it("preserves existing behavior when skills manager is unavailable", async () => {

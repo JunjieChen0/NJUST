@@ -5,7 +5,6 @@ import { CodeIndexStateManager, IndexingState } from "./state-manager"
 import { IFileWatcher, IVectorStore, BatchProcessingSummary } from "./interfaces"
 import { DirectoryScanner } from "./processors"
 import { CacheManager } from "./cache-manager"
-import { TelemetryService } from "@njust-ai-cj/telemetry"
 import { t } from "../../i18n"
 import { logger } from "../../shared/logger"
 
@@ -41,7 +40,7 @@ export class CodeIndexOrchestrator {
 			await this.fileWatcher.initialize()
 
 			this._fileWatcherSubscriptions = [
-				this.fileWatcher.onDidStartBatchProcessing((filePaths: string[]) => {}),
+				this.fileWatcher.onDidStartBatchProcessing((_filePaths: string[]) => {}),
 				this.fileWatcher.onBatchProgressUpdate(({ processedInBatch, totalInBatch, currentFile }) => {
 					if (totalInBatch > 0 && this.stateManager.state !== "Indexing") {
 						this.stateManager.setSystemState("Indexing", "Processing file changes...")
@@ -68,10 +67,10 @@ export class CodeIndexOrchestrator {
 					if (summary.batchError) {
 						logger.error("CodeIndexOrchestrator", "Batch processing failed:", summary.batchError)
 					} else {
-						const successCount = summary.processedFiles.filter(
+						const _successCount = summary.processedFiles.filter(
 							(f: { status: string }) => f.status === "success",
 						).length
-						const errorCount = summary.processedFiles.filter(
+						const _errorCount = summary.processedFiles.filter(
 							(f: { status: string }) => f.status === "error" || f.status === "local_error",
 						).length
 					}
@@ -239,7 +238,7 @@ export class CodeIndexOrchestrator {
 					throw new Error("Scan failed, is scanner initialized?")
 				}
 
-				const { stats } = result
+				const { _stats } = result
 
 				// Check if any blocks were actually indexed successfully
 				// If no blocks were indexed but blocks were found, it means all batches failed
@@ -285,7 +284,8 @@ export class CodeIndexOrchestrator {
 
 				this.stateManager.setSystemState("Indexed", t("embeddings:orchestrator.fileWatcherStarted"))
 			}
-		} catch (error: any) {
+		} catch (error: unknown) {
+			const errorMessage = error instanceof Error ? error.message : String(error)
 			// Handle abort gracefully — not an error, just a user-initiated stop
 			if (indexingStarted) {
 				try {
@@ -309,7 +309,7 @@ export class CodeIndexOrchestrator {
 			this.stateManager.setSystemState(
 				"Error",
 				t("embeddings:orchestrator.failedDuringInitialScan", {
-					errorMessage: error.message || t("embeddings:orchestrator.unknownError"),
+					errorMessage: errorMessage || t("embeddings:orchestrator.unknownError"),
 				}),
 			)
 			this.stopWatcher()
@@ -361,9 +361,10 @@ export class CodeIndexOrchestrator {
 				} else {
 					logger.warn("CodeIndexOrchestrator", "Service not configured, skipping vector collection clear.")
 				}
-			} catch (error: any) {
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error)
 				logger.error("CodeIndexOrchestrator", "Failed to clear vector collection:", error)
-				this.stateManager.setSystemState("Error", `Failed to clear vector collection: ${error.message}`)
+				this.stateManager.setSystemState("Error", `Failed to clear vector collection: ${message}`)
 			}
 
 			await this.cacheManager.clearCacheFile()

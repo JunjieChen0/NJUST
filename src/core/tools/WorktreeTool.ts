@@ -1,7 +1,5 @@
 import { BaseTool, type ToolCallbacks, type ValidationResult } from "./BaseTool"
 import { Task } from "../task/Task"
-import type { ToolUse } from "../../shared/tools"
-import { formatResponse } from "../prompts/responses"
 
 interface WorktreeParams {
 	action: "enter" | "exit"

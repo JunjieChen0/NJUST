@@ -261,6 +261,10 @@ export type ExtensionState = Pick<
 	| "includeCurrentCost"
 	| "maxGitStatusFiles"
 	| "requestDelaySeconds"
+	| "unattendedRetryEnabled"
+	| "unattendedMaxRetryAttempts"
+	| "unattendedMaxBackoffSeconds"
+	| "enablePersistentRetry"
 	| "disabledTools"
 	| "enableStreamingToolExecution"
 > & {

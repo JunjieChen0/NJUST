@@ -11,7 +11,7 @@
  * inspired by Claude Code's Fork isolation mode.
  */
 
-import type { SubTaskOptions, IsolationLevel, ForkedContextConfig, CacheSafeParams } from "./SubTaskOptions"
+import type { SubTaskOptions, ForkedContextConfig, CacheSafeParams } from "./SubTaskOptions"
 import { DEFAULT_FORKED_CONTEXT_CONFIG } from "./SubTaskOptions"
 
 export interface ForkedContext {

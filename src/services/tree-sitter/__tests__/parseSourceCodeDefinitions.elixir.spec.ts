@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest"
+
 import { elixirQuery } from "../queries"
 import { testParseSourceCodeDefinitions, debugLog } from "./helpers"
 import sampleElixirContent from "./fixtures/sample-elixir"

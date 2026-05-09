@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
-import { TelemetryEventName, type TelemetrySetting } from "@njust-ai-cj/types"
+import { type TelemetrySetting } from "@njust-ai-cj/types"
 
 describe("Telemetry Settings Tracking", () => {
 	let mockTelemetryService: {
@@ -22,7 +22,7 @@ describe("Telemetry Settings Tracking", () => {
 
 		// Mock the TelemetryService
 		vi.spyOn(TelemetryService, "hasInstance").mockReturnValue(true)
-		vi.spyOn(TelemetryService, "instance", "get").mockReturnValue(mockTelemetryService as any)
+		vi.spyOn(TelemetryService, "instance", "get").mockReturnValue(mockTelemetryService as unknown as TelemetryService)
 	})
 
 	describe("when telemetry is turned OFF", () => {
@@ -45,7 +45,7 @@ describe("Telemetry Settings Tracking", () => {
 			// Verify the event was captured before updateTelemetryState
 			expect(mockTelemetryService.captureTelemetrySettingsChanged).toHaveBeenCalledWith("enabled", "disabled")
 			expect(mockTelemetryService.captureTelemetrySettingsChanged).toHaveBeenCalledBefore(
-				mockTelemetryService.updateTelemetryState as any,
+				mockTelemetryService.updateTelemetryState,
 			)
 			expect(mockTelemetryService.updateTelemetryState).toHaveBeenCalledWith(false)
 		})
@@ -87,7 +87,7 @@ describe("Telemetry Settings Tracking", () => {
 			expect(mockTelemetryService.updateTelemetryState).toHaveBeenCalledWith(true)
 			expect(mockTelemetryService.captureTelemetrySettingsChanged).toHaveBeenCalledWith("disabled", "enabled")
 			expect(mockTelemetryService.updateTelemetryState).toHaveBeenCalledBefore(
-				mockTelemetryService.captureTelemetrySettingsChanged as any,
+				mockTelemetryService.captureTelemetrySettingsChanged,
 			)
 		})
 
@@ -140,9 +140,9 @@ describe("Telemetry Settings Tracking", () => {
 	describe("TelemetryService.captureTelemetrySettingsChanged", () => {
 		it("should call emit with correct parameters", () => {
 			// Create a real instance to test the method
-			const service = new (TelemetryService as any)([])
+			const service = new TelemetryService()
 			const mockEmit = vi.fn()
-			service.emit = mockEmit
+			;(service as unknown as { emit: typeof mockEmit }).emit = mockEmit
 
 			service.captureTelemetrySettingsChanged("enabled", "disabled")
 

@@ -193,6 +193,7 @@ export const globalSettingsSchema = z.object({
 	unattendedRetryEnabled: z.boolean().optional(),
 	unattendedMaxRetryAttempts: z.number().int().min(0).optional(),
 	unattendedMaxBackoffSeconds: z.number().int().min(1).optional(),
+	enablePersistentRetry: z.boolean().optional(),
 	experiments: experimentsSchema.optional(),
 
 	codebaseIndexModels: codebaseIndexModelsSchema.optional(),

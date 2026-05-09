@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+
 import * as path from "path"
 import * as fs from "fs"
 import * as os from "os"
@@ -88,7 +90,7 @@ describe("list-files gitignore integration", () => {
 		mockSpawn.mockReturnValue(mockProcess as any)
 
 		// Call listFiles in recursive mode
-		const [files, didHitLimit] = await listFiles(tempDir, true, 100)
+		const [files, _didHitLimit] = await listFiles(tempDir, true, 100)
 
 		// Filter out only directories from the results
 		const directoriesInResult = files.filter((f) => f.endsWith("/"))
@@ -140,7 +142,7 @@ describe("list-files gitignore integration", () => {
 		mockSpawn.mockReturnValue(mockProcess as any)
 
 		// Call listFiles in recursive mode
-		const [files, didHitLimit] = await listFiles(tempDir, true, 100)
+		const [files, _didHitLimit] = await listFiles(tempDir, true, 100)
 
 		// Filter out only directories from the results
 		const directoriesInResult = files.filter((f) => f.endsWith("/"))
@@ -189,10 +191,10 @@ describe("list-files gitignore integration", () => {
 		mockSpawn.mockReturnValue(mockProcess as any)
 
 		// Call listFiles in NON-recursive mode
-		const [files, didHitLimit] = await listFiles(tempDir, false, 100)
+		const [files, _didHitLimit] = await listFiles(tempDir, false, 100)
 
 		// Verify ripgrep was called without --no-ignore-vcs (should respect .gitignore)
-		const [rgPath, args] = mockSpawn.mock.calls[0]
+		const [_rgPath, args] = mockSpawn.mock.calls[0]
 		expect(args).not.toContain("--no-ignore-vcs")
 
 		// Filter out only directories from the results

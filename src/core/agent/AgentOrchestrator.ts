@@ -5,7 +5,7 @@ import EventEmitter from "events"
 import type { ClineProvider } from "../webview/ClineProvider"
 import type { Task } from "../task/Task"
 import type { SharedContext, AgentInfo } from "./types"
-import { generateParentContextSummary, generateTaskResultSummary } from "../task/SubTaskContextBuilder"
+import { generateParentContextSummary } from "../task/SubTaskContextBuilder"
 import { DEFAULT_FORKED_CONTEXT_CONFIG } from "../task/SubTaskOptions"
 import type { ForkedContextConfig } from "../task/SubTaskOptions"
 
@@ -150,7 +150,7 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 			specNodes.set(spec.mode, spec)
 		}
 
-		const WHITE = 0, GRAY = 1, BLACK = 2
+		const WHITE = 0, _GRAY = 1, _BLACK = 2
 		const color = new Map<string, number>()
 		const parent = new Map<string, string>()
 
@@ -259,7 +259,7 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 
 			this.emit("agentCompleted", agent, result)
 
-			const taskResult: ParallelTaskResult = {
+			taskResult = {
 				agentId,
 				taskId: task.taskId,
 				mode: spec.mode,

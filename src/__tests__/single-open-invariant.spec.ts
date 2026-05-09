@@ -166,7 +166,7 @@ describe("Single-open-task invariant", () => {
 			createTask,
 			getValues: vi.fn(() => ({})),
 			providerSettingsManager: { saveConfig: vi.fn() },
-			on: vi.fn((ev: any, cb: any) => {
+			on: vi.fn((ev: any, _cb: any) => {
 				if (ev === "taskCreated") {
 					// no-op for this test
 				}

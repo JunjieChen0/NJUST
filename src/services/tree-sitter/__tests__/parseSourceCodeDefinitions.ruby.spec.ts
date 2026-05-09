@@ -1,5 +1,7 @@
 // npx vitest services/tree-sitter/__tests__/parseSourceCodeDefinitions.ruby.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 vi.mock("fs/promises")
 
 vi.mock("../languageParser", () => ({

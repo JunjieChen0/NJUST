@@ -1,5 +1,7 @@
 // npx vitest run src/shared/__tests__/combineApiRequests.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import type { ClineMessage, ClineSay } from "@njust-ai-cj/types"
 
 import { combineApiRequests } from "../combineApiRequests"

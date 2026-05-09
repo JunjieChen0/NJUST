@@ -1,4 +1,6 @@
 // Mock TelemetryService before other imports
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 const mockCaptureException = vi.fn()
 
 vi.mock("@njust-ai-cj/telemetry", () => ({
@@ -36,7 +38,7 @@ vi.mock("@aws-sdk/client-bedrock-runtime", () => {
 })
 
 import { AwsBedrockHandler } from "../bedrock"
-import { ConverseStreamCommand, BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime"
+import { ConverseStreamCommand, BedrockRuntimeClient } from "@aws-sdk/client-bedrock-runtime"
 import {
 	BEDROCK_1M_CONTEXT_MODEL_IDS,
 	BEDROCK_SERVICE_TIER_MODEL_IDS,
@@ -48,7 +50,6 @@ import type { Anthropic } from "@anthropic-ai/sdk"
 
 // Get access to the mocked functions
 const mockConverseStreamCommand = vi.mocked(ConverseStreamCommand)
-const mockBedrockRuntimeClient = vi.mocked(BedrockRuntimeClient)
 
 describe("AwsBedrockHandler", () => {
 	let handler: AwsBedrockHandler
@@ -1143,12 +1144,12 @@ describe("AwsBedrockHandler", () => {
 	})
 
 	describe("error telemetry", () => {
-		let mockSend: ReturnType<typeof vi.fn>
+		let _mockSend: ReturnType<typeof vi.fn>
 
 		beforeEach(() => {
 			mockCaptureException.mockClear()
 			// Get access to the mock send function from the mocked client
-			mockSend = vi.mocked(BedrockRuntimeClient).mock.results[0]?.value?.send
+			_mockSend = vi.mocked(BedrockRuntimeClient).mock.results[0]?.value?.send
 		})
 
 		it("should capture telemetry on createMessage error", async () => {

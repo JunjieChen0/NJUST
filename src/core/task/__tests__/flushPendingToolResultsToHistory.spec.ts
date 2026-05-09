@@ -1,5 +1,7 @@
 // npx vitest run core/task/__tests__/flushPendingToolResultsToHistory.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import * as os from "os"
 import * as path from "path"
 import * as vscode from "vscode"
@@ -169,7 +171,7 @@ describe("flushPendingToolResultsToHistory", () => {
 
 		mockExtensionContext = {
 			globalState: {
-				get: vi.fn().mockImplementation((key: keyof GlobalState) => undefined),
+				get: vi.fn().mockImplementation((_key: keyof GlobalState) => undefined),
 				update: vi.fn().mockImplementation((_key, _value) => Promise.resolve()),
 				keys: vi.fn().mockReturnValue([]),
 			},

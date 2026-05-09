@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions, debugLog } from "./helpers"
 import systemrdlQuery from "../queries/systemrdl"
 import sampleSystemRDLContent from "./fixtures/sample-systemrdl"

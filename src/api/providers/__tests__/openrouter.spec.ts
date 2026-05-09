@@ -1,5 +1,7 @@
 // pnpm --filter njust-ai-cj test api/providers/__tests__/openrouter.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 vitest.mock("vscode", () => ({}))
 
 import { Anthropic } from "@anthropic-ai/sdk"

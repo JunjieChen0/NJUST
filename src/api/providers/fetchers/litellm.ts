@@ -66,8 +66,9 @@ export async function getLiteLLMModels(apiKey: string, baseUrl: string): Promise
 		}
 
 		return models
-	} catch (error: any) {
-		logger.error("LiteLLM", "Error fetching LiteLLM models:", error.message ? error.message : error)
+	} catch (error: unknown) {
+		const errorMessage = error instanceof Error ? error.message : String(error)
+		logger.error("LiteLLM", "Error fetching LiteLLM models:", errorMessage)
 		if (axios.isAxiosError(error) && error.response) {
 			throw new Error(
 				`Failed to fetch LiteLLM models: ${error.response.status} ${error.response.statusText}. Check base URL and API key.`,
@@ -77,7 +78,7 @@ export async function getLiteLLMModels(apiKey: string, baseUrl: string): Promise
 				"Failed to fetch LiteLLM models: No response from server. Check LiteLLM server status and base URL.",
 			)
 		} else {
-			throw new Error(`Failed to fetch LiteLLM models: ${error.message || "An unknown error occurred."}`)
+			throw new Error(`Failed to fetch LiteLLM models: ${errorMessage || "An unknown error occurred."}`)
 		}
 	}
 }

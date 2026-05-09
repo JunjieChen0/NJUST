@@ -4,7 +4,7 @@ import { LLM, LLMInfo, LLMInstanceInfo, LMStudioClient } from "@lmstudio/sdk"
 import { type ModelInfo, lMStudioDefaultModelInfo } from "@njust-ai-cj/types"
 
 import { logger } from "../../../shared/logger"
-import { flushModels, getModels } from "./modelCache"
+import { flushModels } from "./modelCache"
 
 const modelsWithLoadedDetails = new Set<string>()
 
@@ -76,7 +76,7 @@ export async function getLMStudioModels(baseUrl = "http://localhost:1234"): Prom
 				// Use the model path as the key since that's what users select
 				models[model.path] = parseLMStudioModel(model)
 			}
-		} catch (error) {
+		} catch {
 			logger.warn("LMStudio", "Failed to list downloaded models, falling back to loaded models only")
 		}
 

@@ -1,5 +1,7 @@
 // npx vitest run src/api/providers/__tests__/bedrock-inference-profiles.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import { AWS_INFERENCE_PROFILE_MAPPING } from "@njust-ai-cj/types"
 import { AwsBedrockHandler } from "../bedrock"
 import { ApiHandlerOptions } from "../../../shared/api"

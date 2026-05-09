@@ -6,7 +6,6 @@ import { Task } from "../task/Task"
 import { ignoreAbortError } from "../../utils/errorHandling"
 import { getModeBySlug } from "../../shared/modes"
 import { formatResponse } from "../prompts/responses"
-import { t } from "../../i18n"
 import { parseMarkdownChecklist } from "./UpdateTodoListTool"
 import { Package } from "../../shared/package"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
@@ -76,7 +75,7 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 			if (todos) {
 				try {
 					todoItems = parseMarkdownChecklist(todos)
-				} catch (error) {
+				} catch {
 					task.consecutiveMistakeCount++
 					task.recordToolError("new_task")
 					task.didToolFailInCurrentTurn = true
@@ -125,7 +124,7 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 			// Reflect delegation in tool result (no pause/unpause, no wait)
 			pushToolResult(`Delegated to child task ${child.taskId}`)
 			return
-		} catch (error) {
+		} catch {
 			await handleError("creating new task", error instanceof Error ? error : new Error(String(error)))
 			return
 		}

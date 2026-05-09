@@ -1,6 +1,8 @@
 // npx vitest core/prompts/sections/__tests__/custom-instructions.spec.ts
 
 // Mock fs/promises
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from "vitest"
+
 vi.mock("fs/promises")
 
 // Mock path.resolve and path.join to be predictable in tests
@@ -260,7 +262,7 @@ describe("loadRuleFiles", () => {
 			},
 		] as any)
 
-		statMock.mockImplementation((path) => {
+		statMock.mockImplementation((_path) => {
 			return Promise.resolve({
 				isFile: vi.fn().mockReturnValue(true),
 			}) as any
@@ -1436,7 +1438,7 @@ describe("Rules directory reading", () => {
 			{ name: "Beta.txt", isFile: () => true, parentPath: "/fake/path/.njust_ai/rules" }, // Test case-insensitive sorting
 		] as any)
 
-		statMock.mockImplementation((path) => {
+		statMock.mockImplementation((_path) => {
 			return Promise.resolve({
 				isFile: vi.fn().mockReturnValue(true),
 			}) as any

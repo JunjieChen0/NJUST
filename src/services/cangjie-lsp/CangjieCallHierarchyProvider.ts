@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import { CangjieSymbolIndex } from "./CangjieSymbolIndex"
-import { findClosingBrace, type CangjieDefKind } from "../../services/tree-sitter/cangjieParser"
+import {  type CangjieDefKind } from "../../services/tree-sitter/cangjieParser"
 
 const CALLABLE_KINDS: Set<CangjieDefKind> = new Set(["func", "main", "init", "macro", "operator"])
 
@@ -69,7 +69,7 @@ export class CangjieCallHierarchyProvider implements vscode.CallHierarchyProvide
 		try {
 			const fs = await import("fs")
 			const content = fs.readFileSync(item.uri.fsPath, "utf-8")
-			const lines = content.split("\n")
+			const _lines = content.split("\n")
 			const callPattern = /\b([A-Z]\w*|[a-z_]\w+)\s*(?=<|!|\.|\()/g
 
 			const calls: vscode.CallHierarchyOutgoingCall[] = []

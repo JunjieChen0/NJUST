@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest"
+
 import { javaQuery } from "../queries"
 import { testParseSourceCodeDefinitions } from "./helpers"
 import sampleJavaContent from "./fixtures/sample-java"

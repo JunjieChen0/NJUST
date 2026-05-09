@@ -1,3 +1,5 @@
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest"
+
 import * as actualFsPromises from "fs/promises"
 import * as fsSyncActual from "fs"
 import { Writable } from "stream"
@@ -20,7 +22,7 @@ const originalFsPromisesRename = actualFsPromises.rename
 const originalFsPromisesUnlink = actualFsPromises.unlink
 const originalFsPromisesWriteFile = actualFsPromises.writeFile
 const _originalFsPromisesAccess = actualFsPromises.access
-const originalFsPromisesMkdir = actualFsPromises.mkdir
+const _originalFsPromisesMkdir = actualFsPromises.mkdir
 
 vi.mock("fs/promises", async () => {
 	const actual = await vi.importActual<typeof import("fs/promises")>("fs/promises")

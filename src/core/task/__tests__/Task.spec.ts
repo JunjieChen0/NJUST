@@ -1,5 +1,7 @@
 // npx vitest core/task/__tests__/Task.spec.ts
 
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+
 import * as os from "os"
 import * as path from "path"
 
@@ -1038,7 +1040,7 @@ describe("Cline", () => {
 
 			it("should enforce rate limiting across parent and subtask", async () => {
 				// Add a spy to track getState calls
-				const getStateSpy = vi.spyOn(mockProvider, "getState")
+				const _getStateSpy = vi.spyOn(mockProvider, "getState")
 
 				// Create parent task
 				const parent = new Task({
@@ -1503,7 +1505,7 @@ describe("Cline", () => {
 						openAiModelId: modelId,
 						openAiApiKey: "sk-test-123",
 					}
-					const task = new Task({
+					const _task = new Task({
 						provider: mockProvider,
 						apiConfiguration: config,
 						task: "test task",

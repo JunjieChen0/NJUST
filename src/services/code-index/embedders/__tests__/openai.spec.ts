@@ -72,7 +72,7 @@ describe("OpenAiEmbedder", () => {
 		})
 
 		it("should initialize with provided API key when key is supplied", () => {
-			const embedderWithKey = new OpenAiEmbedder({
+			const _embedderWithKey = new OpenAiEmbedder({
 				openAiNativeApiKey: "sk-test-123",
 				openAiEmbeddingModelId: "text-embedding-3-small",
 			})

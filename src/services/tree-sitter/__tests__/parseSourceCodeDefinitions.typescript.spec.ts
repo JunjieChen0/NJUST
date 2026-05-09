@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeAll } from "vitest"
+
 import { testParseSourceCodeDefinitions } from "./helpers"
 import { typescriptQuery } from "../queries"
 import sampleTypeScriptContent from "./fixtures/sample-typescript"

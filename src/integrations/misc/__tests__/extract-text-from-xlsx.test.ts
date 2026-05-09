@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import ExcelJS from "exceljs"
 import { extractTextFromXLSX } from "../extract-text-from-xlsx"
 

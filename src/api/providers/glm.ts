@@ -1,4 +1,4 @@
-import { glmModels, glmDefaultModelId, type ModelInfo } from "@njust-ai-cj/types"
+import { glmModels, glmDefaultModelId } from "@njust-ai-cj/types"
 
 import type { ApiHandlerOptions } from "../../shared/api"
 

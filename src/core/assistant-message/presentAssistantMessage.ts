@@ -2,13 +2,12 @@ import { serializeError } from "serialize-error"
 import { Anthropic } from "@anthropic-ai/sdk"
 
 import type { ToolName, ClineAsk, ToolProgressStatus } from "@njust-ai-cj/types"
-import { ConsecutiveMistakeError } from "@njust-ai-cj/types"
 import { customToolRegistry } from "@njust-ai-cj/core"
 
 import { t } from "../../i18n"
 
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
-import type { ToolParamName, ToolResponse, ToolUse, McpToolUse, PushToolResultOptions } from "../../shared/tools"
+import type { ToolResponse, ToolUse, McpToolUse, PushToolResultOptions } from "../../shared/tools"
 
 import { AskIgnoredError } from "../task/AskIgnoredError"
 import { Task } from "../task/Task"
@@ -236,7 +235,7 @@ export async function presentAssistantMessage(cline: Task) {
 				hasToolResult = true
 			}
 
-			const toolDescription = () => `[mcp_tool: ${mcpBlock.serverName}/${mcpBlock.toolName}]`
+			const _toolDescription = () => `[mcp_tool: ${mcpBlock.serverName}/${mcpBlock.toolName}]`
 
 			const askApproval = async (
 				type: ClineAsk,
@@ -810,7 +809,7 @@ export async function presentAssistantMessage(cline: Task) {
 
 				// Track legacy format usage for read_file tool (for migration monitoring)
 				if (block.name === "read_file" && block.usedLegacyFormat) {
-					const modelInfo = cline.api.getModel()
+					cline.api.getModel()
 					// Legacy format tracking removed
 				}
 			}

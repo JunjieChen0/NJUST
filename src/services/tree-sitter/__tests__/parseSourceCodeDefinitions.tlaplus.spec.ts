@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeAll } from "vitest"
+
 import { initializeTreeSitter, testParseSourceCodeDefinitions } from "./helpers"
 import { tlaPlusQuery } from "../queries"
 import sampleTLAPlusContent from "./fixtures/sample-tlaplus"

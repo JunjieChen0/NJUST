@@ -1,5 +1,7 @@
 // npx vitest services/code-index/processors/__tests__/parser.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import { CodeParser, codeParser } from "../parser"
 import { loadRequiredLanguageParsers } from "../../../tree-sitter/languageParser"
 import { parseMarkdown } from "../../../tree-sitter/markdownParser"
@@ -743,7 +745,7 @@ ${longParagraph}
 Final thoughts that need to be long enough to meet the minimum character requirement.
 This conclusion section contains multiple lines to ensure it exceeds 100 characters.`
 
-			const lines = markdownContent.split("\n")
+			const _lines = markdownContent.split("\n")
 
 			vi.mocked(parseMarkdown).mockReturnValue([
 				{

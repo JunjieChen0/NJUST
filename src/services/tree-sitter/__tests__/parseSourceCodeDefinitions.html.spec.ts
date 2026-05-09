@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeAll } from "vitest"
+
 import { sampleHtmlContent } from "./fixtures/sample-html"
 import { htmlQuery } from "../queries"
 import { testParseSourceCodeDefinitions } from "./helpers"

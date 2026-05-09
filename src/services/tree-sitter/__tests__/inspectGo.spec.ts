@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import sampleGoContent from "./fixtures/sample-go"
 import goQuery from "../queries/go"

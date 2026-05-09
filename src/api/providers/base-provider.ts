@@ -5,7 +5,7 @@ import type { ModelInfo } from "@njust-ai-cj/types"
 import type { ApiHandler, ApiHandlerCreateMessageMetadata } from "../index"
 
 import { ApiStream } from "../transform/stream"
-import { countTokens, countTokensDetailed, type TokenCountResult } from "../../utils/countTokens"
+import { countTokensDetailed, type TokenCountResult } from "../../utils/countTokens"
 import { isMcpTool } from "../../utils/mcp-name"
 import { computeBackoffMs, delayMs, DEFAULT_API_RETRY_OPTIONS, type ApiRetryOptions } from "../retry/ApiRetryStrategy"
 import { analyzeErrorForRetry } from "../retry/ApiErrorClassifier"

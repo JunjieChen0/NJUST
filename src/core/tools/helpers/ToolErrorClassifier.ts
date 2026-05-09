@@ -52,7 +52,7 @@ export function classifyToolError(error: unknown): ToolErrorClassification {
 	const e = error as any
 	const msg = String(e?.message ?? "").toLowerCase()
 	const code = String(e?.code ?? "")
-	const errno = String(e?.errno ?? "")
+	const _errno = String(e?.errno ?? "")
 
 	// ── Filesystem errors ────────────────────────────────────────────
 	if (code === "ENOENT" || /no such file|file not found|enoent/i.test(msg)) {

@@ -1,5 +1,7 @@
 // npx vitest utils/logging/__tests__/CompactLogger.spec.ts
 
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest"
+
 import { CompactLogger } from "../CompactLogger"
 import { MockTransport } from "./MockTransport"
 import { LogLevel } from "../types"

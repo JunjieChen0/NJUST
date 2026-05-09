@@ -10,6 +10,9 @@ export class ApiProviderError extends Error {
 	errorDetails?: unknown
 	code?: string
 	$metadata?: unknown
+	provider?: string
+	modelId?: string
+	operation?: string
 
 	constructor(message: string, options?: { cause?: unknown }) {
 		super(message, options)

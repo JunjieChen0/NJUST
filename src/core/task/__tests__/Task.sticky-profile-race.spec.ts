@@ -1,6 +1,8 @@
 // npx vitest run core/task/__tests__/Task.sticky-profile-race.spec.ts
 
-import * as vscode from "vscode"
+import { describe, it, expect, vi } from "vitest"
+
+import * as _vscode from "vscode"
 
 import type { ProviderSettings } from "@njust-ai-cj/types"
 import { Task } from "../Task"

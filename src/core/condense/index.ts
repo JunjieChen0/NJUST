@@ -885,11 +885,11 @@ export async function summarizePartialConversation(
 		messages,
 		pivotIndex,
 		apiHandler,
-		systemPrompt,
-		taskId,
+		systemPrompt: _systemPrompt,
+		taskId: _taskId,
 		direction,
 		customCondensingPrompt,
-		metadata,
+		metadata: _metadata,
 	} = options
 
 	const response: SummarizeResponse = { messages, cost: 0, summary: "" }
@@ -942,7 +942,7 @@ export async function summarizePartialConversation(
 
 	let summary = ""
 	let cost = 0
-	let outputTokens = 0
+	let _outputTokens = 0
 
 	try {
 		const stream = apiHandler.createMessage(promptToUse, requestMessages)
@@ -951,7 +951,7 @@ export async function summarizePartialConversation(
 				summary += chunk.text
 			} else if (chunk.type === "usage") {
 				cost = chunk.totalCost ?? 0
-				outputTokens = chunk.outputTokens ?? 0
+				_outputTokens = chunk.outputTokens ?? 0
 			}
 		}
 	} catch (error) {

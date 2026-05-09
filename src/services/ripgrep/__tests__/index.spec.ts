@@ -1,5 +1,7 @@
 // npx vitest run src/services/ripgrep/__tests__/index.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import { truncateLine } from "../index"
 
 describe("Ripgrep line truncation", () => {

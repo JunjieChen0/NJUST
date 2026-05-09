@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions, debugLog } from "./helpers"
 import { rustQuery } from "../queries"
 import sampleRustContent from "./fixtures/sample-rust"

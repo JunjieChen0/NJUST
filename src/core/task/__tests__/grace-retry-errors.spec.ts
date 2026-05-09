@@ -1,5 +1,7 @@
 // npx vitest core/task/__tests__/grace-retry-errors.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import * as os from "os"
 import * as path from "path"
 import * as vscode from "vscode"

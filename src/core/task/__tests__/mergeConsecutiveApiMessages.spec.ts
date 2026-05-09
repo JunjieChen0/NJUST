@@ -1,5 +1,7 @@
 // npx vitest run core/task/__tests__/mergeConsecutiveApiMessages.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import { mergeConsecutiveApiMessages } from "../mergeConsecutiveApiMessages"
 
 describe("mergeConsecutiveApiMessages", () => {

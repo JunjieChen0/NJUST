@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeEach } from "vitest"
+
 import { ExecException } from "child_process"
 import * as fs from "fs"
 import * as path from "path"
@@ -491,7 +493,7 @@ describe("getGitRepositoryInfo", () => {
 		const mockHead = "ref: refs/heads/main"
 
 		// Setup the readFile mock to return different values based on the path
-		gitSpy.mockImplementation((path: any, encoding: any) => {
+		gitSpy.mockImplementation((path: any, _encoding: any) => {
 			if (path === configPath) {
 				return Promise.resolve(mockConfig)
 			} else if (path === headPath) {
@@ -536,7 +538,7 @@ describe("getGitRepositoryInfo", () => {
 		const mockHead = "ref: refs/heads/main"
 
 		// Setup the readFile mock to return different values based on the path
-		gitSpy.mockImplementation((path: any, encoding: any) => {
+		gitSpy.mockImplementation((path: any, _encoding: any) => {
 			if (path === configPath) {
 				return Promise.resolve(mockConfig)
 			} else if (path === headPath) {
@@ -563,7 +565,7 @@ describe("getGitRepositoryInfo", () => {
 		vitest.mocked(fs.promises.access).mockResolvedValue(undefined)
 
 		// Setup the readFile mock to return different values based on the path
-		gitSpy.mockImplementation((path: any, encoding: any) => {
+		gitSpy.mockImplementation((path: any, _encoding: any) => {
 			if (path === configPath) {
 				return Promise.reject(new Error("Failed to read config"))
 			} else if (path === headPath) {
@@ -590,7 +592,7 @@ describe("getGitRepositoryInfo", () => {
 		vitest.mocked(fs.promises.access).mockResolvedValue(undefined)
 
 		// Setup the readFile mock to return different values based on the path
-		gitSpy.mockImplementation((path: any, encoding: any) => {
+		gitSpy.mockImplementation((path: any, _encoding: any) => {
 			if (path === configPath) {
 				return Promise.resolve(`
 [remote "origin"]
@@ -637,7 +639,7 @@ describe("getGitRepositoryInfo", () => {
 		const mockHead = "ref: refs/heads/main"
 
 		// Setup the readFile mock to return different values based on the path
-		gitSpy.mockImplementation((path: any, encoding: any) => {
+		gitSpy.mockImplementation((path: any, _encoding: any) => {
 			if (path === configPath) {
 				return Promise.resolve(mockConfig)
 			} else if (path === headPath) {
@@ -815,7 +817,7 @@ describe("getWorkspaceGitInfo", () => {
 `
 
 		// Setup the readFile mock to return config content
-		readFileSpy.mockImplementation((path: any, encoding: any) => {
+		readFileSpy.mockImplementation((path: any, _encoding: any) => {
 			if (path.includes("config")) {
 				return Promise.resolve(mockConfig)
 			}

@@ -61,8 +61,8 @@ export class GrepTool extends BaseTool<"grep"> {
 		const pattern = params.pattern
 		const relDirPath = params.path && params.path.trim().length > 0 ? params.path : "."
 		const include = params.include || undefined
-		const exclude = params.exclude || undefined
-		const contextLines = params.contextLines
+		const _exclude = params.exclude || undefined
+		const _contextLines = params.contextLines
 
 		task.consecutiveMistakeCount = 0
 

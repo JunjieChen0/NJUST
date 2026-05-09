@@ -31,7 +31,7 @@ import {
 	buildWhitespaceTolerantRegex,
 	buildTokenRegex,
 	countRegexMatches,
-	escapeRegExp,
+	_escapeRegExp,
 	type LineEnding,
 } from "./editMatching"
 

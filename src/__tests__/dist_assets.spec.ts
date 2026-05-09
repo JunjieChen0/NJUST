@@ -1,5 +1,7 @@
 // npx vitest __tests__/dist_assets.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import * as fs from "fs"
 import * as path from "path"
 

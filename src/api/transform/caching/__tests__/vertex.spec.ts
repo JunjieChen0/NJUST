@@ -1,5 +1,7 @@
 // npx vitest run src/api/transform/caching/__tests__/vertex.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import { Anthropic } from "@anthropic-ai/sdk"
 
 import { addCacheBreakpoints } from "../vertex"

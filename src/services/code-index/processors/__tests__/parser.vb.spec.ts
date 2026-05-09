@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { CodeParser } from "../parser"
 
 // Mock TelemetryService

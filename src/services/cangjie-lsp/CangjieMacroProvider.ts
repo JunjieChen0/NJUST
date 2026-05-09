@@ -45,7 +45,7 @@ async function formatExpandedCangjieWithCjfmt(expanded: string, outputChannel: v
 }
 
 const MACRO_CALL_RE = /@(\w+)(?=\s*\(|\s+\w|$)/g
-const MACRO_DEF_RE = /^\s*(?:public\s+|private\s+|protected\s+|internal\s+)*macro\s+(\w+)/
+const _MACRO_DEF_RE = /^\s*(?:public\s+|private\s+|protected\s+|internal\s+)*macro\s+(\w+)/
 
 /**
  * CodeLens provider that shows "Expand Macro" / "Go to Macro Definition"

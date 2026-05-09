@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { askFollowupQuestionTool } from "../AskFollowupQuestionTool"
 import { ToolUse } from "../../../shared/tools"
 import { NativeToolCallParser } from "../../assistant-message/NativeToolCallParser"
@@ -5,7 +7,7 @@ import { NativeToolCallParser } from "../../assistant-message/NativeToolCallPars
 describe("askFollowupQuestionTool", () => {
 	let mockCline: any
 	let mockPushToolResult: any
-	let toolResult: any
+	let _toolResult: any
 
 	beforeEach(() => {
 		vi.clearAllMocks()

@@ -1,3 +1,5 @@
+import { describe, it } from "vitest"
+
 import { testParseSourceCodeDefinitions, debugLog } from "./helpers"
 import { javascriptQuery } from "../queries"
 import sampleJsonContent from "./fixtures/sample-json"

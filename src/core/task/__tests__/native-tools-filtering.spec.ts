@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import type { ModeConfig } from "@njust-ai-cj/types"
 
 describe("Native Tools Filtering by Mode", () => {

@@ -207,14 +207,14 @@ async function generatePromptImpl(cfg: SystemPromptConfig): Promise<SystemPrompt
 	const {
 		context,
 		cwd,
-		supportsComputerUse,
+		supportsComputerUse: _supportsComputerUse,
 		mode,
 		mcpHub,
-		diffStrategy,
+		diffStrategy: _diffStrategy,
 		promptComponent,
 		customModeConfigs,
 		globalCustomInstructions,
-		experiments,
+		experiments: _experiments,
 		language,
 		rooIgnoreInstructions,
 		settings,
@@ -239,10 +239,10 @@ async function generatePromptImpl(cfg: SystemPromptConfig): Promise<SystemPrompt
 	const hasMcpServers = mcpHub && mcpHub.getServers().length > 0
 	const shouldIncludeMcp = hasMcpGroup && hasMcpServers
 
-	const codeIndexManager = CodeIndexManager.getInstance(context, cwd)
+	CodeIndexManager.getInstance(context, cwd)
 
 	// Tool calling is native-only.
-	const effectiveProtocol = "native"
+	const _effectiveProtocol = "native"
 	const cangjieSkillTriggerText = settings?.lastUserMessageForCangjieHint
 
 	const [modesSection, skillsSection] = await Promise.all([

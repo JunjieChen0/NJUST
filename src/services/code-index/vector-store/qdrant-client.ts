@@ -66,7 +66,7 @@ export class QdrantVectorStore implements IVectorStore {
 					"User-Agent": "NJUST_AI_CJ",
 				},
 			})
-		} catch (urlError) {
+		} catch {
 			// If URL parsing fails, fall back to URL-based config
 			// Note: This fallback won't correctly handle prefixes, but it's a last resort for malformed URLs.
 			this.client = new QdrantClient({
@@ -105,7 +105,7 @@ export class QdrantVectorStore implements IVectorStore {
 
 		try {
 			// Attempt to parse as complete URL - return as-is, let constructor handle ports
-			const parsedUrl = new URL(trimmedUrl)
+			const _parsedUrl = new URL(trimmedUrl)
 			return trimmedUrl
 		} catch {
 			// Failed to parse as URL - treat as hostname
@@ -193,8 +193,8 @@ export class QdrantVectorStore implements IVectorStore {
 			// Create payload indexes
 			await this._createPayloadIndexes()
 			return created
-		} catch (error: any) {
-			const errorMessage = error?.message || error
+		} catch (error: unknown) {
+			const errorMessage = error instanceof Error ? error.message : String(error)
 			logger.error("QdrantVectorStore", `Failed to initialize Qdrant collection "${this.collectionName}":`, errorMessage)
 
 			// If this is already a vector dimension mismatch error (identified by cause), re-throw it as-is
@@ -352,7 +352,7 @@ logger.info("QdrantVectorStore", `Creating new collection ${this.collectionName}
 				points: processedPoints,
 				wait: true,
 			})
-		} catch (error) {
+		} catch {
 			logger.error("QdrantVectorStore", "Failed to upsert points:", error)
 			throw error
 		}
@@ -445,7 +445,7 @@ logger.info("QdrantVectorStore", `Creating new collection ${this.collectionName}
 			const filteredPoints = operationResult.points.filter((p) => this.isPayloadValid(p.payload))
 
 			return filteredPoints as VectorStoreSearchResult[]
-		} catch (error) {
+		} catch {
 			logger.error("QdrantVectorStore", "Failed to search points:", error)
 			throw error
 		}
@@ -504,11 +504,13 @@ logger.info("QdrantVectorStore", `Creating new collection ${this.collectionName}
 				filter,
 				wait: true,
 			})
-		} catch (error: any) {
+		} catch (error: unknown) {
 			// Extract more detailed error information
-			const errorMessage = error?.message || String(error)
-			const errorStatus = error?.status || error?.response?.status || error?.statusCode
-			const errorDetails = error?.response?.data || error?.data || ""
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			const err = error as Record<string, unknown>
+			const response = err.response as Record<string, unknown> | undefined
+			const errorStatus = err.status || response?.status || err.statusCode
+			const errorDetails = response?.data || err.data || ""
 
 			logger.error("QdrantVectorStore", `Failed to delete points by file paths:`, {
 				error: errorMessage,
@@ -531,7 +533,7 @@ logger.info("QdrantVectorStore", `Creating new collection ${this.collectionName}
 			if (await this.collectionExists()) {
 				await this.client.deleteCollection(this.collectionName)
 			}
-		} catch (error) {
+		} catch {
 			logger.error("QdrantVectorStore", `Failed to delete collection ${this.collectionName}:`, error)
 			throw error // Re-throw to allow calling code to handle it
 		}
@@ -546,7 +548,7 @@ logger.info("QdrantVectorStore", `Creating new collection ${this.collectionName}
 					filter: {},
 					wait: true,
 				})
-		} catch (error) {
+		} catch {
 			logger.error("QdrantVectorStore", "Failed to clear collection:", error)
 			throw error
 		}
@@ -593,7 +595,7 @@ logger.info("QdrantVectorStore", `Creating new collection ${this.collectionName}
 			// Fall back to old logic - assume complete if collection has points
 			logger.info("QdrantVectorStore", "No indexing metadata marker found. Using backward compatibility mode (checking points_count > 0).")
 			return pointsCount > 0
-		} catch (error) {
+		} catch {
 			logger.warn("QdrantVectorStore", "Failed to check if collection has data:", error)
 			return false
 		}
@@ -624,7 +626,7 @@ logger.info("QdrantVectorStore", `Creating new collection ${this.collectionName}
 				wait: true,
 			})
 			logger.info("QdrantVectorStore", "Marked indexing as complete")
-		} catch (error) {
+		} catch {
 			logger.error("QdrantVectorStore", "Failed to mark indexing as complete:", error)
 			throw error
 		}
@@ -655,7 +657,7 @@ logger.info("QdrantVectorStore", `Creating new collection ${this.collectionName}
 				wait: true,
 			})
 			logger.info("QdrantVectorStore", "Marked indexing as incomplete (in progress)")
-		} catch (error) {
+		} catch {
 			logger.error("QdrantVectorStore", "Failed to mark indexing as incomplete:", error)
 			throw error
 		}

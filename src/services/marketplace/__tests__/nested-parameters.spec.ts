@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import type { McpInstallationMethod } from "@njust-ai-cj/types"
 import { mcpInstallationMethodSchema, mcpMarketplaceItemSchema } from "@njust-ai-cj/types"
 

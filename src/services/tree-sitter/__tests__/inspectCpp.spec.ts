@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import { cppQuery } from "../queries"
 import sampleCppContent from "./fixtures/sample-cpp"

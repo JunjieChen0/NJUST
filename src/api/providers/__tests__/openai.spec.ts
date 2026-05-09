@@ -1,10 +1,11 @@
 // npx vitest run api/providers/__tests__/openai.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { OpenAiHandler, getOpenAiModels } from "../openai"
 import { ApiHandlerOptions } from "../../../shared/api"
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI from "openai"
-import { openAiModelInfoSaneDefaults } from "@njust-ai-cj/types"
 import { Package } from "../../../shared/package"
 import axios from "axios"
 
@@ -17,7 +18,7 @@ vitest.mock("openai", () => {
 		default: mockConstructor.mockImplementation(() => ({
 			chat: {
 				completions: {
-					create: mockCreate.mockImplementation(async (options) => {
+					create: mockCreate.mockImplementation(async (_options) => {
 						if (!options.stream) {
 							return {
 								id: "test-completion",
@@ -220,7 +221,7 @@ describe("OpenAiHandler", () => {
 		})
 
 		it("should handle tool calls in streaming responses", async () => {
-			mockCreate.mockImplementation(async (options) => {
+			mockCreate.mockImplementation(async (_options) => {
 				return {
 					[Symbol.asyncIterator]: async function* () {
 						yield {
@@ -302,7 +303,7 @@ describe("OpenAiHandler", () => {
 		})
 
 		it("should yield tool calls even when finish_reason is not set (fallback behavior)", async () => {
-			mockCreate.mockImplementation(async (options) => {
+			mockCreate.mockImplementation(async (_options) => {
 				return {
 					[Symbol.asyncIterator]: async function* () {
 						yield {
@@ -825,7 +826,7 @@ describe("OpenAiHandler", () => {
 		it("should handle tool calls with O3 model in streaming mode", async () => {
 			const o3Handler = new OpenAiHandler(o3Options)
 
-			mockCreate.mockImplementation(async (options) => {
+			mockCreate.mockImplementation(async (_options) => {
 				return {
 					[Symbol.asyncIterator]: async function* () {
 						yield {
@@ -890,7 +891,7 @@ describe("OpenAiHandler", () => {
 		it("should yield tool calls for O3 model even when finish_reason is not set (fallback behavior)", async () => {
 			const o3Handler = new OpenAiHandler(o3Options)
 
-			mockCreate.mockImplementation(async (options) => {
+			mockCreate.mockImplementation(async (_options) => {
 				return {
 					[Symbol.asyncIterator]: async function* () {
 						yield {

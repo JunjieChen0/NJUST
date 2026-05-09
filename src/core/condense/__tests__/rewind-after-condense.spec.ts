@@ -1,5 +1,7 @@
 // npx vitest src/core/condense/__tests__/rewind-after-condense.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 /**
  * Regression tests for the issue: "Rewind after Condense is broken"
  * https://github.com/NJUST-AI/NJUST_AI_CJ/issues/8295

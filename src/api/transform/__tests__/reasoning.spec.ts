@@ -1,5 +1,7 @@
 // npx vitest run src/api/transform/__tests__/reasoning.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import type { ModelInfo, ProviderSettings, ReasoningEffortWithMinimal } from "@njust-ai-cj/types"
 
 import {
@@ -12,7 +14,6 @@ import {
 	OpenRouterReasoningParams,
 	AnthropicReasoningParams,
 	OpenAiReasoningParams,
-	RooReasoningParams,
 	GeminiReasoningParams,
 	GeminiThinkingLevel,
 } from "../reasoning"

@@ -73,7 +73,7 @@ describe("OpenRouterEmbedder", () => {
 
 		it("should use default model when none specified", () => {
 			const embedder = new OpenRouterEmbedder(mockApiKey)
-			const expectedDefault = getDefaultModelId("openrouter")
+			const _expectedDefault = getDefaultModelId("openrouter")
 			expect(embedder.embedderInfo.name).toBe("openrouter")
 		})
 

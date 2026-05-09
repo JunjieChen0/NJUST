@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import * as vscode from "vscode"
 import { initializeNetworkProxy, getProxyConfig, isProxyEnabled, isDebugMode } from "../networkProxy"
 

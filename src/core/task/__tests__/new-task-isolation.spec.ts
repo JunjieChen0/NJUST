@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 /**
  * Tests for new_task tool isolation enforcement.
  *

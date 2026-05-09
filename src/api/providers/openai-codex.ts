@@ -8,10 +8,8 @@ import {
 	openAiCodexDefaultModelId,
 	OpenAiCodexModelId,
 	openAiCodexModels,
-	type ReasoningEffort,
 	type ReasoningEffortExtended,
 } from "@njust-ai-cj/types"
-import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import { Package } from "../../shared/package"
 import type { ApiHandlerOptions } from "../../shared/api"
@@ -44,6 +42,21 @@ const CODEX_API_BASE_URL = "https://chatgpt.com/backend-api/codex"
  * - Limited model subset
  * - Custom headers for Codex backend
  */
+interface OpenAiCodexUsageData {
+	input_tokens?: number
+	prompt_tokens?: number
+	output_tokens?: number
+	completion_tokens?: number
+	cache_creation_input_tokens?: number
+	cache_write_tokens?: number
+	cache_read_input_tokens?: number
+	cache_read_tokens?: number
+	cached_tokens?: number
+	input_tokens_details?: { cached_tokens?: number; cache_miss_tokens?: number }
+	prompt_tokens_details?: { cached_tokens?: number; cache_miss_tokens?: number }
+	output_tokens_details?: { reasoning_tokens?: number }
+}
+
 export class OpenAiCodexHandler extends BaseProvider implements SingleCompletionHandler {
 	protected options: ApiHandlerOptions
 	private readonly providerName = "OpenAI Codex"
@@ -100,15 +113,13 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 		this.sessionId = uuidv7()
 	}
 
-	private normalizeUsage(usage: any, model: OpenAiCodexModel): ApiStreamUsageChunk | undefined {
+	private normalizeUsage(usage: OpenAiCodexUsageData | undefined, _model: OpenAiCodexModel): ApiStreamUsageChunk | undefined {
 		if (!usage) return undefined
 
 		const inputDetails = usage.input_tokens_details ?? usage.prompt_tokens_details
 
-		const hasCachedTokens = typeof inputDetails?.cached_tokens === "number"
-		const hasCacheMissTokens = typeof inputDetails?.cache_miss_tokens === "number"
-		const cachedFromDetails = hasCachedTokens ? inputDetails.cached_tokens : 0
-		const missFromDetails = hasCacheMissTokens ? inputDetails.cache_miss_tokens : 0
+					const cachedFromDetails = inputDetails?.cached_tokens ?? 0
+			const missFromDetails = inputDetails?.cache_miss_tokens ?? 0
 
 		let totalInputTokens = usage.input_tokens ?? usage.prompt_tokens ?? 0
 		if (totalInputTokens === 0 && inputDetails && (cachedFromDetails > 0 || missFromDetails > 0)) {

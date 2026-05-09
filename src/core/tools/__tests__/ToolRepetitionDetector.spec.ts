@@ -1,5 +1,7 @@
 // npx vitest run src/core/tools/__tests__/ToolRepetitionDetector.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import type { ToolName } from "@njust-ai-cj/types"
 
 import type { ToolUse } from "../../../shared/tools"

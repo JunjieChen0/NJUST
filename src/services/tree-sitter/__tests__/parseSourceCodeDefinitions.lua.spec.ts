@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeAll } from "vitest"
+
 import { testParseSourceCodeDefinitions } from "./helpers"
 import sampleLuaContent from "./fixtures/sample-lua"
 import { luaQuery } from "../queries"

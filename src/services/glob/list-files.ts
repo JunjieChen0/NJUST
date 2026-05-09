@@ -650,7 +650,7 @@ function formatAndCombineResults(files: string[], directories: string[], limit: 
 async function execRipgrep(rgPath: string, args: string[], limit: number): Promise<string[]> {
 	return new Promise((resolve, reject) => {
 		// Extract the directory path from args (it's the last argument)
-		const searchDir = args[args.length - 1]
+		const _searchDir = args[args.length - 1]
 
 		const rgProcess = childProcess.spawn(rgPath, args)
 		let output = ""

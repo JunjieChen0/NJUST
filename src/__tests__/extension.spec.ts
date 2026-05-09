@@ -1,7 +1,8 @@
 // npx vitest run __tests__/extension.spec.ts
 
+import { describe, test, expect, vi, beforeEach } from "vitest"
+
 import type * as vscode from "vscode"
-import type { AuthState } from "@njust-ai-cj/types"
 
 vi.mock("vscode", () => {
 	const mockRegFn = () =>

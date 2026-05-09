@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { Anthropic } from "@anthropic-ai/sdk"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 import {

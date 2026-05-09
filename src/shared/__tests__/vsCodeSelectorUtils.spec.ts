@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { LanguageModelChatSelector } from "vscode"
 
 import { stringifyVsCodeLmModelSelector } from "../vsCodeSelectorUtils"

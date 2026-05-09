@@ -14,7 +14,6 @@ import type { Dirent } from "fs"
 import * as path from "path"
 import type {
 	AgentDefinition,
-	BuiltInAgentDefinition,
 	CustomAgentDefinition,
 	PluginAgentDefinition,
 } from "./types"

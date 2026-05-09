@@ -362,7 +362,7 @@ export class OpenRouterEmbedder implements IEmbedder {
 	/**
 	 * Updates global rate limit state when a 429 error occurs
 	 */
-	private async updateGlobalRateLimitState(error: HttpError): Promise<void> {
+	private async updateGlobalRateLimitState(_error: HttpError): Promise<void> {
 		const release = await OpenRouterEmbedder.globalRateLimitState.mutex.acquire()
 		try {
 			const state = OpenRouterEmbedder.globalRateLimitState

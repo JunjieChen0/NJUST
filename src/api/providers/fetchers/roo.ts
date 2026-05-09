@@ -161,24 +161,26 @@ export async function getRooModels(baseUrl: string, apiKey?: string): Promise<Mo
 		} finally {
 			clearTimeout(timeoutId)
 		}
-	} catch (error: any) {
+	} catch (error: unknown) {
+		const errorMessage = error instanceof Error ? error.message : String(error)
+		const errorName = error instanceof Error ? error.name : undefined
 		// Enhanced error logging
 		logger.error("RooModels", "Error fetching NJUST_AI_CJ Cloud models:", {
-			message: error.message || String(error),
-			name: error.name,
-			stack: error.stack,
+			message: errorMessage,
+			name: errorName,
+			stack: error instanceof Error ? error.stack : undefined,
 			url,
 			hasApiKey: Boolean(apiKey),
 		})
 
 		// Handle abort/timeout
-		if (error.name === "AbortError") {
+		if (errorName === "AbortError") {
 			throw new Error("Failed to fetch NJUST_AI_CJ Cloud models: Request timed out after 10 seconds.")
 		}
 
 		// Handle fetch errors
-		if (error.message?.includes("HTTP")) {
-			throw new Error(`Failed to fetch NJUST_AI_CJ Cloud models: ${error.message}. Check base URL and API key.`)
+		if (errorMessage.includes("HTTP")) {
+			throw new Error(`Failed to fetch NJUST_AI_CJ Cloud models: ${errorMessage}. Check base URL and API key.`)
 		}
 
 		// Handle network errors
@@ -188,6 +190,6 @@ export async function getRooModels(baseUrl: string, apiKey?: string): Promise<Mo
 			)
 		}
 
-		throw new Error(`Failed to fetch NJUST_AI_CJ Cloud models: ${error.message || "An unknown error occurred."}`)
+		throw new Error(`Failed to fetch NJUST_AI_CJ Cloud models: ${errorMessage || "An unknown error occurred."}`)
 	}
 }

@@ -10,7 +10,6 @@ import {
 	OPEN_ROUTER_PROMPT_CACHING_MODELS,
 	DEEP_SEEK_DEFAULT_TEMPERATURE,
 } from "@njust-ai-cj/types"
-import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import type { ApiHandlerOptions } from "../../shared/api"
 
@@ -65,7 +64,7 @@ const OpenRouterErrorResponseSchema = z.object({
 
 // OpenRouter error structure that may include error.metadata.raw with actual upstream error
 // This is for caught exceptions which have the error wrapped in an "error" property
-interface OpenRouterErrorResponse {
+interface _OpenRouterErrorResponse {
 	error?: {
 		message?: string
 		code?: number
@@ -343,7 +342,7 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 				const openRouterError = parseResult.data
 				const rawString = openRouterError.error?.metadata?.raw
 				const parsedError = extractErrorFromMetadataRaw(rawString)
-				const rawErrorMessage = parsedError || openRouterError.error?.message || "Unknown error"
+				void (parsedError || openRouterError.error?.message || "Unknown error")
 
 				throw handleOpenAIError(error, this.providerName)
 			} else {
@@ -601,7 +600,7 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 				const openRouterError = parseResult.data
 				const rawString = openRouterError.error?.metadata?.raw
 				const parsedError = extractErrorFromMetadataRaw(rawString)
-				const rawErrorMessage = parsedError || openRouterError.error?.message || "Unknown error"
+				void (parsedError || openRouterError.error?.message || "Unknown error")
 
 				throw handleOpenAIError(error, this.providerName)
 			} else {

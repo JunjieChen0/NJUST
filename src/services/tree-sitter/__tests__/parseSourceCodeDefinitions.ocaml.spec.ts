@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeAll } from "vitest"
+
 import { testParseSourceCodeDefinitions } from "./helpers"
 import { ocamlQuery } from "../queries"
 import { sampleOCaml } from "./fixtures/sample-ocaml"

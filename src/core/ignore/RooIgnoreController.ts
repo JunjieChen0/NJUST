@@ -74,7 +74,7 @@ export class RooIgnoreController {
 			} else {
 				this.rooIgnoreContent = undefined
 			}
-		} catch (error) {
+		} catch {
 			// Should never happen: reading file failed even though it exists
 			console.error("Unexpected error loading .rooignore:", error)
 		}
@@ -109,7 +109,7 @@ export class RooIgnoreController {
 
 			// Check if the real path is ignored
 			return !this.ignoreInstance.ignores(relativePath)
-		} catch (error) {
+		} catch {
 			// Allow access to files outside cwd or on errors (backward compatibility)
 			return true
 		}
@@ -185,7 +185,7 @@ export class RooIgnoreController {
 				}))
 				.filter((x) => x.allowed)
 				.map((x) => x.path)
-		} catch (error) {
+		} catch {
 			console.error("Error filtering paths:", error)
 			return [] // Fail closed for security
 		}

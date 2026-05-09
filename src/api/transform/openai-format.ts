@@ -290,7 +290,7 @@ export function convertToOpenAiMessages(
 			// conversation state client-side, we don't use `store: true`, and sending
 			// back the `id` field causes a 404 error.
 			if (detail?.format === "openai-responses-v1" && detail?.id) {
-				const { id, ...rest } = detail
+				const { id: _id, ...rest } = detail
 				return rest
 			}
 			return detail

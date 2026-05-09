@@ -1,5 +1,7 @@
 // npx vitest src/integrations/terminal/__tests__/TerminalProcessExec.bash.spec.ts
 
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest"
+
 import * as vscode from "vscode"
 import { execSync } from "child_process"
 

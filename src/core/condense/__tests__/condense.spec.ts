@@ -1,5 +1,7 @@
 // npx vitest src/core/condense/__tests__/condense.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 import { Anthropic } from "@anthropic-ai/sdk"
 import type { ModelInfo } from "@njust-ai-cj/types"
 import { TelemetryService } from "@njust-ai-cj/telemetry"

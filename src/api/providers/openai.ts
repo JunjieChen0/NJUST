@@ -499,7 +499,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 	protected _getUrlHost(baseUrl?: string): string {
 		try {
 			return new URL(baseUrl ?? "").host
-		} catch (error) {
+		} catch {
 			return ""
 		}
 	}
@@ -564,7 +564,7 @@ export async function getOpenAiModels(baseUrl?: string, apiKey?: string, openAiH
 		const response = await axios.get(`${trimmedBaseUrl}/models`, config)
 		const modelsArray = response.data?.data?.map((model: any) => model.id) || []
 		return [...new Set<string>(modelsArray)]
-	} catch (error) {
+	} catch {
 		return []
 	}
 }

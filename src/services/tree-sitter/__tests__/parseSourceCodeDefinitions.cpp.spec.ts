@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeAll } from "vitest"
+
 /*
 TODO: The following C++ structures can be parsed by tree-sitter but lack query support:
 

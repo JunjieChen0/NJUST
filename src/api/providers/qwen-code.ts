@@ -4,7 +4,7 @@ import OpenAI from "openai"
 import * as os from "os"
 import * as path from "path"
 
-import { type ModelInfo, type QwenCodeModelId, qwenCodeModels, qwenCodeDefaultModelId } from "@njust-ai-cj/types"
+import { type ModelInfo, qwenCodeModels, qwenCodeDefaultModelId } from "@njust-ai-cj/types"
 
 import type { ApiHandlerOptions } from "../../shared/api"
 
@@ -187,8 +187,9 @@ export class QwenCodeHandler extends BaseProvider implements SingleCompletionHan
 	private async callApiWithRetry<T>(apiCall: () => Promise<T>): Promise<T> {
 		try {
 			return await apiCall()
-		} catch (error: any) {
-			if (error.status === 401) {
+		} catch (error: unknown) {
+			const err = error as Record<string, unknown>
+			if (err.status === 401) {
 				// Token expired, refresh and retry
 				this.credentials = await this.refreshAccessToken(this.credentials!)
 				const client = this.ensureClient()

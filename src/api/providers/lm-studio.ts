@@ -100,7 +100,7 @@ export class LmStudioHandler extends BaseProvider implements SingleCompletionHan
 			let results
 			try {
 				results = await this.client.chat.completions.create(params)
-			} catch (error) {
+			} catch {
 				throw handleOpenAIError(error, this.providerName)
 			}
 
@@ -163,7 +163,7 @@ export class LmStudioHandler extends BaseProvider implements SingleCompletionHan
 				inputTokens,
 				outputTokens,
 			} as const
-		} catch (error) {
+		} catch {
 			throw new Error(
 				"Please check the LM Studio developer logs to debug what went wrong. You may need to load the model with a larger context length to work with NJUST_AI_CJ's prompts.",
 			)
@@ -203,11 +203,11 @@ export class LmStudioHandler extends BaseProvider implements SingleCompletionHan
 			let response
 			try {
 				response = await this.client.chat.completions.create(params)
-			} catch (error) {
+			} catch {
 				throw handleOpenAIError(error, this.providerName)
 			}
 			return response.choices[0]?.message.content || ""
-		} catch (error) {
+		} catch {
 			throw new Error(
 				"Please check the LM Studio developer logs to debug what went wrong. You may need to load the model with a larger context length to work with NJUST_AI_CJ's prompts.",
 			)
@@ -224,7 +224,7 @@ export async function getLmStudioModels(baseUrl = "http://localhost:1234") {
 		const response = await axios.get(`${baseUrl}/v1/models`)
 		const modelsArray = response.data?.data?.map((model: any) => model.id) || []
 		return [...new Set<string>(modelsArray)]
-	} catch (error) {
+	} catch {
 		return []
 	}
 }

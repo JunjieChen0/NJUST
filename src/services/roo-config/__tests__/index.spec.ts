@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+
 import * as path from "path"
 
 // Use vi.hoisted to ensure mocks are available during hoisting

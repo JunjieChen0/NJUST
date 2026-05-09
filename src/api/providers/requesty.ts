@@ -136,7 +136,7 @@ export class RequestyHandler extends BaseProvider implements SingleCompletionHan
 		]
 
 		// Map extended efforts to OpenAI Chat Completions-accepted values (omit unsupported)
-		const allowedEffort = (["low", "medium", "high"] as const).includes(reasoning_effort as any)
+		const allowedEffort = (["low", "medium", "high"] as readonly string[]).includes(reasoning_effort as string)
 			? (reasoning_effort as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming["reasoning_effort"])
 			: undefined
 

@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { mcpParameterSchema } from "@njust-ai-cj/types"
 
 describe("Optional Parameters", () => {

@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { mentionRegex, mentionRegexGlobal } from "../context-mentions"
 
 describe("mentionRegex and mentionRegexGlobal", () => {

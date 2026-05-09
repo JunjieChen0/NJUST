@@ -59,7 +59,7 @@ export class ModelFallbackManager {
 	 * 报告模型调用失败
 	 * @returns 下一个要尝试的模型 ID，或 null 表示所有模型都已耗尽
 	 */
-	reportFailure(error: Error): { nextModel: string | null; shouldNotifyUser: boolean; reason: string } {
+	reportFailure(_error: Error): { nextModel: string | null; shouldNotifyUser: boolean; reason: string } {
 		this.state.consecutiveFailures++
 
 		// 未达到切换阈值，继续使用当前模型

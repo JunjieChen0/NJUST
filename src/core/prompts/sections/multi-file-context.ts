@@ -122,7 +122,7 @@ function extractDefs(content: string, patterns: Array<{ re: RegExp; kind: string
 // ---------------------------------------------------------------------------
 
 const CPP_INCLUDE_LOCAL = /^\s*#include\s+"([^"]+)"/gm
-const CPP_INCLUDE_SYSTEM = /^\s*#include\s+<([^>]+)>/gm
+const _CPP_INCLUDE_SYSTEM = /^\s*#include\s+<([^>]+)>/gm
 
 const JAVA_IMPORT = /^\s*import\s+(?:static\s+)?([\w.]+(?:\.\*)?)\s*;/gm
 
@@ -155,7 +155,7 @@ function resolveRelativePath(importPath: string, cwd: string, sourceFile: string
 	return null
 }
 
-function findFileInWorkspace(name: string, cwd: string, extensions: string[]): string | null {
+function _findFileInWorkspace(name: string, cwd: string, extensions: string[]): string | null {
 	for (const ext of extensions) {
 		const candidate = path.join(cwd, name + ext)
 		if (fs.existsSync(candidate)) return candidate

@@ -1,5 +1,7 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import fs from "fs/promises"
-import * as path from "path"
+import * as _path from "path"
 
 import { getCommand, getCommands } from "../commands"
 

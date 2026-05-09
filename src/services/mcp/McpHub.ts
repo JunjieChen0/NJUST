@@ -521,7 +521,6 @@ export class McpHub implements IMcpHubService {
 		}
 
 		const settingsPath = await this.getMcpSettingsFilePath()
-		const settingsUri = vscode.Uri.file(settingsPath)
 		const settingsPattern = new vscode.RelativePattern(path.dirname(settingsPath), path.basename(settingsPath))
 
 		// Create a file system watcher for the global MCP settings file
@@ -1110,7 +1109,7 @@ export class McpHub implements IMcpHubService {
 			}
 			const response = await connection.client.request({ method: "resources/list" }, ListResourcesResultSchema)
 			return response?.resources || []
-		} catch (error) {
+		} catch {
 			return []
 		}
 	}
@@ -1129,7 +1128,7 @@ export class McpHub implements IMcpHubService {
 				ListResourceTemplatesResultSchema,
 			)
 			return response?.resourceTemplates || []
-		} catch (error) {
+		} catch {
 			return []
 		}
 	}
@@ -1433,24 +1432,22 @@ export class McpHub implements IMcpHubService {
 
 		try {
 			const globalPath = await this.getMcpSettingsFilePath()
-			let globalServers: Record<string, any> = {}
+			let _globalServers: Record<string, any> = {}
 			try {
 				const globalContent = await fs.readFile(globalPath, "utf-8")
 				const globalConfig = JSON.parse(globalContent)
-				globalServers = globalConfig.mcpServers || {}
-				const globalServerNames = Object.keys(globalServers)
+				_globalServers = globalConfig.mcpServers || {}
 			} catch (error) {
 				logger.warn("McpHub", "Error reading global MCP config:", error)
 			}
 
 			const projectPath = await this.getProjectMcpPath()
-			let projectServers: Record<string, any> = {}
+			let _projectServers: Record<string, any> = {}
 			if (projectPath) {
 				try {
 					const projectContent = await fs.readFile(projectPath, "utf-8")
 					const projectConfig = JSON.parse(projectContent)
-					projectServers = projectConfig.mcpServers || {}
-					const projectServerNames = Object.keys(projectServers)
+					_projectServers = projectConfig.mcpServers || {}
 				} catch (error) {
 					logger.warn("McpHub", "Error reading project MCP config:", error)
 				}
@@ -1492,7 +1489,7 @@ export class McpHub implements IMcpHubService {
 				const projectContent = await fs.readFile(projectMcpPath, "utf-8")
 				const projectConfig = JSON.parse(projectContent)
 				projectServerOrder = Object.keys(projectConfig.mcpServers || {})
-			} catch (error) {
+			} catch {
 				// Silently continue with empty project server order
 			}
 		}
@@ -1775,7 +1772,7 @@ export class McpHub implements IMcpHubService {
 			// Ensure the settings file exists and is accessible
 			try {
 				await fs.access(configPath)
-			} catch (error) {
+			} catch {
 				throw new Error("Settings file not accessible")
 			}
 

@@ -1,3 +1,5 @@
+import { describe, it, expect, vi } from "vitest"
+
 import type OpenAI from "openai"
 
 import type { McpServer, McpTool } from "@njust-ai-cj/types"
@@ -70,7 +72,7 @@ describe("getMcpServerTools", () => {
 	})
 
 	it("should deduplicate tools when same server exists in both global and project configs", () => {
-		const globalServer = createMockServer(
+		const _globalServer = createMockServer(
 			"context7",
 			[createMockTool("resolve-library-id", "Global description")],
 			"global",

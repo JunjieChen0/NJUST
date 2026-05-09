@@ -8,7 +8,6 @@ import { parseCangjieWithFallback } from "../../tree-sitter/cangjieParser"
 import { ICodeParser, CodeBlock } from "../interfaces"
 import { scannerExtensions, shouldUseFallbackChunking } from "../shared/supported-extensions"
 import { MAX_BLOCK_CHARS, MIN_BLOCK_CHARS, MIN_CHUNK_REMAINDER_CHARS, MAX_CHARS_TOLERANCE_FACTOR } from "../constants"
-import { sanitizeErrorMessage } from "../shared/validation-helpers"
 import { logger } from "../../../shared/logger"
 
 /**

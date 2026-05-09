@@ -1,5 +1,7 @@
 // npx vitest run api/transform/__tests__/model-params.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import { type ModelInfo, ANTHROPIC_DEFAULT_MAX_TOKENS } from "@njust-ai-cj/types"
 
 import { getModelParams } from "../model-params"
@@ -890,7 +892,7 @@ describe("getModelParams", () => {
 				reasoningEffort: "medium",
 			}
 
-			const result = getModelParams({
+			getModelParams({
 				...anthropicParams,
 				settings: {},
 				model,

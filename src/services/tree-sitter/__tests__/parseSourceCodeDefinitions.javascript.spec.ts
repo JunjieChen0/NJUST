@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeAll } from "vitest"
+
 import { testParseSourceCodeDefinitions } from "./helpers"
 import { javascriptQuery } from "../queries"
 import sampleJavaScriptContent from "./fixtures/sample-javascript"

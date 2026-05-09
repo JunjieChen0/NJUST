@@ -379,7 +379,7 @@ function isBlockDef(kind: CangjieDefKind): boolean {
 	return ["class", "struct", "interface", "enum", "func", "extend", "main", "macro", "init", "prop", "operator"].includes(kind)
 }
 
-function isEnumContainer(kind: CangjieDefKind): boolean {
+function _isEnumContainer(kind: CangjieDefKind): boolean {
 	return kind === "enum"
 }
 
@@ -387,7 +387,7 @@ function isEnumContainer(kind: CangjieDefKind): boolean {
  * Strip trailing `//` comment from a line, respecting string and character
  * literal boundaries. Returns the code-only prefix.
  */
-function stripInlineComment(line: string): string {
+function _stripInlineComment(line: string): string {
 	let inString = false
 	let inChar = false
 	for (let i = 0; i < line.length - 1; i++) {
@@ -707,7 +707,7 @@ export function extractTypeMemberSummaries(
  * Convert extracted definitions into mock QueryCaptures compatible with
  * processCaptures() in tree-sitter/index.ts.
  */
-export function cangjieDefsToCaptures(defs: CangjieDef[], lines: string[]): QueryCapture[] {
+export function cangjieDefsToCaptures(defs: CangjieDef[], _lines: string[]): QueryCapture[] {
 	const captures: MockCapture[] = []
 
 	for (const def of defs) {

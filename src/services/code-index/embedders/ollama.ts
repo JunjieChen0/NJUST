@@ -3,7 +3,7 @@ import { EmbedderInfo, EmbeddingResponse, IEmbedder } from "../interfaces"
 import { getModelQueryPrefix } from "../../../shared/embeddingModels"
 import { MAX_ITEM_TOKENS } from "../constants"
 import { t } from "../../../i18n"
-import { withValidationErrorHandling, sanitizeErrorMessage } from "../shared/validation-helpers"
+import { withValidationErrorHandling } from "../shared/validation-helpers"
 import { logger } from "../../../shared/logger"
 
 // Timeout constants for Ollama API requests
@@ -88,7 +88,7 @@ export class CodeIndexOllamaEmbedder implements IEmbedder {
 				let errorBody = t("embeddings:ollama.couldNotReadErrorBody")
 				try {
 					errorBody = await response.text()
-				} catch (e) {
+				} catch {
 					// Ignore error reading body
 				}
 				throw new Error(
@@ -111,21 +111,24 @@ export class CodeIndexOllamaEmbedder implements IEmbedder {
 			return {
 				embeddings: embeddings,
 			}
-		} catch (error: any) {
+		} catch (error: unknown) {
 			// Log the original error for debugging purposes
 			logger.error("OllamaEmbedder", "Ollama embedding failed:", error)
 
+			const err = error as Record<string, unknown>
+
 			// Handle specific error types with better messages
-			if (error.name === "AbortError") {
+			if (err.name === "AbortError") {
 				throw new Error(t("embeddings:validation.connectionFailed"))
-			} else if (error.message?.includes("fetch failed") || error.code === "ECONNREFUSED") {
+			} else if ((typeof err.message === "string" && err.message.includes("fetch failed")) || err.code === "ECONNREFUSED") {
 				throw new Error(t("embeddings:ollama.serviceNotRunning", { baseUrl: this.baseUrl }))
-			} else if (error.code === "ENOTFOUND") {
+			} else if (err.code === "ENOTFOUND") {
 				throw new Error(t("embeddings:ollama.hostNotFound", { baseUrl: this.baseUrl }))
 			}
 
 			// Re-throw a more specific error for the caller
-			throw new Error(t("embeddings:ollama.embeddingFailed", { message: error.message }))
+			const message = error instanceof Error ? error.message : String(error)
+			throw new Error(t("embeddings:ollama.embeddingFailed", { message }))
 		}
 	}
 

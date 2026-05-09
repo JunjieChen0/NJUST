@@ -1,8 +1,6 @@
 import * as path from "path"
-import * as vscode from "vscode"
 import os from "os"
 import crypto from "crypto"
-import { promises as fs } from "fs"
 import { v7 as uuidv7 } from "uuid"
 import EventEmitter from "events"
 
@@ -11,13 +9,8 @@ import { startAllPrefetch } from "../prefetch"
 import { setLastGlobalApiRequestTime, getLastGlobalApiRequestTime as getGlobalApiTime } from "./globalApiTiming"
 
 import { Anthropic } from "@anthropic-ai/sdk"
-import OpenAI from "openai"
 import debounce from "lodash.debounce"
-import delay from "delay"
 import pWaitFor from "p-wait-for"
-import { serializeError } from "serialize-error"
-import { Package } from "../../shared/package"
-import { formatToolInvocation } from "../tools/helpers/toolResultFormatting"
 
 import {
 	type TaskLike,
@@ -37,7 +30,6 @@ import {
 	type CreateTaskOptions,
 	type ModelInfo,
 	type ClineApiReqCancelReason,
-	type ClineApiReqInfo,
 	NJUST_AI_CJEventName,
 	TaskStatus,
 	TodoItem,
@@ -52,71 +44,51 @@ import {
 	DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
 	MAX_CHECKPOINT_TIMEOUT_SECONDS,
 	MIN_CHECKPOINT_TIMEOUT_SECONDS,
-	MAX_MCP_TOOLS_THRESHOLD,
 	countEnabledMcpTools,
-	DEFAULT_REQUEST_DELAY_SECONDS,
-	DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT,
 } from "@njust-ai-cj/types"
 
 // api
-import { ApiHandler, ApiHandlerCreateMessageMetadata, buildApiHandler } from "../../api"
-import { ApiStream, GroundingSource } from "../../api/transform/stream"
-import { maybeRemoveImageBlocks } from "../../api/transform/image-cleaning"
+import { ApiHandler, buildApiHandler } from "../../api"
+import { ApiStream } from "../../api/transform/stream"
 
 // shared
 import { findLastIndex } from "../../shared/array"
 import { combineApiRequests } from "../../shared/combineApiRequests"
 import { combineCommandSequences } from "../../shared/combineCommandSequences"
-import { t } from "../../i18n"
 import { getApiMetrics, hasTokenUsageChanged, hasToolUsageChanged } from "../../shared/getApiMetrics"
 import { ClineAskResponse } from "../../shared/WebviewMessage"
-import { DEFAULT_MODE_SLUG } from "../../shared/mode-constants"
-import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
-import { DiffStrategy, type ToolUse, type ToolParamName, toolParamNames } from "../../shared/tools"
-import { getModelMaxOutputTokens } from "../../shared/api"
+import { defaultModeSlug } from "../../shared/modes"
+import { DiffStrategy } from "../../shared/tools"
 import { logger } from "../../shared/logger"
 
 // services
 import { McpServerManager } from "../../services/mcp/McpServerManager"
 import { RepoPerTaskCheckpointService } from "../../services/checkpoints"
-import { deleteGeneratedCangjieTestFilesForTask } from "../../services/cangjie-lsp/cangjieGeneratedTestCleanup"
 
 // integrations
 import { DiffViewProvider } from "../../integrations/editor/DiffViewProvider"
-import { findToolName } from "../../integrations/misc/export-markdown"
 import { RooTerminalProcess } from "../../integrations/terminal/types"
-import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"
-import { OutputInterceptor } from "../../integrations/terminal/OutputInterceptor"
 
 // utils
-import { calculateApiCostAnthropic, calculateApiCostOpenAI } from "../../shared/cost"
 import { getWorkspacePath } from "../../utils/path"
 import { CloudAgentOrchestrator, type ICloudAgentHost } from "./CloudAgentOrchestrator"
-import { sanitizeToolUseId } from "../../utils/tool-id"
-import { getTaskDirectoryPath } from "../../utils/storage"
 import { tokenCountCache } from "../../utils/tokenCountCache"
-import { globalCacheMetrics } from "../../utils/cacheMetrics"
-import { globalQueryProfiler } from "../../utils/queryProfiler"
-import { globalPromptCacheBreakDetector } from "../prompts/promptCacheBreakDetection"
 
 // prompts
 import { formatResponse } from "../prompts/responses"
 import {
 	type SystemPromptParts,
 } from "../prompts/system"
-import { buildNativeToolsArrayWithRestrictions } from "./build-tools"
 
 // core modules
 import { ToolRepetitionDetector } from "../tools/ToolRepetitionDetector"
 import { restoreTodoListForTask } from "../tools/UpdateTodoListTool"
 import { FileContextTracker } from "../context-tracking/FileContextTracker"
-import { allowRooIgnorePathAccess, RooIgnoreController } from "../ignore/RooIgnoreController"
+import { RooIgnoreController } from "../ignore/RooIgnoreController"
 import { RooProtectedController } from "../protect/RooProtectedController"
-import { type AssistantMessageContent, presentAssistantMessage } from "../assistant-message"
+import { type AssistantMessageContent } from "../assistant-message"
 import { NativeToolCallParser } from "../assistant-message/NativeToolCallParser"
-import { defaultToolCallParser } from "../assistant-message/ToolCallParserImpl"
 import { ToolExecutionContext } from "./ToolExecutionContext"
-import { manageContext, willManageContext } from "../context-management"
 import { TokenGrowthTracker } from "../context-management/tokenGrowthTracker"
 import { taskEventBus, type TaskEventBus } from "../events/TaskEventBus"
 import type { ITaskHost } from "./interfaces/ITaskHost"
@@ -131,10 +103,8 @@ import {
 	taskMetadata,
 } from "../task-persistence"
 import { getEnvironmentDetails } from "../environment/getEnvironmentDetails"
-import { clearRetryEvents } from "../errors/retryPersistence"
 import { ErrorRecoveryHandler } from "./ErrorRecoveryHandler"
 import { PersistentRetryManager } from "./PersistentRetry"
-import { clearMcpInstructionsDelta } from "../prompts/sections/mcp-instructions-delta"
 import {
 	type CheckpointDiffOptions,
 	type CheckpointRestoreOptions,
@@ -143,18 +113,15 @@ import {
 	checkpointRestore,
 	checkpointDiff,
 } from "../checkpoints"
-import { processUserContentMentions } from "../mentions/processUserContentMentions"
-import { getMessagesSinceLastSummary, getEffectiveApiHistory } from "../condense"
+import { getEffectiveApiHistory } from "../condense"
 import { MessageQueueService } from "../message-queue/MessageQueueService"
 import { AutoApprovalHandler, checkAutoApproval } from "../auto-approval"
 import { MessageManager } from "../message-manager"
 import { validateAndFixToolResultIds } from "./validateToolResultIds"
-import { mergeConsecutiveApiMessages } from "./mergeConsecutiveApiMessages"
 import { TaskStateMachine, TaskState } from "./TaskStateMachine"
 import { TaskRequestBuilder } from "./TaskRequestBuilder"
 import { TaskStreamProcessor } from "./TaskStreamProcessor"
-import { generateParentContextSummary, buildCacheAwareForkContext, buildForkPlaceholderResult } from "./SubTaskContextBuilder"
-import { AGENT_TYPE_CONTEXT_BUDGET } from "./SubTaskOptions"
+import { generateParentContextSummary } from "./SubTaskContextBuilder"
 import type { IsolationLevel, ForkedContextConfig, CacheSafeParams } from "./SubTaskOptions"
 import { DEFAULT_FORKED_CONTEXT_CONFIG } from "./SubTaskOptions"
 import { TaskMessageManager, type TaskMessageContext } from "./TaskMessageManager"
@@ -162,10 +129,6 @@ import { TaskToolHandler } from "./TaskToolHandler"
 import { TaskExecutor, type TaskExecutorHost } from "./TaskExecutor"
 import { TaskLifecycleHandler, type TaskLifecycleHost } from "./TaskLifecycleHandler"
 import { CangjieRuntimePolicy } from "./CangjieRuntimePolicy"
-
-const MAX_EXPONENTIAL_BACKOFF_SECONDS = 600 // 10 minutes
-const DEFAULT_USAGE_COLLECTION_TIMEOUT_MS = 5000 // 5 seconds
-const FORCED_CONTEXT_REDUCTION_PERCENT = 75 // Keep 75% of context (remove 25%) on context window errors
 
 export interface TaskOptions extends CreateTaskOptions {
 	host?: ITaskHost
@@ -596,7 +559,6 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		task,
 		images,
 		historyItem,
-		experiments: experimentsConfig,
 		startTask = true,
 		rootTask,
 		parentTask,
@@ -2350,7 +2312,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private buildCleanConversationHistory(
 		messages: ApiMessage[],
 	): Array<
-		Anthropic.Messages.MessageParam | { type: "reasoning"; encrypted_content: string; id?: string; summary?: any[] }
+		Anthropic.Messages.MessageParam | { type: "reasoning"; encrypted_content?: string; id?: string; summary?: any[] }
 	> {
 		return this.streamProcessor.buildCleanConversationHistory(messages)
 	}

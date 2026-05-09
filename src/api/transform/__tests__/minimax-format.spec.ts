@@ -1,5 +1,7 @@
 // npx vitest run api/transform/__tests__/minimax-format.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import { Anthropic } from "@anthropic-ai/sdk"
 
 import { mergeEnvironmentDetailsForMiniMax } from "../minimax-format"

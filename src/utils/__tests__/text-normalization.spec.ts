@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { normalizeString, unescapeHtmlEntities } from "../text-normalization"
 
 describe("Text normalization utilities", () => {

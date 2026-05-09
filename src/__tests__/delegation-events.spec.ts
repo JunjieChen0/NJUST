@@ -1,5 +1,7 @@
 // npx vitest run __tests__/delegation-events.spec.ts
 
+import { describe, test, expect } from "vitest"
+
 import { NJUST_AI_CJEventName, rooCodeEventsSchema, taskEventSchema } from "@njust-ai-cj/types"
 
 describe("delegation event schemas", () => {

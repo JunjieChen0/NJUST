@@ -170,7 +170,7 @@ type CommonFetchParams = {
 // Exhaustive, value-level map for all dynamic providers.
 // If a new dynamic provider is added in packages/types, this will fail to compile
 // until a corresponding entry is added here.
-const dynamicProviderExtras = {
+const _dynamicProviderExtras = {
 	openrouter: {} as {}, // eslint-disable-line @typescript-eslint/no-empty-object-type
 	"vercel-ai-gateway": {} as {}, // eslint-disable-line @typescript-eslint/no-empty-object-type
 	litellm: {} as { apiKey: string; baseUrl: string },

@@ -11,7 +11,6 @@ import {
 	OpenAiNativeModelId,
 	openAiNativeModels,
 	OPENAI_NATIVE_DEFAULT_TEMPERATURE,
-	type ReasoningEffort,
 	type VerbosityLevel,
 	type ReasoningEffortExtended,
 	type ServiceTier,
@@ -33,6 +32,21 @@ import { sanitizeOpenAiCallId } from "../../utils/tool-id"
 import { requireApiKey } from "../interfaces/api-key-validator"
 
 export type OpenAiNativeModel = ReturnType<OpenAiNativeHandler["getModel"]>
+
+interface OpenAiUsageData {
+	input_tokens?: number
+	prompt_tokens?: number
+	output_tokens?: number
+	completion_tokens?: number
+	cache_creation_input_tokens?: number
+	cache_write_tokens?: number
+	cache_read_input_tokens?: number
+	cache_read_tokens?: number
+	cached_tokens?: number
+	input_tokens_details?: { cached_tokens?: number; cache_miss_tokens?: number }
+	prompt_tokens_details?: { cached_tokens?: number; cache_miss_tokens?: number }
+	output_tokens_details?: { reasoning_tokens?: number }
+}
 
 export class OpenAiNativeHandler extends BaseProvider implements SingleCompletionHandler {
 	protected options: ApiHandlerOptions
@@ -109,17 +123,15 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		})
 	}
 
-	private normalizeUsage(usage: any, model: OpenAiNativeModel): ApiStreamUsageChunk | undefined {
+	private normalizeUsage(usage: OpenAiUsageData | undefined, model: OpenAiNativeModel): ApiStreamUsageChunk | undefined {
 		if (!usage) return undefined
 
 		// Prefer detailed shapes when available (Responses API)
 		const inputDetails = usage.input_tokens_details ?? usage.prompt_tokens_details
 
 		// Extract cache information from details with better readability
-		const hasCachedTokens = typeof inputDetails?.cached_tokens === "number"
-		const hasCacheMissTokens = typeof inputDetails?.cache_miss_tokens === "number"
-		const cachedFromDetails = hasCachedTokens ? inputDetails.cached_tokens : 0
-		const missFromDetails = hasCacheMissTokens ? inputDetails.cache_miss_tokens : 0
+				const cachedFromDetails = inputDetails?.cached_tokens ?? 0
+		const missFromDetails = inputDetails?.cache_miss_tokens ?? 0
 
 		// If total input tokens are missing but we have details, derive from them
 		let totalInputTokens = usage.input_tokens ?? usage.prompt_tokens ?? 0
@@ -211,7 +223,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		this.streamedToolCallIds.clear()
 
 		// Use Responses API for ALL models
-		const { verbosity, reasoning } = this.getModel()
+		const { verbosity, reasoning: _reasoning } = this.getModel()
 
 		// Resolve reasoning effort for models that support it
 		const reasoningEffort = this.getReasoningEffort(model)
@@ -598,8 +610,8 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		requestBody: any,
 		model: OpenAiNativeModel,
 		metadata?: ApiHandlerCreateMessageMetadata,
-		systemPrompt?: string,
-		messages?: Anthropic.Messages.MessageParam[],
+		_systemPrompt?: string,
+		_messages?: Anthropic.Messages.MessageParam[],
 	): ApiStream {
 		const apiKey = requireApiKey(this.options.openAiNativeApiKey, "OpenAI Native")
 		const baseUrl = this.options.openAiNativeBaseUrl || "https://api.openai.com"
@@ -695,9 +707,9 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			if (TelemetryService.hasInstance()) {
 				const forTelemetry =
 					error instanceof ApiProviderError ? error : new ApiProviderError(errorMessage, { cause: error })
-				;(forTelemetry as any).provider = this.providerName
-				;(forTelemetry as any).modelId = model.id
-				;(forTelemetry as any).operation = "createMessage"
+				;forTelemetry.provider = this.providerName
+				;forTelemetry.modelId = model.id
+				;forTelemetry.operation = "createMessage"
 				TelemetryService.instance.captureException(forTelemetry)
 			}
 
@@ -728,8 +740,6 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		const decoder = new TextDecoder()
 		let buffer = ""
 		let hasContent = false
-		const totalInputTokens = 0
-		const totalOutputTokens = 0
 		let sseJsonParseFailureCount = 0
 
 		try {
@@ -1205,9 +1215,9 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			if (TelemetryService.hasInstance()) {
 				const msg = error instanceof Error ? error.message : String(error)
 				const forTelemetry = new ApiProviderError(msg)
-				;(forTelemetry as any).provider = this.providerName
-				;(forTelemetry as any).modelId = model.id
-				;(forTelemetry as any).operation = "createMessage"
+				;forTelemetry.provider = this.providerName
+				;forTelemetry.modelId = model.id
+				;forTelemetry.operation = "createMessage"
 				TelemetryService.instance.captureException(forTelemetry)
 			}
 			if (error instanceof Error) {
@@ -1569,7 +1579,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 
 		try {
 			const model = this.getModel()
-			const { verbosity, reasoning } = model
+			const { verbosity, reasoning: _reasoning } = model
 
 			// Resolve reasoning effort for models that support it
 			const reasoningEffort = this.getReasoningEffort(model)
@@ -1653,9 +1663,9 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			if (TelemetryService.hasInstance()) {
 				const msg = error instanceof Error ? error.message : String(error)
 				const forTelemetry = new ApiProviderError(msg)
-				;(forTelemetry as any).provider = this.providerName
-				;(forTelemetry as any).modelId = this.getModel().id
-				;(forTelemetry as any).operation = "completePrompt"
+				;forTelemetry.provider = this.providerName
+				;forTelemetry.modelId = this.getModel().id
+				;forTelemetry.operation = "completePrompt"
 				TelemetryService.instance.captureException(forTelemetry)
 			}
 			if (error instanceof Error) {

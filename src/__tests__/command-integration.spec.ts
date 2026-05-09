@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import * as path from "path"
 
 import { getCommands, getCommand, getCommandNames } from "../services/command/commands"

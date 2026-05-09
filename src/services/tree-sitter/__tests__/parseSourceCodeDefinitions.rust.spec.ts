@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeAll } from "vitest"
+
 import { testParseSourceCodeDefinitions, debugLog } from "./helpers"
 import sampleRustContent from "./fixtures/sample-rust"
 import { rustQuery } from "../queries"

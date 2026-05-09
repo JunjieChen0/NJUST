@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import * as path from "path"
 
 describe("custom-instructions path detection", () => {

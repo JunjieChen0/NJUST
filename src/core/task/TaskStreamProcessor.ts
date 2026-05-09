@@ -4,17 +4,12 @@ import { Anthropic } from "@anthropic-ai/sdk"
 import {
 	type ContextCondense,
 	type ContextTruncation,
-	type ProviderSettings,
-	getApiProtocol,
-	getModelId,
-	isRetiredProvider,
 	DEFAULT_REQUEST_DELAY_SECONDS,
 } from "@njust-ai-cj/types"
 
 import type { Task } from "./Task"
 import type { ApiHandlerCreateMessageMetadata } from "../../api"
 import { resolveParallelNativeToolCalls } from "../../shared/parallelToolCalls"
-import { calculateApiCostAnthropic, calculateApiCostOpenAI } from "../../shared/cost"
 import { getModelMaxOutputTokens } from "../../shared/api"
 
 import { manageContext } from "../context-management"
@@ -44,7 +39,7 @@ export class TaskStreamProcessor {
 	/**
 	 * Safely get files read by Roo, catching errors.
 	 */
-	async getFilesReadByRooSafely(context: string): Promise<string[] | undefined> {
+	async getFilesReadByRooSafely(_context: string): Promise<string[] | undefined> {
 		try {
 			return await this.task.fileContextTracker.getFilesReadByRoo()
 		} catch (error) {
@@ -138,7 +133,7 @@ export class TaskStreamProcessor {
 			const state = await this.task.providerRef.deref()?.getState()
 			const baseDelay = state?.requestDelaySeconds ?? DEFAULT_REQUEST_DELAY_SECONDS
 
-			const unattendedMaxBackoffSeconds = (state as any)?.unattendedMaxBackoffSeconds ?? MAX_EXPONENTIAL_BACKOFF_SECONDS
+			const unattendedMaxBackoffSeconds = state?.unattendedMaxBackoffSeconds ?? MAX_EXPONENTIAL_BACKOFF_SECONDS
 			let exponentialDelay = Math.min(
 				Math.ceil(baseDelay * Math.pow(2, retryAttempt)),
 				unattendedMaxBackoffSeconds,
@@ -429,7 +424,7 @@ export class TaskStreamProcessor {
 	buildCleanConversationHistory(
 		messages: ApiMessage[],
 	): Array<
-		Anthropic.Messages.MessageParam | { type: "reasoning"; encrypted_content: string; id?: string; summary?: any[] }
+		Anthropic.Messages.MessageParam | ReasoningBlock
 	> {
 		type ReasoningItemForRequest = {
 			type: "reasoning"
@@ -494,18 +489,18 @@ export class TaskStreamProcessor {
 
 				// Embedded reasoning: encrypted (send) or plain text (skip)
 				const hasEncryptedReasoning =
-					first && (first as any).type === "reasoning" && typeof (first as any).encrypted_content === "string"
+					first && (first as unknown as ReasoningBlock).type === "reasoning" && typeof (first as unknown as ReasoningBlock).encrypted_content === "string"
 				const hasPlainTextReasoning =
-					first && (first as any).type === "reasoning" && typeof (first as any).text === "string"
+					first && (first as unknown as ReasoningBlock).type === "reasoning" && typeof (first as unknown as ReasoningBlock).text === "string"
 
 				if (hasEncryptedReasoning) {
-					const reasoningBlock = first as any
+					const reasoningBlock = first as unknown as ReasoningBlock
 
 					// Send as separate reasoning item (OpenAI Native)
 					cleanConversationHistory.push({
 						type: "reasoning",
 						summary: reasoningBlock.summary ?? [],
-						encrypted_content: reasoningBlock.encrypted_content,
+						encrypted_content: reasoningBlock.encrypted_content!,
 						...(reasoningBlock.id ? { id: reasoningBlock.id } : {}),
 					})
 
@@ -599,4 +594,12 @@ export class TaskStreamProcessor {
 
 		return cleanConversationHistory
 	}
+}
+
+interface ReasoningBlock {
+	type: "reasoning"
+	text?: string
+	encrypted_content?: string
+	id?: string
+	summary?: Array<{ type?: string; text?: string }>
 }

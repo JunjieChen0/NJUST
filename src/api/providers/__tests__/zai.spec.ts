@@ -1,5 +1,7 @@
 // npx vitest run src/api/providers/__tests__/zai.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 import OpenAI from "openai"
 import { Anthropic } from "@anthropic-ai/sdk"
 

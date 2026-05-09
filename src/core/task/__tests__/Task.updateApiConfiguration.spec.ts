@@ -1,8 +1,9 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+
 import type { ProviderSettings } from "@njust-ai-cj/types"
 
 import { Task } from "../Task"
 import { ClineProvider } from "../../webview/ClineProvider"
-import { NativeToolCallParser } from "../../assistant-message/NativeToolCallParser"
 import { tokenCountCache } from "../../../utils/tokenCountCache"
 import { buildApiHandler } from "../../../api"
 

@@ -9,13 +9,11 @@ import {
 	mistralModels,
 	MISTRAL_DEFAULT_TEMPERATURE,
 } from "@njust-ai-cj/types"
-import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import { ApiHandlerOptions } from "../../shared/api"
 
 import { convertToMistralMessages } from "../transform/mistral-format"
 import { ApiStream } from "../transform/stream"
-import { handleProviderError } from "./utils/error-handler"
 
 import { BaseProvider } from "./base-provider"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"

@@ -1,5 +1,7 @@
 // npx vitest services/code-index/__tests__/config-manager.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { CodeIndexConfigManager } from "../config-manager"
 import { PreviousConfigSnapshot } from "../interfaces/config"
 
@@ -1400,7 +1402,7 @@ describe("CodeIndexConfigManager", () => {
 			configManager = new CodeIndexConfigManager(mockContextProxy)
 
 			// Get the initial snapshot
-			const { configSnapshot: previousSnapshot } = await configManager.loadConfiguration()
+			const { configSnapshot: _previousSnapshot } = await configManager.loadConfiguration()
 
 			// Update the internal state to enabled with proper configuration
 			mockContextProxy.getGlobalState.mockReturnValue({
@@ -1471,7 +1473,7 @@ describe("CodeIndexConfigManager", () => {
 			configManager = new CodeIndexConfigManager(mockContextProxy)
 
 			// Get initial configuration
-			const { configSnapshot: previousSnapshot } = await configManager.loadConfiguration()
+			const { configSnapshot: _previousSnapshot } = await configManager.loadConfiguration()
 
 			// Load again with same config - should not require restart
 			const { requiresRestart } = await configManager.loadConfiguration()

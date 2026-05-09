@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeEach } from "vitest"
+
 import path from "path"
 import { RooProtectedController } from "../RooProtectedController"
 

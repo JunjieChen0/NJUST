@@ -1,10 +1,12 @@
 // npx vitest src/core/config/__tests__/ProviderSettingsManager.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { ExtensionContext } from "vscode"
 
 import type { ProviderSettings } from "@njust-ai-cj/types"
 
-import { ProviderSettingsManager, ProviderProfiles, SyncCloudProfilesResult } from "../ProviderSettingsManager"
+import { ProviderSettingsManager, ProviderProfiles } from "../ProviderSettingsManager"
 
 // Mock VSCode ExtensionContext
 const mockSecrets = {

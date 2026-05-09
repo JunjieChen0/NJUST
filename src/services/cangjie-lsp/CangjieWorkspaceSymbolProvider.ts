@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import { CangjieSymbolIndex } from "./CangjieSymbolIndex"
-import type { CangjieDefKind } from "../../services/tree-sitter/cangjieParser"
+
 
 const KIND_TO_ICON: Record<string, vscode.SymbolKind> = {
 	class: vscode.SymbolKind.Class,

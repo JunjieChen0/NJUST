@@ -1,3 +1,5 @@
+import { describe, it } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import { kotlinQuery } from "../queries"
 import sampleKotlinContent from "./fixtures/sample-kotlin"

@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { getToolUseGuidelinesSection } from "../tool-use-guidelines"
 
 describe("getToolUseGuidelinesSection", () => {

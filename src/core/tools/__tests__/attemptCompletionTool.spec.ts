@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { NJUST_AI_CJEventName, TodoItem } from "@njust-ai-cj/types"
 
 import { AttemptCompletionToolUse } from "../../../shared/tools"

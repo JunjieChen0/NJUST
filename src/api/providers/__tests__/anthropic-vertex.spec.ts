@@ -1,5 +1,7 @@
 // npx vitest run src/api/providers/__tests__/anthropic-vertex.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import { Anthropic } from "@anthropic-ai/sdk"
 import { AnthropicVertex } from "@anthropic-ai/vertex-sdk"
 
@@ -619,7 +621,7 @@ describe("VertexHandler", () => {
 				vertexRegion: "us-central1",
 			})
 
-			const mockCreate = vitest.fn().mockImplementation(async (options) => {
+			const mockCreate = vitest.fn().mockImplementation(async (_options) => {
 				return {
 					async *[Symbol.asyncIterator]() {
 						yield {
@@ -701,7 +703,7 @@ describe("VertexHandler", () => {
 				vertexRegion: "us-central1",
 			})
 
-			const mockCreate = vitest.fn().mockImplementation(async (options) => {
+			const mockCreate = vitest.fn().mockImplementation(async (_options) => {
 				return {
 					async *[Symbol.asyncIterator]() {
 						yield {
@@ -1104,7 +1106,7 @@ describe("VertexHandler", () => {
 				modelMaxThinkingTokens: 4096,
 			})
 
-			const mockCreate = vitest.fn().mockImplementation(async (options) => {
+			const mockCreate = vitest.fn().mockImplementation(async (_options) => {
 				if (!options.stream) {
 					return {
 						id: "test-completion",

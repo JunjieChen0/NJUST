@@ -1,5 +1,7 @@
 // pnpm --filter njust-ai-cj test core/webview/__tests__/ClineProvider.spec.ts
 
+
+import { describe, it, test, expect, vi, beforeEach, beforeAll, afterAll } from "vitest"
 import Anthropic from "@anthropic-ai/sdk"
 import * as vscode from "vscode"
 import axios from "axios"
@@ -337,7 +339,7 @@ describe("ClineProvider", () => {
 		vi.clearAllMocks()
 
 		if (!TelemetryService.hasInstance()) {
-			TelemetryService.createInstance([])
+			TelemetryService.createInstance()
 		}
 
 		const globalState: Record<string, string | undefined> = {
@@ -2194,7 +2196,7 @@ describe("getTelemetryProperties", () => {
 
 		// Initialize TelemetryService if not already initialized
 		if (!TelemetryService.hasInstance()) {
-			TelemetryService.createInstance([])
+			TelemetryService.createInstance()
 		}
 
 		// Setup basic mocks
@@ -2328,7 +2330,7 @@ describe("ClineProvider - Router Models", () => {
 		} as unknown as vscode.WebviewView
 
 		if (!TelemetryService.hasInstance()) {
-			TelemetryService.createInstance([])
+			TelemetryService.createInstance()
 		}
 
 		provider = new ClineProvider(mockContext, mockOutputChannel, "sidebar", new ContextProxy(mockContext))
@@ -2582,7 +2584,7 @@ describe("ClineProvider - Comprehensive Edit/Delete Edge Cases", () => {
 		vi.clearAllMocks()
 
 		if (!TelemetryService.hasInstance()) {
-			TelemetryService.createInstance([])
+			TelemetryService.createInstance()
 		}
 
 		const globalState: Record<string, string | undefined> = {

@@ -13,8 +13,7 @@ import fs from "fs/promises"
 import { logger } from "../../shared/logger"
 import ignore from "ignore"
 import path from "path"
-import { t } from "../../i18n"
-import { TelemetryService } from "@njust-ai-cj/telemetry"
+import { _t } from "../../i18n"
 
 export class CodeIndexManager {
 	// --- Singleton Implementation ---
@@ -150,7 +149,7 @@ export class CodeIndexManager {
 		try {
 			this.assertInitialized()
 			return true
-		} catch (error) {
+		} catch {
 			return false
 		}
 	}
@@ -285,7 +284,7 @@ export class CodeIndexManager {
 		try {
 			// Clear error state
 			this._stateManager.setSystemState("Standby", "")
-		} catch (error) {
+		} catch {
 			// Log error but continue with recovery - clearing service instances is more important
 			logger.error("CodeIndexManager", "Failed to clear error state during recovery:", error)
 		} finally {
@@ -376,7 +375,7 @@ export class CodeIndexManager {
 			const content = await fs.readFile(ignorePath, "utf8")
 			ignoreInstance.add(content)
 			ignoreInstance.add(".gitignore")
-		} catch (error) {
+		} catch {
 			// Should never happen: reading file failed even though it exists
 			logger.error("CodeIndexManager", "Unexpected error loading .gitignore:", error)
 		}
@@ -454,7 +453,7 @@ export class CodeIndexManager {
 
 					// Recreate services with new configuration
 					await this._recreateServices()
-				} catch (error) {
+				} catch {
 				// Error state already set in _recreateServices
 				logger.error("CodeIndexManager", "Failed to recreate services:", error)
 				// Re-throw the error so the caller knows validation failed

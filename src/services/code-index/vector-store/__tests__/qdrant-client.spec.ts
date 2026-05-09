@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeEach } from "vitest"
+
 import { QdrantClient } from "@qdrant/js-client-rest"
 import { createHash } from "crypto"
 
@@ -99,7 +101,7 @@ describe("QdrantVectorStore", () => {
 		expect((vectorStore as any).vectorSize).toBe(mockVectorSize)
 	})
 	it("should handle constructor with default URL when none provided", () => {
-		const vectorStoreWithDefaults = new QdrantVectorStore(mockWorkspacePath, undefined as any, mockVectorSize)
+		const _vectorStoreWithDefaults = new QdrantVectorStore(mockWorkspacePath, undefined as any, mockVectorSize)
 
 		expect(QdrantClient).toHaveBeenLastCalledWith({
 			host: "localhost",
@@ -113,7 +115,7 @@ describe("QdrantVectorStore", () => {
 	})
 
 	it("should handle constructor without API key", () => {
-		const vectorStoreWithoutKey = new QdrantVectorStore(mockWorkspacePath, mockQdrantUrl, mockVectorSize)
+		const _vectorStoreWithoutKey = new QdrantVectorStore(mockWorkspacePath, mockQdrantUrl, mockVectorSize)
 
 		expect(QdrantClient).toHaveBeenLastCalledWith({
 			host: "mock-qdrant",

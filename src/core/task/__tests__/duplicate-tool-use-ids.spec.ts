@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 /**
  * Tests for duplicate tool_use ID prevention.
  *
@@ -12,7 +14,7 @@
  */
 
 import { sanitizeToolUseId } from "../../../utils/tool-id"
-import type { ToolUse, McpToolUse } from "../../../shared/tools"
+import type { _ToolUse, _McpToolUse } from "../../../shared/tools"
 
 describe("Duplicate tool_use ID Prevention", () => {
 	describe("Pre-flight deduplication logic", () => {
@@ -143,7 +145,7 @@ describe("Duplicate tool_use ID Prevention", () => {
 			const streamingToolCallIndices = new Map<string, number>()
 			const processedEvents: string[] = []
 
-			const processToolCallStart = (id: string, name: string): boolean => {
+			const processToolCallStart = (id: string, _name: string): boolean => {
 				// Guard against duplicate tool_call_start events
 				if (streamingToolCallIndices.has(id)) {
 					// Would log: console.warn(`Ignoring duplicate tool_call_start for ID: ${id}`)

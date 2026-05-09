@@ -1,5 +1,7 @@
 // npx vitest run src/core/webview/__tests__/skillsMessageHandler.spec.ts
 
+
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { SkillMetadata, WebviewMessage } from "@njust-ai-cj/types"
 import type { ClineProvider } from "../ClineProvider"
 

@@ -1,7 +1,8 @@
 // npx vitest run api/providers/__tests__/base-openai-compatible-provider.spec.ts
 
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+
 import { Anthropic } from "@anthropic-ai/sdk"
-import OpenAI from "openai"
 
 import type { ModelInfo } from "@njust-ai-cj/types"
 

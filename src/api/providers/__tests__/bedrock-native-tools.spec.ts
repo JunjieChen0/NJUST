@@ -1,4 +1,6 @@
 // Mock AWS SDK credential providers
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 vi.mock("@aws-sdk/credential-providers", () => {
 	const mockFromIni = vi.fn().mockReturnValue({
 		accessKeyId: "profile-access-key",

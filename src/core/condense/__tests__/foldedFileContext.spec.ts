@@ -1,6 +1,8 @@
 // npx vitest src/core/condense/__tests__/foldedFileContext.spec.ts
 
-import * as path from "path"
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
+import * as _path from "path"
 import { Anthropic } from "@anthropic-ai/sdk"
 import type { ModelInfo } from "@njust-ai-cj/types"
 import { TelemetryService } from "@njust-ai-cj/telemetry"

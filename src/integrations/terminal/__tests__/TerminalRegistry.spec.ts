@@ -1,5 +1,7 @@
 // npx vitest run src/integrations/terminal/__tests__/TerminalRegistry.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import * as vscode from "vscode"
 import { Terminal } from "../Terminal"
 import { TerminalRegistry } from "../TerminalRegistry"
@@ -15,7 +17,7 @@ describe("TerminalRegistry", () => {
 
 	beforeEach(() => {
 		mockCreateTerminal = vi.spyOn(vscode.window, "createTerminal").mockImplementation(
-			(...args: any[]) =>
+			(..._args: any[]) =>
 				({
 					exitStatus: undefined,
 					name: "NJUST_AI_CJ",

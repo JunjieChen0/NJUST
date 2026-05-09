@@ -1,5 +1,7 @@
 // npx vitest core/webview/__tests__/ClineProvider.sticky-mode.spec.ts
 
+
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import * as vscode from "vscode"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 import { ClineProvider } from "../ClineProvider"
@@ -193,7 +195,7 @@ describe("ClineProvider - Sticky Mode", () => {
 		vi.clearAllMocks()
 
 		if (!TelemetryService.hasInstance()) {
-			TelemetryService.createInstance([])
+			TelemetryService.createInstance()
 		}
 
 		const globalState: Record<string, string | undefined> = {
@@ -1113,11 +1115,6 @@ describe("ClineProvider - Sticky Mode", () => {
 					mode: "debug",
 				},
 			])
-
-			// Mock updateTaskHistory
-			const updateTaskHistorySpy = vi
-				.spyOn(provider, "updateTaskHistory")
-				.mockImplementation(() => Promise.resolve([]))
 
 			// Mock getCurrentTask to return different tasks
 			const getCurrentTaskSpy = vi.spyOn(provider, "getCurrentTask")

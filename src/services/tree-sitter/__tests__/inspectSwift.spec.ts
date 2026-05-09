@@ -1,5 +1,7 @@
 // npx vitest services/tree-sitter/__tests__/inspectSwift.spec.ts
 
+import { it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions, debugLog } from "./helpers"
 import { swiftQuery } from "../queries"
 import sampleSwiftContent from "./fixtures/sample-swift"

@@ -50,7 +50,7 @@ const DEFAULT_OPTIONS: NormalizeOptions = {
 const SMART_CHAR_MAP: Record<string, string> = { ...NORMALIZATION_MAPS.SMART_QUOTES, ...NORMALIZATION_MAPS.TYPOGRAPHIC }
 const SMART_CHAR_RE = new RegExp(`[${Object.keys(SMART_CHAR_MAP).join("")}]`, "g")
 
-function applySmartCharReplacement(text: string): string {
+function _applySmartCharReplacement(text: string): string {
 	return text.replace(SMART_CHAR_RE, (ch) => SMART_CHAR_MAP[ch] ?? ch)
 }
 

@@ -1,5 +1,7 @@
 // npx vitest run api/transform/__tests__/image-cleaning.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import type { ModelInfo } from "@njust-ai-cj/types"
 
 import { ApiHandler } from "../../index"

@@ -1,5 +1,7 @@
 ﻿// npx vitest run src/core/tools/__tests__/validateToolUse.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import type { ModeConfig } from "@njust-ai-cj/types"
 
 import { getToolsForMode, modes } from "../../../shared/modes"

@@ -1,5 +1,7 @@
 // npx vitest run src/shared/__tests__/getApiMetrics.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import type { ClineMessage } from "@njust-ai-cj/types"
 
 import { getApiMetrics } from "../getApiMetrics"

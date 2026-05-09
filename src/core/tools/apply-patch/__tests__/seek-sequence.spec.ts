@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { seekSequence } from "../seek-sequence"
 
 describe("seek-sequence", () => {

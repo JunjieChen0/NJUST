@@ -1,4 +1,4 @@
-import { assertSafeOutboundUrl, guardedFetch } from "../../core/security/networkGuard"
+import {  guardedFetch } from "../../core/security/networkGuard"
 
 export type WebSearchProviderName =
 	| "tavily"

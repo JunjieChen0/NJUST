@@ -1,14 +1,14 @@
-import { ProviderSettings, ClineMessage, GlobalState } from "@njust-ai-cj/types"
+import { ProviderSettings, ClineMessage } from "@njust-ai-cj/types"
 import { supportPrompt } from "../../shared/support-prompt"
 import { singleCompletionHandler } from "../../utils/single-completion-handler"
 import { ProviderSettingsManager } from "../config/ProviderSettingsManager"
-import { ClineProvider } from "./ClineProvider"
+
 import { logger } from "../../shared/logger"
 
 export interface MessageEnhancerOptions {
 	text: string
 	apiConfiguration: ProviderSettings
-	customSupportPrompts?: Record<string, any>
+	customSupportPrompts?: Record<string, unknown>
 	listApiConfigMeta: Array<{ id: string; name?: string }>
 	enhancementApiConfigId?: string
 	includeTaskHistoryInEnhance?: boolean
@@ -131,7 +131,7 @@ export class MessageEnhancer {
 	 * @param taskId Optional task ID for telemetry tracking
 	 * @param includeTaskHistory Whether task history was included in the enhancement
 	 */
-	static captureTelemetry(taskId?: string, includeTaskHistory?: boolean): void {
+	static captureTelemetry(_taskId?: string, _includeTaskHistory?: boolean): void {
 		// Telemetry removed
 	}
 }

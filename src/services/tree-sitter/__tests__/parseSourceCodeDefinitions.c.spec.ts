@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeAll } from "vitest"
+
 import { testParseSourceCodeDefinitions } from "./helpers"
 import { cQuery } from "../queries"
 import sampleCContent from "./fixtures/sample-c"

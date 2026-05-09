@@ -1,4 +1,5 @@
-import OpenAI from "openai"
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { Anthropic } from "@anthropic-ai/sdk"
 
 import { LiteLLMHandler } from "../lite-llm"
@@ -250,7 +251,7 @@ describe("LiteLLMHandler", () => {
 				})
 
 				const generator = handler.createMessage(systemPrompt, messages)
-				for await (const chunk of generator) {
+				for await (const _chunk of generator) {
 					// Consume the generator
 				}
 
@@ -295,7 +296,7 @@ describe("LiteLLMHandler", () => {
 				})
 
 				const generator = handler.createMessage(systemPrompt, messages)
-				for await (const chunk of generator) {
+				for await (const _chunk of generator) {
 					// Consume the generator
 				}
 

@@ -219,7 +219,7 @@ export class TaskHistoryService {
 								await collectChildIds(childId)
 							}
 						}
-					} catch (error) {
+					} catch (_error) {
 						logger.info("TaskHistoryService", `deleteTaskWithId: child task ${taskId} not found, skipping`)
 					}
 				}

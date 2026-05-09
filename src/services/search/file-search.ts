@@ -50,7 +50,7 @@ export async function executeRipgrep({
 					}
 
 					count++
-				} catch (error) {
+				} catch {
 					// Silently ignore errors processing individual paths.
 				}
 			} else {
@@ -188,7 +188,7 @@ export async function searchWorkspaceFiles(
 		)
 
 		return verifiedResults
-	} catch (error) {
+	} catch {
 		logger.error("FileSearch", "Error in searchWorkspaceFiles:", error)
 		return []
 	}

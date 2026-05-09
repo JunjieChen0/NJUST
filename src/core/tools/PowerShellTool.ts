@@ -1,4 +1,3 @@
-import * as path from "path"
 
 import { BaseTool, type ToolCallbacks, type ValidationResult } from "./BaseTool"
 import { Task } from "../task/Task"
@@ -51,7 +50,7 @@ export class PowerShellTool extends BaseTool<"execute_command"> {
 	}
 
 	async execute(params: PowerShellParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
-		const { command, cwd: customCwd, timeout } = params
+		const { command, cwd: _customCwd, _timeout } = params
 		const { handleError, pushToolResult, askApproval } = callbacks
 
 		try {

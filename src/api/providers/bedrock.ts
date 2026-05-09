@@ -47,6 +47,18 @@ import { normalizeToolSchema } from "../../utils/json-schema"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
 import { getApiRequestTimeout } from "./utils/timeout-config"
 
+interface BedrockError extends Error {
+	status?: number
+	$metadata?: { httpStatusCode?: number; [key: string]: unknown }
+	name: string
+	__type?: string
+	code?: string
+}
+
+function isBedrockError(error: unknown): error is BedrockError {
+	return error instanceof Error && ("status" in error || "$metadata" in error || "__type" in error)
+}
+
 /************************************************************************************
  *
  *     TYPES
@@ -436,11 +448,11 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 		// Check if 1M context is enabled for supported Claude 4 models
 		// Use parseBaseModelId to handle cross-region inference prefixes
 		const is1MContextEnabled =
-			BEDROCK_1M_CONTEXT_MODEL_IDS.includes(baseModelId as any) && this.options.awsBedrock1MContext
+			(BEDROCK_1M_CONTEXT_MODEL_IDS as readonly string[]).includes(baseModelId) && this.options.awsBedrock1MContext
 
 		// Determine if service tier should be applied (checked later when building payload)
 		const useServiceTier =
-			this.options.awsBedrockServiceTier && BEDROCK_SERVICE_TIER_MODEL_IDS.includes(baseModelId as any)
+			this.options.awsBedrockServiceTier && (BEDROCK_SERVICE_TIER_MODEL_IDS as readonly string[]).includes(baseModelId)
 		if (useServiceTier) {
 			logger.info("Service tier specified for Bedrock request", {
 				ctx: "bedrock",
@@ -797,20 +809,20 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 		if (TelemetryService.hasInstance()) {
 			const origMsg = error instanceof Error ? error.message : String(error)
 			const forTelemetry = new ApiProviderError(origMsg)
-			;(forTelemetry as any).provider = this.providerName
-			;(forTelemetry as any).modelId = modelId
-			;(forTelemetry as any).operation = operation
+			;forTelemetry.provider = this.providerName
+			;forTelemetry.modelId = modelId
+			;forTelemetry.operation = operation
 			TelemetryService.instance.captureException(forTelemetry)
 		}
 
 		const enhancedError = new ApiProviderError(errorMessage)
 		if (error instanceof Error) {
 			enhancedError.name = error.name
-			if ("status" in error && typeof (error as any).status === "number") {
-				enhancedError.status = (error as any).status
+			if (isBedrockError(error) && typeof error.status === "number") {
+				enhancedError.status = error.status
 			}
-			if ("$metadata" in error && typeof (error as any).$metadata === "object" && (error as any).$metadata !== null) {
-				enhancedError.$metadata = (error as any).$metadata
+			if (isBedrockError(error) && typeof error.$metadata === "object" && error.$metadata !== null) {
+				enhancedError.$metadata = error.$metadata
 			}
 		}
 		return enhancedError
@@ -1079,7 +1091,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			const baseIdForGlobal = this.parseBaseModelId(modelConfig.id)
 			if (
 				this.options.awsUseGlobalInference &&
-				BEDROCK_GLOBAL_INFERENCE_MODEL_IDS.includes(baseIdForGlobal as any)
+				(BEDROCK_GLOBAL_INFERENCE_MODEL_IDS as readonly string[]).includes(baseIdForGlobal)
 			) {
 				modelConfig.id = `global.${baseIdForGlobal}`
 			}
@@ -1095,7 +1107,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 		// Check if 1M context is enabled for supported Claude 4 models
 		// Use parseBaseModelId to handle cross-region inference prefixes
 		const baseModelId = this.parseBaseModelId(modelConfig.id)
-		if (BEDROCK_1M_CONTEXT_MODEL_IDS.includes(baseModelId as any) && this.options.awsBedrock1MContext) {
+		if ((BEDROCK_1M_CONTEXT_MODEL_IDS as readonly string[]).includes(baseModelId) && this.options.awsBedrock1MContext) {
 			// Update context window and pricing to 1M tier when 1M context beta is enabled
 			const tier = modelConfig.info.tiers?.[0]
 			modelConfig.info = {
@@ -1119,7 +1131,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 
 		// Apply service tier pricing if specified and model supports it
 		const baseModelIdForTier = this.parseBaseModelId(modelConfig.id)
-		if (this.options.awsBedrockServiceTier && BEDROCK_SERVICE_TIER_MODEL_IDS.includes(baseModelIdForTier as any)) {
+		if (this.options.awsBedrockServiceTier && (BEDROCK_SERVICE_TIER_MODEL_IDS as readonly string[]).includes(baseModelIdForTier)) {
 			const pricingMultiplier = BEDROCK_SERVICE_TIER_PRICING[this.options.awsBedrockServiceTier]
 			if (pricingMultiplier && pricingMultiplier !== 1.0) {
 				// Apply pricing multiplier to all price fields
@@ -1168,8 +1180,8 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 		return (
 			modelConfig?.info?.supportsPromptCache &&
 			// Use optional chaining and type assertion to access cachableFields
-			(modelConfig?.info as any)?.cachableFields &&
-			(modelConfig?.info as any)?.cachableFields?.length > 0
+			modelConfig?.info?.cachableFields &&
+			modelConfig?.info?.cachableFields?.length > 0
 		)
 	}
 
@@ -1447,12 +1459,12 @@ Please check:
 		}
 
 		// Check for HTTP 429 status code (Too Many Requests)
-		if ((error as any).status === 429 || (error as any).$metadata?.httpStatusCode === 429) {
+		if (isBedrockError(error) && (error.status === 429 || error.$metadata?.httpStatusCode === 429)) {
 			return "THROTTLING"
 		}
 
 		// Check for Amazon Bedrock specific throttling exception names
-		if ((error as any).name === "ThrottlingException" || (error as any).__type === "ThrottlingException") {
+		if (isBedrockError(error) && (error.name === "ThrottlingException" || error.__type === "ThrottlingException")) {
 			return "THROTTLING"
 		}
 

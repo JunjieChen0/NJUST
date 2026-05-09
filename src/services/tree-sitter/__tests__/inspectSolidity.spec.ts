@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { debugLog, inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import { solidityQuery } from "../queries"
 import { sampleSolidity } from "./fixtures/sample-solidity"

@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import { typescriptQuery } from "../queries"
 import sampleTypeScriptContent from "./fixtures/sample-typescript"

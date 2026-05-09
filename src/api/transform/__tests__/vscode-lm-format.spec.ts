@@ -1,5 +1,7 @@
 // npx vitest run src/api/transform/__tests__/vscode-lm-format.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import { Anthropic } from "@anthropic-ai/sdk"
 import * as vscode from "vscode"
 

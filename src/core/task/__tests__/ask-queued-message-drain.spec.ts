@@ -1,3 +1,5 @@
+import { describe, it, expect, vi } from "vitest"
+
 import { Task } from "../Task"
 
 // Keep this test focused: if a queued message arrives while Task.ask() is blocked,

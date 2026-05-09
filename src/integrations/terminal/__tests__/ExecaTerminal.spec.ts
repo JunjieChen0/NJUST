@@ -1,5 +1,7 @@
 // npx vitest run src/integrations/terminal/__tests__/ExecaTerminal.spec.ts
 
+import { describe, it, expect, vi } from "vitest"
+
 import { RooTerminalCallbacks } from "../types"
 import { ExecaTerminal } from "../ExecaTerminal"
 

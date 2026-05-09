@@ -23,7 +23,6 @@ import { codeParser } from "./parser"
 import { CacheManager } from "../cache-manager"
 import { generateNormalizedAbsolutePath, generateRelativeFilePath } from "../shared/get-relative-path"
 import { isPathInIgnoredDirectory } from "../../glob/ignore-utils"
-import { sanitizeErrorMessage } from "../shared/validation-helpers"
 import { Package } from "../../../shared/package"
 import { logger } from "../../../shared/logger"
 
@@ -220,9 +219,11 @@ export class FileWatcher implements IFileWatcher {
 						currentFile: path,
 					})
 				}
-			} catch (error: any) {
-				const errorStatus = error?.status || error?.response?.status || error?.statusCode
-				const errorMessage = error instanceof Error ? error.message : String(error)
+			} catch (error: unknown) {
+				const _errorMessage = error instanceof Error ? error.message : String(error)
+				const err = error as Record<string, unknown>
+				const response = err.response as Record<string, unknown> | undefined
+				const _errorStatus = err.status || response?.status || err.statusCode
 
 				// Mark all paths as error
 				overallBatchError = error as Error

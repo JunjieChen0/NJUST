@@ -173,8 +173,9 @@ export class NativeOllamaHandler extends BaseProvider implements SingleCompletio
 				}
 
 				this.client = new Ollama(clientOptions)
-			} catch (error: any) {
-				throw new Error(`Error creating Ollama client: ${redactApiSecrets(error.message)}`)
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error)
+				throw new Error(`Error creating Ollama client: ${redactApiSecrets(message)}`)
 			}
 		}
 		return this.client
@@ -318,12 +319,12 @@ export class NativeOllamaHandler extends BaseProvider implements SingleCompletio
 					yield chunk
 				}
 			}
-		} catch (error: any) {
-			// Enhance error reporting
-			const statusCode = error.status || error.statusCode
-			const errorMessage = error.message || "Unknown error"
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error)
+			const err = error as Record<string, unknown>
+			const statusCode = err.status || err.statusCode
 
-			if (error.code === "ECONNREFUSED") {
+			if (err.code === "ECONNREFUSED") {
 				throw new Error(
 					`Ollama service is not running at ${this.options.ollamaBaseUrl || "http://localhost:11434"}. Please start Ollama first.`,
 				)
@@ -333,8 +334,8 @@ export class NativeOllamaHandler extends BaseProvider implements SingleCompletio
 				)
 			}
 
-			logger.error("Ollama", redactApiSecrets(`Ollama API error (${statusCode || "unknown"}): ${errorMessage}`))
-			throw new Error(redactApiSecrets(`Ollama API error (${statusCode || "unknown"}): ${errorMessage}`))
+			logger.error("Ollama", redactApiSecrets(`Ollama API error (${statusCode || "unknown"}): ${message}`))
+			throw new Error(redactApiSecrets(`Ollama API error (${statusCode || "unknown"}): ${message}`))
 		}
 	}
 

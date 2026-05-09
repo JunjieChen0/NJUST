@@ -1,5 +1,7 @@
 // npx vitest run src/core/tools/__tests__/executeCommandTool.spec.ts
 
+import { describe, it, expect, beforeEach, afterEach } from "vitest"
+
 import type { ToolUsage } from "@njust-ai-cj/types"
 import * as vscode from "vscode"
 

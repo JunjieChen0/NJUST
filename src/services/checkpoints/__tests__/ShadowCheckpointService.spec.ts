@@ -1,5 +1,7 @@
 // npx vitest run src/services/checkpoints/__tests__/ShadowCheckpointService.spec.ts
 
+import { describe, it, expect, beforeEach, afterEach, afterAll } from "vitest"
+
 import fs from "fs/promises"
 import path from "path"
 import os from "os"
@@ -590,7 +592,7 @@ describe.each([[RepoPerTaskCheckpointService, "RepoPerTaskCheckpointService"]])(
 				// Try to restore an invalid checkpoint.
 				try {
 					await service.restoreCheckpoint(invalidCommitHash)
-				} catch (error) {
+				} catch {
 					// Expected to throw, we're testing the event emission.
 				}
 
@@ -901,7 +903,7 @@ describe.each([[RepoPerTaskCheckpointService, "RepoPerTaskCheckpointService"]])(
 				// (In Dev Containers, the workspace repo already exists before GIT_DIR is set)
 				const testShadowDir = path.join(tmpDir, `shadow-git-dir-test-${Date.now()}`)
 				const testWorkspaceDir = path.join(tmpDir, `workspace-git-dir-test-${Date.now()}`)
-				const testRepo = await initWorkspaceRepo({ workspaceDir: testWorkspaceDir })
+				const _testRepo = await initWorkspaceRepo({ workspaceDir: testWorkspaceDir })
 
 				// Set GIT_DIR to point to the external repository BEFORE creating the service
 				// This simulates the Dev Container environment where GIT_DIR is already set

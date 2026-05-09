@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 import { AdaptiveConcurrencyController } from "../AdaptiveConcurrencyController"
 import { ConcurrentToolExecutor } from "../ConcurrentToolExecutor"
 import { ToolExecutionScheduler, type ToolCategory, ToolExecutionStats } from "../../task/ToolExecutionOrchestrator"

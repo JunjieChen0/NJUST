@@ -1,3 +1,5 @@
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest"
+
 import { NJUST_AI_CJEventName, ProviderSettings, TokenUsage, ToolUsage } from "@njust-ai-cj/types"
 
 import { Task } from "../Task"

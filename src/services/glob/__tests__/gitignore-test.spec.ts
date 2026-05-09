@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+
 import * as path from "path"
 import * as fs from "fs"
 import * as os from "os"
@@ -85,7 +87,7 @@ describe("list-files gitignore support", () => {
 		mockSpawn.mockReturnValue(mockProcess as any)
 
 		// Call listFiles in recursive mode
-		const [files, didHitLimit] = await listFiles(tempDir, true, 100)
+		const [files, _didHitLimit] = await listFiles(tempDir, true, 100)
 
 		// Verify that gitignored directories are not included
 		const directoriesInResult = files.filter((f) => f.endsWith("/"))
@@ -134,7 +136,7 @@ describe("list-files gitignore support", () => {
 		mockSpawn.mockReturnValue(mockProcess as any)
 
 		// Call listFiles in recursive mode
-		const [files, didHitLimit] = await listFiles(tempDir, true, 100)
+		const [files, _didHitLimit] = await listFiles(tempDir, true, 100)
 
 		// Verify that nested gitignored directories are not included
 		const directoriesInResult = files.filter((f) => f.endsWith("/"))

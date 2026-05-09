@@ -1,3 +1,5 @@
+import { describe, it, expect, vi } from "vitest"
+
 import { t } from "i18next"
 import { FunctionCallingConfigMode } from "@google/genai"
 

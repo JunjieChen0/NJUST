@@ -1,5 +1,7 @@
 // pnpm --filter njust-ai-cj test core/task-persistence/__tests__/TaskHistoryStore.crossInstance.spec.ts
 
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as os from "os"
@@ -7,7 +9,6 @@ import * as os from "os"
 import type { HistoryItem } from "@njust-ai-cj/types"
 
 import { TaskHistoryStore } from "../TaskHistoryStore"
-import { GlobalFileNames } from "../../../shared/globalFileNames"
 
 vi.mock("../../../utils/storage", () => ({
 	getStorageBasePath: vi.fn().mockImplementation((defaultPath: string) => defaultPath),

@@ -1,5 +1,7 @@
 // npx vitest src/core/config/__tests__/ModeConfig.spec.ts
 
+import { describe, it, test, expect } from "vitest"
+
 import { ZodError } from "zod"
 
 import { type ModeConfig, modeConfigSchema } from "@njust-ai-cj/types"

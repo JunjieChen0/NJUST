@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from "vitest"
+import { describe, it, expect } from "vitest"
 import { parseMarkdownChecklist } from "../UpdateTodoListTool"
-import { TodoItem } from "@njust-ai-cj/types"
 
 describe("parseMarkdownChecklist", () => {
 	describe("standard checkbox format (without dash prefix)", () => {

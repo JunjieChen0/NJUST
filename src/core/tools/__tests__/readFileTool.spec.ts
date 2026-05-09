@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 /**
  * Tests for ReadFileTool - Codex-inspired file reading with indentation mode support.
  *
@@ -12,20 +14,19 @@
  * - Output structure formatting
  */
 
-import path from "path"
 
 import { isBinaryFile } from "isbinaryfile"
 
-import { readFileTool, ReadFileTool } from "../ReadFileTool"
+import { readFileTool } from "../ReadFileTool"
 import { toolResultCache } from "../helpers/ToolResultCache"
 import { formatResponse } from "../../prompts/responses"
 import {
 	validateImageForProcessing,
 	processImageFile,
 	isSupportedImageFormat,
-	ImageMemoryTracker,
+	
 } from "../helpers/imageHelpers"
-import { extractTextFromFile, addLineNumbers, getSupportedBinaryFormats } from "../../../integrations/misc/extract-text"
+import { extractTextFromFile, getSupportedBinaryFormats } from "../../../integrations/misc/extract-text"
 import { readWithIndentation, readWithSlice } from "../../../integrations/misc/indentation-reader"
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────

@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import { embeddedTemplateQuery } from "../queries"
 import sampleEmbeddedTemplateContent from "./fixtures/sample-embedded_template"

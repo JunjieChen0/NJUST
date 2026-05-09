@@ -1,5 +1,7 @@
 // npx vitest run src/api/providers/fetchers/__tests__/vercel-ai-gateway.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 import axios from "axios"
 import { VERCEL_AI_GATEWAY_VISION_ONLY_MODELS, VERCEL_AI_GATEWAY_VISION_AND_TOOLS_MODELS } from "@njust-ai-cj/types"
 

@@ -1,4 +1,3 @@
-import * as vscode from "vscode"
 import type { WebviewMessage } from "@njust-ai-cj/types"
 import { CodeIndexManager } from "../../../services/code-index/manager"
 import { t } from "../../../i18n"

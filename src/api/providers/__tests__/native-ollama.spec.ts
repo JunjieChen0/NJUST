@@ -1,5 +1,7 @@
 // npx vitest run api/providers/__tests__/native-ollama.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 import { NativeOllamaHandler } from "../native-ollama"
 import { ApiHandlerOptions } from "../../../shared/api"
 import { getOllamaModels } from "../fetchers/ollama"

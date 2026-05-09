@@ -15,6 +15,7 @@ import type { Anthropic } from "@anthropic-ai/sdk"
 import type {
 	ClineAsk,
 	ClineApiReqInfo,
+	ClineMessage,
 } from "@njust-ai-cj/types"
 import {
 	NJUST_AI_CJEventName,
@@ -68,8 +69,8 @@ export interface TaskLifecycleHost {
 	providerProfileChangeListener?: (() => void) | undefined
 	messageQueueStateChangedHandler?: (() => void) | undefined
 	rooIgnoreController?: { dispose(): void } | undefined
-	clineMessages: any[]
-	apiConversationHistory: any[]
+	clineMessages: ClineMessage[]
+	apiConversationHistory: ApiMessage[]
 
 	refreshWebviewState(): Promise<void>
 	say(type: any, text?: string, images?: string[], partial?: boolean, checkpoint?: any, progressStatus?: any, options?: any): Promise<undefined>
@@ -79,10 +80,10 @@ export interface TaskLifecycleHost {
 	getTaskMode(): Promise<string>
 	initiateCloudAgentLoop(message: string, images?: string[]): Promise<void>
 	initiateTaskLoop(userContent: any[]): Promise<void>
-	getSavedClineMessages(): Promise<any[]>
-	getSavedApiConversationHistory(): Promise<any[]>
-	overwriteClineMessages(messages: any[]): Promise<void>
-	overwriteApiConversationHistory(history: any[]): Promise<void>
+	getSavedClineMessages(): Promise<ClineMessage[]>
+	getSavedApiConversationHistory(): Promise<ApiMessage[]>
+	overwriteClineMessages(messages: ClineMessage[]): Promise<void>
+	overwriteApiConversationHistory(history: ApiMessage[]): Promise<void>
 	saveClineMessages(): Promise<boolean>
 	emitFinalTokenUsageUpdate(): void
 	dispose(): void
@@ -313,7 +314,7 @@ export class TaskLifecycleHandler {
 
 			const newUserContent: Anthropic.Messages.ContentBlockParam[] = [...modifiedOldUserContent]
 
-			const agoText = ((): string => {
+			const _agoText = ((): string => {
 				const timestamp = lastClineMessage?.ts ?? Date.now()
 				const now = Date.now()
 				const diff = now - timestamp

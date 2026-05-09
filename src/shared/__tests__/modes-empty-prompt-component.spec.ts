@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import type { PromptComponent } from "@njust-ai-cj/types"
 
 import { getModeSelection, modes } from "../modes"

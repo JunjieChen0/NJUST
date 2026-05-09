@@ -21,7 +21,7 @@ import { customToolRegistry } from "@njust-ai-cj/core"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import "./utils/path" // Necessary to have access to String.prototype.toPosix.
-import { createOutputChannelLogger } from "./utils/outputChannelLogger"
+import { logger } from "./shared/logger"
 import { initializeNetworkProxy } from "./utils/networkProxy"
 
 import { Package } from "./shared/package"
@@ -138,6 +138,9 @@ function scheduleCangjieToolchainGapCheck(): void {
 export async function activate(context: vscode.ExtensionContext) {
 	startupProfiler.start("activate")
 	extensionContext = context
+	process.on("unhandledRejection", (reason, _promise) => {
+		logger.error("Extension", "Unhandled promise rejection:", reason)
+	})
 	outputChannel = vscode.window.createOutputChannel(Package.outputChannel)
 	context.subscriptions.push(outputChannel)
 	context.subscriptions.push(
@@ -352,7 +355,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 	})
 
-	void checkAndPromptSdkSetup(context, outputChannel).catch(() => {})
+	void checkAndPromptSdkSetup(context, outputChannel).catch((err: unknown) => { logger.warn("Extension", "checkAndPromptSdkSetup failed", err) })
 	void scheduleCangjieToolchainGapCheck()
 
 	void cangjieLspClient.start().catch((error) => {

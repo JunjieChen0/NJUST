@@ -1,5 +1,7 @@
 // npx vitest run src/utils/__tests__/enhance-prompt.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import type { ProviderSettings } from "@njust-ai-cj/types"
 
 import { singleCompletionHandler } from "../single-completion-handler"

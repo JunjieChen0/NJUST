@@ -11,8 +11,8 @@
 import type { Anthropic } from "@anthropic-ai/sdk"
 import type OpenAI from "openai"
 import pWaitFor from "p-wait-for"
-import { serializeError } from "serialize-error"
 
+import type { ITaskHost } from "./interfaces/ITaskHost"
 import type {
 	ClineMessage,
 	ClineSay,
@@ -24,12 +24,9 @@ import type {
 	ProviderSettings,
 	ToolProgressStatus,
 	TokenUsage,
-	ToolUsage,
 	ToolName,
-	ModelInfo,
 } from "@njust-ai-cj/types"
 import {
-	NJUST_AI_CJEventName,
 	DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT,
 	getApiProtocol,
 	getModelId,
@@ -39,12 +36,10 @@ import {
 import type { ApiHandler, ApiHandlerCreateMessageMetadata } from "../../api"
 import { resolveParallelNativeToolCalls } from "../../shared/parallelToolCalls"
 import { type ApiStream, GroundingSource } from "../../api/transform/stream"
-import { maybeRemoveImageBlocks } from "../../api/transform/image-cleaning"
 import type { SystemPromptParts } from "../prompts/system"
 import { checkToolPromptConsistency } from "../prompts/toolPromptConsistency"
 import { type AssistantMessageContent, presentAssistantMessage, markUserContentReadyIfDrained } from "../assistant-message"
 import { NativeToolCallParser } from "../assistant-message/NativeToolCallParser"
-import { defaultToolCallParser } from "../assistant-message/ToolCallParserImpl"
 import type { ApiMessage } from "../task-persistence"
 import { getModelMaxOutputTokens } from "../../shared/api"
 import { findLastIndex } from "../../shared/array"
@@ -63,8 +58,6 @@ import { buildNativeToolsArrayWithRestrictions } from "./build-tools"
 import { PersistentRetryManager } from "./PersistentRetry"
 import { TaskState } from "./TaskStateMachine"
 import { formatResponse } from "../prompts/responses"
-import { combineApiRequests } from "../../shared/combineApiRequests"
-import { combineCommandSequences } from "../../shared/combineCommandSequences"
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
 import { t as i18nT } from "../../i18n"
 import { processUserContentMentions } from "../mentions/processUserContentMentions"
@@ -116,7 +109,7 @@ export interface TaskExecutorHost {
 
 	// Sub-delegates
 	stateMachine: { force(state: TaskState): void; readonly state: TaskState }
-	hostRef: WeakRef<any>
+	hostRef: WeakRef<ITaskHost>
 	requestBuilder: {
 		prefetchSystemPromptData(): void
 		getSystemPromptParts(): Promise<SystemPromptParts>
@@ -151,8 +144,8 @@ export interface TaskExecutorHost {
 	}
 	persistentRetryHandler: PersistentRetryManager | undefined
 	parentTask: { getTokenUsage(): TokenUsage } | undefined
-	rooIgnoreController: any
-	toolExecution: any
+	rooIgnoreController: { dispose(): void } | undefined
+	toolExecution: { dispose(): void; streamingExecutor: { shouldEagerExecute(task: unknown, block: unknown): string | null } }
 	compactFailures: number
 
 	// Token windows
@@ -269,16 +262,15 @@ export class TaskExecutor {
 		const {
 			apiConfiguration,
 			autoApprovalEnabled,
-			requestDelaySeconds,
 			mode,
 			autoCondenseContext = true,
 			autoCondenseContextPercent = DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT,
 			profileThresholds = {},
 		} = state ?? {}
-		const unattendedRetryEnabled = (state as any)?.unattendedRetryEnabled ?? false
-		const unattendedMaxRetryAttempts = (state as any)?.unattendedMaxRetryAttempts ?? 5
+		const unattendedRetryEnabled = state?.unattendedRetryEnabled ?? false
+		const unattendedMaxRetryAttempts = state?.unattendedMaxRetryAttempts ?? 5
 
-		const enablePersistentRetry = (state as any)?.enablePersistentRetry ?? false
+		const _enablePersistentRetry = state?.enablePersistentRetry ?? false
 		const persistentRetryHandler = h.persistentRetryHandler ?? (h.persistentRetryHandler = new PersistentRetryManager())
 
 		const customCondensingPrompt = state?.customSupportPrompts?.CONDENSE
@@ -426,7 +418,7 @@ export class TaskExecutor {
 					environmentDetails: contextMgmtEnvironmentDetails,
 					filesReadByRoo: contextMgmtFilesReadByRoo,
 					cwd: h.cwd,
-					rooIgnoreController: h.rooIgnoreController,
+					rooIgnoreController: h.rooIgnoreController as any,
 					enableMicroCompact: true,
 					cacheReadTokens,
 					cacheAwareTotalTokens,
@@ -603,7 +595,7 @@ export class TaskExecutor {
 			}
 			yield firstValue
 			h.isWaitingForFirstChunk = false
-		} catch (error: any) {
+		} catch (error: unknown) {
 			h.isWaitingForFirstChunk = false
 			h.currentRequestAbortController = undefined
 
@@ -1349,7 +1341,7 @@ export class TaskExecutor {
 								)
 
 								// Use the appropriate cost function based on the API protocol
-								const costResult =
+								const _costResult =
 									apiProtocol === "anthropic"
 										? calculateApiCostAnthropic(
 												streamModelInfo,

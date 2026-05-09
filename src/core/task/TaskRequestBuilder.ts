@@ -4,8 +4,6 @@ import crypto from "crypto"
 
 import {
 	type ContextCondense,
-	type ToolProgressStatus,
-	DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT,
 } from "@njust-ai-cj/types"
 import { Package } from "../../shared/package"
 import { defaultModeSlug } from "../../shared/modes"
@@ -295,7 +293,7 @@ export class TaskRequestBuilder {
 			cost,
 			newContextTokens = 0,
 			error,
-			errorDetails,
+			_errorDetails,
 			condenseId,
 		} = await summarizeConversation({
 			messages: this.task.apiConversationHistory,
@@ -404,7 +402,7 @@ export class TaskRequestBuilder {
 	/**
 	 * Safely get files read by Roo, catching errors.
 	 */
-	private async getFilesReadByRooSafely(context: string): Promise<string[] | undefined> {
+	private async getFilesReadByRooSafely(_context: string): Promise<string[] | undefined> {
 		try {
 			return await this.task.fileContextTracker.getFilesReadByRoo()
 		} catch (error) {

@@ -1,6 +1,6 @@
 // npx vitest src/core/assistant-message/__tests__/presentAssistantMessage.loop.spec.ts
 
-import { describe, it, expect, beforeEach, vi } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { presentAssistantMessage, markUserContentReadyIfDrained } from "../presentAssistantMessage"
 
 vi.mock("../../task/Task")

@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { sanitizeToolUseId, truncateOpenAiCallId, sanitizeOpenAiCallId, OPENAI_CALL_ID_MAX_LENGTH } from "../tool-id"
 
 describe("sanitizeToolUseId", () => {

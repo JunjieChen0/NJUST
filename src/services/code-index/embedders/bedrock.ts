@@ -10,7 +10,7 @@ import {
 import { getDefaultModelId } from "../../../shared/embeddingModels"
 import { Package } from "../../../shared/package"
 import { t } from "../../../i18n"
-import { withValidationErrorHandling, formatEmbeddingError, HttpError } from "../shared/validation-helpers"
+import { withValidationErrorHandling, formatEmbeddingError } from "../shared/validation-helpers"
 import { logger } from "../../../shared/logger"
 
 /**
@@ -140,11 +140,13 @@ export class BedrockEmbedder implements IEmbedder {
 						totalTokens,
 					},
 				}
-			} catch (error: any) {
+			} catch (error: unknown) {
 				const hasMoreAttempts = attempts < MAX_RETRIES - 1
+				const err = error as Record<string, unknown>
+				const errorName = typeof err.name === "string" ? err.name : undefined
 
 				// Check if it's a rate limit error
-				if (error.name === "ThrottlingException" && hasMoreAttempts) {
+				if (errorName === "ThrottlingException" && hasMoreAttempts) {
 					const delayMs = INITIAL_DELAY_MS * Math.pow(2, attempts)
 					logger.warn("BedrockEmbedder",
 						t("embeddings:rateLimitRetry", {
@@ -285,23 +287,26 @@ export class BedrockEmbedder implements IEmbedder {
 				}
 
 				return { valid: true }
-			} catch (error: any) {
+			} catch (error: unknown) {
+				const err = error as Record<string, unknown>
+				const errorName = typeof err.name === "string" ? err.name : undefined
+
 				// Check for specific AWS errors
-				if (error.name === "UnrecognizedClientException") {
+				if (errorName === "UnrecognizedClientException") {
 					return {
 						valid: false,
 						error: t("embeddings:bedrock.invalidCredentials"),
 					}
 				}
 
-				if (error.name === "AccessDeniedException") {
+				if (errorName === "AccessDeniedException") {
 					return {
 						valid: false,
 						error: t("embeddings:bedrock.accessDenied"),
 					}
 				}
 
-				if (error.name === "ResourceNotFoundException") {
+				if (errorName === "ResourceNotFoundException") {
 					return {
 						valid: false,
 						error: t("embeddings:bedrock.modelNotFound", { model: this.defaultModelId }),

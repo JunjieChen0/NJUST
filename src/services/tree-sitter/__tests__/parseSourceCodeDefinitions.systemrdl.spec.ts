@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeAll } from "vitest"
+
 import { initializeTreeSitter, testParseSourceCodeDefinitions } from "./helpers"
 import systemrdlQuery from "../queries/systemrdl"
 import sampleSystemRDLContent from "./fixtures/sample-systemrdl"

@@ -1,5 +1,7 @@
 // npx vitest run shared/__tests__/modes.spec.ts
 
+import { describe, it, test, expect, vi, beforeEach } from "vitest"
+
 import type { ModeConfig, PromptComponent } from "@njust-ai-cj/types"
 
 // Mock setup must come before imports

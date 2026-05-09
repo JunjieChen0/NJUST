@@ -1,5 +1,7 @@
 // npx vitest run api/providers/__tests__/base-openai-compatible-provider-timeout.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 import type { ModelInfo } from "@njust-ai-cj/types"
 
 import { BaseOpenAiCompatibleProvider } from "../base-openai-compatible-provider"

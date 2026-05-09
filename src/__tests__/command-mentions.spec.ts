@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { parseMentions } from "../core/mentions"
 import { getCommand } from "../services/command/commands"
 

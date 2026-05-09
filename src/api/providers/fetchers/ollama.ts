@@ -22,7 +22,7 @@ const OllamaModelSchema = z.object({
 	size: z.number().optional(),
 })
 
-const OllamaModelInfoResponseSchema = z.object({
+const _OllamaModelInfoResponseSchema = z.object({
 	modelfile: z.string().optional(),
 	parameters: z.string().optional(),
 	template: z.string().optional(),

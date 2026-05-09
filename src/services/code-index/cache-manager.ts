@@ -38,7 +38,7 @@ export class CacheManager implements ICacheManager {
 		try {
 			const cacheData = await vscode.workspace.fs.readFile(this.cachePath)
 			this.fileHashes = JSON.parse(cacheData.toString())
-		} catch (error) {
+		} catch {
 			this.fileHashes = {}
 		}
 	}
@@ -49,7 +49,7 @@ export class CacheManager implements ICacheManager {
 	private async _performSave(): Promise<void> {
 		try {
 			await safeWriteJson(this.cachePath.fsPath, this.fileHashes)
-		} catch (error) {
+		} catch {
 			logger.error("CacheManager", "Failed to save cache:", error)
 		}
 	}
@@ -61,7 +61,7 @@ export class CacheManager implements ICacheManager {
 		try {
 			await safeWriteJson(this.cachePath.fsPath, {})
 			this.fileHashes = {}
-		} catch (error) {
+		} catch {
 			logger.error("CacheManager", "Failed to clear cache file:", error, this.cachePath)
 		}
 	}

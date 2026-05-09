@@ -60,7 +60,7 @@ export async function openFile(filePath: string, options: OpenFileOptions = {}) 
 				fileStat = await vscode.workspace.fs.stat(tempUri)
 				successfulUri = tempUri // Path found
 				break // Exit loop once a path is successfully stated
-			} catch (e) {
+			} catch {
 				// Stat failed for this path, continue to the next one
 			}
 		}
@@ -145,7 +145,7 @@ export async function openFile(filePath: string, options: OpenFileOptions = {}) 
 			preview: false,
 			selection,
 		})
-	} catch (error) {
+	} catch {
 		if (error instanceof Error) {
 			vscode.window.showErrorMessage(t("common:errors.could_not_open_file", { errorMessage: error.message }))
 		} else {

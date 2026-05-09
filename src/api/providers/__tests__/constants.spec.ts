@@ -1,5 +1,7 @@
 // npx vitest run src/api/providers/__tests__/constants.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import { DEFAULT_HEADERS } from "../constants"
 import { Package } from "../../../shared/package"
 

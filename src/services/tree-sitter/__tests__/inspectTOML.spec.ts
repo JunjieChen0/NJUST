@@ -1,3 +1,5 @@
+import { describe, it } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import { tomlQuery } from "../queries"
 import { sampleToml } from "./fixtures/sample-toml"

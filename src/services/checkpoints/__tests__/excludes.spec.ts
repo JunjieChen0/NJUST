@@ -1,5 +1,7 @@
 // npx vitest services/checkpoints/__tests__/excludes.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { join } from "path"
 import fs from "fs/promises"
 import { fileExistsAtPath } from "../../../utils/fs"

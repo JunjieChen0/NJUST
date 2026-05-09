@@ -1,5 +1,7 @@
 // npx vitest run src/api/providers/__tests__/gemini.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 const mockCaptureException = vitest.fn()
 
 vitest.mock("@njust-ai-cj/telemetry", () => ({

@@ -1,3 +1,5 @@
+import { describe, it, expect, vi } from "vitest"
+
 vi.mock("vscode", () => ({
 	window: {
 		visibleTextEditors: [],

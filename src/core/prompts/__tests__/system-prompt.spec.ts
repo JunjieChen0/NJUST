@@ -1,5 +1,7 @@
 // npx vitest core/prompts/__tests__/system-prompt.spec.ts
 
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from "vitest"
+
 vi.mock("os", () => ({
 	default: {
 		homedir: () => "/home/user",
@@ -51,8 +53,7 @@ import { SYSTEM_PROMPT } from "../system"
 import type { IMcpHubService } from "../../../services/mcp/interfaces/IMcpHubService"
 import { defaultModeSlug, modes, Mode } from "../../../shared/modes"
 import "../../../utils/path"
-import { addCustomInstructions } from "../sections/custom-instructions"
-import { MultiSearchReplaceDiffStrategy } from "../../diff/strategies/multi-search-replace"
+import { _addCustomInstructions } from "../sections/custom-instructions"
 
 // Mock the sections
 vi.mock("../sections/modes", () => ({

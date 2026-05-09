@@ -1,5 +1,7 @@
 // npx vitest core/tools/__tests__/useMcpToolTool.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { useMcpToolTool } from "../UseMcpToolTool"
 import { Task } from "../../task/Task"
 import { ToolUse } from "../../../shared/tools"
@@ -70,7 +72,7 @@ describe("useMcpToolTool", () => {
 	let mockAskApproval: ReturnType<typeof vi.fn>
 	let mockHandleError: ReturnType<typeof vi.fn>
 	let mockPushToolResult: ReturnType<typeof vi.fn>
-	let mockRemoveClosingTag: ReturnType<typeof vi.fn>
+	let _mockRemoveClosingTag: ReturnType<typeof vi.fn>
 	let mockProviderRef: any
 
 	beforeEach(() => {

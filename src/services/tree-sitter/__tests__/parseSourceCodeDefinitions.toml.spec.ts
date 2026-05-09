@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeAll } from "vitest"
+
 import { initializeTreeSitter, testParseSourceCodeDefinitions } from "./helpers"
 import { tomlQuery } from "../queries"
 import { sampleToml } from "./fixtures/sample-toml"

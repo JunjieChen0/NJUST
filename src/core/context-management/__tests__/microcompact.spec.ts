@@ -73,7 +73,7 @@ describe("microcompactMessages", () => {
 		// Verify that older messages (earlier in array) are more compacted
 		const firstCompacted = ((result[0].content as any[])[0]?.content as string) ?? ""
 		const middleCompacted = ((result[10].content as any[])[0]?.content as string) ?? ""
-		const recentCompacted = ((result[22].content as any[])[0]?.content as string) ?? ""
+		const _recentCompacted = ((result[22].content as any[])[0]?.content as string) ?? ""
 
 		// Older messages should be more aggressively compacted
 		expect(firstCompacted.length).toBeLessThan(middleCompacted.length)

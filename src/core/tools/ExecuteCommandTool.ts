@@ -29,7 +29,7 @@ import { checkCommandSafety } from "./helpers/commandSafety"
 import { logger } from "../../shared/logger"
 
 /** Uses {@link checkCommandSafety} so high-risk detection stays aligned with permission classifiers. */
-function isHighRiskShellCommand(command: string): boolean {
+function _isHighRiskShellCommand(command: string): boolean {
 	const { riskLevel } = checkCommandSafety(command)
 	return riskLevel === "forbidden" || riskLevel === "dangerous"
 }
@@ -229,7 +229,7 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 			}
 
 			return
-		} catch (error) {
+		} catch {
 			await handleError("executing command", error as Error)
 			return
 		}
@@ -275,7 +275,7 @@ export async function executeCommandInTerminal(
 
 	try {
 		await fs.access(workingDir)
-	} catch (error) {
+	} catch {
 		return [false, `Working directory '${workingDir}' does not exist.`]
 	}
 
@@ -518,7 +518,7 @@ export async function executeCommandInTerminal(
 		}
 
 		await Promise.race(racers)
-	} catch (error) {
+	} catch {
 		if (isUserTimedOut) {
 			const status: CommandExecutionStatus = { executionId, status: "timeout" }
 			provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })

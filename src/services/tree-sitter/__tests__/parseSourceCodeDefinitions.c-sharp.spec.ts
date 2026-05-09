@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest"
+
 /*
 TODO: The following structures can be parsed by tree-sitter but lack query support:
 

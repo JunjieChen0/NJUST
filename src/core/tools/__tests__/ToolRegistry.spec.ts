@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest"
 import { ToolRegistryImpl } from "../ToolRegistry"
-import { BaseTool, type ToolCallbacks } from "../BaseTool"
+import { BaseTool } from "../BaseTool"
 
 // Minimal test tool that extends BaseTool
 class MockReadTool extends BaseTool<"read_file"> {

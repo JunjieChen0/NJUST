@@ -1,5 +1,7 @@
 // npx vitest run core/webview/__tests__/ClineProvider.sticky-profile.spec.ts
 
+
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import * as vscode from "vscode"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 import { ClineProvider } from "../ClineProvider"
@@ -198,7 +200,7 @@ describe("ClineProvider - Sticky Provider Profile", () => {
 		delete process.env.ROO_CLI_RUNTIME
 
 		if (!TelemetryService.hasInstance()) {
-			TelemetryService.createInstance([])
+			TelemetryService.createInstance()
 		}
 
 		const globalState: Record<string, string | undefined> = {
@@ -734,20 +736,6 @@ describe("ClineProvider - Sticky Provider Profile", () => {
 			const task1 = {
 				taskId: "task-1",
 				_taskApiConfigName: "profile-a",
-				setTaskApiConfigName: vi.fn().mockImplementation(function (this: any, name: string) {
-					this._taskApiConfigName = name
-				}),
-				emit: vi.fn(),
-				saveClineMessages: vi.fn(),
-				clineMessages: [],
-				apiConversationHistory: [],
-				updateApiConfiguration: vi.fn(),
-			}
-
-			// Create task 2 with profile B
-			const task2 = {
-				taskId: "task-2",
-				_taskApiConfigName: "profile-b",
 				setTaskApiConfigName: vi.fn().mockImplementation(function (this: any, name: string) {
 					this._taskApiConfigName = name
 				}),

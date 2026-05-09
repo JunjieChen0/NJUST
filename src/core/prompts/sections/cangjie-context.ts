@@ -8,7 +8,6 @@ import { getCjpmTreeSummaryForPrompt } from "../../../services/cangjie-lsp/cjpmT
 import {
 	parseCangjieDefinitions,
 	computeCangjieSignature,
-	extractTypeMemberSummaries,
 	type CangjieDef,
 } from "../../../services/tree-sitter/cangjieParser"
 import { CangjieSymbolIndex, type SymbolEntry } from "../../../services/cangjie-lsp/CangjieSymbolIndex"
@@ -33,7 +32,6 @@ function getCorpusSingleton(corpusRoot: string): CangjieCorpusSemanticIndex {
 import {
 	CJC_ERROR_PATTERNS as _CJC_ERROR_PATTERNS,
 	STDLIB_DOC_MAP as _STDLIB_DOC_MAP,
-	CJC_DIAGNOSTIC_CODE_MAP,
 	getErrorFixDirective as _getErrorFixDirective,
 	getMatchingCjcPatternsByCategory,
 	matchCjcErrorPattern,
@@ -49,7 +47,6 @@ import {
 	saveLearnedFixes,
 } from "./learnedFixesStorage"
 import { traceDiagnosticRootCause } from "../../../services/cangjie-lsp/cangjieDiagnosticRootCause"
-import { extractCangjieImportPackagePrefixes } from "../../../services/cangjie-lsp/cangjieImportPaths"
 import { mergeStdlibConstraintHintsFromCorpus } from "../../../services/cangjie-lsp/stdlibConstraintHints"
 
 import {
@@ -172,22 +169,22 @@ function editorDocumentCacheKey(uri: vscode.Uri): string {
 	}
 }
 
-const extractImports = _extractImports
-const isNonTrivialImportMapping = _isNonTrivialImportMapping
-const mapImportsToDocPaths = _mapImportsToDocPaths
+const _extractImports = extractImports
+const _isNonTrivialImportMapping = isNonTrivialImportMapping
+const _mapImportsToDocPaths = mapImportsToDocPaths
 
-const collectActiveCangjieEditorSnapshot = _collectActiveCangjieEditorSnapshot
-const getActiveCangjieFileInfo = _getActiveCangjieFileInfo
+const _collectActiveCangjieEditorSnapshot = collectActiveCangjieEditorSnapshot
+const _getActiveCangjieFileInfo = getActiveCangjieFileInfo
 
 // ---------------------------------------------------------------------------
 // Cross-file symbol resolution via CangjieSymbolIndex
 // ---------------------------------------------------------------------------
 
-const resolveImportedSymbols = _resolveImportedSymbols
-const resolveImportToDirectory = _resolveImportToDirectory
+const _resolveImportedSymbols = resolveImportedSymbols
+const _resolveImportToDirectory = resolveImportToDirectory
 
-const extractTypeOutlineFromLines = _extractTypeOutlineFromLines
-const formatSymbolEntries = _formatSymbolEntries
+const _extractTypeOutlineFromLines = extractTypeOutlineFromLines
+const _formatSymbolEntries = formatSymbolEntries
 
 // ---------------------------------------------------------------------------
 // Source-level package declaration verification
@@ -1981,9 +1978,6 @@ function buildContextualCodingRules(
 
 	const hasTestFile = vscode.window.visibleTextEditors.some(
 		(e) => e.document.fileName.endsWith("_test.cj"),
-	)
-	const hasMainFile = vscode.window.visibleTextEditors.some(
-		(e) => e.document.fileName.endsWith("main.cj"),
 	)
 	const hasSyncImport = imports.some((i) => i.startsWith("std.sync"))
 	const diags = diagnostics

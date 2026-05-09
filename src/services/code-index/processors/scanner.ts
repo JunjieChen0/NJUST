@@ -26,7 +26,6 @@ import {
 	MAX_PENDING_BATCHES,
 } from "../constants"
 import { isPathInIgnoredDirectory } from "../../glob/ignore-utils"
-import { sanitizeErrorMessage } from "../shared/validation-helpers"
 import { Package } from "../../../shared/package"
 import { logger } from "../../../shared/logger"
 
@@ -338,7 +337,7 @@ export class DirectoryScanner implements IDirectoryScanner {
 				for (const fp of deletedFilePaths) {
 					await this.cacheManager.deleteHash(fp)
 				}
-			} catch (error: any) {
+			} catch (error: unknown) {
 				logger.error("DirectoryScanner", `Failed to batch-delete ${deletedFilePaths.length} files from workspace ${scanWorkspace}:`, error)
 				if (onError) {
 					onError(
@@ -392,7 +391,7 @@ export class DirectoryScanner implements IDirectoryScanner {
 					try {
 						await this.qdrantClient.deletePointsByMultipleFilePaths(uniqueFilePaths)
 					} catch (deleteError: any) {
-						const errorStatus =
+						const _errorStatus =
 							deleteError?.status || deleteError?.response?.status || deleteError?.statusCode
 						const errorMessage = deleteError instanceof Error ? deleteError.message : String(deleteError)
 

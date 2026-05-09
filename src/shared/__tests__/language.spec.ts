@@ -1,5 +1,7 @@
 // npx vitest run src/shared/__tests__/language.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import { formatLanguage } from "../language"
 
 describe("formatLanguage", () => {

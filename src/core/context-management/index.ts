@@ -2,6 +2,7 @@ import { Anthropic } from "@anthropic-ai/sdk"
 import crypto from "crypto"
 
 import { TelemetryService } from "@njust-ai-cj/telemetry"
+import { logger } from "../../shared/logger"
 
 import { ApiHandler, ApiHandlerCreateMessageMetadata } from "../../api"
 import { MAX_CONDENSE_THRESHOLD, MIN_CONDENSE_THRESHOLD, summarizeConversation, SummarizeResponse } from "../condense"
@@ -733,7 +734,7 @@ export async function manageContext({
 						messageCountAfter: smResult.messages.length,
 						tokenCountBefore: prevContextTokens,
 						tokenCountAfter: 0, // SM-compact has no API call
-					}).catch(() => {})
+					}).catch((err: unknown) => { logger.warn("ContextManagement", "Failed to capture compact telemetry", err) })
 					compactFailures = 0
 					const restored = postCompactRestore(smResult.messages, {
 						recentFiles: filesReadByRoo?.slice(-5),
@@ -764,7 +765,7 @@ export async function manageContext({
 						messageCountAfter: smMemoryResult.messages.length,
 						tokenCountBefore: prevContextTokens,
 						tokenCountAfter: 0,
-					}).catch(() => {})
+					}).catch((err: unknown) => { logger.warn("ContextManagement", "Failed to capture memory compact telemetry", err) })
 					compactFailures = 0
 					const restored = postCompactRestore(smMemoryResult.messages, {
 						recentFiles: filesReadByRoo?.slice(-5),
@@ -813,7 +814,7 @@ export async function manageContext({
 						messageCountAfter: result.messages.length,
 						tokenCountBefore: prevContextTokens,
 						tokenCountAfter: result.newContextTokens ?? prevContextTokens,
-					}).catch(() => {})
+					}).catch((err: unknown) => { logger.warn("ContextManagement", "Failed to capture compact telemetry", err) })
 					compactFailures = 0
 					const restored = postCompactRestore(result.messages, {
 						recentFiles: filesReadByRoo?.slice(-5),

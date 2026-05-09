@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import { rubyQuery } from "../queries"
 import sampleRubyContent from "./fixtures/sample-ruby"

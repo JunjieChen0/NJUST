@@ -183,7 +183,7 @@ function trimEmptyLines(lines: LineRecord[]): void {
  * Find the file header (imports, top-level comments, etc.).
  * Returns the end index of the header section.
  */
-function findHeaderEnd(lines: LineRecord[]): number {
+function _findHeaderEnd(lines: LineRecord[]): number {
 	let lastHeaderIdx = -1
 	let inBlockComment = false
 

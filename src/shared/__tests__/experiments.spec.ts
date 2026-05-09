@@ -1,5 +1,7 @@
 // npx vitest run src/shared/__tests__/experiments.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import type { ExperimentId } from "@njust-ai-cj/types"
 
 import { EXPERIMENT_IDS, experimentConfigsMap, experiments as Experiments } from "../experiments"

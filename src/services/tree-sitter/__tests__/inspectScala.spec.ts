@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions, debugLog } from "./helpers"
 import { scalaQuery } from "../queries"
 import { sampleScala } from "./fixtures/sample-scala"

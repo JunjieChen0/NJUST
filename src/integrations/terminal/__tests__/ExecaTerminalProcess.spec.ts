@@ -1,11 +1,13 @@
 // npx vitest run integrations/terminal/__tests__/ExecaTerminalProcess.spec.ts
 
+import { describe, it, expect, beforeEach, afterEach } from "vitest"
+
 const mockPid = 12345
 
 vitest.mock("execa", () => {
 	const mockKill = vitest.fn()
-	const execa = vitest.fn((options: any) => {
-		return (_template: TemplateStringsArray, ...args: any[]) => ({
+	const execa = vitest.fn((_options: any) => {
+		return (_template: TemplateStringsArray, ..._args: any[]) => ({
 			pid: mockPid,
 			iterable: (_opts: any) =>
 				(async function* () {

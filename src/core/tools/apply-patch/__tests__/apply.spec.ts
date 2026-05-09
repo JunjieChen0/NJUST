@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { applyChunksToContent, ApplyPatchError } from "../apply"
 import type { UpdateFileChunk } from "../parser"
 

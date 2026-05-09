@@ -1,5 +1,7 @@
 // npx vitest services/code-index/processors/__tests__/file-watcher.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import * as vscode from "vscode"
 
 import { FileWatcher } from "../file-watcher"

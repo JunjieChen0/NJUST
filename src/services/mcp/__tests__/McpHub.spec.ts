@@ -37,7 +37,7 @@ vi.mock("fs/promises", () => ({
 }))
 
 // Import safeWriteJson to use in mocks
-import { safeWriteJson } from "../../../utils/safeWriteJson"
+import { _safeWriteJson } from "../../../utils/safeWriteJson"
 
 // Mock safeWriteJson
 vi.mock("../../../utils/safeWriteJson", () => ({
@@ -505,7 +505,7 @@ describe("McpHub", () => {
 
 			vi.mocked(chokidar.watch).mockClear()
 
-			const mcpHub = new McpHub(mockProvider as IMcpHubClient)
+			const _mcpHub = new McpHub(mockProvider as IMcpHubClient)
 			await new Promise((resolve) => setTimeout(resolve, 100))
 
 			// Verify no watcher was created for disabled server

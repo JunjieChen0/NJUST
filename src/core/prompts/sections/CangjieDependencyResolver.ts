@@ -1,7 +1,7 @@
 import * as path from "path"
 import * as fs from "fs"
 
-import { STDLIB_DOC_MAP as _STDLIB_DOC_MAP, type DocMapping } from "../../../services/cangjie-lsp/CangjieErrorAnalyzer"
+import { STDLIB_DOC_MAP as _STDLIB_DOC_MAP } from "../../../services/cangjie-lsp/CangjieErrorAnalyzer"
 import { CangjieSymbolIndex, type SymbolEntry } from "../../../services/cangjie-lsp/CangjieSymbolIndex"
 import { extractCangjieImportPackagePrefixes } from "../../../services/cangjie-lsp/cangjieImportPaths"
 import { extractTypeMemberSummaries } from "../../../services/tree-sitter/cangjieParser"

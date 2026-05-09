@@ -1,5 +1,6 @@
 // npx vitest core/webview/__tests__/webviewMessageHandler.searchFiles.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { Mock } from "vitest"
 
 // Mock dependencies - must come before imports
@@ -36,9 +37,9 @@ describe("webviewMessageHandler - searchFiles with RooIgnore filtering", () => {
 		mockDispose = vi.fn()
 
 		// Override the filterPaths method on the prototype
-		;(RooIgnoreController.prototype as any).filterPaths = mockFilterPaths
-		;(RooIgnoreController.prototype as any).initialize = vi.fn().mockResolvedValue(undefined)
-		;(RooIgnoreController.prototype as any).dispose = mockDispose
+		;(RooIgnoreController.prototype as unknown as Record<string, Mock>).filterPaths = mockFilterPaths
+		;(RooIgnoreController.prototype as unknown as Record<string, Mock>).initialize = vi.fn().mockResolvedValue(undefined)
+		;(RooIgnoreController.prototype as unknown as Record<string, Mock>).dispose = mockDispose
 
 		// Create mock ClineProvider
 		mockClineProvider = {

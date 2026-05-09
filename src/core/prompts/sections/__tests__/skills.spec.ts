@@ -1,3 +1,5 @@
+import { describe, it, expect, vi } from "vitest"
+
 import { getSkillsSection, filterCangjieSkillRoutingRows } from "../skills"
 
 describe("getSkillsSection", () => {

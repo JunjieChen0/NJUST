@@ -215,17 +215,15 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 			let lastUsageMetadata: GenerateContentResponseUsageMetadata | undefined
 			let pendingGroundingMetadata: GroundingMetadata | undefined
 			let finalResponse: { responseId?: string } | undefined
-			let finishReason: string | undefined
 
 			let toolCallCounter = 0
-			let hasContent = false
-			let hasReasoning = false
+			let _hasContent = false
+			let _hasReasoning = false
 
 			for await (const chunk of result) {
 				// Track the final structured response (per SDK pattern: candidate.finishReason)
 				if (chunk.candidates && chunk.candidates[0]?.finishReason) {
 					finalResponse = chunk as { responseId?: string }
-					finishReason = chunk.candidates[0].finishReason
 				}
 				// Process candidates and their parts to separate thoughts from content
 				if (chunk.candidates && chunk.candidates.length > 0) {
@@ -254,11 +252,11 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 							if (part.thought) {
 								// This is a thinking/reasoning part
 								if (part.text) {
-									hasReasoning = true
+									_hasReasoning = true
 									yield { type: "reasoning", text: part.text }
 								}
 							} else if (part.functionCall) {
-								hasContent = true
+								_hasContent = true
 								// Gemini sends complete function calls in a single chunk
 								// Emit as partial chunks for consistent handling with NativeToolCallParser
 								const callId = `${part.functionCall.name}-${toolCallCounter}`
@@ -286,7 +284,7 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 							} else {
 								// This is regular content
 								if (part.text) {
-									hasContent = true
+									_hasContent = true
 									yield { type: "text", text: part.text }
 								}
 							}
@@ -296,7 +294,7 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 
 				// Fallback to the original text property if no candidates structure
 				else if (chunk.text) {
-					hasContent = true
+					_hasContent = true
 					yield { type: "text", text: chunk.text }
 				}
 
@@ -344,9 +342,9 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 				const modelId = this.getModel().id
 				if (TelemetryService.hasInstance()) {
 					const forTelemetry = new ApiProviderError(error.message)
-					;(forTelemetry as any).provider = this.providerName
-					;(forTelemetry as any).modelId = modelId
-					;(forTelemetry as any).operation = "createMessage"
+					;forTelemetry.provider = this.providerName
+					;forTelemetry.modelId = modelId
+					;forTelemetry.operation = "createMessage"
 					TelemetryService.instance.captureException(forTelemetry)
 				}
 				throw new ApiProviderError(t("common:errors.gemini.generate_stream", { error: error.message }))
@@ -456,9 +454,9 @@ includedTools: [...new Set([...(info.includedTools || []), "edit"])],
 				const modelId = this.getModel().id
 				if (TelemetryService.hasInstance()) {
 					const forTelemetry = new ApiProviderError(error.message)
-					;(forTelemetry as any).provider = this.providerName
-					;(forTelemetry as any).modelId = modelId
-					;(forTelemetry as any).operation = "completePrompt"
+					;forTelemetry.provider = this.providerName
+					;forTelemetry.modelId = modelId
+					;forTelemetry.operation = "completePrompt"
 					TelemetryService.instance.captureException(forTelemetry)
 				}
 				throw new ApiProviderError(t("common:errors.gemini.generate_complete_prompt", { error: error.message }))

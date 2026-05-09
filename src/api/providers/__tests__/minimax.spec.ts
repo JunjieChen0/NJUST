@@ -1,5 +1,7 @@
 // npx vitest run src/api/providers/__tests__/minimax.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 vitest.mock("vscode", () => ({
 	workspace: {
 		getConfiguration: vitest.fn().mockReturnValue({

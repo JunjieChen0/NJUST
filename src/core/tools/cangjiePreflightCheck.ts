@@ -1,4 +1,3 @@
-import path from "path"
 import { STDLIB_CRITICAL_SIGNATURES, parseCjpmToml } from "../prompts/sections/cangjie-context"
 
 /**

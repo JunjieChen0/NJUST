@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { testParseSourceCodeDefinitions, inspectTreeStructure } from "./helpers"
 import { sampleZig } from "./fixtures/sample-zig"
 import { zigQuery } from "../queries"

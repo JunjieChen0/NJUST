@@ -1,5 +1,7 @@
 // npx vitest run src/integrations/terminal/__tests__/TerminalProcess.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import * as vscode from "vscode"
 
 import { mergePromise } from "../mergePromise"

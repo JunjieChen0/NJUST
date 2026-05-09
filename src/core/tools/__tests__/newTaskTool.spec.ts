@@ -1,5 +1,7 @@
 // npx vitest core/tools/__tests__/newTaskTool.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import type { AskApproval, HandleError, NativeToolArgs, ToolUse } from "../../../shared/tools"
 
 // Mock vscode module

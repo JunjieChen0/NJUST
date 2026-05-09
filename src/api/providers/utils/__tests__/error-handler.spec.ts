@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { handleProviderError, handleOpenAIError } from "../error-handler"
 
 describe("handleProviderError", () => {

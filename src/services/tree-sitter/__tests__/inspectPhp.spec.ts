@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import { phpQuery } from "../queries"
 import samplePhpContent from "./fixtures/sample-php"

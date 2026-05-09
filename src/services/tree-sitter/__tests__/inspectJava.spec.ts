@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import { javaQuery } from "../queries"
 import sampleJavaContent from "./fixtures/sample-java"

@@ -1,5 +1,7 @@
 // npx vitest src/core/webview/__tests__/diagnosticsHandler.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import * as path from "path"
 
 // Mock vscode first

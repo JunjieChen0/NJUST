@@ -1,6 +1,8 @@
 // npx vitest run api/providers/__tests__/qwen-code-native-tools.spec.ts
 
 // Mock filesystem - must come before other imports
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 vi.mock("node:fs", () => ({
 	promises: {
 		readFile: vi.fn(),

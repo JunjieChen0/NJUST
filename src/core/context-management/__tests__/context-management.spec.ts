@@ -1,5 +1,7 @@
 // cd src && npx vitest run core/context-management/__tests__/context-management.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import { Anthropic } from "@anthropic-ai/sdk"
 
 import type { ModelInfo } from "@njust-ai-cj/types"
@@ -642,7 +644,7 @@ describe("Context Management", () => {
 
 			// When truncating, always uses 0.5 fraction
 			// With 4 messages after the first, 0.5 fraction means remove 2 messages
-			const expectedMessages = [
+			const _expectedMessages = [
 				messagesWithSmallContent[0],
 				messagesWithSmallContent[3],
 				messagesWithSmallContent[4],
@@ -692,7 +694,7 @@ describe("Context Management", () => {
 
 			// When truncating, always uses 0.5 fraction
 			// With 4 messages after the first, 0.5 fraction means remove 2 messages
-			const expectedMessages = [
+			const _expectedMessages = [
 				messagesWithSmallContent[0],
 				messagesWithSmallContent[3],
 				messagesWithSmallContent[4],
@@ -1017,7 +1019,7 @@ describe("Context Management", () => {
 				m.role === "user" ? { ...m, content: "" } : m,
 			)
 
-			const result = await manageContext({
+			const _result = await manageContext({
 				messages: messagesWithSmallContent,
 				totalTokens,
 				contextWindow: modelInfo.contextWindow,

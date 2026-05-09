@@ -1,3 +1,5 @@
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest"
+
 import { ProviderSettings } from "@njust-ai-cj/types"
 
 import { Task } from "../Task"
@@ -92,12 +94,12 @@ describe("Task dispose method", () => {
 		const listeners = {
 			TaskStarted: vi.fn(() => {}),
 			TaskAborted: vi.fn(() => {}),
-			TaskIdle: vi.fn((taskId: string) => {}),
-			TaskActive: vi.fn((taskId: string) => {}),
+			TaskIdle: vi.fn((_taskId: string) => {}),
+			TaskActive: vi.fn((_taskId: string) => {}),
 			TaskAskResponded: vi.fn(() => {}),
-			Message: vi.fn((data: { action: "created" | "updated"; message: any }) => {}),
-			TaskTokenUsageUpdated: vi.fn((taskId: string, tokenUsage: any) => {}),
-			TaskToolFailed: vi.fn((taskId: string, tool: any, error: string) => {}),
+			Message: vi.fn((_data: { action: "created" | "updated"; message: any }) => {}),
+			TaskTokenUsageUpdated: vi.fn((_taskId: string, _tokenUsage: any) => {}),
+			TaskToolFailed: vi.fn((_taskId: string, _tool: any, _error: string) => {}),
 			TaskUnpaused: vi.fn(() => {}),
 		}
 		const taskAny = task as any

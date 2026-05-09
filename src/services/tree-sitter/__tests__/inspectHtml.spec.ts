@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import { htmlQuery } from "../queries"
 import { sampleHtmlContent } from "./fixtures/sample-html"

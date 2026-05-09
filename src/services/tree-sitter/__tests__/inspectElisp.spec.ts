@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { inspectTreeStructure, testParseSourceCodeDefinitions } from "./helpers"
 import { elispQuery } from "../queries/elisp"
 import sampleElispContent from "./fixtures/sample-elisp"

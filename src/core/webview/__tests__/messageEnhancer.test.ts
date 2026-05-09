@@ -1,3 +1,5 @@
+
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { ProviderSettings, ClineMessage } from "@njust-ai-cj/types"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 
@@ -46,7 +48,7 @@ describe("MessageEnhancer", () => {
 				apiKey: "enhancement-key",
 				apiModelId: "claude-3",
 			}),
-		} as any
+		} as unknown as ProviderSettingsManager
 
 		// Mock single completion handler
 		mockSingleCompletionHandler = vi.fn().mockResolvedValue("Enhanced prompt text")
@@ -111,10 +113,10 @@ describe("MessageEnhancer", () => {
 
 		it("should include task history when enabled", async () => {
 			const mockClineMessages: ClineMessage[] = [
-				{ type: "ask", text: "Create a React component", ts: 1000 },
-				{ type: "say", say: "text", text: "I'll create a React component for you", ts: 2000 },
-				{ type: "ask", text: "Add props to the component", ts: 3000 },
-				{ type: "say", say: "reasoning", text: "Using tool", ts: 4000 }, // Should be filtered out
+				{ type: "ask", text: "Create a React component", ts: 1000, id: "msg-1" },
+				{ type: "say", say: "text", text: "I'll create a React component for you", ts: 2000, id: "msg-2" },
+				{ type: "ask", text: "Add props to the component", ts: 3000, id: "msg-3" },
+				{ type: "say", say: "reasoning", text: "Using tool", ts: 4000, id: "msg-4" }, // Should be filtered out
 			]
 
 			const result = await MessageEnhancer.enhanceMessage({
@@ -166,7 +168,7 @@ describe("MessageEnhancer", () => {
 
 		it("should truncate long messages in task history", async () => {
 			const longText = "A".repeat(600) // 600 characters
-			const mockClineMessages: ClineMessage[] = [{ type: "ask", text: longText, ts: 1000 }]
+			const mockClineMessages: ClineMessage[] = [{ type: "ask", text: longText, ts: 1000, id: "msg-long" }]
 
 			await MessageEnhancer.enhanceMessage({
 				text: "Test",
@@ -304,16 +306,16 @@ describe("MessageEnhancer", () => {
 	describe("extractTaskHistory", () => {
 		it("should filter and format messages correctly", () => {
 			const messages: ClineMessage[] = [
-				{ type: "ask", text: "User message 1", ts: 1000 },
-				{ type: "say", say: "text", text: "Assistant message 1", ts: 2000 },
-				{ type: "say", say: "reasoning", text: "Tool use", ts: 3000 },
-				{ type: "ask", text: "", ts: 4000 }, // Empty text
-				{ type: "say", say: "text", text: undefined, ts: 5000 }, // No text
-				{ type: "ask", text: "User message 2", ts: 6000 },
+				{ type: "ask", text: "User message 1", ts: 1000, id: "m1" },
+				{ type: "say", say: "text", text: "Assistant message 1", ts: 2000, id: "m2" },
+				{ type: "say", say: "reasoning", text: "Tool use", ts: 3000, id: "m3" },
+				{ type: "ask", text: "", ts: 4000, id: "m4" }, // Empty text
+				{ type: "say", say: "text", text: undefined, ts: 5000, id: "m5" }, // No text
+				{ type: "ask", text: "User message 2", ts: 6000, id: "m6" },
 			]
 
-			// Access private method through any type assertion for testing
-			const history = (MessageEnhancer as any).extractTaskHistory(messages)
+			// Access private method for testing
+			const history = (MessageEnhancer as unknown as { extractTaskHistory: (messages: ClineMessage[]) => string }).extractTaskHistory(messages)
 
 			expect(history).toContain("User: User message 1")
 			expect(history).toContain("Assistant: Assistant message 1")
@@ -329,10 +331,10 @@ describe("MessageEnhancer", () => {
 				undefined,
 				{ type: "ask" }, // Missing required properties
 				"not an object",
-			] as any
+			] as unknown as ClineMessage[]
 
-			// Access private method through any type assertion for testing
-			const history = (MessageEnhancer as any).extractTaskHistory(malformedMessages)
+			// Access private method for testing
+			const history = (MessageEnhancer as unknown as { extractTaskHistory: (messages: ClineMessage[]) => string }).extractTaskHistory(malformedMessages)
 
 			// Should return empty string and log error
 			expect(history).toBe("")
@@ -341,13 +343,13 @@ describe("MessageEnhancer", () => {
 
 		it("should handle messages with circular references", () => {
 			// Create a message with circular reference
-			const circularMessage: any = { type: "ask", text: "Test" }
+			const circularMessage: Record<string, unknown> = { type: "ask", text: "Test" }
 			circularMessage.self = circularMessage
 
 			const messages = [circularMessage] as ClineMessage[]
 
-			// Access private method through any type assertion for testing
-			const history = (MessageEnhancer as any).extractTaskHistory(messages)
+			// Access private method for testing
+			const history = (MessageEnhancer as unknown as { extractTaskHistory: (messages: ClineMessage[]) => string }).extractTaskHistory(messages)
 
 			// Should handle gracefully
 			expect(history).toBe("User: Test")

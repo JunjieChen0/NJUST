@@ -1,5 +1,7 @@
 // npx vitest utils/__tests__/config.spec.ts
 
+import { describe, it, expect, beforeEach, afterAll } from "vitest"
+
 import { injectEnv, injectVariables } from "../config"
 import { logger } from "../../shared/logger"
 

@@ -20,7 +20,6 @@ import {
 	type ProviderSettingsEntry,
 	type StaticAppProperties,
 	type DynamicAppProperties,
-	type CloudAppProperties,
 	type TaskProperties,
 	type GitProperties,
 	type TelemetryProperties,
@@ -31,8 +30,6 @@ import {
 	type TerminalActionPromptType,
 	type HistoryItem,
 	type CreateTaskOptions,
-	type TokenUsage,
-	type ToolUsage,
 	type ExtensionMessage,
 	type ExtensionState,
 	NJUST_AI_CJEventName,
@@ -57,7 +54,6 @@ import { supportPrompt } from "../../shared/support-prompt"
 
 import { Mode, defaultModeSlug, getModeBySlug } from "../../shared/modes"
 import { experimentDefault } from "../../shared/experiments"
-import { WebviewMessage } from "../../shared/WebviewMessage"
 import { EMBEDDING_MODEL_PROFILES } from "../../shared/embeddingModels"
 import { ProfileValidator } from "../../shared/ProfileValidator"
 
@@ -66,7 +62,6 @@ import { Terminal } from "../../integrations/terminal/Terminal"
 import { getTheme } from "../../integrations/theme/getTheme"
 import WorkspaceTracker from "../../integrations/workspace/WorkspaceTracker"
 
-import { McpHub } from "../../services/mcp/McpHub"
 import { McpServerManager } from "../../services/mcp/McpServerManager"
 import type { IMcpHubService } from "../../services/mcp/interfaces/IMcpHubService"
 
@@ -86,7 +81,6 @@ import { setPanel } from "../../activate/registerCommands"
 
 import { t } from "../../i18n"
 
-import { buildApiHandler } from "../../api"
 import { forceFullModelDetailsLoad, hasLoadedFullDetails } from "../../api/providers/fetchers/lmstudio"
 
 import { ContextProxy } from "../config/ContextProxy"
@@ -98,7 +92,6 @@ import type { IMcpHubClient } from "../../services/mcp/interfaces/IMcpHubClient"
 import { PlanEngine } from "../agent/PlanEngine"
 import { AgentOrchestrator } from "../agent/AgentOrchestrator"
 
-import { webviewMessageHandler } from "./webviewMessageHandler"
 import { WebviewMessageRouter } from "./WebviewMessageRouter"
 import { PendingEditManager } from "./PendingEditManager"
 import { WebviewContentProvider } from "./WebviewContentProvider"
@@ -108,8 +101,6 @@ import { TaskHistoryService, type TaskHistoryHost } from "./TaskHistoryService"
 import type { ClineMessage, TodoItem } from "@njust-ai-cj/types"
 import { readApiMessages, saveApiMessages, saveTaskMessages, TaskHistoryStore } from "../task-persistence"
 import { readTaskMessages } from "../task-persistence/taskMessages"
-import { getNonce } from "./getNonce"
-import { getUri } from "./getUri"
 import { REQUESTY_BASE_URL } from "../../shared/utils/requesty"
 import { validateAndFixToolResultIds } from "../task/validateToolResultIds"
 import { logger } from "../../shared/logger"
@@ -1108,7 +1099,7 @@ export class ClineProvider
 
 		try {
 			await fs.mkdir(mcpServersDir, { recursive: true })
-		} catch (error) {
+		} catch (_error) {
 			// Fallback to a relative path if directory creation fails
 			return path.join(os.homedir(), ".roo-code", "mcp")
 		}
@@ -1703,7 +1694,7 @@ export class ClineProvider
 
 		// Subscribe to the new manager's progress updates if it exists
 		if (currentManager) {
-			this.codeIndexStatusSubscription = currentManager.onProgressUpdate((update: IndexProgressUpdate) => {
+			this.codeIndexStatusSubscription = currentManager.onProgressUpdate((_update: IndexProgressUpdate) => {
 				// Only send updates if this manager is still the current one
 				if (currentManager === this.getCurrentWorkspaceCodeIndexManager()) {
 					// Get the full status from the manager to ensure we have all fields correctly formatted
@@ -1958,7 +1949,7 @@ export class ClineProvider
 		try {
 			const customModes = await this.customModesManager.getCustomModes()
 			return [...DEFAULT_MODES, ...customModes].map(({ slug, name }) => ({ slug, name }))
-		} catch (error) {
+		} catch (_error) {
 			return DEFAULT_MODES.map(({ slug, name }) => ({ slug, name }))
 		}
 	}
@@ -2468,7 +2459,6 @@ export class ClineProvider
 			}
 
 			// Specific error for no webview available
-			const error = new Error("No webview available for URI conversion")
 			logger.error("ClineProvider", "No webview available for URI conversion")
 			// Fallback to file URI if no webview available
 			return fileUri.toString()

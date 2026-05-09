@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest"
+
 import { scalaQuery } from "../queries"
 import { initializeTreeSitter, testParseSourceCodeDefinitions } from "./helpers"
 import { sampleScala as sampleScalaContent } from "./fixtures/sample-scala"

@@ -1,5 +1,7 @@
 // npx vitest run api/providers/__tests__/lm-studio-timeout.spec.ts
 
+import { describe, it, expect, beforeEach } from "vitest"
+
 import { LmStudioHandler } from "../lm-studio"
 import { ApiHandlerOptions } from "../../../shared/api"
 

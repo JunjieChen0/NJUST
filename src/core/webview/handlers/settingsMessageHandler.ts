@@ -60,7 +60,7 @@ export function registerSettingsHandlers(router: MessageRouter): void {
 }
 
 async function handleUpdateSettings(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
-	const { provider, getGlobalState, updateGlobalState } = context
+	const { provider, getGlobalState } = context
 	if (!message.updatedSettings) return
 
 	for (const [key, value] of Object.entries(message.updatedSettings)) {
@@ -154,7 +154,7 @@ async function handleUpdateSettings(context: MessageHandlerContext, message: Web
 async function handleUpdateCloudAgentSettings(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
 	const { provider } = context
 	const config = vscode.workspace.getConfiguration(Package.name)
-	const msg = message as any
+	const msg = message as unknown as Record<string, unknown>
 	if (msg.serverUrl !== undefined) await config.update("cloudAgent.serverUrl", msg.serverUrl, vscode.ConfigurationTarget.Global)
 	if (msg.deferredProtocol !== undefined) await config.update("cloudAgent.deferredProtocol", msg.deferredProtocol, vscode.ConfigurationTarget.Global)
 	if (msg.applyRemoteWorkspaceOps !== undefined) await config.update("cloudAgent.applyRemoteWorkspaceOps", msg.applyRemoteWorkspaceOps, vscode.ConfigurationTarget.Global)

@@ -1,5 +1,7 @@
 // npx vitest core/webview/__tests__/ClineProvider.apiHandlerRebuild.spec.ts
 
+import { describe, test, expect, vi, beforeEach } from "vitest"
+
 import * as vscode from "vscode"
 
 import { TelemetryService } from "@njust-ai-cj/telemetry"
@@ -95,7 +97,7 @@ vi.mock("../../../integrations/workspace/WorkspaceTracker", () => {
 })
 
 vi.mock("../../task/Task", () => ({
-	Task: vi.fn().mockImplementation((options) => {
+	Task: vi.fn().mockImplementation((options: TaskOptions) => {
 		const mockTask = {
 			api: undefined,
 			abortTask: vi.fn(),
@@ -133,7 +135,7 @@ describe("ClineProvider - API Handler Rebuild Guard", () => {
 		vi.clearAllMocks()
 
 		if (!TelemetryService.hasInstance()) {
-			TelemetryService.createInstance([])
+			TelemetryService.createInstance()
 		}
 
 		const globalState: Record<string, any> = {
@@ -187,7 +189,7 @@ describe("ClineProvider - API Handler Rebuild Guard", () => {
 				asWebviewUri: vi.fn(),
 			},
 			visible: true,
-			onDidDispose: vi.fn().mockImplementation((callback) => {
+			onDidDispose: vi.fn().mockImplementation((callback: () => void) => {
 				callback()
 				return { dispose: vi.fn() }
 			}),

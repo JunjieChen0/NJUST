@@ -1,3 +1,5 @@
+import { describe, it, expect, vi } from "vitest"
+
 import OpenAI from "openai"
 
 import { OpenAiHandler } from "../openai"

@@ -1,6 +1,8 @@
 // npx vitest core/mentions/__tests__/index.spec.ts
 
-import * as vscode from "vscode"
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
+import * as _vscode from "vscode"
 
 import { parseMentions } from "../index"
 

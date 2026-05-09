@@ -1,3 +1,5 @@
+import { describe, it, expect } from "vitest"
+
 import { MultiSearchReplaceDiffStrategy } from "../multi-search-replace"
 
 describe("MultiSearchReplaceDiffStrategy", () => {

@@ -1,5 +1,7 @@
 // npx vitest src/integrations/editor/__tests__/EditorUtils.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 import * as vscode from "vscode"
 
 import { EditorUtils } from "../EditorUtils"

@@ -11,7 +11,6 @@
  * from Task.ts is deferred to Phase 2.
  */
 
-import type { ToolName } from "@njust-ai-cj/types"
 
 // ─── Tool Category Classification ────────────────────────────────────────────
 

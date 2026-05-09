@@ -1,5 +1,7 @@
 // npx vitest src/integrations/terminal/__tests__/TerminalProcessExec.cmd.spec.ts
 
+import { it, expect, vi, beforeEach, beforeAll } from "vitest"
+
 import * as vscode from "vscode"
 
 import { ExitCodeDetails } from "../types"

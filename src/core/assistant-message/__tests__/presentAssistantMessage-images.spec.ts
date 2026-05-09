@@ -1,9 +1,7 @@
 // npx vitest src/core/assistant-message/__tests__/presentAssistantMessage-images.spec.ts
 
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { Anthropic } from "@anthropic-ai/sdk"
 import { presentAssistantMessage } from "../presentAssistantMessage"
-import { Task } from "../../task/Task"
 
 // Mock dependencies
 vi.mock("../../task/Task")
@@ -89,16 +87,6 @@ describe("presentAssistantMessage - Image Handling in Native Tool Calling", () =
 				nativeArgs: { question: "What do you see?", follow_up: [] },
 			},
 		]
-
-		// Create a mock askApproval that includes images in the response
-		const imageBlock: Anthropic.ImageBlockParam = {
-			type: "image",
-			source: {
-				type: "base64",
-				media_type: "image/png",
-				data: "base64ImageData",
-			},
-		}
 
 		mockTask.ask = vi.fn().mockResolvedValue({
 			response: "yesButtonClicked",

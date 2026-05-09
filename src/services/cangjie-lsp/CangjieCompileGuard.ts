@@ -412,7 +412,7 @@ export class CangjieCompileGuard implements vscode.Disposable {
 		cwd: string,
 		locations: CompileResult["errorLocations"],
 		buildOutput: string,
-		success: boolean,
+		_success: boolean,
 	): void {
 			// Clear only diagnostics under this project root (multi-project safe).
 			if (this.compileDiagnostics) {
@@ -431,9 +431,9 @@ export class CangjieCompileGuard implements vscode.Disposable {
 		const byFile = new Map<string, vscode.Diagnostic[]>()
 		for (const loc of locations) {
 			const abs = path.isAbsolute(loc.file) ? loc.file : path.resolve(cwd, loc.file)
-			let uri: vscode.Uri
+			let _uri: vscode.Uri
 			try {
-				uri = vscode.Uri.file(abs)
+				_uri = vscode.Uri.file(abs)
 			} catch {
 				continue
 			}

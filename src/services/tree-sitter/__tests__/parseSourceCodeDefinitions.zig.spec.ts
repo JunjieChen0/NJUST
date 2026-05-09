@@ -1,3 +1,5 @@
+import { describe, it, expect, beforeAll } from "vitest"
+
 import { testParseSourceCodeDefinitions } from "./helpers"
 import { sampleZig } from "./fixtures/sample-zig"
 import { zigQuery } from "../queries"

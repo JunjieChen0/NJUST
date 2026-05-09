@@ -1,7 +1,9 @@
 // pnpm --filter njust-ai-cj test core/webview/__tests__/ClineProvider.taskHistory.spec.ts
 
+
+import { describe, it, expect, vi, beforeEach, afterAll } from "vitest"
 import * as vscode from "vscode"
-import type { HistoryItem, ExtensionMessage } from "@njust-ai-cj/types"
+import type { HistoryItem } from "@njust-ai-cj/types"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import { ContextProxy } from "../../config/ContextProxy"
@@ -228,7 +230,7 @@ describe("ClineProvider Task History Synchronization", () => {
 		vi.clearAllMocks()
 
 		if (!TelemetryService.hasInstance()) {
-			TelemetryService.createInstance([])
+			TelemetryService.createInstance()
 		}
 
 		// Initialize task history state

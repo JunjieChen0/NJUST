@@ -1,5 +1,7 @@
 // npx vitest core/prompts/__tests__/add-custom-instructions.spec.ts
 
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
 vi.mock("os", () => ({
 	default: {
 		homedir: () => "/home/user",
@@ -45,15 +47,12 @@ vi.mock("fs/promises")
 
 import * as vscode from "vscode"
 
-import { ModeConfig } from "@njust-ai-cj/types"
 
 import { SYSTEM_PROMPT } from "../system"
 import type { IMcpHubService } from "../../../services/mcp/interfaces/IMcpHubService"
-import { defaultModeSlug, modes, Mode } from "../../../shared/modes"
+import { defaultModeSlug, modes } from "../../../shared/modes"
 import "../../../utils/path"
 import { addCustomInstructions } from "../sections/custom-instructions"
-import { MultiSearchReplaceDiffStrategy } from "../../diff/strategies/multi-search-replace"
-
 // Mock the sections
 vi.mock("../sections/modes", () => ({
 	getModesSection: vi.fn().mockImplementation(async () => `====\n\nMODES\n\n- Test modes section`),

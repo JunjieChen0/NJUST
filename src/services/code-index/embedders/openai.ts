@@ -181,7 +181,7 @@ export class OpenAiEmbedder extends OpenAiNativeHandler implements IEmbedder {
 						totalTokens: response.usage?.total_tokens || 0,
 					},
 				}
-			} catch (error: any) {
+			} catch (error: unknown) {
 				const hasMoreAttempts = attempts < MAX_RETRIES - 1
 
 				// Check if it's a rate limit error

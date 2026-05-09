@@ -3,7 +3,6 @@ import * as path from "path"
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest"
 
 import { OutputInterceptor } from "../OutputInterceptor"
-import { TerminalOutputPreviewSize } from "@njust-ai-cj/types"
 
 // Mock filesystem operations
 vi.mock("fs", () => ({

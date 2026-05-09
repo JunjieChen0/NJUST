@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import { parseCangjieDefinitions, type CangjieDefKind } from "../../services/tree-sitter/cangjieParser"
+import { parseCangjieDefinitions } from "../../services/tree-sitter/cangjieParser"
 
 const KIND_TO_TOKEN_TYPE: Record<string, string> = {
 	class: "type",

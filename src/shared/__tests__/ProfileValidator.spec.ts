@@ -1,5 +1,7 @@
 // npx vitest run src/shared/__tests__/ProfileValidator.spec.ts
 
+import { describe, it, expect } from "vitest"
+
 import type { ProviderSettings, OrganizationAllowList } from "@njust-ai-cj/types"
 
 import { ProfileValidator } from "../ProfileValidator"
