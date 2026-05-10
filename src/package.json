@@ -1085,7 +1085,7 @@
 				"njust-ai-cj.cloudAgent.serverUrl": {
 					"type": "string",
 					"default": "http://120.79.250.232:8765",
-					"description": "Cloud Agent REST base URL (GET /health, POST /v1/run). Override for a custom deployment or local mock (e.g. http://127.0.0.1:4000)."
+					"description": "Cloud Agent REST base URL (GET /health, POST /v1/run). Override for a custom deployment or local mock (e.g. http://127.0.0.1:4000). Keep in sync with DEFAULT_CLOUD_AGENT_URL in packages/types/src/constants.ts."
 				},
 				"njust-ai-cj.cloudAgent.deviceToken": {
 					"type": "string",

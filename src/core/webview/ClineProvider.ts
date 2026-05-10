@@ -45,6 +45,7 @@ import {
 	DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
 	getModelId,
 	isRetiredProvider,
+	DEFAULT_CLOUD_AGENT_URL,
 } from "@njust-ai-cj/types"
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 import { Package } from "../../shared/package"
@@ -1259,7 +1260,7 @@ export class ClineProvider
 		const { allowedCommands, deniedCommands } = commandLists
 		const cloudOrganizations: any[] = []
 		const workspaceConfig = vscode.workspace.getConfiguration(Package.name)
-		const cloudAgentServerUrl = workspaceConfig.get<string>("cloudAgent.serverUrl", "http://120.79.250.232:8765") ?? "http://120.79.250.232:8765"
+		const cloudAgentServerUrl = workspaceConfig.get<string>("cloudAgent.serverUrl", DEFAULT_CLOUD_AGENT_URL) ?? DEFAULT_CLOUD_AGENT_URL
 		const debug = workspaceConfig.get<boolean>("debug", false)
 		const currentTask = this.getCurrentTask()
 

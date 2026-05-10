@@ -16,6 +16,7 @@ import {
 	ToolGroup,
 	modeConfigSchema,
 	NJUST_AI_CONFIG_DIR,
+	DEFAULT_CLOUD_AGENT_URL,
 } from "@njust-ai-cj/types"
 
 import {
@@ -103,7 +104,7 @@ const ModesView = () => {
 	const [importLevel, setImportLevel] = useState<"global" | "project">("project")
 	const [hasRulesToExport, setHasRulesToExport] = useState<Record<string, boolean>>({})
 
-	const defaultCloudAgentServerUrl = "http://120.79.250.232:8765"
+	const defaultCloudAgentServerUrl = DEFAULT_CLOUD_AGENT_URL
 	const [cloudAgentServerUrlDraft, setCloudAgentServerUrlDraft] = useState(
 		() => cloudAgentServerUrlFromState?.trim() || defaultCloudAgentServerUrl,
 	)
