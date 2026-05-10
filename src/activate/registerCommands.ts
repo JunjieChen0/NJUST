@@ -102,9 +102,9 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 
 		TelemetryService.instance?.captureTitleButtonClicked("settings")
 
-		visibleProvider.postMessageToWebview({ type: "action", action: "settingsButtonClicked" })
+		void visibleProvider.postMessageToWebview({ type: "action", action: "settingsButtonClicked" })
 		// Also explicitly post the visibility message to trigger scroll reliably
-		visibleProvider.postMessageToWebview({ type: "action", action: "didBecomeVisible" })
+		void visibleProvider.postMessageToWebview({ type: "action", action: "didBecomeVisible" })
 	},
 	historyButtonClicked: () => {
 		const visibleProvider = getVisibleProviderOrLog(outputChannel)
@@ -115,7 +115,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 
 		TelemetryService.instance?.captureTitleButtonClicked("history")
 
-		visibleProvider.postMessageToWebview({ type: "action", action: "historyButtonClicked" })
+		void visibleProvider.postMessageToWebview({ type: "action", action: "historyButtonClicked" })
 	},
 	newTask: handleNewTask,
 	setCustomStoragePath: async () => {
@@ -144,7 +144,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 
 			// Send focus input message only for sidebar panels
 			if (sidebarPanel && getPanel() === sidebarPanel) {
-				provider.postMessageToWebview({ type: "action", action: "focusInput" })
+				void provider.postMessageToWebview({ type: "action", action: "focusInput" })
 			}
 		} catch (error) {
 			outputChannel.appendLine(`Error focusing input: ${error}`)
@@ -164,7 +164,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 			return
 		}
 
-		visibleProvider.postMessageToWebview({ type: "acceptInput" })
+		void visibleProvider.postMessageToWebview({ type: "acceptInput" })
 	},
 	toggleAutoApprove: async () => {
 		const visibleProvider = getVisibleProviderOrLog(outputChannel)
@@ -173,7 +173,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 			return
 		}
 
-		visibleProvider.postMessageToWebview({
+		void visibleProvider.postMessageToWebview({
 			type: "action",
 			action: "toggleAutoApprove",
 		})

@@ -152,7 +152,7 @@ async function testCmdCommand(
 		const eventHandlers = (vscode as any).__eventHandlers
 
 		// Execute the command first to set up the process
-		terminalProcess.run(command)
+		await terminalProcess.run(command)
 
 		// Trigger the start terminal shell execution event through VSCode mock
 		if (eventHandlers.startTerminalShellExecution) {

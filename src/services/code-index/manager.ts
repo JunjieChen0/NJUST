@@ -207,7 +207,7 @@ export class CodeIndexManager {
 			(needsServiceRecreation && (!this._orchestrator || this._orchestrator.state !== "Indexing"))
 
 		if (shouldStartOrRestartIndexing) {
-			this._orchestrator?.startIndexing()
+			void this._orchestrator?.startIndexing()
 		}
 
 		return { requiresRestart }

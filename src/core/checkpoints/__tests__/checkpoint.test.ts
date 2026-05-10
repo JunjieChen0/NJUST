@@ -426,7 +426,7 @@ describe("Checkpoint functionality", () => {
 			mockTask.checkpointService = undefined
 			mockTask.checkpointServiceInitializing = false
 
-			getCheckpointService(mockTask)
+			await getCheckpointService(mockTask)
 
 			const checkpointsModule = await import("../../../services/checkpoints")
 			expect(vi.mocked(checkpointsModule.RepoPerTaskCheckpointService.create)).toHaveBeenCalledWith({

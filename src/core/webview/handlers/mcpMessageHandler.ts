@@ -48,7 +48,7 @@ async function handleDeniedCommands(context: MessageHandlerContext, message: Web
 
 async function handleOpenMcpSettings(context: MessageHandlerContext, _message: WebviewMessage): Promise<void> {
 	const mcpSettingsFilePath = await context.provider.getMcpHub()?.getMcpSettingsFilePath()
-	if (mcpSettingsFilePath) openFile(mcpSettingsFilePath)
+	if (mcpSettingsFilePath) void openFile(mcpSettingsFilePath)
 }
 
 async function handleOpenProjectMcpSettings(context: MessageHandlerContext, _message: WebviewMessage): Promise<void> {

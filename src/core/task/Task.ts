@@ -726,9 +726,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		if (startTask) {
 			this._started = true
 			if (task || images) {
-				this.startTask(task, images)
+				void this.startTask(task, images)
 			} else if (historyItem) {
-				this.resumeTaskFromHistory()
+				void this.resumeTaskFromHistory()
 			} else {
 				throw new Error("Either historyItem or task/images must be provided")
 			}
@@ -1364,7 +1364,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		const { task, images } = this.metadata
 
 		if (task || images) {
-			this.startTask(task ?? undefined, images ?? undefined)
+			void this.startTask(task ?? undefined, images ?? undefined)
 		}
 	}
 
@@ -1496,7 +1496,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	private async initiateTaskLoop(userContent: Anthropic.Messages.ContentBlockParam[]): Promise<void> {
 		// Kicks off the checkpoints initialization process in the background.
-		getCheckpointService(this)
+		void getCheckpointService(this)
 
 		// Start skill/memory prefetch in parallel (non-blocking)
 		const provider = this.hostRef.deref()

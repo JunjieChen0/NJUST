@@ -199,7 +199,7 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 				pushToolResult(result)
 			} catch (error: unknown) {
 				const status: CommandExecutionStatus = { executionId, status: "fallback" }
-				provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
+				void provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
 				await task.say("shell_integration_warning")
 
 				// Invalidate pending ask from first execution to prevent race condition
@@ -394,7 +394,7 @@ export async function executeCommandInTerminal(
 			const compressedOutput = Terminal.compressTerminalOutput(accumulatedOutput)
 			latestCompressedOutput = compressedOutput
 			const status: CommandExecutionStatus = { executionId, status: "output", output: compressedOutput }
-			provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
+			void provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
 			schedulePartialCommandOutputUpdate()
 
 			if (runInBackground || hasAskedForCommandOutput) {
@@ -444,11 +444,11 @@ export async function executeCommandInTerminal(
 		},
 		onShellExecutionStarted: (pid: number | undefined) => {
 			const status: CommandExecutionStatus = { executionId, status: "started", pid, command: resolvedCommand }
-			provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
+			void provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
 		},
 		onShellExecutionComplete: (details: ExitCodeDetails) => {
 			const status: CommandExecutionStatus = { executionId, status: "exited", exitCode: details.exitCode }
-			provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
+			void provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
 			exitDetails = details
 		},
 	}
@@ -522,7 +522,7 @@ export async function executeCommandInTerminal(
 	} catch (error) {
 		if (isUserTimedOut) {
 			const status: CommandExecutionStatus = { executionId, status: "timeout" }
-			provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
+			void provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
 			await task.say("error", t("common:errors:command_timeout", { seconds: commandExecutionTimeoutSeconds }))
 			task.didToolFailInCurrentTurn = true
 			task.terminalProcess = undefined

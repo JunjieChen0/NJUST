@@ -4,12 +4,17 @@ import { config } from "@njust-ai-cj/config-eslint/base-strict"
 export default [
 	...config,
 	{
+		languageOptions: {
+			parserOptions: {
+				project: "./.eslint-tsconfig.json",
+				tsconfigRootDir: import.meta.dirname,
+			},
+		},
 		rules: {
 			"no-regex-spaces": "warn",
 			"no-useless-escape": "warn",
 			"no-empty": ["error", { allowEmptyCatch: true }],
 			"prefer-const": "error",
-			// 存量告警较多时：先 warn，分批清零后再改为 error（与 P0-1 决策矩阵一致）。
 			"@typescript-eslint/no-unused-vars": [
 				"error",
 				{
@@ -22,11 +27,9 @@ export default [
 			"@typescript-eslint/no-require-imports": "warn",
 			"@typescript-eslint/ban-ts-comment": ["warn", { "ts-expect-error": false, "ts-ignore": true, "ts-nocheck": true }],
 			"no-console": ["error", { allow: ["error"] }],
-			// NOTE: The following rules require type information (parserOptions.project)
-			// They are disabled until parserOptions are properly configured
-			// "@typescript-eslint/no-floating-promises": "error",
-			// "@typescript-eslint/require-await": "warn",
-			// "@typescript-eslint/prefer-optional-chain": "warn",
+			"@typescript-eslint/no-floating-promises": "error",
+			"@typescript-eslint/require-await": "warn",
+			"@typescript-eslint/prefer-optional-chain": "warn",
 		},
 	},
 	{

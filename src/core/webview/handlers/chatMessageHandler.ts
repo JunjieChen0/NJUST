@@ -70,7 +70,7 @@ async function handleAskResponse(context: MessageHandlerContext, message: Webvie
 
 async function handleTerminalOperation(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
 	if (message.terminalOperation) {
-		context.provider.getCurrentTask()?.handleTerminalOperation(message.terminalOperation)
+		void context.provider.getCurrentTask()?.handleTerminalOperation(message.terminalOperation)
 	}
 }
 
@@ -96,14 +96,14 @@ async function handleSelectContextFiles(context: MessageHandlerContext, message:
 }
 
 async function handleOpenImage(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
-	openImage(message.text!, { values: message.values })
+	void openImage(message.text!, { values: message.values })
 }
 
 async function handleSaveImage(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
 	if (message.dataUri) {
 		const matches = message.dataUri.match(/^data:image\/([a-zA-Z]+);base64,(.+)$/)
 		if (!matches) {
-			saveImage(message.dataUri, vscode.Uri.file(""))
+			void saveImage(message.dataUri, vscode.Uri.file(""))
 			return
 		}
 		const format = matches[1]
@@ -133,14 +133,14 @@ async function handleOpenFile(context: MessageHandlerContext, message: WebviewMe
 	if (!path.isAbsolute(filePath)) {
 		filePath = path.join(context.getCurrentCwd(), filePath)
 	}
-	openFile(filePath, message.values as { create?: boolean; content?: string; line?: number })
+	void openFile(filePath, message.values as { create?: boolean; content?: string; line?: number })
 }
 
 async function handleReadFileContent(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
 	const { provider, getCurrentCwd } = context
 	const relPath = message.text || ""
 	if (!relPath) {
-		provider.postMessageToWebview({
+		void provider.postMessageToWebview({
 			type: "fileContent",
 			fileContent: { path: relPath, content: null, error: "No path provided" },
 		})
@@ -149,7 +149,7 @@ async function handleReadFileContent(context: MessageHandlerContext, message: We
 	try {
 		const cwd = getCurrentCwd()
 		if (!cwd) {
-			provider.postMessageToWebview({
+			void provider.postMessageToWebview({
 				type: "fileContent",
 				fileContent: { path: relPath, content: null, error: "No workspace path available" },
 			})
@@ -157,17 +157,17 @@ async function handleReadFileContent(context: MessageHandlerContext, message: We
 		}
 		const absPath = path.resolve(cwd, relPath)
 		if (isPathOutsideWorkspace(absPath)) {
-			provider.postMessageToWebview({
+			void provider.postMessageToWebview({
 				type: "fileContent",
 				fileContent: { path: relPath, content: null, error: "Path is outside workspace" },
 			})
 			return
 		}
 		const content = await fs.readFile(absPath, "utf-8")
-		provider.postMessageToWebview({ type: "fileContent", fileContent: { path: relPath, content } })
+		void provider.postMessageToWebview({ type: "fileContent", fileContent: { path: relPath, content } })
 	} catch (err) {
 		const errorMsg = err instanceof Error ? err.message : String(err)
-		provider.postMessageToWebview({
+		void provider.postMessageToWebview({
 			type: "fileContent",
 			fileContent: { path: relPath, content: null, error: errorMsg },
 		})
@@ -175,7 +175,7 @@ async function handleReadFileContent(context: MessageHandlerContext, message: We
 }
 
 async function handleOpenMention(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
-	openMention(context.getCurrentCwd(), message.text)
+	void openMention(context.getCurrentCwd(), message.text)
 }
 
 async function handleOpenExternal(_context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
@@ -207,7 +207,7 @@ async function handleTtsSpeed(context: MessageHandlerContext, message: WebviewMe
 
 async function handlePlayTts(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
 	if (message.text) {
-		playTts(message.text, {
+		void playTts(message.text, {
 			onStart: () => context.provider.postMessageToWebview({ type: "ttsStart", text: message.text }),
 			onStop: () => context.provider.postMessageToWebview({ type: "ttsStop", text: message.text }),
 		})

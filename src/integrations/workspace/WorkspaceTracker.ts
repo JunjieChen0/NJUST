@@ -64,7 +64,7 @@ class WorkspaceTracker {
 			vscode.window.tabGroups.onDidChangeTabs(() => {
 				// Reset if workspace path has changed
 				if (this.prevWorkSpacePath !== this.cwd) {
-					this.workspaceDidReset()
+					void this.workspaceDidReset()
 				} else {
 					// Otherwise just update
 					this.workspaceDidUpdate()
@@ -97,14 +97,14 @@ class WorkspaceTracker {
 		}
 		this.resetTimer = setTimeout(async () => {
 			if (this.prevWorkSpacePath !== this.cwd) {
-				await this.providerRef.deref()?.postMessageToWebview({
+				void this.providerRef.deref()?.postMessageToWebview({
 					type: "workspaceUpdated",
 					filePaths: [],
 					openedTabs: this.getOpenedTabsInfo(),
 				})
 				this.filePaths.clear()
 				this.prevWorkSpacePath = this.cwd
-				this.initializeFilePaths()
+				void this.initializeFilePaths()
 			}
 		}, 300) // Debounce for 300ms
 	}
@@ -119,7 +119,7 @@ class WorkspaceTracker {
 			}
 
 			const relativeFilePaths = Array.from(this.filePaths).map((file) => toRelativePath(file, this.cwd))
-			this.providerRef.deref()?.postMessageToWebview({
+			void this.providerRef.deref()?.postMessageToWebview({
 				type: "workspaceUpdated",
 				filePaths: relativeFilePaths,
 				openedTabs: this.getOpenedTabsInfo(),

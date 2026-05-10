@@ -156,8 +156,8 @@ export async function initializeNetworkProxy(
 
 					if (newConfig.enabled) {
 						applyTlsVerificationOverride(newConfig)
-						configureGlobalProxy(newConfig)
-						configureUndiciProxy(newConfig)
+						void configureGlobalProxy(newConfig)
+						void configureUndiciProxy(newConfig)
 					} else {
 						// Proxy disabled - but we can't easily un-bootstrap global-agent or reset undici dispatcher safely.
 						// We *can* restore any global fetch patch immediately.

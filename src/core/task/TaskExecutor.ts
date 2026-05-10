@@ -629,7 +629,7 @@ export class TaskExecutor {
 							await persistentRetryHandler.waitForRetry(
 								errorType,
 								(message, _retryCount, _elapsed) => {
-									h.say("api_req_retry_delayed", message, undefined, true)
+									void h.say("api_req_retry_delayed", message, undefined, true)
 								},
 							)
 						} catch (persistentErr) {
@@ -1119,7 +1119,7 @@ export class TaskExecutor {
 										// Add to content and present
 										t.assistantMessageContent.push(partialToolUse)
 										t.userMessageContentReady = false
-										t.presentAssistantMessage()
+										void t.presentAssistantMessage()
 									} else if (event.type === "tool_call_delta") {
 										// Process chunk using streaming JSON parser
 										const partialToolUse = this.toolCallParser.processStreamingChunk(
@@ -1138,7 +1138,7 @@ export class TaskExecutor {
 												t.assistantMessageContent[toolUseIndex] = partialToolUse
 
 												// Present updated tool use
-												t.presentAssistantMessage()
+												void t.presentAssistantMessage()
 											}
 										}
 									} else if (event.type === "tool_call_end") {
@@ -1171,14 +1171,14 @@ export class TaskExecutor {
 												if (enabled && (state?.autoApprovalEnabled ?? false)) {
 													const decision = t.toolExecution.streamingExecutor.shouldEagerExecute(t, latest)
 													if (decision === "eager") {
-														t.presentAssistantMessage()
+														void t.presentAssistantMessage()
 														break
 													}
 												}
 											}
 
 											// Present the finalized tool call
-											t.presentAssistantMessage()
+											void t.presentAssistantMessage()
 										} else if (toolUseIndex !== undefined) {
 											// finalizeStreamingToolCall returned null (malformed JSON or missing args)
 											// Mark the tool as non-partial so it's presented as complete, but execution
@@ -1197,7 +1197,7 @@ export class TaskExecutor {
 											t.userMessageContentReady = false
 
 											// Present the tool call - validation will handle missing params
-											t.presentAssistantMessage()
+											void t.presentAssistantMessage()
 										}
 									}
 								}
@@ -1230,7 +1230,7 @@ export class TaskExecutor {
 
 								// Present the tool call to user - presentAssistantMessage will execute
 								// tools sequentially and accumulate all results in userMessageContent
-								t.presentAssistantMessage()
+								void t.presentAssistantMessage()
 								break
 							}
 							case "text": {
@@ -1250,7 +1250,7 @@ export class TaskExecutor {
 									})
 									t.userMessageContentReady = false
 								}
-								t.presentAssistantMessage()
+								void t.presentAssistantMessage()
 								break
 							}
 						}
@@ -1634,7 +1634,7 @@ export class TaskExecutor {
 							t.userMessageContentReady = false
 
 							// Present the finalized tool call
-							t.presentAssistantMessage()
+							void t.presentAssistantMessage()
 						} else if (toolUseIndex !== undefined) {
 							// finalizeStreamingToolCall returned null (malformed JSON or missing args)
 							// We still need to mark the tool as non-partial so it gets executed
@@ -1653,7 +1653,7 @@ export class TaskExecutor {
 							t.userMessageContentReady = false
 
 							// Present the tool call - validation will handle missing params
-							t.presentAssistantMessage()
+							void t.presentAssistantMessage()
 						}
 					}
 				}
@@ -1844,7 +1844,7 @@ export class TaskExecutor {
 					// If there is content to update then it will complete and
 					// update `t.userMessageContentReady` to true, which we
 					// `pWaitFor` before making the next request.
-					t.presentAssistantMessage()
+					void t.presentAssistantMessage()
 				}
 
 				if (hasTextContent || hasToolUses) {

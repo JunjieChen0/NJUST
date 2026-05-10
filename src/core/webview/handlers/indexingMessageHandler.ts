@@ -84,16 +84,16 @@ async function handleRequestIndexingStatus(context: MessageHandlerContext, _mess
 	const { provider } = context
 	const mgr = provider.getCurrentWorkspaceCodeIndexManager()
 	if (!mgr) {
-		provider.postMessageToWebview({ type: "indexingStatusUpdate", values: { systemStatus: "Error", message: t("embeddings:orchestrator.indexingRequiresWorkspace"), processedItems: 0, totalItems: 0, currentItemUnit: "items", workerspacePath: undefined } })
+		void provider.postMessageToWebview({ type: "indexingStatusUpdate", values: { systemStatus: "Error", message: t("embeddings:orchestrator.indexingRequiresWorkspace"), processedItems: 0, totalItems: 0, currentItemUnit: "items", workerspacePath: undefined } })
 		return
 	}
-	provider.postMessageToWebview({ type: "indexingStatusUpdate", values: mgr.getCurrentStatus() })
+	void provider.postMessageToWebview({ type: "indexingStatusUpdate", values: mgr.getCurrentStatus() })
 }
 
 async function handleRequestCodeIndexSecretStatus(context: MessageHandlerContext, _message: WebviewMessage): Promise<void> {
 	const { provider } = context
 	const v = (k: string) => provider.context.secrets.get(k).then(Boolean)
-	provider.postMessageToWebview({ type: "codeIndexSecretStatus", values: {
+	void provider.postMessageToWebview({ type: "codeIndexSecretStatus", values: {
 		hasOpenAiKey: await v("codeIndexOpenAiKey"),
 		hasQdrantApiKey: await v("codeIndexQdrantApiKey"),
 		hasOpenAiCompatibleApiKey: await v("codebaseIndexOpenAiCompatibleApiKey"),
@@ -108,13 +108,13 @@ async function handleStartIndexing(context: MessageHandlerContext, _message: Web
 	const { provider } = context
 	try {
 		const mgr = provider.getCurrentWorkspaceCodeIndexManager()
-		if (!mgr) { provider.postMessageToWebview({ type: "indexingStatusUpdate", values: { systemStatus: "Error", message: t("embeddings:orchestrator.indexingRequiresWorkspace"), processedItems: 0, totalItems: 0, currentItemUnit: "items" } }); provider.log("Cannot start indexing: No workspace folder open"); return }
+		if (!mgr) { void provider.postMessageToWebview({ type: "indexingStatusUpdate", values: { systemStatus: "Error", message: t("embeddings:orchestrator.indexingRequiresWorkspace"), processedItems: 0, totalItems: 0, currentItemUnit: "items" } }); provider.log("Cannot start indexing: No workspace folder open"); return }
 		await mgr.setWorkspaceEnabled(true)
 		if (mgr.isFeatureEnabled && mgr.isFeatureConfigured) {
 			await mgr.initialize(provider.contextProxy)
 			if (mgr.state === "Standby" || mgr.state === "Error") {
-				mgr.startIndexing()
-				if (!mgr.isInitialized) { await mgr.initialize(provider.contextProxy); if (mgr.state === "Standby" || mgr.state === "Error") mgr.startIndexing() }
+				void mgr.startIndexing()
+				if (!mgr.isInitialized) { await mgr.initialize(provider.contextProxy); if (mgr.state === "Standby" || mgr.state === "Error") void mgr.startIndexing() }
 			}
 		}
 	} catch (error) { provider.log(`Error starting indexing: ${error instanceof Error ? error.message : String(error)}`) }
@@ -126,7 +126,7 @@ async function handleStopIndexing(context: MessageHandlerContext, _message: Webv
 		const mgr = provider.getCurrentWorkspaceCodeIndexManager()
 		if (!mgr) { provider.log("Cannot stop indexing: No workspace folder open"); return }
 		mgr.stopIndexing()
-		provider.postMessageToWebview({ type: "indexingStatusUpdate", values: mgr.getCurrentStatus() })
+		void provider.postMessageToWebview({ type: "indexingStatusUpdate", values: mgr.getCurrentStatus() })
 	} catch (error) { provider.log(`Error stopping indexing: ${error instanceof Error ? error.message : String(error)}`) }
 }
 
@@ -137,9 +137,9 @@ async function handleToggleWorkspaceIndexing(context: MessageHandlerContext, mes
 		if (!mgr) { provider.log("Cannot toggle workspace indexing: No workspace folder open"); return }
 		const enabled = message.bool ?? false
 		await mgr.setWorkspaceEnabled(enabled)
-		if (enabled && mgr.isFeatureEnabled && mgr.isFeatureConfigured) { await mgr.initialize(provider.contextProxy); mgr.startIndexing() }
+		if (enabled && mgr.isFeatureEnabled && mgr.isFeatureConfigured) { await mgr.initialize(provider.contextProxy); void mgr.startIndexing() }
 		else if (!enabled) mgr.stopIndexing()
-		provider.postMessageToWebview({ type: "indexingStatusUpdate", values: mgr.getCurrentStatus() })
+		void provider.postMessageToWebview({ type: "indexingStatusUpdate", values: mgr.getCurrentStatus() })
 	} catch (error) { provider.log(`Error toggling workspace indexing: ${error instanceof Error ? error.message : String(error)}`) }
 }
 
@@ -155,9 +155,9 @@ async function handleSetAutoEnableDefault(context: MessageHandlerContext, messag
 			const was = prior.get(m)!
 			const now = m.isWorkspaceEnabled
 			if (was && !now) m.stopIndexing()
-			else if (!was && now && m.isFeatureEnabled && m.isFeatureConfigured) { await m.initialize(provider.contextProxy); m.startIndexing() }
+			else if (!was && now && m.isFeatureEnabled && m.isFeatureConfigured) { await m.initialize(provider.contextProxy); void m.startIndexing() }
 		}
-		provider.postMessageToWebview({ type: "indexingStatusUpdate", values: mgr.getCurrentStatus() })
+		void provider.postMessageToWebview({ type: "indexingStatusUpdate", values: mgr.getCurrentStatus() })
 	} catch (error) { provider.log(`Error setting auto-enable default: ${error instanceof Error ? error.message : String(error)}`) }
 }
 
@@ -165,8 +165,8 @@ async function handleClearIndexData(context: MessageHandlerContext, _message: We
 	const { provider } = context
 	try {
 		const mgr = provider.getCurrentWorkspaceCodeIndexManager()
-		if (!mgr) { provider.postMessageToWebview({ type: "indexCleared", values: { success: false, error: t("embeddings:orchestrator.indexingRequiresWorkspace") } }); return }
+		if (!mgr) { void provider.postMessageToWebview({ type: "indexCleared", values: { success: false, error: t("embeddings:orchestrator.indexingRequiresWorkspace") } }); return }
 		await mgr.clearIndexData()
-		provider.postMessageToWebview({ type: "indexCleared", values: { success: true } })
-	} catch (error) { provider.postMessageToWebview({ type: "indexCleared", values: { success: false, error: error instanceof Error ? error.message : String(error) } }) }
+		void provider.postMessageToWebview({ type: "indexCleared", values: { success: true } })
+	} catch (error) { void provider.postMessageToWebview({ type: "indexCleared", values: { success: false, error: error instanceof Error ? error.message : String(error) } }) }
 }

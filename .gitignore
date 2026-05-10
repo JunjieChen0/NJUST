@@ -72,5 +72,8 @@ cangjie_lsp_*.txt
 log.txt
 .aider*
 
+# Temp lint output
+temp-lint-*.txt
+
 # Devflow planning and specs
 devflow/

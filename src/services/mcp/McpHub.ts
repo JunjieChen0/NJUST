@@ -169,7 +169,7 @@ export class McpHub implements IMcpHubService {
 
 	constructor(provider: IMcpHubClient) {
 		this.providerRef = new WeakRef(provider)
-		this.watchMcpSettingsFile()
+		void this.watchMcpSettingsFile()
 		this.watchProjectMcpFile().catch((err) => logger.error("McpHub", "watchProjectMcpFile failed:", err))
 		this.setupWorkspaceFoldersWatcher()
 		this.initializationPromise = Promise.all([

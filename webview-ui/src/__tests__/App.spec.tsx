@@ -249,5 +249,4 @@ describe("App", () => {
 		expect(chatView.getAttribute("data-hidden")).toBe("false")
 		expect(screen.queryByTestId(`${view}-view`)).not.toBeInTheDocument()
 	})
-
 })

@@ -87,7 +87,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 					}
 				}
 			})
-			this.initializeClient()
+			void this.initializeClient()
 		} catch (error) {
 			// Ensure cleanup if constructor fails
 			this.dispose()

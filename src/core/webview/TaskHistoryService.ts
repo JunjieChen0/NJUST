@@ -91,7 +91,7 @@ export class TaskHistoryService {
 			}
 
 			const items = this.host.taskHistoryStore.getAll().filter((item: HistoryItem) => item.ts && item.task)
-			this.host.postMessageToWebview({ type: "taskHistoryUpdated", taskHistory: items })
+			void this.host.postMessageToWebview({ type: "taskHistoryUpdated", taskHistory: items })
 		} catch (error) {
 			this.log(`[TaskHistoryService] Init error: ${error instanceof Error ? error.message : String(error)}`)
 		}
@@ -167,7 +167,7 @@ export class TaskHistoryService {
 			const { historyItem } = await this.getTaskWithId(id)
 			await createTaskWithHistoryItem(historyItem)
 		}
-		this.host.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
+		void this.host.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
 	}
 
 	async exportTaskWithId(id: string): Promise<void> {
@@ -198,7 +198,7 @@ export class TaskHistoryService {
 			throw new Error(`Task with id ${taskId} not found in stack`)
 		}
 		await task.condenseContext()
-		this.host.postMessageToWebview({ type: "condenseTaskContextResponse", text: taskId })
+		void this.host.postMessageToWebview({ type: "condenseTaskContextResponse", text: taskId })
 	}
 
 	// ── Task Deletion ───────────────────────────────────────────────

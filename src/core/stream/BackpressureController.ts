@@ -25,7 +25,7 @@ export class BackpressureController<T> implements AsyncIterable<T> {
 		if (highWaterMark <= lowWaterMark) {
 			throw new Error("highWaterMark must be greater than lowWaterMark")
 		}
-		this.startPumping()
+		void this.startPumping()
 	}
 
 	private async startPumping(): Promise<void> {

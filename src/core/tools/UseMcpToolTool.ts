@@ -253,7 +253,7 @@ export class UseMcpToolTool extends BaseTool<"use_mcp_tool"> {
 
 	private async sendExecutionStatus(task: Task, status: McpExecutionStatus): Promise<void> {
 		const clineProvider = await task.providerRef.deref()
-		clineProvider?.postMessageToWebview({
+		void clineProvider?.postMessageToWebview({
 			type: "mcpExecutionStatus",
 			text: JSON.stringify(status),
 		})

@@ -207,11 +207,11 @@ async function handleWebviewDidLaunch(context: MessageHandlerContext, _message: 
 	const { provider, updateGlobalState } = context
 	const customModes = await provider.customModesManager.getCustomModes()
 	await updateGlobalState("customModes", customModes)
-	provider.postStateToWebview()
-	provider.workspaceTracker?.initializeFilePaths()
-	getTheme().then((t) => provider.postMessageToWebview({ type: "theme", text: JSON.stringify(t) }))
+	void provider.postStateToWebview()
+	void provider.workspaceTracker?.initializeFilePaths()
+	void getTheme().then((t) => provider.postMessageToWebview({ type: "theme", text: JSON.stringify(t) }))
 	const mcpHub = provider.getMcpHub()
-	if (mcpHub) provider.postMessageToWebview({ type: "mcpServers", mcpServers: mcpHub.getAllServers() })
+	if (mcpHub) void provider.postMessageToWebview({ type: "mcpServers", mcpServers: mcpHub.getAllServers() })
 	provider.providerSettingsManager.listConfig().then(async (list) => {
 		if (!list) return
 		if (list.length === 1) {
@@ -247,7 +247,7 @@ async function handleNewTask(context: MessageHandlerContext, message: WebviewMes
 
 async function handleClearTask(context: MessageHandlerContext, _message: WebviewMessage): Promise<void> {
 	await context.provider.clearTask()
-	await context.provider.postStateToWebview()
+	void context.provider.postStateToWebview()
 }
 
 async function handleCancelTask(context: MessageHandlerContext, _message: WebviewMessage): Promise<void> {
@@ -260,19 +260,19 @@ async function handleCancelAutoApproval(context: MessageHandlerContext, _message
 
 async function handleExportCurrentTask(context: MessageHandlerContext, _message: WebviewMessage): Promise<void> {
 	const id = context.provider.getCurrentTask()?.taskId
-	if (id) context.provider.exportTaskWithId(id)
+	if (id) void context.provider.exportTaskWithId(id)
 }
 
 async function handleShowTaskWithId(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
-	context.provider.showTaskWithId(message.text!)
+	void context.provider.showTaskWithId(message.text!)
 }
 
 async function handleCondenseTaskContextRequest(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
-	context.provider.condenseTaskContext(message.text!)
+	void context.provider.condenseTaskContext(message.text!)
 }
 
 async function handleDeleteTaskWithId(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
-	context.provider.deleteTaskWithId(message.text!)
+	void context.provider.deleteTaskWithId(message.text!)
 }
 
 async function handleDeleteMultipleTasksWithIds(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
@@ -296,7 +296,7 @@ async function handleDeleteMultipleTasksWithIds(context: MessageHandlerContext, 
 }
 
 async function handleExportTaskWithId(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
-	context.provider.exportTaskWithId(message.text!)
+	void context.provider.exportTaskWithId(message.text!)
 }
 
 async function handleGetTaskWithAggregatedCosts(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {

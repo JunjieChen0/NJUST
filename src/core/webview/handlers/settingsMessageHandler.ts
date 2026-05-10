@@ -289,7 +289,7 @@ async function handleGetListApiConfiguration(context: MessageHandlerContext, _me
 	try {
 		const listApiConfig = await provider.providerSettingsManager.listConfig()
 		await updateGlobalState("listApiConfigMeta", listApiConfig)
-		provider.postMessageToWebview({ type: "listApiConfig", listApiConfig })
+		void provider.postMessageToWebview({ type: "listApiConfig", listApiConfig })
 	} catch (error) {
 		provider.log(`Error get list api configuration: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`)
 		vscode.window.showErrorMessage(t("common:errors.list_api_config"))
@@ -359,11 +359,11 @@ async function handleRequestRouterModels(context: MessageHandlerContext, message
 			const errorMessage = result.reason instanceof Error ? result.reason.message : String(result.reason)
 			logger.error("SettingsMessageHandler", `Error fetching models for ${routerName}:`, result.reason)
 			routerModels[routerName] = {}
-			provider.postMessageToWebview({ type: "singleRouterModelFetchResponse", success: false, error: errorMessage, values: { provider: routerName } })
+			void provider.postMessageToWebview({ type: "singleRouterModelFetchResponse", success: false, error: errorMessage, values: { provider: routerName } })
 		}
 	})
 
-	provider.postMessageToWebview({
+	void provider.postMessageToWebview({
 		type: "routerModels",
 		routerModels,
 		values: providerFilter ? { provider: requestedProvider } : undefined,
@@ -378,7 +378,7 @@ async function handleRequestOllamaModels(context: MessageHandlerContext, _messag
 		await flushModels(ollamaOptions, true)
 		const ollamaModels = await getModels(ollamaOptions)
 		if (Object.keys(ollamaModels).length > 0) {
-			provider.postMessageToWebview({ type: "ollamaModels", ollamaModels })
+			void provider.postMessageToWebview({ type: "ollamaModels", ollamaModels })
 		}
 	} catch (error) { debugLog("Ollama models fetch failed:", error) }
 }
@@ -391,7 +391,7 @@ async function handleRequestLmStudioModels(context: MessageHandlerContext, _mess
 		await flushModels(lmStudioOptions, true)
 		const lmStudioModels = await getModels(lmStudioOptions)
 		if (Object.keys(lmStudioModels).length > 0) {
-			provider.postMessageToWebview({ type: "lmStudioModels", lmStudioModels })
+			void provider.postMessageToWebview({ type: "lmStudioModels", lmStudioModels })
 		}
 	} catch (error) { debugLog("LM Studio models fetch failed:", error) }
 }
@@ -402,10 +402,10 @@ async function handleRequestRooModels(context: MessageHandlerContext, _message: 
 		const rooOptions = { provider: "roo" as const, baseUrl: process.env.NJUST_AI_CJ_PROVIDER_URL ?? "", apiKey: undefined }
 		await flushModels(rooOptions, true)
 		const rooModels = await getModels(rooOptions)
-		provider.postMessageToWebview({ type: "singleRouterModelFetchResponse", success: true, values: { provider: "roo", models: rooModels } })
+		void provider.postMessageToWebview({ type: "singleRouterModelFetchResponse", success: true, values: { provider: "roo", models: rooModels } })
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error)
-		provider.postMessageToWebview({ type: "singleRouterModelFetchResponse", success: false, error: errorMessage, values: { provider: "roo" } })
+		void provider.postMessageToWebview({ type: "singleRouterModelFetchResponse", success: false, error: errorMessage, values: { provider: "roo" } })
 	}
 }
 
@@ -413,14 +413,14 @@ async function handleRequestOpenAiModels(context: MessageHandlerContext, message
 	const { provider } = context
 	if (message?.values?.baseUrl && message?.values?.apiKey) {
 		const openAiModels = await getOpenAiModels(message.values.baseUrl, message.values.apiKey, message.values.openAiHeaders)
-		provider.postMessageToWebview({ type: "openAiModels", openAiModels })
+		void provider.postMessageToWebview({ type: "openAiModels", openAiModels })
 	}
 }
 
 async function handleRequestVsCodeLmModels(context: MessageHandlerContext, _message: WebviewMessage): Promise<void> {
 	const { provider } = context
 	const vsCodeLmModels = await getVsCodeLmModels()
-	provider.postMessageToWebview({ type: "vsCodeLmModels", vsCodeLmModels })
+	void provider.postMessageToWebview({ type: "vsCodeLmModels", vsCodeLmModels })
 }
 
 async function handleImportSettings(context: MessageHandlerContext, _message: WebviewMessage): Promise<void> {
@@ -541,16 +541,16 @@ async function handleRequestOpenAiCodexRateLimits(context: MessageHandlerContext
 		const { openAiCodexOAuthManager } = await import("../../../integrations/openai-codex/oauth")
 		const accessToken = await openAiCodexOAuthManager.getAccessToken()
 		if (!accessToken) {
-			provider.postMessageToWebview({ type: "openAiCodexRateLimits", error: "Not authenticated with OpenAI Codex" })
+			void provider.postMessageToWebview({ type: "openAiCodexRateLimits", error: "Not authenticated with OpenAI Codex" })
 			return
 		}
 		const accountId = await openAiCodexOAuthManager.getAccountId()
 		const { fetchOpenAiCodexRateLimitInfo } = await import("../../../integrations/openai-codex/rate-limits")
 		const rateLimits = await fetchOpenAiCodexRateLimitInfo(accessToken, { accountId })
-		provider.postMessageToWebview({ type: "openAiCodexRateLimits", values: rateLimits })
+		void provider.postMessageToWebview({ type: "openAiCodexRateLimits", values: rateLimits })
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error)
 		provider.log(`Error fetching OpenAI Codex rate limits: ${errorMessage}`)
-		provider.postMessageToWebview({ type: "openAiCodexRateLimits", error: errorMessage })
+		void provider.postMessageToWebview({ type: "openAiCodexRateLimits", error: errorMessage })
 	}
 }

@@ -79,7 +79,7 @@ if (!isTestEnv) {
 // Initialize i18next with configuration
 const isDevMode = process.env.NODE_ENV === "development"
 
-i18next.init({
+void i18next.init({
 	lng: "en",
 	fallbackLng: "en",
 	debug: false,

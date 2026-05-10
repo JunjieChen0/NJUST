@@ -679,7 +679,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			context.subscriptions.push({
 				dispose: () => {
-					rooToolsMcpServer?.stop()
+					void rooToolsMcpServer?.stop()
 				},
 			})
 		}
@@ -781,7 +781,7 @@ export async function deactivate() {
 
 	if (cangjieLspClient) {
 		await cangjieLspClient.stop()
-		cangjieLspClient.dispose()
+		await cangjieLspClient.dispose()
 		cangjieLspClient = undefined
 	}
 

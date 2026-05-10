@@ -20,9 +20,9 @@ export function startAllPrefetch(options: {
 	memoryFetchFn?: () => Promise<string[]>
 }): void {
 	if (options.skillFetchFn) {
-		globalSkillPrefetcher.startPrefetch(options.skillFetchFn)
+		void globalSkillPrefetcher.startPrefetch(options.skillFetchFn)
 	}
 	if (options.memoryFetchFn) {
-		globalMemoryPrefetcher.startPrefetch(options.memoryFetchFn)
+		void globalMemoryPrefetcher.startPrefetch(options.memoryFetchFn)
 	}
 }

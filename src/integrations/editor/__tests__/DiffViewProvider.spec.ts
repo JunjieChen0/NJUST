@@ -513,7 +513,7 @@ describe("DiffViewProvider", () => {
 			// Mock closeAllDiffViews
 			;(diffViewProvider as any).closeAllDiffViews = vi.fn().mockResolvedValue(undefined)
 
-			diffViewProvider.saveChanges(true, 5000)
+			await diffViewProvider.saveChanges(true, 5000)
 
 			// Verify custom delay was used
 			expect(mockDelay).toHaveBeenCalledWith(5000)

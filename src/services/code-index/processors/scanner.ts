@@ -214,7 +214,7 @@ export class DirectoryScanner implements IDirectoryScanner {
 										activeBatchPromises.add(batchPromise)
 
 										// Clean up completed promises to prevent memory accumulation
-										batchPromise.finally(() => {
+										void batchPromise.finally(() => {
 											activeBatchPromises.delete(batchPromise)
 											pendingBatchCount--
 										})
@@ -299,7 +299,7 @@ export class DirectoryScanner implements IDirectoryScanner {
 				activeBatchPromises.add(batchPromise)
 
 				// Clean up completed promises to prevent memory accumulation
-				batchPromise.finally(() => {
+				void batchPromise.finally(() => {
 					activeBatchPromises.delete(batchPromise)
 					pendingBatchCount--
 				})

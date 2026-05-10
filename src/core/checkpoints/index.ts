@@ -20,7 +20,7 @@ import { CheckpointServiceOptions, RepoPerTaskCheckpointService } from "../../se
 const WARNING_THRESHOLD_MS = 5000
 
 function sendCheckpointInitWarn(task: Task, type?: "WAIT_TIMEOUT" | "INIT_TIMEOUT", timeout?: number) {
-	task.providerRef.deref()?.postMessageToWebview({
+	void task.providerRef.deref()?.postMessageToWebview({
 		type: "checkpointInitWarning",
 		checkpointWarning: type && timeout ? { type, timeout } : undefined,
 	})
@@ -296,7 +296,7 @@ export async function checkpointRestore(
 		// I'd like to revisit this in the future and try to improve the
 		// task flow and the communication between the webview and the
 		// `Task` instance.
-		provider?.cancelTask()
+		void provider?.cancelTask()
 	} catch {
 		provider?.log("[checkpointRestore] disabling checkpoints for this task")
 		task.enableCheckpoints = false

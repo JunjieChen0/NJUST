@@ -44,13 +44,13 @@ export class RooIgnoreController {
 		// Watch for changes and updates
 		this.disposables.push(
 			fileWatcher.onDidChange(() => {
-				this.loadRooIgnore()
+				void this.loadRooIgnore()
 			}),
 			fileWatcher.onDidCreate(() => {
-				this.loadRooIgnore()
+				void this.loadRooIgnore()
 			}),
 			fileWatcher.onDidDelete(() => {
-				this.loadRooIgnore()
+				void this.loadRooIgnore()
 			}),
 		)
 

@@ -75,7 +75,7 @@ export class TaskAskSayHandler {
 					lastMessage.partial = partial
 					lastMessage.progressStatus = progressStatus
 					lastMessage.isProtected = isProtected
-					this.host.updateClineMessage(lastMessage)
+					void this.host.updateClineMessage(lastMessage)
 					throw new AskIgnoredError("updating existing partial")
 				} else {
 					askTs = Date.now()
@@ -95,7 +95,7 @@ export class TaskAskSayHandler {
 					lastMessage.progressStatus = progressStatus
 					lastMessage.isProtected = isProtected
 					await this.host.saveClineMessages()
-					this.host.updateClineMessage(lastMessage)
+					void this.host.updateClineMessage(lastMessage)
 				} else {
 					this.host.askResponse = undefined
 					this.host.askResponseText = undefined
@@ -297,7 +297,7 @@ export class TaskAskSayHandler {
 					lastMessage.images = images
 					lastMessage.partial = partial
 					lastMessage.progressStatus = progressStatus
-					this.host.updateClineMessage(lastMessage)
+					void this.host.updateClineMessage(lastMessage)
 				} else {
 					const sayTs = Date.now()
 					if (!options.isNonInteractive) {
@@ -324,7 +324,7 @@ export class TaskAskSayHandler {
 					lastMessage.partial = false
 					lastMessage.progressStatus = progressStatus
 					await this.host.saveClineMessages()
-					this.host.updateClineMessage(lastMessage)
+					void this.host.updateClineMessage(lastMessage)
 				} else {
 					const sayTs = Date.now()
 					if (!options.isNonInteractive) {

@@ -191,7 +191,7 @@ export class ClineProvider
 
 		ClineProvider.activeInstances.add(this)
 
-		this.updateGlobalState("codebaseIndexModels", EMBEDDING_MODEL_PROFILES)
+		void this.updateGlobalState("codebaseIndexModels", EMBEDDING_MODEL_PROFILES)
 
 		// Initialize the per-task file-based history store.
 		// The globalState write-through is debounced separately (not on every mutation)
@@ -581,14 +581,14 @@ export class ClineProvider
 		if ("onDidChangeViewState" in webviewView) {
 			const viewStateDisposable = webviewView.onDidChangeViewState(() => {
 				if (this.view?.visible) {
-					this.postMessageToWebview({ type: "action", action: "didBecomeVisible" })
+					void this.postMessageToWebview({ type: "action", action: "didBecomeVisible" })
 				}
 			})
 			this.webviewDisposables.push(viewStateDisposable)
 		} else if ("onDidChangeVisibility" in webviewView) {
 			const visibilityDisposable = webviewView.onDidChangeVisibility(() => {
 				if (this.view?.visible) {
-					this.postMessageToWebview({ type: "action", action: "didBecomeVisible" })
+					void this.postMessageToWebview({ type: "action", action: "didBecomeVisible" })
 				}
 			})
 			this.webviewDisposables.push(visibilityDisposable)
@@ -1217,7 +1217,7 @@ export class ClineProvider
 
 	async postStateToWebview() {
 		const state = await this.getStateToPostToWebview()
-		this.postMessageToWebview({ type: "state", state })
+		void this.postMessageToWebview({ type: "state", state })
 	}
 
 	/**
@@ -1226,7 +1226,7 @@ export class ClineProvider
 	async postStateToWebviewWithoutTaskHistory(): Promise<void> {
 		const state = await this.getStateToPostToWebview()
 		const { taskHistory: _omit, ...rest } = state
-		this.postMessageToWebview({ type: "state", state: rest })
+		void this.postMessageToWebview({ type: "state", state: rest })
 	}
 
 	/**
@@ -1235,7 +1235,7 @@ export class ClineProvider
 	async postStateToWebviewWithoutClineMessages(): Promise<void> {
 		const state = await this.getStateToPostToWebview()
 		const { clineMessages: _omitMessages, taskHistory: _omitHistory, ...rest } = state
-		this.postMessageToWebview({ type: "state", state: rest })
+		void this.postMessageToWebview({ type: "state", state: rest })
 	}
 
 	private getMergedCommandLists(allowedCommands?: string[], deniedCommands?: string[]): { allowedCommands: string[]; deniedCommands: string[] } {
@@ -1703,7 +1703,7 @@ export class ClineProvider
 				if (currentManager === this.getCurrentWorkspaceCodeIndexManager()) {
 					// Get the full status from the manager to ensure we have all fields correctly formatted
 					const fullStatus = currentManager.getCurrentStatus()
-					this.postMessageToWebview({
+					void this.postMessageToWebview({
 						type: "indexingStatusUpdate",
 						values: fullStatus,
 					})
@@ -1715,7 +1715,7 @@ export class ClineProvider
 			}
 
 			// Send initial status for the current workspace
-			this.postMessageToWebview({
+			void this.postMessageToWebview({
 				type: "indexingStatusUpdate",
 				values: currentManager.getCurrentStatus(),
 			})
@@ -1880,7 +1880,7 @@ export class ClineProvider
 		task.cancelCurrentRequest()
 
 		// Begin abort (non-blocking)
-		task.abortTask()
+		void task.abortTask()
 
 		// Immediately mark the original instance as abandoned to prevent any residual activity
 		task.abandoned = true

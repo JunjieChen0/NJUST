@@ -65,14 +65,14 @@ async function handleUpdatePrompt(context: MessageHandlerContext, message: Webvi
 			customModePrompts: updatedPrompts,
 			hasOpenedModeSelector: currentState.hasOpenedModeSelector ?? false,
 		}
-		provider.postMessageToWebview({ type: "state", state: stateWithPrompts })
+		void provider.postMessageToWebview({ type: "state", state: stateWithPrompts })
 	}
 }
 
 async function handleOpenCustomModesSettings(context: MessageHandlerContext, _message: WebviewMessage): Promise<void> {
 	const customModesFilePath = await context.provider.customModesManager.getCustomModesFilePath()
 	if (customModesFilePath) {
-		openFile(customModesFilePath)
+		void openFile(customModesFilePath)
 	}
 }
 
@@ -201,18 +201,18 @@ async function handleExportMode(context: MessageHandlerContext, message: Webview
 				if (saveUri && result.yaml) {
 					await saveLastExportPath(provider.contextProxy, "lastModeExportPath", saveUri)
 					await fs.writeFile(saveUri.fsPath, result.yaml, "utf-8")
-					provider.postMessageToWebview({ type: "exportModeResult", success: true, slug: message.slug })
+					void provider.postMessageToWebview({ type: "exportModeResult", success: true, slug: message.slug })
 					vscode.window.showInformationMessage(t("common:info.mode_exported", { mode: message.slug }))
 				} else {
-					provider.postMessageToWebview({ type: "exportModeResult", success: false, error: "Export cancelled", slug: message.slug })
+					void provider.postMessageToWebview({ type: "exportModeResult", success: false, error: "Export cancelled", slug: message.slug })
 				}
 			} else {
-				provider.postMessageToWebview({ type: "exportModeResult", success: false, error: result.error, slug: message.slug })
+				void provider.postMessageToWebview({ type: "exportModeResult", success: false, error: result.error, slug: message.slug })
 			}
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error)
 			provider.log(`Failed to export mode ${message.slug}: ${errorMessage}`)
-			provider.postMessageToWebview({ type: "exportModeResult", success: false, error: errorMessage, slug: message.slug })
+			void provider.postMessageToWebview({ type: "exportModeResult", success: false, error: errorMessage, slug: message.slug })
 		}
 	}
 }
@@ -249,19 +249,19 @@ async function handleImportMode(context: MessageHandlerContext, message: Webview
 				const customModes = await provider.customModesManager.getCustomModes()
 				await updateGlobalState("customModes", customModes)
 				await provider.postStateToWebview()
-				provider.postMessageToWebview({ type: "importModeResult", success: true, slug: result.slug })
+				void provider.postMessageToWebview({ type: "importModeResult", success: true, slug: result.slug })
 				vscode.window.showInformationMessage(t("common:info.mode_imported"))
 			} else {
-				provider.postMessageToWebview({ type: "importModeResult", success: false, error: result.error })
+				void provider.postMessageToWebview({ type: "importModeResult", success: false, error: result.error })
 				vscode.window.showErrorMessage(t("common:errors.mode_import_failed", { error: result.error }))
 			}
 		} else {
-			provider.postMessageToWebview({ type: "importModeResult", success: false, error: "cancelled" })
+			void provider.postMessageToWebview({ type: "importModeResult", success: false, error: "cancelled" })
 		}
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error)
 		provider.log(`Failed to import mode: ${errorMessage}`)
-		provider.postMessageToWebview({ type: "importModeResult", success: false, error: errorMessage })
+		void provider.postMessageToWebview({ type: "importModeResult", success: false, error: errorMessage })
 		vscode.window.showErrorMessage(t("common:errors.mode_import_failed", { error: errorMessage }))
 	}
 }
@@ -269,7 +269,7 @@ async function handleImportMode(context: MessageHandlerContext, message: Webview
 async function handleCheckRulesDirectory(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
 	if (message.slug) {
 		const hasContent = await context.provider.customModesManager.checkRulesDirectoryHasContent(message.slug)
-		context.provider.postMessageToWebview({
+		void context.provider.postMessageToWebview({
 			type: "checkRulesDirectoryResult",
 			slug: message.slug,
 			hasContent: hasContent,
@@ -358,7 +358,7 @@ async function handleOpenCommandFile(context: MessageHandlerContext, message: We
 			const { getCommand } = await import("../../../services/command/commands")
 			const command = await getCommand(getCurrentCwd(), message.text)
 			if (command && command.filePath) {
-				openFile(command.filePath)
+				void openFile(command.filePath)
 			} else {
 				vscode.window.showErrorMessage(t("common:errors.command_not_found", { name: message.text }))
 			}
@@ -458,7 +458,7 @@ async function handleCreateCommand(context: MessageHandlerContext, message: Webv
 		await fs.writeFile(filePath, templateContent, "utf8")
 		provider.log(`Created new command file: ${filePath}`)
 
-		openFile(filePath)
+		void openFile(filePath)
 
 		const { getCommands } = await import("../../../services/command/commands")
 		const commands = await getCommands(getCurrentCwd() || "")
