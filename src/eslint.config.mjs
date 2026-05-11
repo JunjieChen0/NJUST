@@ -40,6 +40,11 @@ export default [
 	},
 	{
 		files: ["__mocks__/**/*.js"],
+		languageOptions: {
+			parserOptions: {
+				project: null, // 禁用 TS 项目检查，避免 JS 文件被当 TS 解析
+			},
+		},
 		rules: {
 			"no-undef": "off",
 		},

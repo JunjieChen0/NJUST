@@ -101,7 +101,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 			return
 		}
 
-		TelemetryService.instance?.captureTitleButtonClicked("settings")
+		void TelemetryService.instance?.captureTitleButtonClicked("settings")
 
 		void visibleProvider.postMessageToWebview({ type: "action", action: "settingsButtonClicked" })
 		// Also explicitly post the visibility message to trigger scroll reliably
@@ -114,7 +114,7 @@ const getCommandsMap = ({ context, outputChannel, provider }: RegisterCommandOpt
 			return
 		}
 
-		TelemetryService.instance?.captureTitleButtonClicked("history")
+		void TelemetryService.instance?.captureTitleButtonClicked("history")
 
 		void visibleProvider.postMessageToWebview({ type: "action", action: "historyButtonClicked" })
 	},
