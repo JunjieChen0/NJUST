@@ -28,6 +28,7 @@ class AskIgnoredError extends Error {
 	}
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 async function checkAutoApproval({
 	state: _state,
 	ask: _ask,

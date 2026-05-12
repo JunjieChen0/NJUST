@@ -33,8 +33,7 @@ const ACTION_COMMAND_MAP: Record<LSPAction, string> = {
  */
 async function getVscodeModule(): Promise<typeof import("vscode") | undefined> {
 	try {
-		 
-		return require("vscode")
+		return await import("vscode")
 	} catch {
 		return undefined
 	}

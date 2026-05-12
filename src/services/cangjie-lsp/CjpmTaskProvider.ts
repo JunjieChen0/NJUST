@@ -46,6 +46,7 @@ export class CjpmTaskProvider implements vscode.TaskProvider, vscode.Disposable 
 		})
 	}
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	async provideTasks(): Promise<vscode.Task[]> {
 		const workspaceFolders = vscode.workspace.workspaceFolders
 		if (!workspaceFolders) return []

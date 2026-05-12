@@ -1,3 +1,4 @@
+import * as nodeFs from "fs"
 import { vi } from "vitest"
 
 // Mock file system data
@@ -150,7 +151,7 @@ const mockFs = {
 		throw error
 	}),
 
-	constants: require("fs").constants,
+	constants: nodeFs.constants,
 
 	// Expose mock data for test assertions
 	_mockFiles: mockFiles,

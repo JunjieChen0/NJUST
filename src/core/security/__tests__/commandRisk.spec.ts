@@ -18,6 +18,7 @@ describe("assessCommandRisk", () => {
 	})
 
 	it("returns high risk for del on Windows", () => {
+		// eslint-disable-next-line no-useless-escape
 		const r = assessCommandRisk("del /f /q C:\temp\*")
 		expect(r.level).toBe("high")
 	})
@@ -53,6 +54,7 @@ describe("assessCommandRisk", () => {
 	})
 
 	it("handles PowerShell Remove-Item as high risk", () => {
+		// eslint-disable-next-line no-useless-escape
 		const r = assessCommandRisk("Remove-Item -Recurse -Force C:\data")
 		expect(r.level).toBe("high")
 	})

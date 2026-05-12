@@ -267,6 +267,7 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 		}
 	}
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	override async handlePartial(_task: Task, _block: ToolUse<"generate_image">): Promise<void> {
 		return
 	}

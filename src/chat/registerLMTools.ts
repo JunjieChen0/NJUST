@@ -1,3 +1,4 @@
+import * as path from "path"
 import * as vscode from "vscode"
 
 import type { ClineProvider } from "../core/webview/ClineProvider"
@@ -180,6 +181,7 @@ function createLMTool(
 			}
 		},
 
+		// eslint-disable-next-line @typescript-eslint/require-await
 		async prepareInvocation(
 			_options: vscode.LanguageModelToolInvocationPrepareOptions<Record<string, unknown>>,
 			_token: vscode.CancellationToken,
@@ -289,7 +291,6 @@ async function executeTool(
 
 function resolveFilePath(cwd: string, relativePath: string): string {
 	if (!relativePath) return cwd
-	const path = require("path")
 	if (path.isAbsolute(relativePath)) return relativePath
 	return path.join(cwd, relativePath)
 }

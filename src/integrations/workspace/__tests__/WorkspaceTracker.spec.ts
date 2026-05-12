@@ -17,7 +17,7 @@ let registeredTabChangeCallback: (() => Promise<void>) | null = null
 vitest.mock("../../../utils/path", () => ({
 	getWorkspacePath: vitest.fn().mockReturnValue("/test/workspace"),
 	toRelativePath: vitest.fn((path, cwd) => {
-		// Handle both Windows and POSIX paths by using path.relative
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		const relativePath = require("path").relative(cwd, path)
 		// Convert to forward slashes for consistency
 		const normalizedPath = relativePath.replace(/\\/g, "/")

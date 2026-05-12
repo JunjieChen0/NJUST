@@ -47,6 +47,7 @@ export type CheckAutoApprovalResult =
 			fn: () => { askResponse: ClineAskResponse; text?: string; images?: string[] }
 	  }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function checkAutoApproval({
 	state,
 	ask,

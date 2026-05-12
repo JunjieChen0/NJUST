@@ -1,3 +1,5 @@
+import * as fs from "fs"
+import * as path from "path"
 import * as vscode from "vscode"
 import i18next from "i18next"
 import { logger } from "../shared/logger"
@@ -11,10 +13,6 @@ const isTestEnv = process.env.NODE_ENV === "test"
 // Load translations based on environment
 if (!isTestEnv) {
 	try {
-		// Dynamic imports to avoid browser compatibility issues
-		const fs = require("fs")
-		const path = require("path")
-
 		const localesDir = path.join(__dirname, "i18n", "locales")
 
 		try {
@@ -58,6 +56,7 @@ if (!isTestEnv) {
 					} catch (error) {
 						console.error(`Error loading translation file ${filePath}:`, error)
 				// Notify user that translations may be incomplete
+				// eslint-disable-next-line @typescript-eslint/prefer-optional-chain
 				if (typeof vscode !== "undefined" && vscode.window) {
 					vscode.window.showWarningMessage(
 						`Failed to load translation: ${path.basename(filePath)}. Falling back to English for this namespace.`,

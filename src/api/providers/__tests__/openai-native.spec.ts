@@ -161,7 +161,7 @@ describe("OpenAiNativeHandler", () => {
 
 			const stream = handler.createMessage(systemPrompt, messages)
 			await expect(async () => {
-				for await (const chunk of stream) {
+				for await (const _chunk of stream) {
 					// Should not reach here
 				}
 			}).rejects.toThrow("OpenAI service error")
@@ -713,7 +713,7 @@ describe("OpenAiNativeHandler", () => {
 			})
 
 			const stream = handler.createMessage(systemPrompt, messages)
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				// drain
 			}
 
@@ -1063,7 +1063,7 @@ describe("OpenAiNativeHandler", () => {
 			const stream = gpt5Handler.createMessage(systemPrompt, messages, {
 				taskId: "task1",
 			})
-			for await (const chunk of stream) {
+			for await (const _chunk of stream) {
 				// consume
 			}
 
@@ -1108,7 +1108,7 @@ describe("OpenAiNativeHandler", () => {
 				const stream = handler.createMessage(systemPrompt, messages)
 
 				await expect(async () => {
-					for await (const chunk of stream) {
+					for await (const _chunk of stream) {
 						// Should throw before yielding anything
 					}
 				}).rejects.toThrow(expectedMessage)
@@ -1148,7 +1148,7 @@ describe("OpenAiNativeHandler", () => {
 			const stream = handler.createMessage(errorSystemPrompt, errorMessages)
 
 			await expect(async () => {
-				for await (const chunk of stream) {
+				for await (const _chunk of stream) {
 					// Should throw before yielding any chunks
 				}
 			}).rejects.toThrow()
@@ -1192,7 +1192,7 @@ describe("OpenAiNativeHandler", () => {
 			const stream = handler.createMessage(errorSystemPrompt, errorMessages)
 
 			await expect(async () => {
-				for await (const chunk of stream) {
+				for await (const _chunk of stream) {
 					// Should throw when encountering error event
 				}
 			}).rejects.toThrow()
@@ -1253,7 +1253,7 @@ describe("OpenAiNativeHandler", () => {
 
 			// Verify the error is still thrown
 			await expect(async () => {
-				for await (const chunk of stream) {
+				for await (const _chunk of stream) {
 					// Should throw
 				}
 			}).rejects.toThrow()
@@ -1574,7 +1574,7 @@ describe("GPT-5 streaming event coverage (additional)", () => {
 
 			// Should throw an error (using the same error format as GPT-5)
 			await expect(async () => {
-				for await (const chunk of stream) {
+				for await (const _chunk of stream) {
 					// consume stream
 				}
 			}).rejects.toThrow("Rate limit exceeded")

@@ -43,7 +43,7 @@ export async function getGitRepositoryInfo(workspaceRoot: string): Promise<GitRe
 			// Very simple approach - just find any URL line
 			const urlMatch = configContent.match(/url\s*=\s*(.+?)(?:\r?\n|$)/m)
 
-			if (urlMatch && urlMatch[1]) {
+			if (urlMatch?.[1]) {
 				const url = urlMatch[1].trim()
 				// Sanitize the URL and convert to HTTPS format for telemetry
 				gitInfo.repositoryUrl = convertGitUrlToHttps(sanitizeGitUrl(url))
@@ -55,7 +55,7 @@ export async function getGitRepositoryInfo(workspaceRoot: string): Promise<GitRe
 
 			// Extract default branch (if available)
 			const branchMatch = configContent.match(/\[branch "([^"]+)"\]/i)
-			if (branchMatch && branchMatch[1]) {
+			if (branchMatch?.[1]) {
 				gitInfo.defaultBranch = branchMatch[1]
 			}
 		} catch {
@@ -68,7 +68,7 @@ export async function getGitRepositoryInfo(workspaceRoot: string): Promise<GitRe
 				const headPath = path.join(gitDir, "HEAD")
 				const headContent = await fs.readFile(headPath, "utf8")
 				const branchMatch = headContent.match(/ref: refs\/heads\/(.+)/)
-				if (branchMatch && branchMatch[1]) {
+				if (branchMatch?.[1]) {
 					gitInfo.defaultBranch = branchMatch[1].trim()
 				}
 			} catch {
@@ -106,7 +106,7 @@ export function convertGitUrlToHttps(url: string): string {
 
 		// Handle SSH with protocol: ssh://git@github.com/user/repo.git -> https://github.com/user/repo.git
 		if (url.startsWith("ssh://")) {
-			const match = url.match(/ssh:\/\/(?:git@)?([^\/]+)\/(.+)/)
+			const match = url.match(/ssh:\/\/(?:git@)?([^/]+)\/(.+)/)
 			if (match && match.length === 3) {
 				const [, host, path] = match
 				return `https://${host}/${path}`
@@ -160,16 +160,16 @@ export function extractRepositoryName(url: string): string {
 		// Handle different URL formats
 		const patterns = [
 			// HTTPS: https://github.com/user/repo.git -> user/repo
-			/https:\/\/[^\/]+\/([^\/]+\/[^\/]+?)(?:\.git)?$/,
+			/https:\/\/[^/]+\/([^/]+\/[^/]+?)(?:\.git)?$/,
 			// SSH: git@github.com:user/repo.git -> user/repo
-			/git@[^:]+:([^\/]+\/[^\/]+?)(?:\.git)?$/,
+			/git@[^:]+:([^/]+\/[^/]+?)(?:\.git)?$/,
 			// SSH with user: ssh://git@github.com/user/repo.git -> user/repo
-			/ssh:\/\/[^\/]+\/([^\/]+\/[^\/]+?)(?:\.git)?$/,
+			/ssh:\/\/[^/]+\/([^/]+\/[^/]+?)(?:\.git)?$/,
 		]
 
 		for (const pattern of patterns) {
 			const match = url.match(pattern)
-			if (match && match[1]) {
+			if (match?.[1]) {
 				return match[1].replace(/\.git$/, "")
 			}
 		}

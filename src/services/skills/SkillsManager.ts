@@ -769,6 +769,7 @@ Add your skill instructions here.
 		this.disposables.push(watcher)
 	}
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	async dispose(): Promise<void> {
 		this.isDisposed = true
 		this.disposables.forEach((d) => d.dispose())

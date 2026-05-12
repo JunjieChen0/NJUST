@@ -16,6 +16,7 @@ function mockUri(fsPath: string, scheme = "file") {
 
 // Mock vscode module
 vi.mock("vscode", () => {
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	const testPath = require("path")
 	const testWorkspacePath = testPath.join(testPath.sep, "test", "workspace")
 	return {
@@ -60,6 +61,7 @@ vi.mock("vscode", () => {
 
 // Mock only the essential dependencies
 vi.mock("../../../utils/path", () => {
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	const testPath = require("path")
 	const testWorkspacePath = testPath.join(testPath.sep, "test", "workspace")
 	return {

@@ -7,6 +7,7 @@ const TYPE_KINDS = new Set(["class", "struct", "interface", "enum", "extend", "t
 export class CangjieTypeHierarchyProvider implements vscode.TypeHierarchyProvider {
 	constructor(private readonly index: CangjieSymbolIndex) {}
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	async prepareTypeHierarchy(
 		document: vscode.TextDocument,
 		position: vscode.Position,

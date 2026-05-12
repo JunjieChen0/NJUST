@@ -7,6 +7,7 @@ const CALLABLE_KINDS: Set<CangjieDefKind> = new Set(["func", "main", "init", "ma
 export class CangjieCallHierarchyProvider implements vscode.CallHierarchyProvider {
 	constructor(private readonly index: CangjieSymbolIndex) {}
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	async prepareCallHierarchy(
 		document: vscode.TextDocument,
 		position: vscode.Position,
@@ -27,6 +28,7 @@ export class CangjieCallHierarchyProvider implements vscode.CallHierarchyProvide
 		}]
 	}
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	async provideCallHierarchyIncomingCalls(
 		item: vscode.CallHierarchyItem,
 		_token: vscode.CancellationToken,

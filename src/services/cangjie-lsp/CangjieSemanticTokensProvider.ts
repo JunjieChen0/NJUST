@@ -30,6 +30,7 @@ export class CangjieSemanticTokensProvider implements vscode.DocumentSemanticTok
 		["declaration", "readonly"],
 	)
 	static get legend(): vscode.SemanticTokensLegend { return CangjieSemanticTokensProvider._legend }
+	// eslint-disable-next-line @typescript-eslint/require-await
 	async provideDocumentSemanticTokens(
 		document: vscode.TextDocument,
 	): Promise<vscode.SemanticTokens> {

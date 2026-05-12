@@ -4,6 +4,8 @@
  * Supports both production builds and HMR (Hot Module Replacement) for development.
  */
 
+import * as fs from "fs"
+import * as path from "path"
 import * as vscode from "vscode"
 import axios from "axios"
 
@@ -28,8 +30,6 @@ export class WebviewContentProvider {
 		let localPort = "5173"
 
 		try {
-			const fs = require("fs")
-			const path = require("path")
 			const portFilePath = path.resolve(__dirname, "../../.vite-port")
 
 			if (fs.existsSync(portFilePath)) {
@@ -56,7 +56,7 @@ export class WebviewContentProvider {
 		const nonce = getNonce()
 
 		const openRouterBaseUrl = this.host.getValues().openRouterBaseUrl || "https://openrouter.ai"
-		const openRouterDomain = openRouterBaseUrl.match(/^(https?:\/\/[^\/]+)/)?.[1] || "https://openrouter.ai"
+		const openRouterDomain = openRouterBaseUrl.match(/^(https?:\/\/[^/]+)/)?.[1] || "https://openrouter.ai"
 
 		const stylesUri = getUri(webview, this.host.extensionUri, [
 			"webview-ui",
@@ -125,7 +125,7 @@ export class WebviewContentProvider {
 	/**
 	 * Generates HTML content for production build.
 	 */
-	async getHtmlContent(webview: vscode.Webview): Promise<string> {
+	getHtmlContent(webview: vscode.Webview): string {
 		const stylesUri = getUri(webview, this.host.extensionUri, [
 			"webview-ui",
 			"build",
@@ -146,7 +146,7 @@ export class WebviewContentProvider {
 		const nonce = getNonce()
 
 		const openRouterBaseUrl = this.host.getValues().openRouterBaseUrl || "https://openrouter.ai"
-		const openRouterDomain = openRouterBaseUrl.match(/^(https?:\/\/[^\/]+)/)?.[1] || "https://openrouter.ai"
+		const openRouterDomain = openRouterBaseUrl.match(/^(https?:\/\/[^/]+)/)?.[1] || "https://openrouter.ai"
 
 		return /*html*/ `
         <!DOCTYPE html>

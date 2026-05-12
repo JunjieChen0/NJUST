@@ -151,19 +151,23 @@ private initPromise: Promise<void> | null = null
 				family: "lm",
 				version: "1.0",
 				maxInputTokens: 8192,
+				// eslint-disable-next-line @typescript-eslint/require-await
 				sendRequest: async (_messages, _options, _token) => {
 					// Provide a minimal implementation
 					return {
+						// eslint-disable-next-line @typescript-eslint/require-await
 						stream: (async function* () {
 							yield new vscode.LanguageModelTextPart(
 								"Language model functionality is limited. Please check VS Code configuration.",
 							)
 						})(),
+						// eslint-disable-next-line @typescript-eslint/require-await
 						text: (async function* () {
 							yield "Language model functionality is limited. Please check VS Code configuration."
 						})(),
 					}
 				},
+				// eslint-disable-next-line @typescript-eslint/require-await
 				countTokens: async () => 0,
 			}
 		} catch (error) {
@@ -220,7 +224,7 @@ private initPromise: Promise<void> | null = null
 			}
 		}
 
-		return this.internalCountTokens(textContent)
+		return await this.internalCountTokens(textContent)
 	}
 
 	/**

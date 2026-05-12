@@ -199,6 +199,7 @@ export class ClineProvider
 		// The globalState write-through is debounced separately (not on every mutation)
 		// since per-task files are authoritative and globalState is only for downgrade compat.
 		this.taskHistoryStore = new TaskHistoryStore(this.contextProxy.globalStorageUri.fsPath, {
+			// eslint-disable-next-line @typescript-eslint/require-await
 			onWrite: async () => {
 				this.taskHistory.scheduleGlobalStateWriteThrough()
 			},
@@ -208,7 +209,7 @@ export class ClineProvider
 		this.taskHistory = new TaskHistoryService(
 			Object.defineProperties({
 				context: this.context,
-				contextProxy: this.contextProxy as any,
+				contextProxy: this.contextProxy as unknown as TaskHistoryHost["contextProxy"],
 				taskHistoryStore: this.taskHistoryStore,
 				outputChannel: this.outputChannel,
 				stack: this.stack,
@@ -272,6 +273,7 @@ export class ClineProvider
 		event: K,
 		listener: (...args: TaskProviderEvents[K]) => void | Promise<void>,
 	): this {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		return super.on(event, listener as any)
 	}
 
@@ -282,6 +284,7 @@ export class ClineProvider
 		event: K,
 		listener: (...args: TaskProviderEvents[K]) => void | Promise<void>,
 	): this {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		return super.off(event, listener as any)
 	}
 
@@ -434,7 +437,7 @@ export class ClineProvider
 	public static async handleCodeAction(
 		command: CodeActionId,
 		promptType: CodeActionName,
-		params: Record<string, string | any[]>,
+		params: Record<string, string | unknown[]>,
 	): Promise<void> {
 		// Capture telemetry for code action usage
 		TelemetryService.instance.captureCodeActionUsed(promptType)
@@ -466,7 +469,7 @@ export class ClineProvider
 	public static async handleTerminalAction(
 		command: TerminalActionId,
 		promptType: TerminalActionPromptType,
-		params: Record<string, string | any[]>,
+		params: Record<string, string | unknown[]>,
 	): Promise<void> {
 		TelemetryService.instance.captureCodeActionUsed(promptType)
 
@@ -612,7 +615,7 @@ export class ClineProvider
 		)
 
 		const configDisposable = vscode.workspace.onDidChangeConfiguration(async (e) => {
-			if (e && e.affectsConfiguration("workbench.colorTheme")) {
+			if (e?.affectsConfiguration("workbench.colorTheme")) {
 				await this.postMessageToWebview({ type: "theme", text: JSON.stringify(await getTheme()) })
 			}
 		})
@@ -747,6 +750,7 @@ export class ClineProvider
 	}
 
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	private async applyPendingEditIfPresent(task: Task): Promise<void> {
 		const operationId = `task-${task.taskId}`
 		const pendingEdit = this.pendingEditManager.get(operationId)
@@ -785,7 +789,7 @@ export class ClineProvider
 		try {
 			await this.view?.webview.postMessage(message)
 		} catch (error) {
-			logger.debug("ClineProvider", `postMessageToWebview: view disposed (message type: ${(message as any).type})`, error)
+			logger.debug("ClineProvider", `postMessageToWebview: view disposed (message type: ${message.type})`, error)
 		}
 	}
 
@@ -1128,7 +1132,7 @@ export class ClineProvider
 		try {
 			const baseUrl = apiConfiguration.openRouterBaseUrl || "https://openrouter.ai/api/v1"
 			// Extract the base domain for the auth endpoint.
-			const baseUrlDomain = baseUrl.match(/^(https?:\/\/[^\/]+)/)?.[1] || "https://openrouter.ai"
+			const baseUrlDomain = baseUrl.match(/^(https?:\/\/[^/]+)/)?.[1] || "https://openrouter.ai"
 			const response = await axios.post(`${baseUrlDomain}/api/v1/auth/keys`, { code })
 
 			if (response.data?.key) {

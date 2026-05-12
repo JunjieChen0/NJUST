@@ -1618,7 +1618,7 @@ function diagnosticToCorpusQuery(d: vscode.Diagnostic): string | null {
 		const head = raw.split(/[:：，,。]/)[0]?.trim() ?? raw
 		return `${resolved.category} ${head}`.slice(0, 120)
 	}
-	const cleaned = raw.replace(/^(error|warning)\s*[:\d\[\]]*\s*/i, "")
+	const cleaned = raw.replace(/^(error|warning)\s*[:\d[\]]*\s*/i, "")
 	const words = cleaned
 		.split(/\s+/)
 		.filter((w) => w.length > 2 && !/^\d+$/.test(w) && !/^[|:=]+$/.test(w))

@@ -157,7 +157,7 @@ export class TaskStreamProcessor {
 			if (error?.status === 429) {
 				const providerKey = this.task.apiConfiguration?.apiProvider ?? "default"
 				try {
-					const { TokenBucketRateLimiter } = require("../../services/rate-limiter/TokenBucketRateLimiter")
+					const { TokenBucketRateLimiter } = await import("../../services/rate-limiter/TokenBucketRateLimiter")
 					TokenBucketRateLimiter.getInstance().drain(providerKey)
 				} catch { /* best-effort */ }
 			}

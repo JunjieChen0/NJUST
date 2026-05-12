@@ -179,7 +179,7 @@ describe("Context Management", () => {
 	describe("estimateTokenCount", () => {
 		it("should return 0 for empty or undefined content", async () => {
 			expect(await estimateTokenCount([], mockApiHandler)).toBe(0)
-			// @ts-ignore - Testing with undefined
+			// @ts-expect-error - Testing with undefined
 			expect(await estimateTokenCount(undefined, mockApiHandler)).toBe(0)
 		})
 

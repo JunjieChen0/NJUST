@@ -178,7 +178,7 @@ export function registerMacroCommands(context: vscode.ExtensionContext, outputCh
 					)
 
 					let expanded = stdout
-					if (stderr && stderr.trim()) {
+					if (stderr?.trim()) {
 						logger.warn("CangjieMacro", `cjc stderr:\n${stderr}`)
 					}
 					if (!expanded || expanded.trim().length === 0) {

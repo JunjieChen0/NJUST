@@ -1,5 +1,5 @@
 import * as path from "path"
-// @ts-ignore-next-line
+// @ts-expect-error pdf-parse lacks type definitions
 import pdf from "pdf-parse/lib/pdf-parse"
 import mammoth from "mammoth"
 import fs from "fs/promises"

@@ -3,6 +3,7 @@ import { CodeIndexOrchestrator } from "../orchestrator"
 
 // Mock vscode workspace so startIndexing passes workspace check
 vi.mock("vscode", () => {
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	const path = require("path")
 	const testWorkspacePath = path.join(path.sep, "test", "workspace")
 	return {

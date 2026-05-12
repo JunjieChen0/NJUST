@@ -813,6 +813,7 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 		}
 	}
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	private async *processEvent(event: any, model: OpenAiCodexModel): ApiStream {
 		if (event?.response?.output && Array.isArray(event.response.output)) {
 			this.lastResponseOutput = event.response.output

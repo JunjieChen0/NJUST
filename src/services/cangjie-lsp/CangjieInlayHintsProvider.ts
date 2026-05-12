@@ -2,6 +2,7 @@ import * as vscode from "vscode"
 import { parseCangjieDefinitions } from "../../services/tree-sitter/cangjieParser"
 
 export class CangjieInlayHintsProvider implements vscode.InlayHintsProvider {
+	// eslint-disable-next-line @typescript-eslint/require-await
 	async provideInlayHints(
 		document: vscode.TextDocument,
 		_range: vscode.Range,

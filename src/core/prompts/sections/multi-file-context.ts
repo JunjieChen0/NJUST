@@ -56,7 +56,7 @@ const JAVA_DEF_PATTERNS: Array<{ re: RegExp; kind: string }> = [
 	{ re: /^[ \t]*(?:public|private|protected)?\s*interface\s+(\w+)/,                                 kind: "interface" },
 	{ re: /^[ \t]*(?:public|private|protected)?\s*enum\s+(\w+)/,                                      kind: "enum" },
 	{ re: /^[ \t]*(?:public|private|protected)?\s*@interface\s+(\w+)/,                                kind: "annotation" },
-	{ re: /^[ \t]*(?:public|private|protected)?\s*(?:abstract|static|final|synchronized|native)?\s*(?:[\w<>,\[\]\s]+)\s+(\w+)\s*\(/, kind: "method" },
+	{ re: /^[ \t]*(?:public|private|protected)?\s*(?:abstract|static|final|synchronized|native)?\s*(?:[\w<>,[\]\s]+)\s+(\w+)\s*\(/, kind: "method" },
 ]
 
 const PYTHON_DEF_PATTERNS: Array<{ re: RegExp; kind: string }> = [
@@ -107,7 +107,7 @@ function extractDefs(content: string, patterns: Array<{ re: RegExp; kind: string
 		const line = lines[i]
 		for (const { re, kind } of patterns) {
 			const m = line.match(re)
-			if (m && m[1]) {
+			if (m?.[1]) {
 				defs.push({ kind, name: m[1], signature: line.trim(), line: i + 1 })
 				break
 			}

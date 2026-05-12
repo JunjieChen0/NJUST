@@ -3,6 +3,7 @@
 
 import { describe, it, test, expect, vi, beforeEach, beforeAll, afterAll } from "vitest"
 import Anthropic from "@anthropic-ai/sdk"
+import * as fs from "fs/promises"
 import * as vscode from "vscode"
 import axios from "axios"
 
@@ -421,10 +422,10 @@ describe("ClineProvider", () => {
 			},
 		}
 
-		// @ts-ignore - Access private property for testing
+		// @ts-expect-error - Access private property for testing
 		updateGlobalStateSpy = vi.spyOn(provider.contextProxy, "setValue")
 
-		// @ts-ignore - Accessing private property for testing.
+		// @ts-expect-error - Accessing private property for testing.
 		provider.customModesManager = mockCustomModesManager
 
 		// Mock getMcpHub method for generateSystemPrompt
@@ -440,7 +441,7 @@ describe("ClineProvider", () => {
 	test("constructor initializes correctly", () => {
 		expect(provider).toBeInstanceOf(ClineProvider)
 		// Since getVisibleInstance returns the last instance where view.visible is true
-		// @ts-ignore - accessing private property for testing
+		// @ts-expect-error - accessing private property for testing
 		provider.view = mockWebviewView
 		expect(ClineProvider.getVisibleInstance()).toBe(provider)
 	})
@@ -2108,7 +2109,6 @@ describe("Project MCP Settings", () => {
 		;(vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: "/test/workspace" } }]
 
 		// Mock fs functions to fail
-		const fs = require("fs/promises")
 		fs.mkdir.mockRejectedValue(new Error("Failed to create directory"))
 
 		// Trigger openProjectMcpSettings

@@ -350,7 +350,7 @@ async function loadAllAgentRulesFiles(cwd: string, enableSubfolderRules: boolean
 	// When subfolder rules are disabled, only load from root
 	if (!enableSubfolderRules) {
 		const content = await loadAgentRulesFileFromDirectory(cwd, false, cwd)
-		if (content && content.trim()) {
+		if (content?.trim()) {
 			agentRules.push(content.trim())
 		}
 		return agentRules.join("\n\n")
@@ -363,7 +363,7 @@ async function loadAllAgentRulesFiles(cwd: string, enableSubfolderRules: boolean
 		// Show path for all directories except the root
 		const showPath = directory !== cwd
 		const content = await loadAgentRulesFileFromDirectory(directory, showPath, cwd)
-		if (content && content.trim()) {
+		if (content?.trim()) {
 			agentRules.push(content.trim())
 		}
 	}
@@ -519,7 +519,7 @@ export async function addCustomInstructions(
 	const rules = []
 
 	// Add mode-specific rules first if they exist
-	if (modeRuleContent && modeRuleContent.trim()) {
+	if (modeRuleContent?.trim()) {
 		if (usedRuleFile.endsWith("directories")) {
 			rules.push(modeRuleContent.trim())
 		} else {
@@ -535,14 +535,14 @@ export async function addCustomInstructions(
 	// Load from root and optionally subdirectories with .njust_ai folders based on enableSubfolderRules setting
 	if (options.settings?.useAgentRules !== false) {
 		const agentRulesContent = await loadAllAgentRulesFiles(cwd, enableSubfolderRules)
-		if (agentRulesContent && agentRulesContent.trim()) {
+		if (agentRulesContent?.trim()) {
 			rules.push(agentRulesContent.trim())
 		}
 	}
 
 	// Add generic rules
 	const genericRuleContent = await loadRuleFiles(cwd, enableSubfolderRules)
-	if (genericRuleContent && genericRuleContent.trim()) {
+	if (genericRuleContent?.trim()) {
 		rules.push(genericRuleContent.trim())
 	}
 
@@ -553,7 +553,7 @@ export async function addCustomInstructions(
 	// Load learned fixes for the current mode (accumulated error-fix patterns from past sessions)
 	if (mode) {
 		const learnedFixes = await loadLearnedFixes(cwd, mode)
-		if (learnedFixes && learnedFixes.trim()) {
+		if (learnedFixes?.trim()) {
 			sections.push(
 				`Learned Fixes (accumulated error-fix patterns from past sessions — reference these to avoid repeating known mistakes):\n\n${learnedFixes.trim()}`,
 			)

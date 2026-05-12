@@ -46,7 +46,7 @@ function escapeXml(value: string): string {
 		.replace(/&/g, "&amp;")
 		.replace(/</g, "&lt;")
 		.replace(/>/g, "&gt;")
-		.replace(/\"/g, "&quot;")
+		.replace(/"/g, "&quot;")
 		.replace(/'/g, "&apos;")
 }
 
@@ -58,6 +58,7 @@ function escapeXml(value: string): string {
  * @param skillsManager - The SkillsManager instance
  * @param currentMode - The current mode slug (e.g., 'code', 'architect')
  */
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function getSkillsSection(
 	skillsManager: SkillsManagerLike | undefined,
 	currentMode: string | undefined,

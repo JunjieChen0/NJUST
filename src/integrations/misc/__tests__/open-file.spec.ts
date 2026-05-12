@@ -41,6 +41,7 @@ vi.mock("vscode", () => ({
 
 // Mock utils
 vi.mock("../../utils/path", () => {
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	const nodePath = require("path")
 	return {
 		arePathsEqual: vi.fn((a: string, b: string) => a === b),

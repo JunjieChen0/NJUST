@@ -104,6 +104,7 @@ export class FileWatcher implements IFileWatcher {
 	/**
 	 * Initializes the file watcher
 	 */
+		// eslint-disable-next-line @typescript-eslint/require-await
 	async initialize(): Promise<void> {
 		// Create file watcher
 		const filePattern = new vscode.RelativePattern(

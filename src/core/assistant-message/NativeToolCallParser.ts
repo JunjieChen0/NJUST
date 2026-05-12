@@ -91,11 +91,11 @@ export class NativeToolCallParser {
 			if (todosMatch) {
 				const content = rawArgs.slice(todosMatch[0].length).replace(/\}?\s*$/, "")
 				const unquoted = content.replace(/^"/, "").replace(/"$/, "")
-				if (/\[[ x\-]\]/.test(unquoted)) {
+				if (/\[[ x-]\]/.test(unquoted)) {
 					return { todos: unquoted }
 				}
 			}
-			if (/\[[ x\-]\]/.test(rawArgs)) {
+			if (/\[[ x-]\]/.test(rawArgs)) {
 				return { todos: rawArgs.trim() }
 			}
 		}

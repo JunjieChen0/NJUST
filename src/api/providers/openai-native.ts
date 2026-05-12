@@ -35,6 +35,34 @@ import { getErrorMessage } from "../../shared/error-utils"
 
 export type OpenAiNativeModel = ReturnType<OpenAiNativeHandler["getModel"]>
 
+type ResponsesInputItem =
+	| { role: "user" | "assistant"; content: Record<string, unknown>[] }
+	| { type: string; id?: string; encrypted_content?: string; [key: string]: unknown }
+
+interface ResponsesRequestBody {
+	model: string
+	input: ResponsesInputItem[]
+	stream: boolean
+	reasoning?: { effort?: ReasoningEffortExtended; summary?: "auto" }
+	text?: { verbosity: VerbosityLevel }
+	temperature?: number
+	max_output_tokens?: number
+	store?: boolean
+	instructions?: string
+	service_tier?: ServiceTier
+	include?: string[]
+	prompt_cache_retention?: "in_memory" | "24h"
+	tools?: Array<{
+		type: "function"
+		name: string
+		description?: string
+		parameters?: Record<string, unknown>
+		strict?: boolean
+	}>
+	tool_choice?: OpenAI.Chat.ChatCompletionCreateParams["tool_choice"]
+	parallel_tool_calls?: boolean
+}
+
 interface OpenAiUsageData {
 	input_tokens?: number
 	prompt_tokens?: number
@@ -72,7 +100,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 	// Resolved service tier from Responses API (actual tier used by OpenAI)
 	private lastServiceTier: ServiceTier | undefined
 	// Complete response output array (includes reasoning items with encrypted_content)
-	private lastResponseOutput: any[] | undefined
+	private lastResponseOutput: Record<string, unknown>[] | undefined
 	// Last top-level response id from Responses API (for troubleshooting)
 	private lastResponseId: string | undefined
 	// Abort controller for cancelling ongoing requests
@@ -249,41 +277,17 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 
 	private buildRequestBody(
 		model: OpenAiNativeModel,
-		formattedInput: any,
+		formattedInput: ResponsesInputItem[],
 		systemPrompt: string,
-		verbosity: any,
+		verbosity: VerbosityLevel | undefined,
 		reasoningEffort: ReasoningEffortExtended | undefined,
 		metadata?: ApiHandlerCreateMessageMetadata,
-	): any {
+	): ResponsesRequestBody {
 		// Ensure all properties are in the required array for OpenAI's strict mode.
 
 		// Build a request body for the OpenAI Responses API.
 		// Ensure we explicitly pass max_output_tokens based on Roo's reserved model response calculation
 		// so requests do not default to very large limits (e.g., 120k).
-		interface ResponsesRequestBody {
-			model: string
-			input: Array<{ role: "user" | "assistant"; content: any[] } | { type: string; content: string }>
-			stream: boolean
-			reasoning?: { effort?: ReasoningEffortExtended; summary?: "auto" }
-			text?: { verbosity: VerbosityLevel }
-			temperature?: number
-			max_output_tokens?: number
-			store?: boolean
-			instructions?: string
-			service_tier?: ServiceTier
-			include?: string[]
-			/** Prompt cache retention policy: "in_memory" (default) or "24h" for extended caching */
-			prompt_cache_retention?: "in_memory" | "24h"
-			tools?: Array<{
-				type: "function"
-				name: string
-				description?: string
-				parameters?: any
-				strict?: boolean
-			}>
-			tool_choice?: any
-			parallel_tool_calls?: boolean
-		}
 
 		// Validate requested tier against model support; if not supported, omit.
 		const requestedTier = (this.options.openAiNativeServiceTier as ServiceTier | undefined) || undefined
@@ -357,7 +361,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 	}
 
 	private async *executeRequest(
-		requestBody: any,
+		requestBody: ResponsesRequestBody,
 		model: OpenAiNativeModel,
 		metadata?: ApiHandlerCreateMessageMetadata,
 		systemPrompt?: string,
@@ -1152,6 +1156,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 	/**
 	 * Shared processor for Responses API events.
 	 */
+	// eslint-disable-next-line @typescript-eslint/require-await
 	private async *processEvent(event: any, model: OpenAiNativeModel): ApiStream {
 		// Capture resolved service tier when available
 		if (event?.response?.service_tier) {
@@ -1484,8 +1489,8 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		if (!reasoningItem?.encrypted_content) return undefined
 
 		return {
-			encrypted_content: reasoningItem.encrypted_content,
-			...(reasoningItem.id ? { id: reasoningItem.id } : {}),
+			encrypted_content: reasoningItem.encrypted_content as string,
+			...(reasoningItem.id ? { id: reasoningItem.id as string } : {}),
 		}
 	}
 

@@ -246,6 +246,7 @@ export class CustomModesManager {
 		}
 	}
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	private async mergeCustomModes(projectModes: ModeConfig[], globalModes: ModeConfig[]): Promise<ModeConfig[]> {
 		const slugs = new Set<string>()
 		const merged: ModeConfig[] = []
@@ -912,7 +913,7 @@ export class CustomModesManager {
 
 				// Check if path starts with a rules-* folder (old export format)
 				let cleanedRelativePath = normalizedRelativePath
-				const rulesMatch = normalizedRelativePath.match(/^rules-[^\/\\]+[\/\\]/)
+				const rulesMatch = normalizedRelativePath.match(/^rules-[^/\\]+[/\\]/)
 				if (rulesMatch) {
 					// Strip the entire rules-* folder reference for backwards compatibility
 					cleanedRelativePath = normalizedRelativePath.substring(rulesMatch[0].length)

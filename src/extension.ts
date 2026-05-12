@@ -242,7 +242,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		const legacyToken =
 			context.globalState.get<string>("njustCloudDeviceToken") ||
 			vscode.workspace.getConfiguration(Package.name).get<string>("cloudAgent.deviceToken", "")
-		if (legacyToken && legacyToken.trim()) {
+		if (legacyToken?.trim()) {
 			deviceToken = legacyToken.trim()
 		} else {
 			const { randomUUID } = await import("crypto")
@@ -638,7 +638,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		if (!authToken) {
 			// Migration: read legacy token from settings and store in SecretStorage.
 			const legacyToken = mcpServerConfig.get<string>("mcpServer.authToken", "")
-			if (legacyToken && legacyToken.trim()) {
+			if (legacyToken?.trim()) {
 				authToken = legacyToken.trim()
 				context.secrets.store(MCP_AUTH_TOKEN_SECRET_KEY, authToken).then(
 					() => {},

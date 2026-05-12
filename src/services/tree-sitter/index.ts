@@ -285,7 +285,7 @@ function processCaptures(captures: QueryCapture[], lines: string[], language: st
 			processedLines.add(lineKey)
 
 			// If this is part of a larger definition, include its non-HTML context
-			if (node.parent && node.parent.lastChild) {
+			if (node.parent?.lastChild) {
 				const contextEnd = node.parent.lastChild.endPosition.row
 				const contextSpan = contextEnd - node.parent.startPosition.row + 1
 

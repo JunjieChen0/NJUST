@@ -2,8 +2,7 @@ import axios from "axios"
 import * as cheerio from "cheerio"
 import dns from "node:dns/promises"
 import net from "node:net"
- 
-const TurndownService = require("turndown")
+import TurndownService from "turndown"
 
 import { BaseTool, type ToolCallbacks } from "./BaseTool"
 import type { Task } from "../task/Task"

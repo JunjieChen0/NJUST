@@ -35,10 +35,9 @@ export function detectCangjieHome(): string | undefined {
 
 	// 2. Infer from VS Code LSP serverPath config (aligns with CangjieLspClient)
 	try {
-		const vscodeModule = require("vscode") as any
-		const serverPath = vscodeModule.workspace
+		const serverPath = vscode.workspace
 			.getConfiguration("njust-ai-cj.cangjieLsp")
-			.get("serverPath")
+			.get<string>("serverPath")
 		if (serverPath && fs.existsSync(serverPath)) {
 			const sdkRoot = path.resolve(serverPath, "..", "..")
 			if (fs.existsSync(path.join(sdkRoot, "bin"))) {
@@ -325,7 +324,7 @@ export async function formatCangjieToolchainSummaryLine(): Promise<string | unde
  * Useful for AI to understand what a file exports before modifying it.
  */
 export function getSymbolContextForFile(filePath: string): string | null {
-	// Lazy import to avoid circular dependency at module load time
+	// eslint-disable-next-line @typescript-eslint/no-require-imports -- Circular dependency: CangjieSymbolIndex imports cangjieToolUtils
 	const { CangjieSymbolIndex } = require("./CangjieSymbolIndex")
 	const index = CangjieSymbolIndex.getInstance()
 	if (!index) return null
@@ -349,6 +348,7 @@ export function getSymbolContextForFile(filePath: string): string | null {
  * Helps AI understand impact before renaming or modifying a function/type.
  */
 export function getReferencesForSymbol(symbolName: string): string | null {
+	// eslint-disable-next-line @typescript-eslint/no-require-imports -- Circular dependency: CangjieSymbolIndex imports cangjieToolUtils
 	const { CangjieSymbolIndex } = require("./CangjieSymbolIndex")
 	const index = CangjieSymbolIndex.getInstance()
 	if (!index) return null

@@ -275,7 +275,7 @@ describe("hidden directory exclusion", () => {
 		const mockSpawn = vi.mocked(childProcess.spawn)
 		const mockProcess = {
 			stdout: {
-				on: vi.fn((event, callback) => {
+				on: vi.fn((event, _callback) => {
 					if (event === "data") {
 						// No files returned
 					}
@@ -330,7 +330,7 @@ describe("hidden directory exclusion", () => {
 		const mockSpawn = vi.mocked(childProcess.spawn)
 		const mockProcess = {
 			stdout: {
-				on: vi.fn((event, callback) => {
+				on: vi.fn((event, _callback) => {
 					if (event === "data") {
 						// No files returned
 					}
@@ -402,7 +402,7 @@ describe("hidden directory exclusion", () => {
 		const [files] = await listFiles("/test/.njust_ai/temp", true, 100)
 
 		// Verify ripgrep was called with correct arguments
-		const [rgPath, args] = mockSpawn.mock.calls[0]
+		const [_rgPath, args] = mockSpawn.mock.calls[0]
 		expect(args).toContain("--no-ignore-vcs")
 		expect(args).toContain("--no-ignore")
 
@@ -452,7 +452,7 @@ describe("buildRecursiveArgs edge cases", () => {
 		// Test with trailing slash on hidden directory
 		await listFiles("/test/.hidden/", true, 100)
 
-		const [rgPath, args] = mockSpawn.mock.calls[0]
+		const [_rgPath, args] = mockSpawn.mock.calls[0]
 		// When targeting a hidden directory, these flags should be present
 		expect(args).toContain("--no-ignore-vcs")
 		expect(args).toContain("--no-ignore")
@@ -486,7 +486,7 @@ describe("buildRecursiveArgs edge cases", () => {
 		// Test with redundant separators before hidden directory
 		await listFiles("/test//.hidden", true, 100)
 
-		const [rgPath, args] = mockSpawn.mock.calls[0]
+		const [_rgPath, args] = mockSpawn.mock.calls[0]
 		// When targeting a hidden directory, these flags should be present
 		expect(args).toContain("--no-ignore-vcs")
 		expect(args).toContain("--no-ignore")
@@ -520,7 +520,7 @@ describe("buildRecursiveArgs edge cases", () => {
 		// Test with complex path including hidden directory
 		await listFiles("/test//normal/.hidden//subdir/", true, 100)
 
-		const [rgPath, args] = mockSpawn.mock.calls[0]
+		const [_rgPath, args] = mockSpawn.mock.calls[0]
 		// When targeting a path containing a hidden directory, these flags should be present
 		expect(args).toContain("--no-ignore-vcs")
 		expect(args).toContain("--no-ignore")
@@ -554,7 +554,7 @@ describe("buildRecursiveArgs edge cases", () => {
 		// Test with a path that has dots but no hidden directories
 		await listFiles("/test/file.with.dots/normal", true, 100)
 
-		const [rgPath, args] = mockSpawn.mock.calls[0]
+		const [_rgPath, args] = mockSpawn.mock.calls[0]
 		// Should NOT have the special flags for hidden directories
 		expect(args).not.toContain("--no-ignore-vcs")
 		expect(args).not.toContain("--no-ignore")

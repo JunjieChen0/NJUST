@@ -62,6 +62,7 @@ const processQueue = async (): Promise<void> => {
 		const { message: nextUtterance, options } = item
 
 		await new Promise<void>((resolve, reject) => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports -- Dynamic require needed for conditional TTS module loading
 			const say: Say = require("say")
 			sayInstance = say
 			options.onStart?.()

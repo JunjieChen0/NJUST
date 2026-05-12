@@ -1499,6 +1499,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		// Start skill/memory prefetch in parallel (non-blocking)
 		const provider = this.hostRef.deref()
 		startAllPrefetch({
+			// eslint-disable-next-line @typescript-eslint/require-await
 			skillFetchFn: async () => {
 				const skillsManager = provider?.getSkillsManager()
 				const skills = skillsManager?.getAllSkills() ?? []

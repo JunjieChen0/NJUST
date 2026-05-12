@@ -12,6 +12,7 @@ export interface RateLimitInfo {
 	fetchedAt?: number
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function fetchOpenAiCodexRateLimitInfo(
 	_accessToken: string,
 	_options?: { accountId?: string | null },

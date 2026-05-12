@@ -27,6 +27,7 @@ export const openAiCodexOAuthManager = {
 		return ""
 	},
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	async waitForCallback(): Promise<{ success: boolean; error?: string }> {
 		// Stub - return failure
 		return { success: false }

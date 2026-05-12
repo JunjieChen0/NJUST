@@ -19,7 +19,7 @@ describe("GeminiHandler backend support", () => {
 		} as ApiHandlerOptions
 		const handler = new GeminiHandler(options)
 		const stub = vi.fn().mockReturnValue((async function* () {})())
-		// @ts-ignore access private client
+		// @ts-expect-error access private client
 		handler["client"].models.generateContentStream = stub
 		await handler.createMessage("instr", [] as any).next()
 		const config = stub.mock.calls[0][0].config
@@ -37,7 +37,7 @@ describe("GeminiHandler backend support", () => {
 		} as ApiHandlerOptions
 		const handler = new GeminiHandler(options)
 		const stub = vi.fn().mockResolvedValue({ text: "ok" })
-		// @ts-ignore access private client
+		// @ts-expect-error access private client
 		handler["client"].models.generateContent = stub
 		const res = await handler.completePrompt("hi")
 		expect(res).toBe("ok")
@@ -69,7 +69,7 @@ describe("GeminiHandler backend support", () => {
 			}
 
 			const stub = vi.fn().mockReturnValue(mockStream())
-			// @ts-ignore access private client
+			// @ts-expect-error access private client
 			handler["client"].models.generateContentStream = stub
 
 			const messages = []
@@ -109,7 +109,7 @@ describe("GeminiHandler backend support", () => {
 			}
 
 			const stub = vi.fn().mockReturnValue(mockStream())
-			// @ts-ignore access private client
+			// @ts-expect-error access private client
 			handler["client"].models.generateContentStream = stub
 
 			const messages = []
@@ -145,7 +145,7 @@ describe("GeminiHandler backend support", () => {
 
 			const mockError = new Error("API rate limit exceeded")
 			const stub = vi.fn().mockRejectedValue(mockError)
-			// @ts-ignore access private client
+			// @ts-expect-error access private client
 			handler["client"].models.generateContentStream = stub
 
 			await expect(async () => {
@@ -190,7 +190,7 @@ describe("GeminiHandler backend support", () => {
 			} as ApiHandlerOptions
 			const handler = new GeminiHandler(options)
 			const stub = vi.fn().mockReturnValue((async function* () {})())
-			// @ts-ignore access private client
+			// @ts-expect-error access private client
 			handler["client"].models.generateContentStream = stub
 
 			await handler
@@ -217,7 +217,7 @@ describe("GeminiHandler backend support", () => {
 			} as ApiHandlerOptions
 			const handler = new GeminiHandler(options)
 			const stub = vi.fn().mockReturnValue((async function* () {})())
-			// @ts-ignore access private client
+			// @ts-expect-error access private client
 			handler["client"].models.generateContentStream = stub
 
 			await handler
@@ -242,7 +242,7 @@ describe("GeminiHandler backend support", () => {
 			} as ApiHandlerOptions
 			const handler = new GeminiHandler(options)
 			const stub = vi.fn().mockReturnValue((async function* () {})())
-			// @ts-ignore access private client
+			// @ts-expect-error access private client
 			handler["client"].models.generateContentStream = stub
 
 			await handler
@@ -267,7 +267,7 @@ describe("GeminiHandler backend support", () => {
 			} as ApiHandlerOptions
 			const handler = new GeminiHandler(options)
 			const stub = vi.fn().mockReturnValue((async function* () {})())
-			// @ts-ignore access private client
+			// @ts-expect-error access private client
 			handler["client"].models.generateContentStream = stub
 
 			await handler
@@ -292,7 +292,7 @@ describe("GeminiHandler backend support", () => {
 			} as ApiHandlerOptions
 			const handler = new GeminiHandler(options)
 			const stub = vi.fn().mockReturnValue((async function* () {})())
-			// @ts-ignore access private client
+			// @ts-expect-error access private client
 			handler["client"].models.generateContentStream = stub
 
 			await handler

@@ -129,6 +129,7 @@ export class ContextProxy {
 	 */
 	private static readonly MIGRATION_VERSION_KEY = "__migration_version__"
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	private async getMigrationVersion(): Promise<number> {
 		return this.originalContext.globalState.get<number>(
 			ContextProxy.MIGRATION_VERSION_KEY,
@@ -566,6 +567,7 @@ export class ContextProxy {
 	 * Import / Export
 	 */
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	public async export(): Promise<GlobalSettings | undefined> {
 		try {
 			const globalSettings = globalSettingsExportSchema.parse(this.getValues())

@@ -57,6 +57,7 @@ class ToolSearchToolImpl extends BaseTool<"tool_search"> {
 
 	// ── Execution ───────────────────────────────────────────────────────
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	override async execute(
 		params: { query: string },
 		_task: Task,

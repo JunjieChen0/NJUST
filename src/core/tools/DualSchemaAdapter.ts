@@ -49,20 +49,17 @@ export class DualSchemaAdapter {
 	 *   2. Auto-converted from Zod schema
 	 *   3. undefined
 	 */
-	getJSONSchema(): JSONSchema | undefined {
+	async getJSONSchema(): Promise<JSONSchema | undefined> {
 		if (this.explicitJsonSchema) {
 			return this.explicitJsonSchema
 		}
 		if (this.zodSchema && !this.cachedJsonSchema) {
 			try {
-				// Lazy import to avoid bundling zod-to-json-schema when not needed
-				 
-				const { zodToJsonSchema } = require("zod-to-json-schema")
+				const { zodToJsonSchema } = await import("zod-to-json-schema")
 				this.cachedJsonSchema = zodToJsonSchema(this.zodSchema, {
 					target: "openApi3",
 				}) as JSONSchema
 			} catch {
-				// zod-to-json-schema not installed — fall back to undefined
 				logger.warn("DualSchemaAdapter", "zod-to-json-schema not available; JSON Schema conversion skipped.")
 				return undefined
 			}

@@ -146,6 +146,7 @@ export class TerminalRegistry {
 	 * @param taskId Optional task ID to associate with the terminal
 	 * @returns A Terminal instance
 	 */
+	// eslint-disable-next-line @typescript-eslint/require-await
 	public static async getOrCreateTerminal(
 		cwd: string,
 		taskId?: string,

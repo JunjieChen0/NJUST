@@ -25,6 +25,7 @@ const KIND_TO_ICON: Record<string, vscode.SymbolKind> = {
 export class CangjieWorkspaceSymbolProvider implements vscode.WorkspaceSymbolProvider {
 	constructor(private readonly index: CangjieSymbolIndex) {}
 
+	// eslint-disable-next-line @typescript-eslint/require-await
 	async provideWorkspaceSymbols(
 		query: string,
 		_token: vscode.CancellationToken,

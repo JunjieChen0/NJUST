@@ -150,7 +150,7 @@ describe("ClineProvider flicker-free cancel", () => {
 		}
 
 		// Create provider instance
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 		provider = new ClineProvider(mockContext, mockOutputChannel, "sidebar", mockContextProxy as any)
 
 		// Mock provider methods
@@ -162,7 +162,7 @@ describe("ClineProvider flicker-free cancel", () => {
 		provider.postStateToWebview = vi.fn().mockResolvedValue(undefined)
 		provider.postStateToWebviewWithoutTaskHistory = vi.fn().mockResolvedValue(undefined)
 		// Mock private method using any cast
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 		;(provider as any).updateGlobalState = vi.fn().mockResolvedValue(undefined)
 		provider.activateProviderProfile = vi.fn().mockResolvedValue(undefined)
 		provider.performPreparationTasks = vi.fn().mockResolvedValue(undefined)
@@ -202,13 +202,13 @@ describe("ClineProvider flicker-free cancel", () => {
 		}
 
 		// Mock Task constructor
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 		vi.mocked(Task).mockImplementation(() => mockTask2 as any)
 	})
 
 	it("should not remove current task from stack when rehydrating same taskId", async () => {
 		// Setup: Add a task to the stack first
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 		await provider.stack.push(mockTask1 as any)
 
 		// Spy on stack.pop to verify it's NOT called (rehydration path)
@@ -242,7 +242,7 @@ describe("ClineProvider flicker-free cancel", () => {
 
 	it("should remove task from stack when creating different task", async () => {
 		// Setup: Add a task to the stack first
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 		await provider.stack.push(mockTask1 as any)
 
 		// Spy on stack.pop to verify it IS called
@@ -303,9 +303,9 @@ describe("ClineProvider flicker-free cancel", () => {
 			off: vi.fn(),
 		}
 
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 		await provider.stack.push(mockParentTask as any)
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 		await provider.stack.push(mockTask1 as any)
 
 		// Act: Rehydrate the current (top) task

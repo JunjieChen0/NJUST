@@ -274,6 +274,7 @@ export class CodeIndexManager {
 	 * - Service instances will be recreated on next initialize() call
 	 * - Prevents race conditions from multiple concurrent recovery attempts
 	 */
+	// eslint-disable-next-line @typescript-eslint/require-await
 	public async recoverFromError(): Promise<void> {
 		// Prevent race conditions from multiple rapid recovery attempts
 		if (this._isRecoveringFromError) {
