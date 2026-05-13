@@ -1,5 +1,5 @@
-# .env
-!.env
+# .env (ignored; use .env.local or .env.example for samples)
+.env
 
 # next.js
 .next

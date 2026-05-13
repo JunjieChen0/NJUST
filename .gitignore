@@ -76,5 +76,8 @@ log.txt
 temp-lint-*.txt
 eslint-report*.json
 
+# Crash dumps
+*.stackdump
+
 # Devflow planning and specs
 devflow/

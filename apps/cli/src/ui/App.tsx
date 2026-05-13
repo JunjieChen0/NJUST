@@ -1,6 +1,6 @@
 import { Box, Text, useApp, useInput } from "ink"
 import { Select } from "@inkjs/ui"
-import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from "react"
 
 import { ExtensionHostInterface, ExtensionHostOptions } from "@/agent/index.js"
 
@@ -39,6 +39,7 @@ import { HorizontalLine } from "./components/HorizontalLine.js"
 import {
 	type AutocompleteInputHandle,
 	type AutocompleteTrigger,
+	type AutocompleteItem,
 	type FileResult,
 	type SlashCommandResult,
 	AutocompleteInput,
@@ -447,12 +448,12 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		<Text color={theme.dimText}>? for shortcuts</Text>
 	) : null
 
-	const getPickerRenderItem = () => {
+	const getPickerRenderItem = (): ((item: AutocompleteItem, isSelected: boolean) => ReactNode) => {
 		if (pickerState.activeTrigger) {
 			return pickerState.activeTrigger.renderItem
 		}
 
-		return (item: FileResult | SlashCommandResult, isSelected: boolean) => (
+		return (item: AutocompleteItem, isSelected: boolean) => (
 			<Box paddingLeft={2}>
 				<Text color={isSelected ? "cyan" : undefined}>{item.key}</Text>
 			</Box>
