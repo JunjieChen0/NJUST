@@ -65,7 +65,7 @@ export function validateAndFixToolResultIds(
 	const previousAssistantMessage = apiConversationHistory[prevAssistantIdx]
 
 	// Get tool_use blocks from the assistant message
-	const assistantContent = previousAssistantMessage.content
+	const assistantContent = previousAssistantMessage!.content
 	if (!Array.isArray(assistantContent)) {
 		return userMessage
 	}
@@ -188,7 +188,7 @@ export function validateAndFixToolResultIds(
 
 			// Try to match by position - only fix if there's a corresponding tool_use
 			if (toolResultIndex !== -1 && toolResultIndex < toolUseBlocks.length) {
-				const correctId = toolUseBlocks[toolResultIndex].id
+				const correctId = toolUseBlocks[toolResultIndex]!.id
 				// Only use this ID if it hasn't been used yet
 				if (!usedToolUseIds.has(correctId)) {
 					usedToolUseIds.add(correctId)

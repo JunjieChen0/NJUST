@@ -56,12 +56,12 @@ export function mergeEnvironmentDetailsForMiniMax(
 
 					// Get existing content as string
 					let existingContent: string
-					if (typeof lastToolResult.content === "string") {
-						existingContent = lastToolResult.content
-					} else if (Array.isArray(lastToolResult.content)) {
+					if (typeof lastToolResult!.content === "string") {
+						existingContent = lastToolResult!.content
+					} else if (Array.isArray(lastToolResult!.content)) {
 						existingContent =
-							lastToolResult.content
-								?.map((c) => {
+							lastToolResult!.content
+								.map((c) => {
 									if (c.type === "text") return c.text
 									if (c.type === "image") return "(image)"
 									return ""
@@ -73,7 +73,7 @@ export function mergeEnvironmentDetailsForMiniMax(
 
 					// Merge text into the last tool_result
 					modifiedToolResults[modifiedToolResults.length - 1] = {
-						...lastToolResult,
+						...lastToolResult!,
 						content: existingContent ? `${existingContent}\n\n${textContent}` : textContent,
 					}
 

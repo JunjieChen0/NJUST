@@ -342,7 +342,7 @@ async function handleRequestRouterModels(context: MessageHandlerContext, message
 		: candidates
 
 	if (shouldRefresh && providerFilter && modelFetchPromises.length > 0) {
-		await flushModels(modelFetchPromises[0].options, true)
+		await flushModels(modelFetchPromises[0]!.options, true)
 	}
 
 	const results = await Promise.allSettled(
@@ -353,7 +353,7 @@ async function handleRequestRouterModels(context: MessageHandlerContext, message
 	)
 
 	results.forEach((result, index) => {
-		const routerName = modelFetchPromises[index].key
+		const routerName = modelFetchPromises[index]!.key
 		if (result.status === "fulfilled") {
 			routerModels[routerName] = result.value.models
 		} else {

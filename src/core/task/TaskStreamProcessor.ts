@@ -473,8 +473,8 @@ export class TaskStreamProcessor {
 
 					if (contentArray.length === 0) {
 						assistantContent = ""
-					} else if (contentArray.length === 1 && contentArray[0].type === "text") {
-						assistantContent = (contentArray[0] as Anthropic.Messages.TextBlockParam).text
+					} else if (contentArray.length === 1 && contentArray[0]!.type === "text") {
+						assistantContent = (contentArray[0]! as Anthropic.Messages.TextBlockParam).text
 					} else {
 						assistantContent = contentArray
 					}
@@ -511,8 +511,8 @@ export class TaskStreamProcessor {
 
 					if (rest.length === 0) {
 						assistantContent = ""
-					} else if (rest.length === 1 && rest[0].type === "text") {
-						assistantContent = (rest[0] as Anthropic.Messages.TextBlockParam).text
+					} else if (rest.length === 1 && rest[0]!.type === "text") {
+						assistantContent = (rest[0]! as Anthropic.Messages.TextBlockParam).text
 					} else {
 						assistantContent = rest
 					}
@@ -537,8 +537,8 @@ export class TaskStreamProcessor {
 						// Strip reasoning out - stored for history only, not sent back to API
 						if (rest.length === 0) {
 							assistantContent = ""
-						} else if (rest.length === 1 && rest[0].type === "text") {
-							assistantContent = (rest[0] as Anthropic.Messages.TextBlockParam).text
+						} else if (rest.length === 1 && rest[0]!.type === "text") {
+							assistantContent = (rest[0]! as Anthropic.Messages.TextBlockParam).text
 						} else {
 							assistantContent = rest
 						}

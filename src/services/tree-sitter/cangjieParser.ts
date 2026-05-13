@@ -273,7 +273,7 @@ export function extractCangjieDeclarationMeta(
 	for (;;) {
 		const m = s.match(LEADING_DECL_MODIFIER_RE)
 		if (!m) break
-		const w = m[1]
+		const w = m[1]!
 		if (w === "public" || w === "protected" || w === "private" || w === "internal") {
 			visibility = w
 		} else {
@@ -288,8 +288,8 @@ export function extractCangjieDeclarationMeta(
 		const lastLine = Math.min(startLine + SIGNATURE_SCAN_MAX_LINES_TYPE - 1, lines.length - 1)
 		const buffer = lines.slice(startLine, lastLine + 1).join("\n")
 		let pos = nameIdx + name.length
-		while (pos < buffer.length && /\s/.test(buffer[pos])) pos++
-		if (pos < buffer.length && buffer[pos] === "<") {
+		while (pos < buffer.length && /\s/.test(buffer[pos]!)) pos++
+		if (pos < buffer.length && buffer[pos]! === "<") {
 			const close = findClosingAngleBracketIndex(buffer, pos)
 			if (close >= 0) typeParams = buffer.slice(pos, close + 1)
 		}
@@ -332,7 +332,7 @@ export function findClosingBrace(lines: string[], openLine: number): number {
 	let depth = 0
 	let inBlockComment = false
 	for (let i = openLine; i < lines.length; i++) {
-		const line = lines[i]
+		const line = lines[i]!
 		let inString = false
 		let inChar = false
 		let j = 0
@@ -422,7 +422,7 @@ export function parseCangjieDefinitions(content: string): CangjieDef[] {
 
 	for (let i = 0; i < lines.length; i++) {
 		if (processedLines.has(i)) continue
-		let line = lines[i]
+		let line = lines[i]!
 
 		// Track multi-line block comments
 		if (inBlockComment) {
@@ -451,7 +451,7 @@ export function parseCangjieDefinitions(content: string): CangjieDef[] {
 		// Backtrack up to 5 lines for annotations (@Attr) on multi-line declarations.
 		let annotationLine = ""
 		for (let back = i - 1; back >= Math.max(0, i - 5); back--) {
-			const prev = lines[back].trim()
+			const prev = lines[back]!.trim()
 			if (prev.startsWith("@")) {
 				annotationLine = prev + " " + annotationLine
 			} else if (prev) {
@@ -480,7 +480,7 @@ export function parseCangjieDefinitions(content: string): CangjieDef[] {
 				} else {
 					// Opening brace may be on the next line
 					for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
-						if (lines[j].includes("{")) {
+						if (lines[j]!.includes("{")) {
 							endLine = findClosingBrace(lines, j)
 							break
 						}
@@ -498,11 +498,11 @@ export function parseCangjieDefinitions(content: string): CangjieDef[] {
 			// Extract enum variants from the body
 			if (kind === "enum" && endLine > i) {
 				for (let el = i + 1; el <= endLine && el < lines.length; el++) {
-					const elTrim = lines[el].trim()
+					const elTrim = lines[el]!.trim()
 					// Match enum variant: identifier (possibly with = value)
 					const variantMatch = elTrim.match(/^(\w+)\s*(?:=|,|$)/)
-					if (variantMatch && !["case", "public", "private", "protected"].includes(variantMatch[1])) {
-						defs.push({ kind: "enum_case", name: variantMatch[1], startLine: el, endLine: el })
+					if (variantMatch && !["case", "public", "private", "protected"].includes(variantMatch[1]!)) {
+						defs.push({ kind: "enum_case", name: variantMatch[1]!, startLine: el, endLine: el })
 					}
 				}
 			}
@@ -647,7 +647,7 @@ export function extractTypeMemberSummaries(
 	let openLine = -1
 	const maxSearch = Math.min(declStartLine + 25, lines.length - 1)
 	for (let i = declStartLine; i <= maxSearch; i++) {
-		if (lines[i] !== undefined && findFirstBraceOutsideString(lines[i]) !== -1) {
+		if (lines[i] !== undefined && findFirstBraceOutsideString(lines[i]!) !== -1) {
 			openLine = i
 			break
 		}
@@ -816,27 +816,27 @@ function parseCjcDumpOutput(output: string): CjcAstNode[] {
 	const stack: ParseCtx[] = []
 
 	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i]
+		const line = lines[i]!
 
 		const startMatch = line.match(nodeStartRe)
 		if (startMatch) {
-			const indent = startMatch[1].length
-			const nodeType = startMatch[2]
+			const indent = startMatch[1]!.length
+			const nodeType = startMatch[2]!
 			stack.push({ type: nodeType, indent })
 			continue
 		}
 
 		if (stack.length > 0) {
-			const current = stack[stack.length - 1]
+			const current = stack[stack.length - 1]!
 
 			const idMatch = line.match(identifierValueRe)
 			if (idMatch && !current.name) {
-				current.name = idMatch[1]
+				current.name = idMatch[1]!
 			}
 
 			const posMatch = line.match(posRe)
 			if (posMatch && current.startLine === undefined) {
-				current.startLine = parseInt(posMatch[1]) - 1 // Convert to 0-based
+				current.startLine = parseInt(posMatch[1]!) - 1 // Convert to 0-based
 			}
 		}
 
@@ -908,7 +908,7 @@ export async function parseCangjieCjcAst(filePath: string): Promise<CangjieDef[]
 			if (["ClassDecl", "StructDecl", "InterfaceDecl", "EnumDecl", "FuncDecl", "MacroDecl", "ExtendDecl", "MainDecl"].includes(node.type)) {
 				// Find the closing brace from source
 				for (let j = startLine; j < Math.min(startLine + 3, sourceLines.length); j++) {
-					if (sourceLines[j].includes("{")) {
+					if (sourceLines[j]!.includes("{")) {
 						endLine = findClosingBrace(sourceLines, j)
 						break
 					}

@@ -548,7 +548,7 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 
 		// If a specific provider is requested, use the endpoint for that provider.
 		if (this.options.openRouterSpecificProvider && this.endpoints[this.options.openRouterSpecificProvider]) {
-			info = this.endpoints[this.options.openRouterSpecificProvider]
+			info = this.endpoints[this.options.openRouterSpecificProvider]!
 		}
 
 		// Apply tool preferences for models accessed through routers (OpenAI, Gemini)

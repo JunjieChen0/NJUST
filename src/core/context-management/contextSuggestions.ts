@@ -73,7 +73,7 @@ export function generateSuggestions(
 			message: `Re-reading files costs ~${Math.round(dupReadPct * 100)}% of context.`,
 			detail:
 				duplicateReads.length > 0
-					? `"${duplicateReads[0].filePath}" read ${duplicateReads[0].readCount}x. Consider referencing previously read content.`
+					? `"${duplicateReads[0]!.filePath}" read ${duplicateReads[0]!.readCount}x. Consider referencing previously read content.`
 					: "Consider referencing previously read content to avoid re-reads.",
 		})
 	}

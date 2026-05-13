@@ -64,7 +64,7 @@ export class CangjieMacroCodeLensProvider implements vscode.CodeLensProvider {
 			let match: RegExpExecArray | null
 
 			while ((match = MACRO_CALL_RE.exec(lineText)) !== null) {
-				const macroName = match[1]
+				const macroName = match[1]!
 				if (this.isBuiltinAnnotation(macroName)) continue
 
 				const range = new vscode.Range(i, 0, i, 0)
@@ -74,7 +74,7 @@ export class CangjieMacroCodeLensProvider implements vscode.CodeLensProvider {
 					lenses.push(new vscode.CodeLens(range, {
 						title: `$(symbol-event) 跳转到宏定义: ${macroName}`,
 						command: "njust-ai-cj.cangjieGoToMacroDef",
-						arguments: [macroDefs[0].filePath, macroDefs[0].startLine],
+						arguments: [macroDefs[0]!.filePath, macroDefs[0]!.startLine],
 					}))
 				}
 
@@ -110,7 +110,7 @@ export class CangjieMacroHoverProvider implements vscode.HoverProvider {
 		let match: RegExpExecArray | null
 
 		while ((match = MACRO_CALL_RE.exec(lineText)) !== null) {
-			const macroName = match[1]
+			const macroName = match[1]!
 			const atIndex = match.index + (match[0].length - macroName.length - 1)
 			const nameStart = atIndex + 1
 
@@ -121,7 +121,7 @@ export class CangjieMacroHoverProvider implements vscode.HoverProvider {
 				md.appendMarkdown(`**宏调用:** \`@${macroName}\`\n\n`)
 
 				if (defs.length > 0) {
-					const def = defs[0]
+					const def = defs[0]!
 					md.appendMarkdown(`**定义位置:** ${path.basename(def.filePath)}:${def.startLine + 1}\n\n`)
 					md.appendCodeblock(def.signature, "cangjie")
 				} else {

@@ -14,17 +14,17 @@ export function extractCangjieImportPackagePrefixes(content: string): string[] {
 
 	IMPORT_REGEX.lastIndex = 0
 	while ((match = IMPORT_REGEX.exec(content)) !== null) {
-		imports.push(match[1])
+		imports.push(match[1]!)
 	}
 
 	IMPORT_BRACE_REGEX.lastIndex = 0
 	while ((match = IMPORT_BRACE_REGEX.exec(content)) !== null) {
-		imports.push(match[1].replace(/\.+$/, ""))
+		imports.push(match[1]!.replace(/\.+$/, ""))
 	}
 
 	FROM_IMPORT_REGEX.lastIndex = 0
 	while ((match = FROM_IMPORT_REGEX.exec(content)) !== null) {
-		imports.push(match[1])
+		imports.push(match[1]!)
 	}
 
 	return [...new Set(imports)]

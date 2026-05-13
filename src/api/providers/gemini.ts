@@ -227,7 +227,7 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 				}
 				// Process candidates and their parts to separate thoughts from content
 				if (chunk.candidates && chunk.candidates.length > 0) {
-					const candidate = chunk.candidates[0]
+					const candidate = chunk.candidates[0]!
 
 					if (candidate.groundingMetadata) {
 						pendingGroundingMetadata = candidate.groundingMetadata

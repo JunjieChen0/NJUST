@@ -151,9 +151,9 @@ export abstract class CacheStrategy {
 			const placement = placements.find((p) => p.index === i)
 
 			if (placement) {
-				messages[i].content?.push(this.createCachePoint())
+				messages[i]!.content?.push(this.createCachePoint())
 			}
-			result.push(messages[i])
+			result.push(messages[i]!)
 		}
 
 		return result

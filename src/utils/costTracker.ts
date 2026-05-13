@@ -149,7 +149,7 @@ export class CostTracker {
 	 * Get pricing for a model (with fallback to default).
 	 */
 	private getModelPricing(model: string): (typeof MODEL_PRICING)[string] {
-		return MODEL_PRICING[model] || MODEL_PRICING["default"]
+		return MODEL_PRICING[model] ?? MODEL_PRICING["default"]!
 	}
 
 	/**

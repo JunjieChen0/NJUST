@@ -1682,9 +1682,9 @@ export class TaskExecutor {
 						(m: ClineMessage) => m.type === "say" && m.say === "reasoning",
 					)
 
-					if (lastReasoningIndex !== -1 && t.clineMessages[lastReasoningIndex].partial) {
-						t.clineMessages[lastReasoningIndex].partial = false
-						await t.updateClineMessage(t.clineMessages[lastReasoningIndex])
+					if (lastReasoningIndex !== -1 && t.clineMessages[lastReasoningIndex]!.partial) {
+						t.clineMessages[lastReasoningIndex]!.partial = false
+						await t.updateClineMessage(t.clineMessages[lastReasoningIndex]!)
 					}
 				}
 
@@ -2002,7 +2002,7 @@ export class TaskExecutor {
 					const state = await t.hostRef.deref()?.getState()
 					if (t.apiConversationHistory.length > 0) {
 						const lastMessage = t.apiConversationHistory[t.apiConversationHistory.length - 1]
-						if (lastMessage.role === "user") {
+						if (lastMessage?.role === "user") {
 							// Remove the last user message that we added earlier
 							t.apiConversationHistory.pop()
 						}

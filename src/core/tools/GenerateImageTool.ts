@@ -198,11 +198,11 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 			if (modelProvider === "roo") {
 				// Use NJUST_AI_CJ Cloud provider (supports both chat completions and images API)
 				const rooHandler = new RooHandler({} as any)
-				result = await rooHandler.generateImage(prompt, selectedModel, inputImageData, apiMethod)
+				result = await rooHandler.generateImage(prompt, selectedModel!, inputImageData, apiMethod)
 			} else {
 				// Use OpenRouter provider (only supports chat completions API)
 				const openRouterHandler = new OpenRouterHandler({} as any)
-				result = await openRouterHandler.generateImage(prompt, selectedModel, openRouterApiKey!, inputImageData)
+				result = await openRouterHandler.generateImage(prompt, selectedModel!, openRouterApiKey!, inputImageData)
 			}
 
 			if (!result.success) {
@@ -229,15 +229,15 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 				return
 			}
 
-			const imageFormat = base64Match[1]
-			const base64Data = base64Match[2]
+			const imageFormat = base64Match[1]!
+			const base64Data = base64Match[2]!
 
 			let finalPath = relPath
 			if (!finalPath.match(/\.(png|jpg|jpeg)$/i)) {
 				finalPath = `${finalPath}.${imageFormat === "jpeg" ? "jpg" : imageFormat}`
 			}
 
-			const imageBuffer = Buffer.from(base64Data, "base64")
+			const imageBuffer = Buffer.from(base64Data!, "base64")
 
 			const absolutePath = path.resolve(task.cwd, finalPath)
 			const directory = path.dirname(absolutePath)

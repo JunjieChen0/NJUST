@@ -101,7 +101,7 @@ export function analyzeContextTokens(
 	const largeToolResults: LargeToolResultInfo[] = []
 
 	for (let i = 0; i < messages.length; i++) {
-		const msg = messages[i]
+		const msg = messages[i]!
 
 		if (msg.isSummary) {
 			const text = getMessageText(msg)
@@ -287,5 +287,5 @@ function blockToText(block: Anthropic.Messages.ContentBlockParam): string {
 
 function extractFilePath(text: string): string | null {
 	const match = text.match(/File:\s*(.+?)(?:\n|$)/)
-	return match ? match[1].trim() : null
+	return match ? match[1]!.trim() : null
 }

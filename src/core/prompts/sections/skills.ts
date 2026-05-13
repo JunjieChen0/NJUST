@@ -32,7 +32,7 @@ export function filterCangjieSkillRoutingRows(markdown: string, discoveredSkillN
 		if (line.includes("|") && line.includes("**`")) {
 			const m = line.match(/\*\*`([^`]+)`\*\*/)
 			if (m) {
-				const id = m[1].trim()
+				const id = m[1]!.trim()
 				if (!discoveredSkillNames.has(id)) continue
 			}
 		}

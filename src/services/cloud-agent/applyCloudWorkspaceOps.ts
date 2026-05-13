@@ -52,7 +52,7 @@ export async function applyCloudWorkspaceOps(
 			}
 		}
 
-		const op = ops[i]
+		const op = ops[i]!
 		const single = await applySingleCloudWorkspaceOp(cwd, op)
 		results.push(single)
 		if (!single.ok) {

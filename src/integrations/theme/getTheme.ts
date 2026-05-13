@@ -42,7 +42,7 @@ export async function getTheme() {
 			if (currentTheme) {
 				break
 			}
-			const extension = vscode.extensions.all[i]
+			const extension = vscode.extensions.all[i]!
 			if (extension.packageJSON?.contributes?.themes?.length > 0) {
 				for (const theme of extension.packageJSON.contributes.themes) {
 					if (theme.label === colorTheme) {
@@ -121,7 +121,7 @@ export function mergeJson(
 					// Merge keys are used to determine whether an item form the second object should override one from the first
 					const keptFromFirst: any[] = []
 					firstValue.forEach((item: any) => {
-						if (!secondValue.some((item2: any) => mergeKeys[key](item, item2))) {
+						if (!secondValue.some((item2: any) => mergeKeys[key]!(item, item2))) {
 							keptFromFirst.push(item)
 						}
 					})

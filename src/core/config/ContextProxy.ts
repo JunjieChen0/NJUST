@@ -154,7 +154,7 @@ export class ContextProxy {
 				// 1. The new location doesn't already have a value
 				// 2. The legacy prompt is a true customization (not equal to the default)
 				// This prevents pinning users to an old default if the default prompt changes.
-				const isCustomized = legacyPrompt.trim() !== supportPrompt.default.CONDENSE.trim()
+				const isCustomized = legacyPrompt.trim() !== supportPrompt.default["CONDENSE"]!.trim()
 				if (!currentSupportPrompts.CONDENSE && isCustomized) {
 					logger.info("Migrating customized legacy customCondensingPrompt to customSupportPrompts")
 					const updatedPrompts = { ...currentSupportPrompts, CONDENSE: legacyPrompt }
@@ -558,7 +558,7 @@ export class ContextProxy {
 		const results = await Promise.allSettled(entries.map(([key, value]) => this.setValue(key, value)))
 		for (const [index, result] of results.entries()) {
 			if (result.status === "rejected") {
-				logger.error(`Failed to set value for key "${entries[index][0]}"`, result.reason)
+				logger.error(`Failed to set value for key "${entries[index]![0]}"`, result.reason)
 			}
 		}
 	}

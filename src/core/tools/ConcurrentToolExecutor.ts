@@ -120,7 +120,7 @@ export class ConcurrentToolExecutor {
 			}
 
 			try {
-				await fn(items[idx], idx, { siblingAbortController, signal: siblingAbortController.signal })
+				await fn(items[idx]!, idx, { siblingAbortController, signal: siblingAbortController.signal })
 			} catch (err) {
 				errors.push({ index: idx, error: err })
 				recordDependencyAbort(idx)

@@ -135,20 +135,20 @@ function ensureFirstLevelDirectoriesIncluded(
 	// Add the missing directories at the beginning (after any existing first-level dirs)
 	// First, separate existing results into first-level and others
 	const resultPaths = adjustedResults.map((r) => path.resolve(r))
-	const basePath = path.resolve(firstLevelDirs[0]).split(path.sep).slice(0, -1).join(path.sep)
+	const basePath = path.resolve(firstLevelDirs[0]!).split(path.sep).slice(0, -1).join(path.sep)
 
 	const firstLevelResults: string[] = []
 	const otherResults: string[] = []
 
 	for (let i = 0; i < adjustedResults.length; i++) {
-		const resolvedPath = resultPaths[i]
+		const resolvedPath = resultPaths[i]!
 		const relativePath = path.relative(basePath, resolvedPath)
 		const depth = relativePath.split(path.sep).length
 
 		if (depth === 1) {
-			firstLevelResults.push(adjustedResults[i])
+			firstLevelResults.push(adjustedResults[i]!)
 		} else {
-			otherResults.push(adjustedResults[i])
+			otherResults.push(adjustedResults[i]!)
 		}
 	}
 

@@ -56,7 +56,7 @@ export class CangjieTestCodeLensProvider implements vscode.CodeLensProvider {
 			if (inTestClass) {
 				const classMatch = text.match(CLASS_RE)
 				if (classMatch) {
-					targets.push({ name: classMatch[1], line: i, kind: "class" })
+					targets.push({ name: classMatch[1]!, line: i, kind: "class" })
 					inTestClass = false
 					continue
 				}
@@ -65,7 +65,7 @@ export class CangjieTestCodeLensProvider implements vscode.CodeLensProvider {
 			if (pendingTestCase || inTestClass) {
 				const funcMatch = text.match(FUNC_RE)
 				if (funcMatch) {
-					targets.push({ name: funcMatch[1], line: i, kind: "func" })
+					targets.push({ name: funcMatch[1]!, line: i, kind: "func" })
 					pendingTestCase = false
 					continue
 				}

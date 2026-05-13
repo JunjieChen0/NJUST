@@ -173,7 +173,7 @@ export function injectSyntheticToolResults(messages: ApiMessage[]): ApiMessage[]
 	// Timestamp is one tick after the last input message so the synthetic
 	// message sits between the original conversation and the summary message.
 	const lastInputTs =
-		messages.length > 0 ? (messages[messages.length - 1].ts ?? Date.now()) : Date.now()
+		messages.length > 0 ? (messages[messages.length - 1]!.ts ?? Date.now()) : Date.now()
 	const syntheticMessage: ApiMessage = {
 		role: "user",
 		content: syntheticResults,
@@ -374,7 +374,7 @@ export async function summarizeConversation(options: SummarizeConversationOption
 
 	// Use custom prompt if provided and non-empty, otherwise use the default CONDENSE prompt
 	// This respects user's custom condensing prompt setting
-	const condenseInstructions = customCondensingPrompt?.trim() || supportPrompt.default.CONDENSE
+	const condenseInstructions = customCondensingPrompt?.trim() || supportPrompt.default.CONDENSE || ""
 
 	// Inject synthetic tool_results for orphan tool_calls to prevent API rejections
 	// (e.g., when user triggers condense after receiving attempt_completion but before responding)
@@ -922,7 +922,7 @@ export async function summarizePartialConversation(
 
 	const condenseId = crypto.randomUUID()
 	const condenseInstructions =
-		customCondensingPrompt?.trim() || supportPrompt.default.CONDENSE
+		customCondensingPrompt?.trim() || supportPrompt.default.CONDENSE || ""
 
 	const finalRequestMessage: Anthropic.MessageParam = {
 		role: "user",

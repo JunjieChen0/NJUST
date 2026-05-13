@@ -127,19 +127,19 @@ function extractPublicSymbols(source: string): string[] {
 
 	let match: RegExpExecArray | null
 	const funcDecl = /(?:^|\n)\s*(?:public|open|protected|internal)\s+func\s+(\w+)\s*\(/g
-	while ((match = funcDecl.exec(source)) !== null) add(match[1])
+	while ((match = funcDecl.exec(source)) !== null) add(match[1]!)
 
 	const classDecl = /(?:^|\n)\s*(?:public|open)\s+class\s+(\w+)/g
-	while ((match = classDecl.exec(source)) !== null) add(match[1])
+	while ((match = classDecl.exec(source)) !== null) add(match[1]!)
 
 	const structDecl = /(?:^|\n)\s*(?:public|open)\s+struct\s+(\w+)/g
-	while ((match = structDecl.exec(source)) !== null) add(match[1])
+	while ((match = structDecl.exec(source)) !== null) add(match[1]!)
 
 	const ifaceDecl = /(?:^|\n)\s*(?:public|open)\s+interface\s+(\w+)/g
-	while ((match = ifaceDecl.exec(source)) !== null) add(match[1])
+	while ((match = ifaceDecl.exec(source)) !== null) add(match[1]!)
 
 	const topFunc = /(?:^|\n)func\s+(\w+)\s*\(/g
-	while ((match = topFunc.exec(source)) !== null) add(match[1])
+	while ((match = topFunc.exec(source)) !== null) add(match[1]!)
 
 	return names.slice(0, MAX_EXTRACT_SYMBOLS)
 }
@@ -406,7 +406,7 @@ export function registerCangjieCommands(
 				return
 			}
 
-			const cur = data.patterns[idx]
+			const cur = data.patterns[idx]!
 			const next = await vscode.window.showInputBox({
 				title: "编辑修复说明",
 				value: cur.fix,

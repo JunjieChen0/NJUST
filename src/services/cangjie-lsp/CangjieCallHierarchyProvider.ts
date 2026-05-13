@@ -45,15 +45,15 @@ export class CangjieCallHierarchyProvider implements vscode.CallHierarchyProvide
 
 		const calls: vscode.CallHierarchyIncomingCall[] = []
 		for (const [filePath, ranges] of byFile) {
-			const caller = this.index.findEnclosingSymbol(filePath, ranges[0].start.line)
+			const caller = this.index.findEnclosingSymbol(filePath, ranges[0]!.start.line)
 			const name = caller?.name ?? filePath.split("/").pop() ?? filePath
 			calls.push({
 				from: {
 					kind: vscode.SymbolKind.Function,
 					name,
 					uri: vscode.Uri.file(filePath),
-					range: ranges[0],
-					selectionRange: ranges[0],
+					range: ranges[0]!,
+					selectionRange: ranges[0]!,
 				},
 				fromRanges: ranges,
 			})
@@ -78,7 +78,7 @@ export class CangjieCallHierarchyProvider implements vscode.CallHierarchyProvide
 			const seen = new Set<string>()
 			let match: RegExpExecArray | null
 			while ((match = callPattern.exec(content)) !== null) {
-				const calleeName = match[1]
+				const calleeName = match[1]!
 				if (seen.has(calleeName)) continue
 				if (calleeName === item.name) continue
 				const defs = this.index.findDefinitions(calleeName)

@@ -41,14 +41,14 @@ export function traceDiagnosticRootCause(
 	} catch {
 		return null
 	}
-	if (path.normalize(def.filePath) === path.normalize(diagPath)) return null
+	if (path.normalize(def!.filePath) === path.normalize(diagPath)) return null
 
-	const defDiagKey = path.normalize(def.filePath)
-	const defDiags = diagnosticsByFile?.get(defDiagKey) ?? vscode.languages.getDiagnostics(vscode.Uri.file(def.filePath))
+	const defDiagKey = path.normalize(def!.filePath)
+	const defDiags = diagnosticsByFile?.get(defDiagKey) ?? vscode.languages.getDiagnostics(vscode.Uri.file(def!.filePath))
 	const hasErr = defDiags.some((d) => d.severity === vscode.DiagnosticSeverity.Error)
 	if (!hasErr) return null
 
-	const rel = path.relative(cwd, def.filePath).replace(/\\/g, "/")
+	const rel = path.relative(cwd, def!.filePath).replace(/\\/g, "/")
 	const first = defDiags.find((d) => d.severity === vscode.DiagnosticSeverity.Error)
 	const lineHint = first ? ` (例如第 ${first.range.start.line + 1} 行: ${first.message.slice(0, 80)}` + ")" : ""
 	return `根因可能在 **${rel}**${lineHint} — 当前文件「${sym}」的连锁报错或源于定义处编译错误`

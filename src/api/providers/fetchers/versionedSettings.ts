@@ -44,7 +44,7 @@ export type VersionedSettings = Record<string, Record<string, unknown>>
 export function compareSemver(version1: string, version2: string): number {
 	// Handle pre-release versions by stripping the suffix
 	// semver-compare doesn't handle pre-release properly
-	const stripPrerelease = (v: string): string => v.split("-")[0]
+	const stripPrerelease = (v: string): string => v.split("-")[0]!
 	return cmp(stripPrerelease(version1), stripPrerelease(version2))
 }
 

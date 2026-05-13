@@ -288,9 +288,9 @@ function computeTurnAttentionMatrix(turns: TurnMeta[], params: AdaptiveParams): 
 		attn[i * N + i] = 1.0 // self-attention
 
 		for (let j = i + 1; j < N; j++) {
-			const contentSim = jaccardSimilarity(tokenSets[i], tokenSets[j])
-			const fileOverlap = computeFileOverlap(turns[i].filePaths, turns[j].filePaths)
-			const toolSim = jaccardSimilarity(turns[i].toolNames, turns[j].toolNames)
+			const contentSim = jaccardSimilarity(tokenSets[i]!, tokenSets[j]!)
+			const fileOverlap = computeFileOverlap(turns[i]!.filePaths, turns[j]!.filePaths)
+			const toolSim = jaccardSimilarity(turns[i]!.toolNames, turns[j]!.toolNames)
 			const temporalWeight = Math.pow(0.5, Math.abs(i - j) / HALF_LIFE_TURNS)
 
 			const score =
@@ -300,7 +300,7 @@ function computeTurnAttentionMatrix(turns: TurnMeta[], params: AdaptiveParams): 
 				hw * temporalWeight
 
 			attn[i * N + j] = Math.min(1, Math.max(0, score))
-			attn[j * N + i] = attn[i * N + j] // symmetric
+			attn[j * N + i] = attn[i * N + j]! // symmetric
 		}
 	}
 
@@ -477,7 +477,7 @@ export function buildContextHierarchy(messages: ApiMessage[], taskId?: string): 
 	const turns: TurnMeta[] = []
 
 	for (let ti = 0; ti < turnGroups.length; ti++) {
-		const group = turnGroups[ti]
+		const group = turnGroups[ti]!
 		const startMsgIndex = globalMsgIndex
 		globalMsgIndex += group.length
 		const endMsgIndex = globalMsgIndex - 1
@@ -552,7 +552,7 @@ export function resetAdaptiveParams(taskId?: string): void {
  */
 export function findTurnIndex(hierarchy: ContextHierarchy, msgIndex: number): number {
 	if (msgIndex < 0 || msgIndex >= hierarchy.msgToTurnIndex.length) return -1
-	return hierarchy.msgToTurnIndex[msgIndex]
+	return hierarchy.msgToTurnIndex[msgIndex] ?? -1
 }
 
 /**
@@ -565,7 +565,7 @@ export function computeTurnSelfAttentionMean(hierarchy: ContextHierarchy, turnId
 	let sum = 0
 	const base = turnIdx * N
 	for (let j = 0; j < N; j++) {
-		sum += hierarchy.turnAttention[base + j]
+		sum += hierarchy.turnAttention[base + j] ?? 0
 	}
 	return sum / N
 }
@@ -634,5 +634,5 @@ export function computeFileHotness(hierarchy: ContextHierarchy, turnIdx: number)
 export function getQueryAttention(hierarchy: ContextHierarchy, turnIdx: number): number {
 	const N = hierarchy.turnCount
 	if (turnIdx < 0 || turnIdx >= N) return 0
-	return hierarchy.turnAttention[turnIdx * N + (N - 1)]
+	return hierarchy.turnAttention[turnIdx * N + (N - 1)] ?? 0
 }

@@ -54,12 +54,12 @@ export class ZAiHandler extends BaseOpenAiCompatibleProvider<string> {
 		const { id: _modelId, info } = this.getModel()
 
 		// Check if this is a model with thinking support (e.g. GLM-4.7, GLM-5)
-		const isThinkingModel = Array.isArray(info.supportsReasoningEffort)
+		const isThinkingModel = Array.isArray(info?.supportsReasoningEffort)
 
 		if (isThinkingModel) {
 			// For GLM-4.7, thinking is ON by default in the API.
 			// We need to explicitly disable it when reasoning is off.
-			const useReasoning = shouldUseReasoningEffort({ model: info, settings: this.options })
+			const useReasoning = shouldUseReasoningEffort({ model: info!, settings: this.options })
 
 			// Create the stream with our custom thinking parameter
 			return this.createStreamWithThinking(systemPrompt, messages, metadata, useReasoning)
@@ -83,7 +83,7 @@ export class ZAiHandler extends BaseOpenAiCompatibleProvider<string> {
 		const max_tokens =
 			getModelMaxOutputTokens({
 				modelId: model,
-				model: info,
+				model: info!,
 				settings: this.options,
 				format: "openai",
 			}) ?? undefined

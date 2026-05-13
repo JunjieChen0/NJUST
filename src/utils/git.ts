@@ -191,7 +191,7 @@ export async function getWorkspaceGitInfo(): Promise<GitRepositoryInfo> {
 	}
 
 	// Use the first workspace folder.
-	const workspaceRoot = workspaceFolders[0].uri.fsPath
+	const workspaceRoot = workspaceFolders[0]!.uri.fsPath
 	return getGitRepositoryInfo(workspaceRoot)
 }
 
@@ -267,11 +267,11 @@ export async function searchCommits(query: string, cwd: string): Promise<GitComm
 
 		for (let i = 0; i < lines.length; i += 5) {
 			commits.push({
-				hash: lines[i],
-				shortHash: lines[i + 1],
-				subject: lines[i + 2],
-				author: lines[i + 3],
-				date: lines[i + 4],
+				hash: lines[i]!,
+				shortHash: lines[i + 1]!,
+				subject: lines[i + 2]!,
+				author: lines[i + 3]!,
+				date: lines[i + 4]!,
 			})
 		}
 
@@ -384,7 +384,7 @@ export async function getGitStatus(cwd: string, maxFiles: number = 20): Promise<
 		const fileLines = lines.slice(1)
 
 		// Build output with branch info and limited file entries
-		const output: string[] = [branchLine]
+		const output: string[] = [branchLine!]
 
 		if (maxFiles > 0 && fileLines.length > 0) {
 			const filesToShow = fileLines.slice(0, maxFiles)

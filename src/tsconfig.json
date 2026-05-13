@@ -12,8 +12,7 @@
 		"noFallthroughCasesInSwitch": true,
 		"noImplicitOverride": true,
 		"noImplicitReturns": true,
-		"noUncheckedIndexedAccess": false,
-		"noUnusedLocals": false,
+
 		"sourceMap": true,
 		"useDefineForClassFields": true,
 		"useUnknownInCatchVariables": true,

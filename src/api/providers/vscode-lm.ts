@@ -140,7 +140,7 @@ private initPromise: Promise<void> | null = null
 
 			// Use first available model or create a minimal model object
 			if (models && Array.isArray(models) && models.length > 0) {
-				return models[0]
+				return models[0]!
 			}
 
 			// Create a minimal model if no models are available

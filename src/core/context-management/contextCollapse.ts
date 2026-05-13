@@ -19,7 +19,7 @@ export function contextCollapseMessages(
 	}
 
 	const keepRecent = Math.max(8, options.keepRecentMessages ?? 14)
-	const head = messages[0]
+	const head = messages[0]!
 	let tail = messages.slice(Math.max(1, messages.length - keepRecent))
 	// Choose marker role to avoid consecutive same-role messages with both head
 	// and tail[0]. The API requires alternating user/assistant roles. If the

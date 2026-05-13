@@ -85,7 +85,7 @@ export function extractStdImports(content: string): string[] {
 	const importRe = /^\s*import\s+([\w.*]+)/gm
 	let m: RegExpExecArray | null
 	while ((m = importRe.exec(content)) !== null) {
-		const imp = m[1]
+		const imp = m[1]!
 		if (imp.startsWith("std.")) {
 			const parts = imp.split(".")
 			if (parts.length >= 2) {
@@ -151,7 +151,7 @@ export function cangjiePreflightCheck(
 	// 4. import path basic validation
 	const imports = [...content.matchAll(/^\s*import\s+([\w.*]+)/gm)]
 	for (const imp of imports) {
-		const importPath = imp[1]
+		const importPath = imp[1]!
 		if (importPath.startsWith("std.")) {
 			const topModule = importPath.split(".").slice(0, 2).join(".")
 			if (!KNOWN_STD_MODULES.has(topModule)) {

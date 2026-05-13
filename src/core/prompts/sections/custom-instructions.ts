@@ -265,7 +265,7 @@ async function readAgentRulesFile(filePath: string): Promise<string> {
 
 			// Extract the resolved path from fileInfo
 			if (fileInfo.length > 0) {
-				resolvedPath = fileInfo[0].resolvedPath
+				resolvedPath = fileInfo[0]!.resolvedPath
 			}
 		}
 	} catch {

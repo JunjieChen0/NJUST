@@ -24,8 +24,8 @@ export async function createDirectoriesForFile(filePath: string): Promise<string
 
 	// Create directories from the topmost missing one down to the target directory
 	for (let i = dirsToCreate.length - 1; i >= 0; i--) {
-		await fs.mkdir(dirsToCreate[i])
-		newDirectories.push(dirsToCreate[i])
+		await fs.mkdir(dirsToCreate[i]!)
+		newDirectories.push(dirsToCreate[i]!)
 	}
 
 	return newDirectories

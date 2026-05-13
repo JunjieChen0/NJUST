@@ -558,7 +558,7 @@ export class CloudAgentOrchestrator {
 	private async applyWorkspaceOps(ops: WorkspaceOp[], confirmOps: boolean): Promise<void> {
 		if (confirmOps) {
 			for (let i = 0; i < ops.length && !this.host.abort; i++) {
-				const op = ops[i]
+				const op = ops[i]!
 				const accessAllowed = allowRooIgnorePathAccess(this.host.rooIgnoreController, op.path)
 				if (!accessAllowed) {
 					await this.host.say("rooignore_error", op.path)

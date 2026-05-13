@@ -17,18 +17,18 @@ export function addCacheBreakpoints(systemPrompt: string, messages: OpenAI.Chat.
 	// Add cache_control to the last two user messages for conversation context caching
 	const lastTwoUserIndices: number[] = []
 	for (let i = result.length - 1; i >= 0 && lastTwoUserIndices.length < 2; i--) {
-		if (result[i].role === "user") {
+		if (result[i]!.role === "user") {
 			lastTwoUserIndices.unshift(i)
 		}
 	}
 
 	for (const idx of lastTwoUserIndices) {
-		const msg = result[idx]
+		const msg = result[idx]!
 		if (typeof msg.content === "string" && msg.content.length > 0) {
 			result[idx] = { ...msg, content: [{ type: "text" as const, text: msg.content }] } as OpenAI.Chat.ChatCompletionMessageParam
 		}
 
-		const content = result[idx].content
+		const content = result[idx]!.content
 		if (Array.isArray(content)) {
 			const lastTextPart = content.filter((part) => part.type === "text").pop() as CacheableTextPart | undefined
 

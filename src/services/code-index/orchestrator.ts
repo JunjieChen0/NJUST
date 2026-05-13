@@ -246,7 +246,7 @@ export class CodeIndexOrchestrator {
 				if (cumulativeBlocksIndexed === 0 && cumulativeBlocksFoundSoFar > 0) {
 					if (batchErrors.length > 0) {
 						// Use the first batch error as it's likely representative of the main issue
-						const firstError = batchErrors[0]
+						const firstError = batchErrors[0]!
 						throw new Error(`Indexing failed: ${firstError.message}`)
 					} else {
 						throw new Error(t("embeddings:orchestrator.indexingFailedNoBlocks"))
@@ -259,7 +259,7 @@ export class CodeIndexOrchestrator {
 					: (cumulativeBlocksFoundSoFar - cumulativeBlocksIndexed) / cumulativeBlocksFoundSoFar
 				if (batchErrors.length > 0 && failureRate > 0.1) {
 					// More than 10% of blocks failed to index
-					const firstError = batchErrors[0]
+					const firstError = batchErrors[0]!
 					throw new Error(
 						`Indexing partially failed: Only ${cumulativeBlocksIndexed} of ${cumulativeBlocksFoundSoFar} blocks were indexed. ${firstError.message}`,
 					)
@@ -268,7 +268,7 @@ export class CodeIndexOrchestrator {
 				// CRITICAL: If there were ANY batch errors and NO blocks were successfully indexed,
 				// this is a complete failure regardless of the failure rate calculation
 				if (batchErrors.length > 0 && cumulativeBlocksIndexed === 0) {
-					const firstError = batchErrors[0]
+					const firstError = batchErrors[0]!
 					throw new Error(`Indexing failed completely: ${firstError.message}`)
 				}
 

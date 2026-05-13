@@ -205,7 +205,7 @@ export class CangjieLintConfig implements vscode.Disposable {
 				for (let i = 0; i < lines.length; i++) {
 					regex.lastIndex = 0
 					let match: RegExpExecArray | null
-					while ((match = regex.exec(lines[i])) !== null) {
+					while ((match = regex.exec(lines[i]!)) !== null) {
 						const range = new vscode.Range(i, match.index, i, match.index + match[0].length)
 						const severity = this.mapSeverity(rule.severity)
 						if (severity === undefined) continue

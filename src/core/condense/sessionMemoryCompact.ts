@@ -195,10 +195,10 @@ export function mergeSessionMemories(memories: SessionMemory[]): SessionMemory {
 	return {
 		modifiedFiles: [...new Set(sorted.flatMap((m) => m.modifiedFiles))],
 		decisions: sorted.flatMap((m) => m.decisions).slice(0, 20), // Keep last 20 decisions
-		pendingTasks: sorted[0].pendingTasks, // Only from most recent session
+		pendingTasks: sorted[0]!.pendingTasks, // Only from most recent session
 		discoveredPatterns: [...new Set(sorted.flatMap((m) => m.discoveredPatterns))].slice(0, 10),
 		errorResolutions: sorted.flatMap((m) => m.errorResolutions).slice(0, 10),
-		timestamp: sorted[0].timestamp,
+		timestamp: sorted[0]!.timestamp,
 	}
 }
 
@@ -409,8 +409,8 @@ async function pruneOldSessions(dir: string): Promise<void> {
 			// Sort by numeric timestamp (filename: session-{ts}-{id}.json).
 			// Lexicographic sort works only when timestamps have equal digit counts.
 			.sort((a, b) => {
-				const tsA = parseInt(a.split("-")[1], 10) || 0
-				const tsB = parseInt(b.split("-")[1], 10) || 0
+				const tsA = parseInt(a.split("-")[1]!, 10) || 0
+				const tsB = parseInt(b.split("-")[1]!, 10) || 0
 				return tsA - tsB
 			})
 
@@ -568,7 +568,7 @@ export function generateAwaySummary(
 
 		// Extract last task description
 		const taskMatch = text.match(/attempt_completion.*?(?:result|output)["':\s]+([^"'\n]{20,100})/is)
-		if (taskMatch) lastTask = taskMatch[1]
+		if (taskMatch) lastTask = taskMatch[1]!
 	}
 
 	if (fileCount > 0) parts.push(`Modified ${fileCount} file${fileCount > 1 ? "s" : ""}.`)

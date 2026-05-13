@@ -65,7 +65,7 @@ export class ModelFallbackManager {
 		// 未达到切换阈值，继续使用当前模型
 		if (this.state.consecutiveFailures < this.config.maxFailuresBeforeFallback) {
 			return {
-				nextModel: this.models[this.state.currentModelIndex],
+				nextModel: this.models[this.state.currentModelIndex] ?? null,
 				shouldNotifyUser: false,
 				reason: `Model "${this.getCurrentModel()}" failed ${this.state.consecutiveFailures}/${this.config.maxFailuresBeforeFallback} times, continuing with current model.`,
 			}
@@ -93,7 +93,7 @@ export class ModelFallbackManager {
 		const nextModel = this.models[nextIndex]
 
 		return {
-			nextModel,
+			nextModel: nextModel ?? null,
 			shouldNotifyUser: this.config.notifyUser,
 			reason: `Model "${previousModel}" failed ${this.config.maxFailuresBeforeFallback} consecutive times. Falling back to "${nextModel}" (fallback #${this.state.totalFallbacks}).`,
 		}
@@ -110,7 +110,7 @@ export class ModelFallbackManager {
 	 * 获取当前活跃模型
 	 */
 	getCurrentModel(): string {
-		return this.models[this.state.currentModelIndex]
+		return this.models[this.state.currentModelIndex]!
 	}
 
 	/**

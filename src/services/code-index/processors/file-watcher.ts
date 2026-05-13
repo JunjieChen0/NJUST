@@ -555,7 +555,7 @@ export class FileWatcher implements IFileWatcher {
 
 					return {
 						id: pointId,
-						vector: embeddings[index],
+						vector: embeddings[index]!,
 						payload: {
 							filePath: generateRelativeFilePath(normalizedAbsolutePath, this.workspacePath),
 							codeChunk: block.content,

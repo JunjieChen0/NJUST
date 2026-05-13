@@ -13,7 +13,7 @@ export function addCacheBreakpoints(systemPrompt: string, messages: OpenAI.Chat.
 
 	// Ensure user messages have content in array format before adding breakpoints
 	for (let i = 0; i < result.length; i++) {
-		const msg = result[i]
+		const msg = result[i]!
 		if (msg.role === "user" && typeof msg.content === "string") {
 			result[i] = { ...msg, content: [{ type: "text" as const, text: msg.content }] }
 		}

@@ -79,9 +79,9 @@ function tokenizeCangjieForEditMatch(s: string): string[] {
 	let i = 0
 	while (i < s.length) {
 		const c = s[i]
-		if (/\s/.test(c)) {
+		if (/\s/.test(c!)) {
 			let j = i
-			while (j < s.length && /\s/.test(s[j])) j++
+			while (j < s.length && /\s/.test(s[j]!)) j++
 			out.push(s.slice(i, j))
 			i = j
 			continue
@@ -96,7 +96,7 @@ function tokenizeCangjieForEditMatch(s: string): string[] {
 			}
 		}
 		if (matched) continue
-		out.push(c)
+		out.push(c!)
 		i++
 	}
 	return out

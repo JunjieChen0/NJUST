@@ -48,7 +48,7 @@ export class CodeIndexManager {
 				}
 				folder = workspaceFolders[0]
 			}
-			workspacePath = folder.uri.fsPath
+			workspacePath = folder!.uri.fsPath
 		}
 
 		if (!CodeIndexManager.instances.has(workspacePath)) {

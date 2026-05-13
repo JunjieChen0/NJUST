@@ -125,7 +125,7 @@ export class ChatParticipantHandler {
 					const messages: ClineMessage[] = task.clineMessages || []
 
 					for (let i = lastMessageCount; i < messages.length; i++) {
-						const msg = messages[i]
+						const msg = messages[i]!
 						this.renderClineMessage(msg, stream)
 					}
 					lastMessageCount = messages.length

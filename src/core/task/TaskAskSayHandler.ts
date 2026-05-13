@@ -248,7 +248,7 @@ export class TaskAskSayHandler {
 				(msg) => msg.type === "ask" && msg.ask === "followup" && !msg.isAnswered,
 			)
 			if (lastFollowUpIndex !== -1) {
-				this.host.clineMessages[lastFollowUpIndex].isAnswered = true
+				this.host.clineMessages[lastFollowUpIndex]!.isAnswered = true
 				this.host.saveClineMessages().catch((error) => {
 					logger.error("TaskAskSayHandler", "Failed to save answered follow-up state:", error)
 				})
@@ -261,8 +261,8 @@ export class TaskAskSayHandler {
 				(msg) => msg.type === "ask" && msg.ask === "tool" && !msg.isAnswered,
 			)
 			if (lastToolAskIndex !== -1) {
-				this.host.clineMessages[lastToolAskIndex].isAnswered = true
-				void this.host.updateClineMessage(this.host.clineMessages[lastToolAskIndex])
+				this.host.clineMessages[lastToolAskIndex]!.isAnswered = true
+				void this.host.updateClineMessage(this.host.clineMessages[lastToolAskIndex]!)
 				this.host.saveClineMessages().catch((error) => {
 					logger.error("TaskAskSayHandler", "Failed to save answered tool-ask state:", error)
 				})

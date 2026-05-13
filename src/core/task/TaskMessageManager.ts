@@ -390,8 +390,8 @@ export class TaskMessageManager {
 
 	findMessageByTimestamp(ts: number): ClineMessage | undefined {
 		for (let i = this.ctx.clineMessages.length - 1; i >= 0; i--) {
-			if (this.ctx.clineMessages[i].ts === ts) {
-				return this.ctx.clineMessages[i]
+			if (this.ctx.clineMessages[i]!.ts === ts) {
+				return this.ctx.clineMessages[i]!
 			}
 		}
 		return undefined
@@ -399,8 +399,8 @@ export class TaskMessageManager {
 
 	findMessageById(id: string): ClineMessage | undefined {
 		for (let i = this.ctx.clineMessages.length - 1; i >= 0; i--) {
-			if (this.ctx.clineMessages[i].id === id) {
-				return this.ctx.clineMessages[i]
+			if (this.ctx.clineMessages[i]!.id === id) {
+				return this.ctx.clineMessages[i]!
 			}
 		}
 		return undefined

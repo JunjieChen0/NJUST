@@ -295,10 +295,10 @@ export class AnthropicVertexHandler extends BaseProvider implements SingleComple
 			}
 
 			const response = await this.client.messages.create(params)
-			const content = response.content[0]
+			const content = response.content[0]!
 
 			if (content.type === "text") {
-				return content.text
+				return (content as Anthropic.TextBlock).text
 			}
 
 			return ""

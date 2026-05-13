@@ -47,7 +47,7 @@ function getQwenCachedCredentialPath(customPath?: string): string {
 
 function objectToUrlEncoded(data: Record<string, string>): string {
 	return Object.keys(data)
-		.map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(data[key])}`)
+		.map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(data[key]!)}`)
 		.join("&")
 }
 
@@ -260,13 +260,13 @@ export class QwenCodeHandler extends BaseProvider implements SingleCompletionHan
 									// Outside thinking block
 									yield {
 										type: "text",
-										text: parts[i],
+										text: parts[i]!,
 									}
 								} else {
 									// Inside thinking block
 									yield {
 										type: "reasoning",
-										text: parts[i],
+										text: parts[i]!,
 									}
 								}
 							}

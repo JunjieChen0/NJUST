@@ -190,7 +190,7 @@ export class TaskHistoryService {
 		let task: Task | undefined
 		const stack = this.host.stack.getStack()
 		for (let i = stack.length - 1; i >= 0; i--) {
-			if (stack[i].taskId === taskId) {
+			if (stack[i]!.taskId === taskId) {
 				task = stack[i]
 				break
 			}

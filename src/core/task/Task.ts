@@ -1136,7 +1136,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 			if (lastFollowUpIndex !== -1) {
 				// Mark this follow-up as answered
-				this.clineMessages[lastFollowUpIndex].isAnswered = true
+				this.clineMessages[lastFollowUpIndex]!.isAnswered = true
 				// Save the updated messages
 				this.saveClineMessages().catch((error) => {
 					logger.error("Task", "Failed to save answered follow-up state:", error)
@@ -1151,8 +1151,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				(msg) => msg.type === "ask" && msg.ask === "tool" && !msg.isAnswered,
 			)
 			if (lastToolAskIndex !== -1) {
-				this.clineMessages[lastToolAskIndex].isAnswered = true
-				void this.updateClineMessage(this.clineMessages[lastToolAskIndex]).catch((error) => { logger.warn("Task", "updateClineMessage failed", error) })
+				this.clineMessages[lastToolAskIndex]!.isAnswered = true
+				void this.updateClineMessage(this.clineMessages[lastToolAskIndex]!).catch((error) => { logger.warn("Task", "updateClineMessage failed", error) })
 				this.saveClineMessages().catch((error) => {
 					logger.error("Task", "Failed to save answered tool-ask state:", error)
 				})

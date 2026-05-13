@@ -150,9 +150,9 @@ function cosineSimilarity(a: number[], b: number[]): number {
 	let na = 0
 	let nb = 0
 	for (let i = 0; i < a.length; i++) {
-		dot += a[i] * b[i]
-		na += a[i] * a[i]
-		nb += b[i] * b[i]
+		dot += a[i]! * b[i]!
+		na += a[i]! * a[i]!
+		nb += b[i]! * b[i]!
 	}
 	if (na === 0 || nb === 0) return 0
 	return dot / (Math.sqrt(na) * Math.sqrt(nb))
@@ -467,11 +467,11 @@ export class CangjieCorpusSemanticIndex {
 				const bm25 = scoreBM25(m.queryTokens, chunk.tf, this.index.idf, this.avgDl)
 				const vecScore = cosineSimilarity(m.queryVec, emb)
 				const s = HYBRID_BM25_WEIGHT * bm25 + HYBRID_VECTOR_WEIGHT * Math.max(0, vecScore)
-				if (s > 0) scoredByQ[qi].push({ chunk, score: s })
+				if (s > 0) scoredByQ[qi]!.push({ chunk, score: s })
 			}
 		}
 
-		return meta.map((m, qi) => (m ? this.finalizeScoredChunks(scoredByQ[qi], topK, options) : []))
+		return meta.map((m, qi) => (m ? this.finalizeScoredChunks(scoredByQ[qi]!, topK, options) : []))
 	}
 
 	private getChunkEmbedding(chunk: ChunkEntry): number[] {

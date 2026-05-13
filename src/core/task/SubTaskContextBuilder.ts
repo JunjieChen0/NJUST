@@ -154,7 +154,7 @@ export function generateParentContextSummary(
 			if (filePatterns) {
 				for (const match of filePatterns) {
 					const pathMatch = match.match(/["':>\s]([^"'<\n]+\.[a-zA-Z]{1,10})$/)
-					if (pathMatch) fileChanges.add(pathMatch[1].trim())
+					if (pathMatch) fileChanges.add(pathMatch[1]!.trim())
 				}
 			}
 		}
@@ -164,7 +164,7 @@ export function generateParentContextSummary(
 			if (cmdPatterns) {
 				for (const match of cmdPatterns) {
 					const cmdMatch = match.match(/["':>\s]([^"'<\n]+)$/)
-					if (cmdMatch) commands.push(cmdMatch[1].trim())
+					if (cmdMatch) commands.push(cmdMatch[1]!.trim())
 				}
 			}
 		}
@@ -304,7 +304,7 @@ export function generateTaskResultSummary(
 		if (writePatterns) {
 			for (const match of writePatterns) {
 				const pathMatch = match.match(/["':>\s]([^"'<\n]+\.[a-zA-Z]{1,10})$/)
-				if (pathMatch) filesModified.add(pathMatch[1].trim())
+				if (pathMatch) filesModified.add(pathMatch[1]!.trim())
 			}
 		}
 
@@ -313,15 +313,15 @@ export function generateTaskResultSummary(
 		if (cmdPatterns) {
 			for (const match of cmdPatterns) {
 				const cmdMatch = match.match(/["':>\s]([^"'<\n]+)$/)
-				if (cmdMatch) commandsExecuted.push(cmdMatch[1].trim())
+				if (cmdMatch) commandsExecuted.push(cmdMatch[1]!.trim())
 			}
 		}
 	}
 
 	// Get last assistant message as the final conclusion
 	for (let i = messages.length - 1; i >= 0; i--) {
-		if (messages[i].role === "assistant") {
-			finalConclusion = getTextContent(messages[i].content)
+		if (messages[i]!.role === "assistant") {
+			finalConclusion = getTextContent(messages[i]!.content)
 			break
 		}
 	}

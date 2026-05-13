@@ -204,7 +204,7 @@ export class CangjieMetricsCollector implements vscode.Disposable {
 			try {
 				const content = fs.readFileSync(tomlPath, "utf-8")
 				const m = content.match(/name\s*=\s*"([^"]+)"/)
-				if (m) return m[1]
+				if (m) return m[1]!
 			} catch { /* ignore */ }
 		}
 		return path.basename(cwd)

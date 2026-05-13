@@ -327,7 +327,7 @@ export class ErrorRecoveryHandler {
 		let modified = false
 
 		for (let i = 0; i < history.length; i++) {
-			const msg = history[i]
+			const msg = history[i]!
 			if (Array.isArray(msg.content)) {
 				const filtered = msg.content.map((block) => {
 					const b = block as unknown as TypedBlock

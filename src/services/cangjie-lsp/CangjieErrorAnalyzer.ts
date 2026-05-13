@@ -483,7 +483,7 @@ export function patternPriority(p: CjcErrorPattern): number {
 
 const CJC_PATTERN_INDEX = new Map<CjcErrorPattern, number>()
 for (let i = 0; i < CJC_ERROR_PATTERNS.length; i++) {
-	CJC_PATTERN_INDEX.set(CJC_ERROR_PATTERNS[i], i)
+	CJC_PATTERN_INDEX.set(CJC_ERROR_PATTERNS[i]!, i)
 }
 
 const CJC_ERROR_PATTERNS_BY_PRIORITY_DESC = [...CJC_ERROR_PATTERNS].sort((a, b) => {

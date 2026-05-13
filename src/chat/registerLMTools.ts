@@ -244,8 +244,8 @@ async function executeTool(
 					const text = new TextDecoder().decode(content)
 					const lines = text.split("\n")
 					for (let i = 0; i < lines.length; i++) {
-						if (regex.test(lines[i])) {
-							results.push(`${vscode.workspace.asRelativePath(file)}:${i + 1}: ${lines[i].trim()}`)
+						if (regex.test(lines[i]!)) {
+							results.push(`${vscode.workspace.asRelativePath(file)}:${i + 1}: ${lines[i]!.trim()}`)
 						}
 						regex.lastIndex = 0
 					}

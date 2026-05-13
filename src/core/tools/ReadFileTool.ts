@@ -79,7 +79,7 @@ function isBlockedDevicePath(filePath: string): boolean {
 	if (BLOCKED_DEVICE_PATHS.has(normalized)) return true
 
 	// Check Windows device names (can appear as bare name or with extensions)
-	const basename = path.basename(filePath).toLowerCase().split(".")[0]
+	const basename = path.basename(filePath).toLowerCase().split(".")[0]!
 	if (BLOCKED_WINDOWS_DEVICES.has(basename)) return true
 
 	return false
@@ -213,7 +213,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 		const updateFileResult = (filePath: string, updates: Partial<FileResult>) => {
 			const index = fileResults.findIndex((result) => result.path === filePath)
 			if (index !== -1) {
-				fileResults[index] = { ...fileResults[index], ...updates }
+				fileResults[index] = { ...fileResults[index]!, ...updates }
 			}
 		}
 
@@ -399,7 +399,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			let output = result.content
 
 			if (result.wasTruncated && result.includedRanges.length > 0) {
-				const [start, end] = result.includedRanges[0]
+				const [start, end] = result.includedRanges[0]!
 				const nextOffset = end + 1
 				const effectiveLimit = entry.limit ?? DEFAULT_LINE_LIMIT
 				// Put truncation warning at TOP (before content) to match @ mention format
@@ -580,7 +580,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 					let hasAnyDenial = false
 
 					batchFiles.forEach((batchFile, index) => {
-						const fileResult = remaining[index]
+						const fileResult = remaining[index]!
 						const approved = individualPermissions[batchFile.key] === true
 
 						if (approved) {
@@ -607,7 +607,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			}
 		} else {
 			// Single file approval
-			const fileResult = remaining[0]
+			const fileResult = remaining[0]!
 			const relPath = fileResult.path
 			const fullPath = path.resolve(task.cwd, relPath)
 

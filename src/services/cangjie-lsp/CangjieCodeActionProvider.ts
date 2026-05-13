@@ -92,7 +92,7 @@ function extractFunctionReturnType(
 	for (let i = beforeBraceLine; i >= Math.max(0, beforeBraceLine - 5); i--) {
 		const line = document.lineAt(i).text
 		const m = line.match(/\)\s*:\s*(\S[\s\S]*?)\s*(?:\{|$)/)
-		if (m) return m[1].trim()
+		if (m) return m[1]!.trim()
 	}
 	return null
 }
@@ -136,7 +136,7 @@ const QUICK_FIX_PATTERNS: QuickFixPattern[] = [
 	{
 		pattern: /(?:undeclared|cannot find|not found|未找到符号|unresolved)\b.*?\b(\w+)/i,
 		createFix(document, diagnostic, match) {
-			let symbolName = match[1]
+			let symbolName = match[1]!
 			const quoted = diagnostic.message.match(/['"`](\w+)['"`]/)
 			if (quoted?.[1]) symbolName = quoted[1]
 			const pkg = STDLIB_IMPORT_HINTS[symbolName]
@@ -251,7 +251,7 @@ const QUICK_FIX_PATTERNS: QuickFixPattern[] = [
 	{
 		pattern: /(?:missing import|import.*not found|未导入)\b.*?\b(\w+)/i,
 		createFix(document, diagnostic, match) {
-			let symbolName = match[1]
+			let symbolName = match[1]!
 			const quoted = diagnostic.message.match(/['"`](\w+)['"`]/)
 			if (quoted?.[1]) symbolName = quoted[1]
 			const pkg = STDLIB_IMPORT_HINTS[symbolName]

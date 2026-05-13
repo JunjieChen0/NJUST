@@ -96,7 +96,7 @@ export class MultiPointStrategy extends CacheStrategy {
 		}
 
 		// Calculate tokens in new messages (added since last cache point placement)
-		const lastPreviousIndex = previousPlacements[previousPlacements.length - 1].index
+		const lastPreviousIndex = previousPlacements[previousPlacements.length - 1]!.index
 		const newMessagesTokens = this.config.messages
 			.slice(lastPreviousIndex + 1)
 			.reduce((acc, curr) => acc + this.estimateTokenCount(curr), 0)
@@ -145,7 +145,7 @@ export class MultiPointStrategy extends CacheStrategy {
 				let smallestGap = Number.MAX_VALUE
 
 				for (let i = 0; i < tokensBetweenPlacements.length - 1; i++) {
-					const gap = tokensBetweenPlacements[i] + tokensBetweenPlacements[i + 1]
+					const gap = tokensBetweenPlacements[i]! + tokensBetweenPlacements[i + 1]!
 					if (gap < smallestGap) {
 						smallestGap = gap
 						smallestGapIndex = i
@@ -171,16 +171,13 @@ export class MultiPointStrategy extends CacheStrategy {
 					// Combine the two placements with the smallest gap
 					for (let i = 0; i < previousPlacements.length; i++) {
 						if (i !== smallestGapIndex && i !== smallestGapIndex + 1) {
-							// Keep this placement
-							if (previousPlacements[i].index < totalMessages) {
-								placements.push(previousPlacements[i])
+							if (previousPlacements[i]!.index < totalMessages) {
+								placements.push(previousPlacements[i]!)
 							}
 						} else if (i === smallestGapIndex) {
-							// Replace with a combined placement
-							const combinedEndIndex = previousPlacements[i + 1].index
+							const combinedEndIndex = previousPlacements[i + 1]!.index
 
-							// Find the optimal placement within this combined range
-							const startOfRange = i === 0 ? 0 : previousPlacements[i - 1].index + 1
+							const startOfRange = i === 0 ? 0 : previousPlacements[i - 1]!.index + 1
 							const combinedPlacement = this.findOptimalPlacementForRange(
 								startOfRange,
 								combinedEndIndex,
@@ -257,7 +254,7 @@ export class MultiPointStrategy extends CacheStrategy {
 		// Find the last user message in the range
 		let lastUserMessageIndex = -1
 		for (let i = endIndex; i >= startIndex; i--) {
-			if (this.config.messages[i].role === "user") {
+			if (this.config.messages[i]!.role === "user") {
 				lastUserMessageIndex = i
 				break
 			}

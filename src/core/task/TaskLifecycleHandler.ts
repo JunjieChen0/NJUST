@@ -177,7 +177,7 @@ export class TaskLifecycleHandler {
 			}
 
 			while (modifiedClineMessages.length > 0) {
-				const last = modifiedClineMessages[modifiedClineMessages.length - 1]
+				const last = modifiedClineMessages[modifiedClineMessages.length - 1]!
 				if (last.type === "say" && last.say === "reasoning") {
 					modifiedClineMessages.pop()
 				} else {
@@ -191,7 +191,7 @@ export class TaskLifecycleHandler {
 			)
 
 			if (lastApiReqStartedIndex !== -1) {
-				const lastApiReqStarted = modifiedClineMessages[lastApiReqStartedIndex]
+				const lastApiReqStarted = modifiedClineMessages[lastApiReqStartedIndex]!
 				const { cost, cancelReason }: ClineApiReqInfo = JSON.parse(lastApiReqStarted.text || "{}")
 
 				if (cost === undefined && cancelReason === undefined) {
@@ -236,7 +236,7 @@ export class TaskLifecycleHandler {
 			let modifiedOldUserContent: Anthropic.Messages.ContentBlockParam[]
 			let modifiedApiConversationHistory: ApiMessage[]
 			if (existingApiConversationHistory.length > 0) {
-				const lastMessage = existingApiConversationHistory[existingApiConversationHistory.length - 1]
+				const lastMessage = existingApiConversationHistory[existingApiConversationHistory.length - 1]!
 
 				if (lastMessage.isSummary) {
 					modifiedApiConversationHistory = [...existingApiConversationHistory]

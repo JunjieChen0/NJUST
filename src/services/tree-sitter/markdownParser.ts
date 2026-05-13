@@ -53,13 +53,13 @@ export function parseMarkdown(content: string): QueryCapture[] {
 
 	// Find all headers in the document
 	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i]
+		const line = lines[i]!
 
 		// Check for ATX headers (# Header)
 		const atxMatch = line.match(atxHeaderRegex)
 		if (atxMatch) {
-			const level = atxMatch[1].length
-			const text = atxMatch[2].trim()
+			const level = atxMatch[1]!.length
+			const text = atxMatch[2]!.trim()
 
 			// Create a mock node for this header
 			const node: MockNode = {
@@ -88,8 +88,8 @@ export function parseMarkdown(content: string): QueryCapture[] {
 		// Check for setext headers (underlined headers)
 		if (i > 0) {
 			// Check for H1 (======)
-			if (setextH1Regex.test(line) && validSetextTextRegex.test(lines[i - 1])) {
-				const text = lines[i - 1].trim()
+			if (setextH1Regex.test(line) && validSetextTextRegex.test(lines[i - 1]!)) {
+				const text = lines[i - 1]!.trim()
 
 				// Create a mock node for this header
 				const node: MockNode = {
@@ -116,8 +116,8 @@ export function parseMarkdown(content: string): QueryCapture[] {
 			}
 
 			// Check for H2 (------)
-			if (setextH2Regex.test(line) && validSetextTextRegex.test(lines[i - 1])) {
-				const text = lines[i - 1].trim()
+			if (setextH2Regex.test(line) && validSetextTextRegex.test(lines[i - 1]!)) {
+				const text = lines[i - 1]!.trim()
 
 				// Create a mock node for this header
 				const node: MockNode = {
@@ -153,19 +153,18 @@ export function parseMarkdown(content: string): QueryCapture[] {
 	const headerCaptures: MockCapture[][] = []
 	for (let i = 0; i < captures.length; i += 2) {
 		if (i + 1 < captures.length) {
-			headerCaptures.push([captures[i], captures[i + 1]])
+			headerCaptures.push([captures[i]!, captures[i + 1]!])
 		} else {
-			headerCaptures.push([captures[i]])
+			headerCaptures.push([captures[i]!])
 		}
 	}
 
 	// Update end positions for section ranges
 	for (let i = 0; i < headerCaptures.length; i++) {
-		const headerPair = headerCaptures[i]
+		const headerPair = headerCaptures[i]!
 
 		if (i < headerCaptures.length - 1) {
-			// End position is the start of the next header minus 1
-			const nextHeaderStartRow = headerCaptures[i + 1][0].node.startPosition.row
+			const nextHeaderStartRow = headerCaptures[i + 1]![0]!.node.startPosition.row
 			headerPair.forEach((capture) => {
 				capture.node.endPosition.row = nextHeaderStartRow - 1
 			})
@@ -200,7 +199,7 @@ export function formatMarkdownCaptures(captures: QueryCapture[], minSectionLines
 
 	// Process only the definition captures (every other capture)
 	for (let i = 1; i < captures.length; i += 2) {
-		const capture = captures[i]
+		const capture = captures[i]!
 		const startLine = capture.node.startPosition.row
 		const endLine = capture.node.endPosition.row
 
@@ -218,7 +217,6 @@ export function formatMarkdownCaptures(captures: QueryCapture[], minSectionLines
 
 			const headerPrefix = "#".repeat(headerLevel)
 
-			// Format: startLine--endLine | # Header Text
 			formattedOutput += `${startLine}--${endLine} | ${headerPrefix} ${capture.node.text}\n`
 		}
 	}

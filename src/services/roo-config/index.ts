@@ -228,7 +228,7 @@ export async function discoverSubfolderRooDirectories(cwd: string): Promise<stri
 			// Match paths like "subfolder/.njust_ai/anything" or nested variants
 			const match = result.path.match(new RegExp(`^(.+?)[/\\\\]${NJUST_AI_CONFIG_DIR_REGEX}[/\\\\]`))
 			if (match) {
-				const rooDir = path.join(cwd, match[1], NJUST_AI_CONFIG_DIR)
+				const rooDir = path.join(cwd, match[1]!, NJUST_AI_CONFIG_DIR)
 				// Exclude the root .njust_ai directory (already handled by getProjectRooDirectoryForCwd)
 				if (rooDir !== rootRooDir) {
 					rooDirs.add(rooDir)

@@ -101,7 +101,7 @@ export class MessageManager {
 		const truncationIds = new Set<string>()
 
 		for (let i = fromIndex; i < this.task.clineMessages.length; i++) {
-			const msg = this.task.clineMessages[i]
+			const msg = this.task.clineMessages[i]!
 
 			// Collect condenseIds from condense_context events
 			if (msg.say === "condense_context" && msg.contextCondense?.condenseId) {
@@ -173,7 +173,7 @@ export class MessageManager {
 
 			if (firstUserMsgIndexToRemove !== -1) {
 				// Use the user message's timestamp as the actual cutoff
-				actualCutoff = apiHistory[firstUserMsgIndexToRemove].ts!
+				actualCutoff = apiHistory[firstUserMsgIndexToRemove]!.ts!
 			}
 			// else: no user message found, use original cutoffTs (fallback)
 		}

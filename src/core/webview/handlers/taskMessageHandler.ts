@@ -102,7 +102,7 @@ async function doDeleteConfirm(context: MessageHandlerContext, messageTs: number
 			const cps = currentCline.clineMessages.filter((m: ClineMessage) => m.say === "checkpoint_saved" && m.ts! > messageTs)
 			if (cps[0]?.text) {
 				await handleCheckpointRestoreOperation({
-					provider, currentCline, messageTs: target.ts!, messageIndex,
+					provider, currentCline, messageTs: target!.ts!, messageIndex,
 					checkpoint: { hash: cps[0].text }, operation: "delete",
 				})
 			} else { vscode.window.showWarningMessage("No checkpoint found before this message") }
@@ -112,10 +112,10 @@ async function doDeleteConfirm(context: MessageHandlerContext, messageTs: number
 				const m = currentCline.clineMessages[i]
 				if (m?.checkpoint && m.ts) saved.set(m.ts, m.checkpoint)
 			}
-			await currentCline.messageManager.rewindToTimestamp(target.ts!, { includeTargetMessage: false })
+			await currentCline.messageManager.rewindToTimestamp(target!.ts!, { includeTargetMessage: false })
 			for (const [ts, cp] of saved) {
 				const idx = currentCline.clineMessages.findIndex((m: ClineMessage) => m.ts === ts)
-				if (idx !== -1) currentCline.clineMessages[idx].checkpoint = cp
+				if (idx !== -1) currentCline.clineMessages[idx]!.checkpoint = cp
 			}
 			await saveTaskMessages({
 				messages: currentCline.clineMessages, taskId: currentCline.taskId,
@@ -156,7 +156,7 @@ async function doEditConfirm(context: MessageHandlerContext, messageTs: number, 
 			const cps = currentCline.clineMessages.filter((m: ClineMessage) => m.say === "checkpoint_saved" && m.ts! > messageTs)
 			if (cps[0]?.text) {
 				await handleCheckpointRestoreOperation({
-					provider, currentCline, messageTs: target.ts!, messageIndex,
+					provider, currentCline, messageTs: target!.ts!, messageIndex,
 					checkpoint: { hash: cps[0].text }, operation: "edit",
 					editData: { editedContent, images, apiConversationHistoryIndex },
 				})
@@ -168,7 +168,7 @@ async function doEditConfirm(context: MessageHandlerContext, messageTs: number, 
 		for (let i = messageIndex; i >= 0; i--) {
 			if (currentCline.clineMessages[i]?.say === "user_feedback") {
 				delIdx = i
-				const uts = currentCline.clineMessages[i].ts
+				const uts = currentCline.clineMessages[i]!.ts
 				if (typeof uts === "number") {
 					const ai = currentCline.apiConversationHistory.findIndex((m: ApiMessage) => m.ts === uts)
 					if (ai !== -1) delApiIdx = ai
@@ -177,7 +177,7 @@ async function doEditConfirm(context: MessageHandlerContext, messageTs: number, 
 			}
 		}
 		if (delApiIdx === -1 && typeof currentCline.clineMessages[delIdx]?.ts === "number") {
-			delApiIdx = findFirstApiIndexAtOrAfter(currentCline.clineMessages[delIdx].ts, currentCline)
+			delApiIdx = findFirstApiIndexAtOrAfter(currentCline.clineMessages[delIdx]!.ts, currentCline)
 		}
 		const saved = new Map<number, any>()
 		for (let i = 0; i < delIdx; i++) {
@@ -188,7 +188,7 @@ async function doEditConfirm(context: MessageHandlerContext, messageTs: number, 
 		if (rts) await currentCline.messageManager.rewindToTimestamp(rts, { includeTargetMessage: false })
 		for (const [ts, cp] of saved) {
 			const idx = currentCline.clineMessages.findIndex((m: ClineMessage) => m.ts === ts)
-			if (idx !== -1) currentCline.clineMessages[idx].checkpoint = cp
+			if (idx !== -1) currentCline.clineMessages[idx]!.checkpoint = cp
 		}
 		await saveTaskMessages({
 			messages: currentCline.clineMessages, taskId: currentCline.taskId,
@@ -219,8 +219,8 @@ async function handleWebviewDidLaunch(context: MessageHandlerContext, _message: 
 			if (!checkExistKey(list[0])) {
 				const { apiConfiguration } = await provider.getState()
 				if (checkExistKey(apiConfiguration)) {
-					await provider.providerSettingsManager.saveConfig(list[0].name ?? "default", apiConfiguration)
-					list[0].apiProvider = apiConfiguration.apiProvider
+					await provider.providerSettingsManager.saveConfig(list[0]!.name ?? "default", apiConfiguration)
+					list[0]!.apiProvider = apiConfiguration.apiProvider
 				}
 			}
 		}

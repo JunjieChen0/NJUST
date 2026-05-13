@@ -22,7 +22,7 @@ export class Terminal extends BaseTerminal {
 		this.terminal = terminal ?? vscode.window.createTerminal({ cwd, name: "NJUST_AI_CJ", iconPath, env })
 
 		if (Terminal.getTerminalZdotdir()) {
-			ShellIntegrationManager.terminalTmpDirs.set(id, env.ZDOTDIR)
+			ShellIntegrationManager.terminalTmpDirs.set(id, env.ZDOTDIR!)
 		}
 	}
 
@@ -137,7 +137,7 @@ export class Terminal extends BaseTerminal {
 			if (lastLine) {
 				let i = lines.length - 1
 
-				while (i >= 0 && !lines[i].trim().startsWith(lastLine)) {
+				while (i >= 0 && !lines[i]!.trim().startsWith(lastLine)) {
 					i--
 				}
 

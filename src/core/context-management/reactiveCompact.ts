@@ -17,5 +17,5 @@ export function reactiveCompactMessages(
 	})
 	if (snip.length <= 12) return snip
 	const keep = Math.max(8, Math.floor(snip.length * 0.6))
-	return [snip[0], ...snip.slice(-keep + 1)]
+	return [snip[0]!, ...snip.slice(-keep + 1)]
 }

@@ -43,7 +43,7 @@ export function resolveDefaultSaveUri(
 		// Try workspace if enabled
 		const workspaceFolders = vscode.workspace.workspaceFolders
 		if (useWorkspace && workspaceFolders && workspaceFolders.length > 0) {
-			return vscode.Uri.file(path.join(workspaceFolders[0].uri.fsPath, fileName))
+			return vscode.Uri.file(path.join(workspaceFolders[0]!.uri.fsPath, fileName))
 		}
 
 		// Fallback

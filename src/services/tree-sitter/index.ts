@@ -266,7 +266,7 @@ function processCaptures(captures: QueryCapture[], lines: string[], language: st
 		}
 
 		// Check if this is a valid component definition (not an HTML element)
-		const startLineContent = lines[startLine].trim()
+		const startLineContent = lines[startLine]!.trim()
 
 		// Special handling for component name definitions
 		if (name.includes("name.definition")) {

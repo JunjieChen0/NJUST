@@ -50,10 +50,10 @@ export async function openImage(dataUriOrPath: string, options?: { values?: { ac
 		return
 	}
 	const [, format, base64Data] = matches
-	const imageBuffer = Buffer.from(base64Data, "base64")
+	const imageBuffer = Buffer.from(base64Data!, "base64")
 
 	// Default behavior: open the image
-	const tempFilePath = path.join(os.tmpdir(), `temp_image_${Date.now()}.${format}`)
+	const tempFilePath = path.join(os.tmpdir(), `temp_image_${Date.now()}.${format!}`)
 	try {
 		await vscode.workspace.fs.writeFile(vscode.Uri.file(tempFilePath), imageBuffer)
 		// Check if this is a copy action
@@ -98,12 +98,12 @@ export async function saveImage(dataUri: string, defaultUri: vscode.Uri): Promis
 		return undefined
 	}
 	const [, format, base64Data] = matches
-	const imageBuffer = Buffer.from(base64Data, "base64")
+	const imageBuffer = Buffer.from(base64Data!, "base64")
 
 	// Show save dialog
 	const saveUri = await vscode.window.showSaveDialog({
 		filters: {
-			Images: [format],
+			Images: [format!],
 			"All Files": ["*"],
 		},
 		defaultUri: defaultUri,

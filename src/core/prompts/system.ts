@@ -235,7 +235,7 @@ async function generatePromptImpl(cfg: SystemPromptConfig): Promise<SystemPrompt
 	}
 
 	// Check if MCP functionality should be included
-	const hasMcpGroup = modeConfig.groups.some((groupEntry) => getGroupName(groupEntry) === "mcp")
+	const hasMcpGroup = modeConfig!.groups.some((groupEntry) => getGroupName(groupEntry) === "mcp")
 	const hasMcpServers = mcpHub && mcpHub.getServers().length > 0
 	const shouldIncludeMcp = hasMcpGroup && hasMcpServers
 
@@ -431,7 +431,7 @@ function positionalToConfig(
 		context,
 		cwd,
 		supportsComputerUse,
-		mode: currentMode.slug,
+		mode: currentMode!.slug,
 		mcpHub,
 		diffStrategy,
 		promptComponent,

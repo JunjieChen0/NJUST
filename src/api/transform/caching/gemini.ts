@@ -20,12 +20,11 @@ export function addCacheBreakpoints(
 	let count = 0
 
 	for (let i = 0; i < result.length; i++) {
-		const msg = result[i]
+		const msg = result[i]!
 		if (msg.role !== "user") {
 			continue
 		}
 
-		// Ensure content is in array format for potential modification.
 		if (typeof msg.content === "string") {
 			result[i] = { ...msg, content: [{ type: "text" as const, text: msg.content }] }
 		}
@@ -33,7 +32,7 @@ export function addCacheBreakpoints(
 		const isNthMessage = count % frequency === frequency - 1
 
 		if (isNthMessage) {
-			const content = result[i].content
+			const content = result[i]!.content
 			if (Array.isArray(content)) {
 				let lastTextPart = content.filter((part) => part.type === "text").pop() as CacheableTextPart | undefined
 

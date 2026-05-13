@@ -489,7 +489,7 @@ export async function presentAssistantMessage(cline: Task) {
 									async (toolBlock, signal) => runOne(toolBlock, signal),
 								)
 							} else {
-								await runOne(batch.calls[0])
+								await runOne(batch.calls[0]!)
 							}
 						}
 						// Replay tool_result for duplicated readonly calls so provider receives

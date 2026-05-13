@@ -88,8 +88,8 @@ export async function resolveImageMentions({
 	}
 
 	const imageMentions = mentions.filter((mention) => {
-		if (!mention.startsWith("/")) return false
-		const relPath = unescapeSpaces(mention.slice(1))
+		if (!mention!.startsWith("/")) return false
+		const relPath = unescapeSpaces(mention!.slice(1))
 		const ext = path.extname(relPath).toLowerCase()
 		return isSupportedImageFormat(ext)
 	})
@@ -106,7 +106,7 @@ export async function resolveImageMentions({
 			break
 		}
 
-		const relPath = unescapeSpaces(mention.slice(1))
+		const relPath = unescapeSpaces(mention!.slice(1))
 		const absPath = path.resolve(cwd, relPath)
 		if (!isPathWithinCwd(absPath, cwd)) {
 			continue

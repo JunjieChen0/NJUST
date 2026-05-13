@@ -128,7 +128,7 @@ export abstract class BaseTerminal implements RooTerminal {
 		if (this.process) {
 			return this.process.command || ""
 		} else if (this.completedProcesses.length > 0) {
-			return this.completedProcesses[0].command || ""
+			return this.completedProcesses[0]!.command || ""
 		}
 
 		return ""

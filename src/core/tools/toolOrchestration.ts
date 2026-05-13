@@ -100,7 +100,7 @@ export function partitionToolCalls(
 	const batches: ToolExecutionBatch[] = []
 	let i = 0
 	while (i < calls.length) {
-		const call = calls[i]
+		const call = calls[i]!
 		if (!isConcurrencySafe(call)) {
 			batches.push({ mode: "serial", calls: [call] })
 			i++
@@ -108,8 +108,8 @@ export function partitionToolCalls(
 		}
 		const run: ToolUse[] = [call]
 		let j = i + 1
-		while (j < calls.length && isConcurrencySafe(calls[j])) {
-			run.push(calls[j])
+		while (j < calls.length && isConcurrencySafe(calls[j]!)) {
+			run.push(calls[j]!)
 			j++
 		}
 		batches.push({ mode: run.length > 1 ? "parallel" : "serial", calls: run })

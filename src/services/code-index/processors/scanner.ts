@@ -420,7 +420,7 @@ export class DirectoryScanner implements IDirectoryScanner {
 
 					return {
 						id: pointId,
-						vector: embeddings[index],
+						vector: embeddings[index]!,
 						payload: {
 							filePath: generateRelativeFilePath(normalizedAbsolutePath, scanWorkspace),
 							codeChunk: block.content,

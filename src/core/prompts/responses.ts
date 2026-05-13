@@ -167,7 +167,7 @@ If you require additional information from the user, use the ask_followup_questi
 							return 1
 						}
 						// Otherwise, sort alphabetically
-						return aParts[i].localeCompare(bParts[i], undefined, { numeric: true, sensitivity: "base" })
+						return aParts[i]!.localeCompare(bParts[i]!, undefined, { numeric: true, sensitivity: "base" })
 					}
 				}
 				// If all parts are the same up to the length of the shorter path,
@@ -232,7 +232,7 @@ const formatImagesIntoBlocks = (images?: string[]): Anthropic.ImageBlockParam[] 
 		? images.map((dataUrl) => {
 				// data:image/png;base64,base64string
 				const [rest, base64] = dataUrl.split(",")
-				const mimeType = rest.split(":")[1].split(";")[0]
+				const mimeType = rest!.split(":")[1]!.split(";")[0]
 				return {
 					type: "image",
 					source: { type: "base64", media_type: mimeType, data: base64 },

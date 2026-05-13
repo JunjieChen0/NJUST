@@ -217,7 +217,7 @@ function verifyPackageDeclarations(
 				try {
 					const content = fs.readFileSync(filePath, "utf-8")
 					const match = content.match(PACKAGE_DECL_REGEX)
-					declaredPkg = match ? match[1] : null
+					declaredPkg = match ? (match[1] ?? null) : null
 				} catch {
 					continue
 				}
@@ -415,8 +415,8 @@ function sampleCangjieDiagnostics(
 	bucketsWithMin.sort((ba, bb) => {
 		const a = ba.group
 		const b = bb.group
-		const da = a[0]
-		const db = b[0]
+		const da = a[0]!
+		const db = b[0]!
 		const r = sevRank(da.severity) - sevRank(db.severity)
 		if (r !== 0) return r
 		const pa = patternPri(da)
@@ -441,7 +441,7 @@ function sampleCangjieDiagnostics(
 	let covered = 0
 
 	for (const group of buckets) {
-		const rep = group[0]
+		const rep = group[0]!
 		if (rep.severity === vscode.DiagnosticSeverity.Error) {
 			if (errTaken >= maxE) continue
 			errTaken++
@@ -570,8 +570,8 @@ function topLevelModuleFromRel(rel: string): string {
 	const normalized = rel.replace(/\\/g, "/")
 	const segs = normalized.split("/")
 	if (segs.length < 2) return normalized
-	if (segs[0] === "src" && segs.length >= 3) return segs[1]
-	return segs[0]
+	if (segs[0] === "src" && segs.length >= 3) return segs[1]!
+	return segs[0]!
 }
 
 function buildCangjieStyleFewShotSection(
@@ -726,7 +726,7 @@ function splitTomlSections(content: string): Map<string, string> {
 			if (currentSection) {
 				sections.set(currentSection, currentLines.join("\n"))
 			}
-			currentSection = match[1].trim()
+			currentSection = match[1]!.trim()
 			currentLines = []
 		} else {
 			currentLines.push(line)
@@ -752,7 +752,7 @@ function extractTomlArray(section: string, key: string): string[] {
 	const re = new RegExp(`^\\s*${escaped}\\s*=\\s*\\[([^\\]]*)\\]`, "ms")
 	const match = section.match(re)
 	if (!match) return []
-	return match[1].match(/"([^"]*)"/g)?.map((s) => s.slice(1, -1)) || []
+	return match[1]!.match(/"([^"]*)"/g)?.map((s) => s.slice(1, -1)) || []
 }
 
 function extractTomlInlineTables(section: string): Record<string, Record<string, string>> {
@@ -760,13 +760,13 @@ function extractTomlInlineTables(section: string): Record<string, Record<string,
 	const re = /^\s*(\S+)\s*=\s*\{([^}]*)\}\s*$/gm
 	let match
 	while ((match = re.exec(section)) !== null) {
-		const key = match[1].trim()
-		const tableContent = match[2]
+		const key = match[1]!.trim()
+		const tableContent = match[2]!
 		const table: Record<string, string> = {}
 		const kvRe = /([\w][\w-]*)\s*=\s*"([^"]*)"/g
 		let kvMatch
 		while ((kvMatch = kvRe.exec(tableContent)) !== null) {
-			table[kvMatch[1]] = kvMatch[2]
+			table[kvMatch[1]!] = kvMatch[2]!
 		}
 		result[key] = table
 	}
@@ -1101,7 +1101,7 @@ function readWorkspaceMemberDependencies(
 	if (!tables) return []
 	return Object.keys(tables)
 		.map((d) => {
-			const t = tables![d]
+			const t = tables![d]!
 			if (t["path"]) return `${d}(path:${t["path"]})`
 			if (t["git"]) return `${d}(git)`
 			if (t["tag"]) return `${d}(tag:${t["tag"]})`
@@ -1226,7 +1226,7 @@ function primitiveTypeTokens(s: string): string[] {
 function extractOrderedPrimitiveTypePair(s: string): [string, string] | null {
 	const m = s.match(/\b(Int\d+|UInt\d+|Float\d+|Bool|String)\b/gi)
 	if (!m || m.length < 2) return null
-	return [m[0].toLowerCase(), m[1].toLowerCase()]
+	return [m[0]!.toLowerCase(), m[1]!.toLowerCase()]
 }
 
 function primitiveTypeSetsEqual(a: string[], b: string[]): boolean {
@@ -1605,8 +1605,8 @@ const CODING_RULES_MAX_CHARS = 3000
 function importPathToCorpusQuery(imp: string): string | null {
 	const parts = imp.split(".").filter((p) => p && p !== "*")
 	if (parts.length === 0) return null
-	if (parts.length === 1) return parts[0]
-	return `${parts[parts.length - 2]} ${parts[parts.length - 1]}`
+	if (parts.length === 1) return parts[0]!
+	return `${parts[parts.length - 2]!} ${parts[parts.length - 1]!}`
 }
 
 /** Short query from diagnostic: prefer CJC pattern category + trimmed message; else keyword heuristic. */
@@ -2370,7 +2370,7 @@ function packSectionsWithTokenBudget(
 	for (const s of sorted) tokenEstimates.set(s, estimateContextTokens(s.content))
 	let splitIdx = sorted.length
 	for (let i = 0; i < sorted.length; i++) {
-		if (sorted[i].priority >= 300) {
+		if (sorted[i]!.priority >= 300) {
 			splitIdx = i
 			break
 		}
@@ -2863,7 +2863,7 @@ function extractErrorSourceContext(errorOutput: string, cwd: string): string[] {
 
 	while ((match = locationRe.exec(errorOutput)) !== null) {
 		const [, filePart, lineStr] = match
-		const lineNum = parseInt(lineStr, 10) - 1
+		const lineNum = parseInt(lineStr!, 10) - 1
 		const filePath = path.isAbsolute(filePart!) ? filePart! : path.resolve(cwd, filePart!)
 		const key = `${filePath}:${lineNum}`
 		if (seen.has(key)) continue
@@ -2961,7 +2961,7 @@ export function buildCangjieExecuteCommandErrorAppendix(
 			: "[输出片段]"
 
 		const snippet =
-			locMatch != null ? formatSingleErrorLocationBlock(cwd, locMatch[1], locMatch[2]) : null
+			locMatch != null ? formatSingleErrorLocationBlock(cwd, locMatch[1]!, locMatch[2]!) : null
 
 		const patterns = getMatchingCjcPatternsByCategory(text)
 		let patternBlock: string
@@ -3118,10 +3118,10 @@ export async function buildStructuredEditingContext(pre?: StructuredEditingConte
 		.sort((a: CangjieDef, b: CangjieDef) => (b.startLine - a.startLine))
 
 	if (enclosing.length > 0) {
-		const innermost = enclosing[0]
+		const innermost = enclosing[0]!
 		const sig = computeCangjieSignature(lines, innermost)
 		if (enclosing.length > 1) {
-			const outermost = enclosing[enclosing.length - 1]
+			const outermost = enclosing[enclosing.length - 1]!
 			parts.push(
 				`外层作用域: ${outermost.kind} ${outermost.name} (第 ${outermost.startLine + 1}–${outermost.endLine + 1} 行)`,
 			)

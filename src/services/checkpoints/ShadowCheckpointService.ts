@@ -261,7 +261,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 			if (nestedGitPaths.length > 0) {
 				// Get the first nested git repository path
 				// Remove .git/HEAD from the path to get the repository directory
-				const headPath = nestedGitPaths[0].path
+				const headPath = nestedGitPaths[0]!.path
 
 				// Use path module to properly extract the repository directory
 				// The HEAD file is at .git/HEAD, so we need to go up two directories

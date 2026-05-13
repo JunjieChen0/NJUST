@@ -153,18 +153,18 @@ export function validateConversationHistory(messages: ApiMessage[]): {
 	}
 
 	// First message should be from user
-	if (messages[0].role !== "user") {
+	if (messages[0]!.role !== "user") {
 		errors.push("First message should be from user role")
 	}
 
 	// Check role alternation (user/assistant)
 	for (let i = 1; i < messages.length; i++) {
-		if (messages[i].role === messages[i - 1].role) {
+		if (messages[i]!.role === messages[i - 1]!.role) {
 			// Consecutive same-role messages are generally invalid
 			// but some edge cases (tool_result chaining) allow it
-			if (messages[i].role === "user") {
+			if (messages[i]!.role === "user") {
 				// Check if it's a tool_result — those can follow user messages
-				const content = messages[i].content
+				const content = messages[i]!.content
 				if (Array.isArray(content)) {
 					const hasToolResult = content.some((b: any) => b.type === "tool_result")
 					if (!hasToolResult) {

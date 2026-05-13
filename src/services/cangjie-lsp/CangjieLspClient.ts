@@ -106,7 +106,7 @@ function filterFalsePackageDiagnostics(
 
 		if (documentText) {
 			// Escape regex characters in the expected package name just in case
-			const escapedExpected = lspExpected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+			const escapedExpected = lspExpected!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 			
 			// 1. If document already correctly declares EXACTLY what LSP expects (LSP is out of sync)
 			const actualPackageDecl = new RegExp(`^\\s*package\\s+${escapedExpected}\\s*(//.*)?$`, 'm')
@@ -616,7 +616,7 @@ export class CangjieLspClient {
 			return
 		}
 
-		const delayMs = RESTART_DELAYS_MS[Math.min(this.autoRestartCount, RESTART_DELAYS_MS.length - 1)]
+		const delayMs = RESTART_DELAYS_MS[Math.min(this.autoRestartCount, RESTART_DELAYS_MS.length - 1)]!
 		this.autoRestartCount++
 		this.extensionOutputChannel.appendLine(
 			`[CangjieLSP] Auto-restarting in ${delayMs / 1000}s (attempt ${this.autoRestartCount}/${MAX_AUTO_RESTARTS})…`,

@@ -15,7 +15,7 @@ function formatCellValue(cell: ExcelJS.Cell): string {
 
 	// Handle dates - ExcelJS can parse them as Date objects
 	if (value instanceof Date) {
-		return value.toISOString().split("T")[0]
+		return value.toISOString().split("T")[0]!
 	}
 
 	// Handle rich text

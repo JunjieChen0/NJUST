@@ -103,13 +103,13 @@ export class NativeToolCallParser {
 		// Try extracting JSON from markdown code blocks
 		const codeBlockMatch = rawArgs.match(/```(?:json)?\s*([\s\S]*?)```/)
 		if (codeBlockMatch) {
-			try { return JSON.parse(codeBlockMatch[1].trim()) } catch { /* ignore */ }
+			try { return JSON.parse(codeBlockMatch[1]!.trim()) } catch { /* ignore */ }
 		}
 
 		// Try extracting the first JSON object
 		const jsonObjectMatch = rawArgs.match(/(\{[\s\S]*\})/)
 		if (jsonObjectMatch) {
-			try { return JSON.parse(jsonObjectMatch[1]) } catch { /* ignore */ }
+			try { return JSON.parse(jsonObjectMatch[1]!) } catch { /* ignore */ }
 		}
 
 		// Try completing missing closing braces
@@ -465,7 +465,7 @@ export class NativeToolCallParser {
 						if (typeof range === "string") {
 							const match = range.match(/^(\d+)-(\d+)$/)
 							if (match) {
-								return { start: parseInt(match[1], 10), end: parseInt(match[2], 10) }
+								return { start: parseInt(match[1]!, 10), end: parseInt(match[2]!, 10) }
 							}
 						}
 						return null

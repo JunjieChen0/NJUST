@@ -128,7 +128,7 @@ export class RooIgnoreController {
 
 		// Split command into parts and get the base command
 		const parts = command.trim().split(/\s+/)
-		const baseCommand = parts[0].toLowerCase()
+		const baseCommand = parts[0]!.toLowerCase()
 
 		// Commands that read file contents
 		const fileReadingCommands = [
@@ -152,16 +152,13 @@ export class RooIgnoreController {
 		if (fileReadingCommands.includes(baseCommand)) {
 			// Check each argument that could be a file path
 			for (let i = 1; i < parts.length; i++) {
-				const arg = parts[i]
-				// Skip command flags/options (both Unix and PowerShell style)
+				const arg = parts[i]!
 				if (arg.startsWith("-") || arg.startsWith("/")) {
 					continue
 				}
-				// Ignore PowerShell parameter names
 				if (arg.includes(":")) {
 					continue
 				}
-				// Validate file access
 				if (!this.validateAccess(arg)) {
 					return arg
 				}

@@ -8,7 +8,8 @@ function isPrivateIPv4(ip: string): boolean {
 	if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) {
 		return true
 	}
-	const [a, b] = parts
+	const a = parts[0]!
+	const b = parts[1]!
 	if (a === 10) return true
 	if (a === 127) return true
 	if (a === 0) return true

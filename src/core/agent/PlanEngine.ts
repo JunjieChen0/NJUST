@@ -129,8 +129,8 @@ export class PlanEngine {
 			)
 
 			for (let i = 0; i < results.length; i++) {
-				const result = results[i]
-				const step = batch[i]
+				const result = results[i]!
+				const step = batch[i]!
 
 				if (result.status === "rejected") {
 					step.status = "failed"

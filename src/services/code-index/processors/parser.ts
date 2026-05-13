@@ -288,7 +288,7 @@ export class CodeParser implements ICodeParser {
 		}
 
 		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i]
+			const line = lines[i]!
 			const lineLength = line.length + (i < lines.length - 1 ? 1 : 0) // +1 for newline, except last line
 			const originalLineNumber = baseStartLine + i
 
@@ -300,7 +300,7 @@ export class CodeParser implements ICodeParser {
 				}
 
 				// Split the oversized line into segments
-				let remainingLineContent = line
+				let remainingLineContent: string = line!
 				let currentSegmentStartChar = 0
 				while (remainingLineContent.length > 0) {
 					const segment = remainingLineContent.substring(0, MAX_BLOCK_CHARS)
@@ -319,7 +319,7 @@ export class CodeParser implements ICodeParser {
 				let splitIndex = i - 1
 				let remainderLength = 0
 				for (let j = i; j < lines.length; j++) {
-					remainderLength += lines[j].length + (j < lines.length - 1 ? 1 : 0)
+					remainderLength += lines[j]!.length + (j < lines.length - 1 ? 1 : 0)
 				}
 
 				if (
@@ -346,14 +346,14 @@ export class CodeParser implements ICodeParser {
 				finalizeChunk(splitIndex)
 
 				if (i >= chunkStartLineIndex) {
-					currentChunkLines.push(line)
+					currentChunkLines.push(line!)
 					currentChunkLength += lineLength
 				} else {
 					i = chunkStartLineIndex - 1
 					continue
 				}
 			} else {
-				currentChunkLines.push(line)
+				currentChunkLines.push(line!)
 				currentChunkLength += lineLength
 			}
 		}
@@ -471,8 +471,8 @@ export class CodeParser implements ICodeParser {
 		let lastProcessedLine = 0
 
 		// Process content before the first definition
-		if (defs.length > 0 && defs[0].startLine > 0) {
-			const preDefLines = lines.slice(0, defs[0].startLine)
+		if (defs.length > 0 && defs[0]!.startLine > 0) {
+			const preDefLines = lines.slice(0, defs[0]!.startLine)
 			const preDefBlocks = this.processCangjieSection(
 				preDefLines,
 				filePath,
@@ -602,7 +602,7 @@ export class CodeParser implements ICodeParser {
 
 		// Process content before the first header
 		if (markdownCaptures.length > 0) {
-			const firstHeaderLine = markdownCaptures[0].node.startPosition.row
+			const firstHeaderLine = markdownCaptures[0]!.node.startPosition.row
 			if (firstHeaderLine > 0) {
 				const preHeaderLines = lines.slice(0, firstHeaderLine)
 				const preHeaderBlocks = this.processMarkdownSection(
@@ -619,8 +619,7 @@ export class CodeParser implements ICodeParser {
 
 		// Process markdown captures (headers and sections)
 		for (let i = 0; i < markdownCaptures.length; i += 2) {
-			const nameCapture = markdownCaptures[i]
-			// Ensure we don't go out of bounds when accessing the next capture
+			const nameCapture = markdownCaptures[i]!
 			if (i + 1 >= markdownCaptures.length) break
 			const definitionCapture = markdownCaptures[i + 1]
 
@@ -632,7 +631,7 @@ export class CodeParser implements ICodeParser {
 
 			// Extract header level for type classification
 			const headerMatch = nameCapture.name.match(/\.h(\d)$/)
-			const headerLevel = headerMatch ? parseInt(headerMatch[1]) : 1
+			const headerLevel = headerMatch ? parseInt(headerMatch[1]!) : 1
 			const headerText = nameCapture.node.text
 
 			const sectionBlocks = this.processMarkdownSection(

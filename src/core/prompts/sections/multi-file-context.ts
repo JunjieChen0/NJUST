@@ -104,11 +104,11 @@ function extractDefs(content: string, patterns: Array<{ re: RegExp; kind: string
 	const defs: SimpleDef[] = []
 
 	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i]
+		const line = lines[i]!
 		for (const { re, kind } of patterns) {
 			const m = line.match(re)
 			if (m?.[1]) {
-				defs.push({ kind, name: m[1], signature: line.trim(), line: i + 1 })
+				defs.push({ kind, name: m[1]!, signature: line.trim(), line: i + 1 })
 				break
 			}
 		}
@@ -313,10 +313,10 @@ function extractImportsForLanguage(
 		while ((blockMatch = GO_IMPORT_BLOCK.exec(content)) !== null) {
 			GO_IMPORT_LINE.lastIndex = 0
 			let lineMatch: RegExpExecArray | null
-			while ((lineMatch = GO_IMPORT_LINE.exec(blockMatch[1])) !== null) {
-				if (!seen.has(lineMatch[1])) {
-					seen.add(lineMatch[1])
-					results.push({ raw: lineMatch[0], modulePath: lineMatch[1] })
+			while ((lineMatch = GO_IMPORT_LINE.exec(blockMatch[1]!)) !== null) {
+				if (!seen.has(lineMatch[1]!)) {
+					seen.add(lineMatch[1]!)
+					results.push({ raw: lineMatch[0]!, modulePath: lineMatch[1]! })
 				}
 			}
 		}
@@ -326,10 +326,10 @@ function extractImportsForLanguage(
 		pattern.lastIndex = 0
 		let m: RegExpExecArray | null
 		while ((m = pattern.exec(content)) !== null) {
-			const modulePath = m[1]
+			const modulePath = m[1]!
 			if (!seen.has(modulePath)) {
 				seen.add(modulePath)
-				results.push({ raw: m[0], modulePath })
+				results.push({ raw: m[0]!, modulePath })
 			}
 		}
 	}

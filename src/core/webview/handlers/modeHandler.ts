@@ -228,7 +228,7 @@ async function handleImportMode(context: MessageHandlerContext, message: Webview
 		} else {
 			const workspaceFolders = vscode.workspace.workspaceFolders
 			if (workspaceFolders && workspaceFolders.length > 0) {
-				defaultUri = vscode.Uri.file(workspaceFolders[0].uri.fsPath)
+				defaultUri = vscode.Uri.file(workspaceFolders[0]!.uri.fsPath)
 			}
 		}
 

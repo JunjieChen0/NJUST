@@ -484,9 +484,9 @@ export class CangjieCompileGuard implements vscode.Disposable {
 			let match: RegExpExecArray | null
 			CJC_ERROR_LOCATION_RE.lastIndex = 0
 			while ((match = CJC_ERROR_LOCATION_RE.exec(output)) !== null) {
-				const file = match[1]
-				const line = parseInt(match[2], 10)
-				const col = parseInt(match[3], 10)
+				const file = match[1]!
+				const line = parseInt(match[2]!, 10)
+				const col = parseInt(match[3]!, 10)
 				errorLocations.push({ file, line, col })
 				this.lastErrors.set(`${file}:${line}`, normalizeErrorPattern(output.slice(match.index, match.index + 300)))
 			}

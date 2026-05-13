@@ -154,7 +154,7 @@ export class DiffViewProvider {
 		this.fadedOverlayController.updateOverlayAfterLine(endLine, document.lineCount)
 		// Scroll to the current line without stealing focus.
 		const ranges = this.activeDiffEditor?.visibleRanges
-		if (ranges && ranges.length > 0 && ranges[0].start.line < endLine && ranges[0].end.line > endLine) {
+		if (ranges && ranges.length > 0 && ranges[0]!.start.line < endLine && ranges[0]!.end.line > endLine) {
 			this.scrollEditorToLine(endLine)
 		}
 
@@ -382,7 +382,7 @@ export class DiffViewProvider {
 
 			// Remove only the directories we created, in reverse order.
 			for (let i = this.createdDirs.length - 1; i >= 0; i--) {
-				await fs.rmdir(this.createdDirs[i])
+				await fs.rmdir(this.createdDirs[i]!)
 			}
 		} else {
 			// Revert document.

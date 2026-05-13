@@ -23,7 +23,7 @@ export function cleanHistoryForResumption(messages: ClineMessage[]): ClineMessag
 
 	// 1. Remove trailing resume messages
 	while (result.length > 0) {
-		const last = result[result.length - 1]
+		const last = result[result.length - 1]!
 		if (last.ask === "resume_task" || last.ask === "resume_completed_task") {
 			result.pop()
 		} else {
@@ -33,7 +33,7 @@ export function cleanHistoryForResumption(messages: ClineMessage[]): ClineMessag
 
 	// 2. Remove trailing reasoning-only UI messages
 	while (result.length > 0) {
-		const last = result[result.length - 1]
+		const last = result[result.length - 1]!
 		if (last.type === "say" && last.say === "reasoning") {
 			result.pop()
 		} else {
@@ -46,7 +46,7 @@ export function cleanHistoryForResumption(messages: ClineMessage[]): ClineMessag
 
 	if (lastApiReqIndex !== -1) {
 		try {
-			const info = JSON.parse(result[lastApiReqIndex].text || "{}")
+			const info = JSON.parse(result[lastApiReqIndex]!.text || "{}")
 			if (info.cost === undefined && info.cancelReason === undefined) {
 				result.splice(lastApiReqIndex, 1)
 			}
@@ -120,7 +120,7 @@ export function safeDispose(label: string, fn: () => void): void {
 
 function findLastIndex<T>(array: T[], predicate: (item: T) => boolean): number {
 	for (let i = array.length - 1; i >= 0; i--) {
-		if (predicate(array[i])) {
+		if (predicate(array[i]!)) {
 			return i
 		}
 	}

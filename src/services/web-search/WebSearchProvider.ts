@@ -106,7 +106,7 @@ function extractSnippetFromBlock(block: string, patterns: RegExp[]): string {
 	for (const pattern of patterns) {
 		const m = block.match(pattern)
 		if (m) {
-			const text = stripHtmlTags(m[1]).trim()
+			const text = stripHtmlTags(m[1]!).trim()
 			if (text.length >= 15) {
 				return text.substring(0, 300)
 			}
@@ -437,23 +437,23 @@ export class BaiduFreeSearchProvider implements WebSearchProvider {
 		const h3Regex = /<h3[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/h3>/gi
 		let match: RegExpExecArray | null
 		while ((match = h3Regex.exec(html)) !== null && results.length < maxResults) {
-			pushResult(match[1], match[2], match.index + match[0].length)
+			pushResult(match[1]!, match[2]!, match.index + match[0].length)
 		}
 
 		if (results.length < maxResults) {
 			const containerRegex =
 				/class="[^"]*c-container[^"]*"[^>]*(?:data-click[^>]*)?>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>([\s\S]*?)(?=class="[^"]*c-container|$)/gi
 			while ((match = containerRegex.exec(html)) !== null && results.length < maxResults) {
-				const linkMatch = match[1].match(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i)
+				const linkMatch = match[1]!.match(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i)
 				if (!linkMatch) continue
-				const rawHref = linkMatch[1]
+				const rawHref = linkMatch[1]!
 				if (!isBaiduSerpJumpHref(rawHref)) continue
 				const url = normalizeMaybeProtocolRelativeUrl(rawHref)
-				const title = stripHtmlTags(linkMatch[2]).trim()
+				const title = stripHtmlTags(linkMatch[2]!).trim()
 				if (!title || title.length < 2) continue
 				if (seenUrl.has(url)) continue
 				seenUrl.add(url)
-				const snippet = extractSnippetFromBlock(match[2], BAIDU_SNIPPET_PATTERNS)
+				const snippet = extractSnippetFromBlock(match[2]!, BAIDU_SNIPPET_PATTERNS)
 				results.push({ title, url, snippet })
 			}
 		}
@@ -539,8 +539,8 @@ export class SogouFreeSearchProvider implements WebSearchProvider {
 		let match: RegExpExecArray | null
 
 		while ((match = h3Regex.exec(html)) !== null && results.length < maxResults) {
-			let url = match[1]
-			const title = stripHtmlTags(match[2]).trim()
+			let url = match[1]!
+			const title = stripHtmlTags(match[2]!).trim()
 			if (!title || title.length < 2) continue
 
 			if (url.startsWith("/link?")) {
@@ -593,15 +593,16 @@ export class DuckDuckGoSearchProvider implements WebSearchProvider {
 
 			let m: RegExpExecArray | null
 			while ((m = linkRegex.exec(html)) !== null && links.length < 100) {
-				links.push({ url: m[1], title: m[2].replace(/<[^>]*>/g, "").trim() })
+				links.push({ url: m[1]!, title: m[2]!.replace(/<[^>]*>/g, "").trim() })
 			}
 			while ((m = snippetRegex.exec(html)) !== null && snippets.length < 100) {
-				snippets.push(m[1].replace(/<[^>]*>/g, "").trim())
+				snippets.push(m[1]!.replace(/<[^>]*>/g, "").trim())
 			}
 
 			for (let i = 0; i < Math.min(links.length, count); i++) {
-				if (links[i].url && links[i].title) {
-					results.push({ title: links[i].title, url: links[i].url, snippet: snippets[i] || "" })
+				const link = links[i]
+				if (link && link.url && link.title) {
+					results.push({ title: link.title, url: link.url, snippet: snippets[i] ?? "" })
 				}
 			}
 			return results

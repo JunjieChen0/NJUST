@@ -218,7 +218,7 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 			return {
 				agentId: `failed-${i}`,
 				taskId: "",
-				mode: specs[i].mode,
+				mode: specs[i]!.mode,
 				status: "failed" as const,
 				error: result.reason instanceof Error ? result.reason.message : String(result.reason),
 			}

@@ -398,7 +398,7 @@ export class ProviderSettingsManager {
 						throw new Error(`Config with name '${name}' not found`)
 					}
 
-					providerSettings = providerProfiles.apiConfigs[name]
+					providerSettings = providerProfiles.apiConfigs[name]!
 				} else {
 					const id = params.id
 
@@ -519,7 +519,7 @@ export class ProviderSettingsManager {
 				const profiles = providerProfilesSchema.parse(await this.load())
 				const configs = profiles.apiConfigs
 				for (const name in configs) {
-					const apiProvider = configs[name].apiProvider
+					const apiProvider = configs[name]!.apiProvider
 
 					if (typeof apiProvider === "string" && isRetiredProvider(apiProvider)) {
 						// Preserve retired-provider profiles as-is to prevent dropping legacy fields.
@@ -778,7 +778,7 @@ export class ProviderSettingsManager {
 							const finalName = cloudName
 							if (existingNames.has(cloudName)) {
 								// There's a conflict - rename the existing non-cloud profile
-								const conflictingProfile = providerProfiles.apiConfigs[cloudName]
+								const conflictingProfile = providerProfiles.apiConfigs[cloudName]!
 								if (conflictingProfile.id !== cloudProfile.id) {
 									const newName = this.findUniqueProfileName(cloudName, existingNames)
 									providerProfiles.apiConfigs[newName] = conflictingProfile
@@ -820,9 +820,8 @@ export class ProviderSettingsManager {
 
 						// Handle name conflict with existing non-cloud profile
 						if (existingNames.has(cloudName)) {
-							const existingProfile = providerProfiles.apiConfigs[cloudName]
+							const existingProfile = providerProfiles.apiConfigs[cloudName]!
 							if (existingProfile.id !== cloudProfile.id) {
-								// Rename the existing profile
 								const newName = this.findUniqueProfileName(cloudName, existingNames)
 								providerProfiles.apiConfigs[newName] = existingProfile
 								existingNames.add(newName)

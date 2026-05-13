@@ -25,7 +25,7 @@ export class TokenGrowthTracker {
 		}
 
 		if (this.samples.length >= 2) {
-			const latestGrowth = this.samples[this.samples.length - 1] - this.samples[this.samples.length - 2]
+			const latestGrowth = this.samples[this.samples.length - 1]! - this.samples[this.samples.length - 2]!
 			if (this.emaGrowth === undefined) {
 				this.emaGrowth = latestGrowth
 			} else {
@@ -38,13 +38,13 @@ export class TokenGrowthTracker {
 		if (this.samples.length < 2) return undefined
 		const growths: number[] = []
 		for (let i = 1; i < this.samples.length; i++) {
-			growths.push(this.samples[i] - this.samples[i - 1])
+			growths.push(this.samples[i]! - this.samples[i - 1]!)
 		}
 		const averageGrowth = growths.reduce((sum, g) => sum + g, 0) / growths.length
 		const emaGrowth = this.emaGrowth ?? averageGrowth
 		const current = this.samples[this.samples.length - 1]
-		const predictedNextTokens = Math.max(0, Math.round(current + emaGrowth))
-		const recentGrowth = growths[growths.length - 1]
+		const predictedNextTokens = Math.max(0, Math.round(current! + emaGrowth))
+		const recentGrowth = growths[growths.length - 1]!
 		const isAccelerating = recentGrowth > averageGrowth * 1.15 && recentGrowth > 0
 
 		return {

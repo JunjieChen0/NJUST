@@ -101,7 +101,7 @@ export class OpenAiEmbedder extends OpenAiNativeHandler implements IEmbedder {
 		const embeddableQueue: Array<{ originalIndex: number; text: string }> = []
 
 		for (let i = 0; i < processedTexts.length; i++) {
-			const itemTokens = estimateTokens(processedTexts[i])
+			const itemTokens = estimateTokens(processedTexts[i]!)
 			if (itemTokens > MAX_ITEM_TOKENS) {
 				logger.warn("OpenAIEmbedder",
 						t("embeddings:textExceedsTokenLimit", {
@@ -112,7 +112,7 @@ export class OpenAiEmbedder extends OpenAiNativeHandler implements IEmbedder {
 					)
 				oversizeItems.push({ originalIndex: i })
 			} else {
-				embeddableQueue.push({ originalIndex: i, text: processedTexts[i] })
+				embeddableQueue.push({ originalIndex: i, text: processedTexts[i]! })
 			}
 		}
 
@@ -121,7 +121,7 @@ export class OpenAiEmbedder extends OpenAiNativeHandler implements IEmbedder {
 			let currentBatchTokens = 0
 
 			while (embeddableQueue.length > 0) {
-				const item = embeddableQueue[0]
+				const item = embeddableQueue[0]!
 				const itemTokens = estimateTokens(item.text)
 				if (currentBatchTokens + itemTokens <= MAX_BATCH_TOKENS) {
 					currentBatch.push(item)
@@ -138,7 +138,7 @@ export class OpenAiEmbedder extends OpenAiNativeHandler implements IEmbedder {
 					modelToUse,
 				)
 				for (let j = 0; j < currentBatch.length; j++) {
-					allEmbeddings[currentBatch[j].originalIndex] = batchResult.embeddings[j]
+					allEmbeddings[currentBatch[j]!.originalIndex] = batchResult.embeddings[j]!
 				}
 				usage.promptTokens += batchResult.usage.promptTokens
 				usage.totalTokens += batchResult.usage.totalTokens

@@ -53,7 +53,7 @@ async function promptManualSelect(context: vscode.ExtensionContext, outputChanne
 
 	if (!uris || uris.length === 0) return
 
-	const selectedPath = uris[0].fsPath
+	const selectedPath = uris[0]!.fsPath
 	const version = await validateSdk(selectedPath)
 
 	if (version) {

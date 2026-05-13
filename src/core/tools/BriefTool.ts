@@ -99,7 +99,7 @@ function briefContent(text: string, maxLength: number): string {
 	const endLines: string[] = []
 	let endLen = 0
 	for (let i = lines.length - 1; i >= 0; i--) {
-		const line = lines[i]
+		const line = lines[i]!
 		if (endLen + line.length + 1 > endBudget) break
 		endLines.unshift(line)
 		endLen += line.length + 1
@@ -111,7 +111,7 @@ function briefContent(text: string, maxLength: number): string {
 	const keyLines: string[] = []
 	let keyLen = 0
 	for (let i = middleStart; i < middleEnd; i++) {
-		const line = lines[i]
+		const line = lines[i]!
 		if (isKeyLine(line)) {
 			if (keyLen + line.length + 1 > middleBudget) break
 			keyLines.push(line)

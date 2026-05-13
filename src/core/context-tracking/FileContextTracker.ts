@@ -162,7 +162,7 @@ export class FileContextTracker {
 					.filter((entry) => entry.path === path && entry[field])
 					.sort((a, b) => (b[field] as number) - (a[field] as number))
 
-				return relevantEntries.length > 0 ? (relevantEntries[0][field] as number) : null
+				return relevantEntries.length > 0 ? (relevantEntries[0]![field] as number) : null
 			}
 
 			const newEntry: FileMetadataEntry = {

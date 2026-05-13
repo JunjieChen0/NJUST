@@ -386,9 +386,9 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 
 		const conversationId =
 			messages.length > 0
-				? `conv_${messages[0].role}_${
-						typeof messages[0].content === "string"
-							? messages[0].content.substring(0, 20)
+				? `conv_${messages[0]!.role}_${
+						typeof messages[0]!.content === "string"
+							? messages[0]!.content.substring(0, 20)
 							: "complex_content"
 					}`
 				: "default_conversation"
@@ -779,11 +779,11 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			if (
 				response?.output?.message?.content &&
 				response.output.message.content.length > 0 &&
-				response.output.message.content[0].text &&
-				response.output.message.content[0].text.trim().length > 0
+				response.output.message.content[0]!.text &&
+				response.output.message.content[0]!.text.trim().length > 0
 			) {
 				try {
-					return response.output.message.content[0].text
+					return response.output.message.content[0]!.text
 				} catch (parseError) {
 					logger.error("Failed to parse Bedrock response", {
 						ctx: "bedrock",
@@ -1503,7 +1503,7 @@ Please check:
 	 */
 	private formatErrorMessage(error: unknown, errorType: string, _isStreamContext: boolean): string {
 		const definition = AwsBedrockHandler.ERROR_TYPES[errorType] || AwsBedrockHandler.ERROR_TYPES.GENERIC
-		let template = definition.messageTemplate
+		let template = definition!.messageTemplate
 
 		// Prepare template variables
 		const templateVars: Record<string, string> = {}
@@ -1550,7 +1550,7 @@ Please check:
 
 		// Log the error
 		const definition = AwsBedrockHandler.ERROR_TYPES[errorType]
-		const logMethod = definition.logLevel
+		const logMethod = definition!.logLevel
 		const contextName = isStreamContext ? "createMessage" : "completePrompt"
 		logger[logMethod](`${errorType} error in ${contextName}`, {
 			ctx: "bedrock",

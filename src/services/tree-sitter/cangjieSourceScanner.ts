@@ -81,20 +81,20 @@ export class CangjieSourceScanner {
 	/** Is this character offset inside executable code (not comment or string)? */
 	isInCode(offset: number): boolean {
 		if (offset < 0 || offset >= this.states.length) return false
-		const s = this.states[offset]
+		const s = this.states[offset]!
 		return !s.inString && !s.inChar && !s.inLineComment && s.inBlock === 0
 	}
 
 	/** Is this character offset inside a string literal? */
 	isInString(offset: number): boolean {
 		if (offset < 0 || offset >= this.states.length) return false
-		return this.states[offset].inString
+		return this.states[offset]!.inString
 	}
 
 	/** Is this character offset inside a comment (line or block)? */
 	isInComment(offset: number): boolean {
 		if (offset < 0 || offset >= this.states.length) return false
-		const s = this.states[offset]
+		const s = this.states[offset]!
 		return s.inLineComment || s.inBlock > 0
 	}
 

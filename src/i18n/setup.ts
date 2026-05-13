@@ -52,7 +52,7 @@ if (!isTestEnv) {
 					try {
 						// Read and parse the JSON file
 						const content = fs.readFileSync(filePath, "utf8")
-						translations[language][namespace] = JSON.parse(content)
+						translations[language]![namespace] = JSON.parse(content)
 					} catch (error) {
 						console.error(`Error loading translation file ${filePath}:`, error)
 				// Notify user that translations may be incomplete

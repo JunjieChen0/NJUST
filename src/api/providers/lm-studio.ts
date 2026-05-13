@@ -179,7 +179,7 @@ export class LmStudioHandler extends BaseProvider implements SingleCompletionHan
 		if (models && this.options.lmStudioModelId && models[this.options.lmStudioModelId]) {
 			return {
 				id: this.options.lmStudioModelId,
-				info: models[this.options.lmStudioModelId],
+				info: models[this.options.lmStudioModelId]!,
 			}
 		} else {
 			return {

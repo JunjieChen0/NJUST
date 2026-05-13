@@ -226,7 +226,7 @@ export function truncateConversation(messages: ApiMessage[], fracToRemove: numbe
 	}
 
 	// === SMART TRUNCATION: dynamic weight-based selection ===
-	const lastVisibleMessage = messages[visibleIndices[visibleIndices.length - 1]]
+	const lastVisibleMessage = messages[visibleIndices[visibleIndices.length - 1]!]
 	const referenceText =
 		typeof lastVisibleMessage?.content === "string"
 			? lastVisibleMessage.content
@@ -235,8 +235,8 @@ export function truncateConversation(messages: ApiMessage[], fracToRemove: numbe
 
 	const candidateWeights: Array<{ visibleIdx: number; originalIdx: number; weight: number }> = []
 	for (let i = 1; i < visibleIndices.length; i++) {
-		const originalIdx = visibleIndices[i]
-		const weight = evaluateMessageWeight(messages[originalIdx], i, visibleCount, referenceTokens, hierarchy)
+		const originalIdx = visibleIndices[i]!
+		const weight = evaluateMessageWeight(messages[originalIdx]!, i, visibleCount, referenceTokens, hierarchy)
 		candidateWeights.push({ visibleIdx: i, originalIdx, weight })
 	}
 
@@ -270,7 +270,7 @@ export function truncateConversation(messages: ApiMessage[], fracToRemove: numbe
 		if (candidate.visibleIdx >= protectedStart) continue
 		// Explicitly protect error recovery messages — do not rely on
 		// weight alone since CSA boosts can inflate non-error weights.
-		if (isErrorRecoveryMessage(messages[candidate.originalIdx])) continue
+		if (isErrorRecoveryMessage(messages[candidate.originalIdx]!)) continue
 
 		indicesToTruncate.add(candidate.originalIdx)
 		removed++
@@ -537,7 +537,7 @@ export async function manageContext({
 	const preprocessedMessages = preprocessed.messages
 
 	// Estimate tokens for the last message (which is always a user message)
-	const lastMessage = preprocessedMessages[preprocessedMessages.length - 1]
+	const lastMessage = preprocessedMessages[preprocessedMessages.length - 1]!
 	const lastMessageContent = lastMessage.content
 	const lastMessageTokens = Array.isArray(lastMessageContent)
 		? await estimateTokenCount(lastMessageContent, apiHandler)

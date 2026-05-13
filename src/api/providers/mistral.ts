@@ -143,9 +143,9 @@ export class MistralHandler extends BaseProvider implements SingleCompletionHand
 					yield {
 						type: "tool_call_partial",
 						index: i,
-						id: toolCall.id,
-						name: toolCall.function?.name,
-						arguments: toolCall.function?.arguments,
+						id: toolCall!.id,
+						name: toolCall!.function?.name,
+						arguments: toolCall!.function?.arguments,
 					}
 				}
 			}

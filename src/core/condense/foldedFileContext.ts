@@ -99,11 +99,11 @@ export async function generateFoldedFileContext(
 	for (let i = 0; i < filePaths.length; i++) {
 		const filePath = filePaths[i]
 		// Resolve to absolute path for tree-sitter
-		const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath)
+		const absolutePath = path.isAbsolute(filePath!) ? filePath! : path.resolve(cwd!, filePath!)
 
 		try {
 			// Get the folded definitions using tree-sitter
-			const definitions = await parseSourceCodeDefinitionsForFile(absolutePath, rooIgnoreController)
+			const definitions = await parseSourceCodeDefinitionsForFile(absolutePath, rooIgnoreController!)
 
 			if (!definitions || isTreeSitterErrorString(definitions)) {
 				// File type not supported, no definitions found, or error accessing file
@@ -149,7 +149,7 @@ ${truncatedDefinitions}
 			result.filesProcessed++
 		} catch {
 			// Collect failed files for batch logging to reduce noise
-			failedFiles.push(filePath)
+			failedFiles.push(filePath!)
 			result.filesSkipped++
 		}
 	}

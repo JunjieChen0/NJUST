@@ -122,7 +122,7 @@ export function updateTodoStatusForTask(cline: Task, id: string, nextStatus: Tod
 	if (!cline.todoList) return false
 	const idx = cline.todoList.findIndex((t) => t.id === id)
 	if (idx === -1) return false
-	const current = cline.todoList[idx]
+	const current = cline.todoList[idx]!
 	if (
 		(current.status === "pending" && nextStatus === "in_progress") ||
 		(current.status === "in_progress" && nextStatus === "completed") ||
@@ -191,11 +191,11 @@ export function parseMarkdownChecklist(md: string): TodoItem[] {
 		else if (match[1] === "-" || match[1] === "~") status = "in_progress"
 		const id = crypto
 			.createHash("md5")
-			.update(match[2] + status)
+			.update(match[2]! + status)
 			.digest("hex")
 		todos.push({
 			id,
-			content: match[2],
+			content: match[2]!,
 			status,
 		})
 	}

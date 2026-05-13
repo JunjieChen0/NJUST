@@ -204,8 +204,8 @@ export async function regexSearchFiles(
 					}
 
 					const lastResult = currentFile.searchResults[currentFile.searchResults.length - 1]
-					if (lastResult?.lines.length > 0) {
-						const lastLine = lastResult.lines[lastResult.lines.length - 1]
+					if (lastResult && lastResult.lines.length > 0) {
+						const lastLine = lastResult.lines[lastResult.lines.length - 1]!
 
 						// If this line is contiguous with the last result, add to it
 						if (parsed.data.line_number <= lastLine.line + 1) {

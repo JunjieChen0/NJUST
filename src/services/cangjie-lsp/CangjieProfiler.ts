@@ -186,10 +186,10 @@ export class CangjieProfiler implements vscode.Disposable {
 			const m = lineRe.exec(line)
 			if (m) {
 				entries.push({
-					percentage: parseFloat(m[1]),
-					selfTime: m[2],
-					totalTime: m[3],
-					functionName: m[4].trim(),
+					percentage: parseFloat(m[1]!),
+					selfTime: m[2]!,
+					totalTime: m[3]!,
+					functionName: m[4]!.trim(),
 					filePath: m[5],
 					line: m[6] ? parseInt(m[6], 10) : undefined,
 				})

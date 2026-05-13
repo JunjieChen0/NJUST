@@ -228,7 +228,7 @@ export class TaskStackManager {
 	 */
 	async rehydrate(task: Task): Promise<void> {
 		const stackIndex = this.stack.length - 1
-		const oldTask = this.stack[stackIndex]
+		const oldTask = this.stack[stackIndex]!
 		try {
 			await oldTask.abortTask(true)
 		} catch (e) {

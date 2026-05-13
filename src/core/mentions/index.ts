@@ -117,7 +117,7 @@ export async function parseMentions(
 
 	// First pass: check which command mentions exist and cache the results
 	const commandMatches = Array.from(text.matchAll(commandRegexGlobal))
-	const uniqueCommandNames = new Set(commandMatches.map(([, commandName]) => commandName))
+	const uniqueCommandNames = new Set(commandMatches.map(([, commandName]) => commandName!))
 
 	const commandExistenceChecks = await Promise.all(
 		Array.from(uniqueCommandNames).map(async (commandName) => {
@@ -127,7 +127,7 @@ export async function parseMentions(
 					return { commandName, command, skillContent: null }
 				}
 
-				const skillContent = await resolveSkillContentForMode(skillsManager, commandName, currentMode)
+				const skillContent = await resolveSkillContentForMode(skillsManager, commandName!, currentMode)
 				return { commandName, command: undefined, skillContent }
 			} catch {
 				// If there's an error checking command existence, treat it as non-existent
@@ -139,7 +139,7 @@ export async function parseMentions(
 	// Store valid commands for later use and capture the first mode found
 	for (const { commandName, command, skillContent } of commandExistenceChecks) {
 		if (command) {
-			validCommands.set(commandName, command)
+			validCommands.set(commandName!, command)
 			// Capture the mode from the first command that has one
 			if (!commandMode && command.mode) {
 				commandMode = command.mode
@@ -148,15 +148,15 @@ export async function parseMentions(
 		}
 
 		if (skillContent) {
-			validSkills.set(commandName, skillContent)
+			validSkills.set(commandName!, skillContent)
 		}
 	}
 
 	// Only replace text for commands that actually exist (keep "see below" for commands)
 	let parsedText = text
 	for (const [match, commandName] of commandMatches) {
-		if (validCommands.has(commandName) || validSkills.has(commandName)) {
-			parsedText = parsedText.replace(match, `Command '${commandName}' (see below for command content)`)
+		if (validCommands.has(commandName!) || validSkills.has(commandName!)) {
+			parsedText = parsedText.replace(match, `Command '${commandName!}' (see below for command content)`)
 		}
 	}
 
@@ -338,7 +338,7 @@ async function getFileOrFolderContentWithMetadata(
 					break
 				}
 
-				const entry = entries[index]
+				const entry = entries[index]!
 				const isLast = index === entries.length - 1
 				const linePrefix = isLast ? "└── " : "├── "
 				const entryPath = path.join(absPath, entry.name)
@@ -368,7 +368,6 @@ async function getFileOrFolderContentWithMetadata(
 								fileReadResults.push(formatted)
 							}
 						} catch {
-							// Skip files that can't be read
 						}
 					}
 				} else if (entry.isDirectory()) {
@@ -454,7 +453,7 @@ export async function getLatestTerminalOutput(): Promise<string> {
 		if (lastLine) {
 			let i = lines.length - 1
 
-			while (i >= 0 && !lines[i].trim().startsWith(lastLine)) {
+			while (i >= 0 && !lines[i]!.trim().startsWith(lastLine)) {
 				i--
 			}
 

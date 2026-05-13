@@ -595,9 +595,9 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 			for (let i = 0; i < lines.length; i++) {
 				let match: RegExpExecArray | null
 				REFERENCE_RE.lastIndex = 0
-				while ((match = REFERENCE_RE.exec(lines[i])) !== null) {
-					if (!isCodeTokenPosition(lines[i], match.index)) continue
-					const name = match[1]
+				while ((match = REFERENCE_RE.exec(lines[i]!)) !== null) {
+					if (!isCodeTokenPosition(lines[i]!, match.index)) continue
+					const name = match[1]!
 					const arr = refsByName[name] ?? []
 					arr.push({ line: i, column: match.index })
 					refsByName[name] = arr
@@ -787,7 +787,7 @@ export class CangjieSymbolIndex implements vscode.Disposable {
 		// Find the insertion point via binary search
 		while (lo <= hi) {
 			const mid = (lo + hi) >> 1
-			const s = symbols[mid]
+			const s = symbols[mid]!
 			if (s.startLine <= line) {
 				if (line <= s.endLine && s.kind !== "import" && s.kind !== "package") {
 					const span = s.endLine - s.startLine

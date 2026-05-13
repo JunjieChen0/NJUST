@@ -86,14 +86,14 @@ export class TaskSubtaskHandler {
 		const environmentDetails = await getEnvironmentDetails(this.host as any, true)
 		let lastUserMsgIndex = -1
 		for (let i = this.host.apiConversationHistory.length - 1; i >= 0; i--) {
-			const msg = this.host.apiConversationHistory[i]
+			const msg = this.host.apiConversationHistory[i]!
 			if (msg.role === "user") {
 				lastUserMsgIndex = i
 				break
 			}
 		}
 		if (lastUserMsgIndex >= 0) {
-			const lastUserMsg = this.host.apiConversationHistory[lastUserMsgIndex]
+			const lastUserMsg = this.host.apiConversationHistory[lastUserMsgIndex]!
 			if (Array.isArray(lastUserMsg.content)) {
 				const contentWithoutEnvDetails = lastUserMsg.content.filter(
 					(block: Anthropic.Messages.ContentBlockParam) => {

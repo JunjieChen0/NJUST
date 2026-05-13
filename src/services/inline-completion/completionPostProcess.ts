@@ -7,7 +7,7 @@ export function stripMarkdownCodeFence(text: string): string {
 	const t = text.trim()
 	const fence = /^```(?:\w+)?\s*\n?([\s\S]*?)```$/m.exec(t)
 	if (fence) {
-		return fence[1].trimEnd()
+		return fence[1]!.trimEnd()
 	}
 	return text
 }

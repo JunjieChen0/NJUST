@@ -133,7 +133,7 @@ export async function importSettingsFromPath(
 		const validProfileNames = Object.keys(validApiConfigs)
 		if (!validApiConfigs[currentApiConfigName]) {
 			if (validProfileNames.length > 0) {
-				currentApiConfigName = validProfileNames[0]
+				currentApiConfigName = validProfileNames[0]!
 				warnings.push(
 					`Profile "${rawProviderProfiles.currentApiConfigName}" was not available; defaulting to "${currentApiConfigName}".`,
 				)
@@ -221,7 +221,7 @@ export const importSettings = async ({ providerSettingsManager, contextProxy, cu
 		return { success: false, error: "User cancelled file selection" }
 	}
 
-	return importSettingsFromPath(uris[0].fsPath, {
+	return importSettingsFromPath(uris[0]!.fsPath, {
 		providerSettingsManager,
 		contextProxy,
 		customModesManager,

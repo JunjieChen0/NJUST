@@ -48,12 +48,12 @@ function buildHierarchy(defs: CangjieDef[], document: vscode.TextDocument): vsco
 	const roots: vscode.DocumentSymbol[] = []
 
 	for (let i = 0; i < symbols.length; i++) {
-		const { def, symbol } = symbols[i]
+		const { def, symbol } = symbols[i]!
 		let added = false
 
 		if (!isContainer(def.kind)) {
 			for (let j = i - 1; j >= 0; j--) {
-				const parent = symbols[j]
+				const parent = symbols[j]!
 				if (
 					isContainer(parent.def.kind) &&
 					parent.def.startLine <= def.startLine &&

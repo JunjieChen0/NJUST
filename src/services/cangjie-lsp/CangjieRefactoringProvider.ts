@@ -89,7 +89,7 @@ export class CangjieRefactoringProvider implements vscode.CodeActionProvider {
 		edit.replace(document.uri, range, callSite)
 
 		const insertionLine = enclosing.length > 0
-			? enclosing[0].endLine
+			? enclosing[0]!.endLine
 			: range.end.line + 2
 		const insertPos = new vscode.Position(Math.min(insertionLine, document.lineCount), 0)
 		edit.insert(document.uri, insertPos, funcDef)
@@ -177,9 +177,9 @@ export class CangjieRefactoringProvider implements vscode.CodeActionProvider {
 				for (let i = 0; i < lines.length; i++) {
 					const line = lines[i]
 					oldImportPattern.lastIndex = 0
-					if (oldImportPattern.test(line)) {
-						const newLine = line.replace(oldImportPattern, `$1${newPackage}$2`)
-						const lineRange = new vscode.Range(i, 0, i, line.length)
+					if (line! && oldImportPattern.test(line)) {
+						const newLine = line!.replace(oldImportPattern, `$1${newPackage}$2`)
+						const lineRange = new vscode.Range(i, 0, i, line!.length)
 						edit.replace(uri, lineRange, newLine)
 					}
 				}
@@ -206,7 +206,7 @@ export class CangjieRefactoringProvider implements vscode.CodeActionProvider {
 		const usedInSelection = new Set<string>()
 		let m: RegExpExecArray | null
 		while ((m = identRe.exec(selectedText)) !== null) {
-			usedInSelection.add(m[1])
+			usedInSelection.add(m[1]!)
 		}
 
 		const keywords = new Set([
@@ -226,7 +226,7 @@ export class CangjieRefactoringProvider implements vscode.CodeActionProvider {
 
 		const declared = new Map<string, string>()
 		while ((m = declRe.exec(contextText)) !== null) {
-			declared.set(m[1], m[2] ?? "/* infer */")
+			declared.set(m[1]!, m[2] ?? "/* infer */")
 		}
 
 		const result: Array<{ name: string; inferredType: string }> = []

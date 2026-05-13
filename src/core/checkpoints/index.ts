@@ -46,8 +46,8 @@ export async function getCheckpointService(task: Task, { interval = 250 }: { int
 
 		try {
 			provider?.log(message)
-		} catch {
-			// NO-OP
+		} catch (error) {
+			logger.debug("Checkpoints", `log failed: ${getErrorMessage(error)}`)
 		}
 	}
 
@@ -298,8 +298,8 @@ export async function checkpointRestore(
 		// task flow and the communication between the webview and the
 		// `Task` instance.
 		void provider?.cancelTask()
-	} catch {
-		provider?.log("[checkpointRestore] disabling checkpoints for this task")
+	} catch (error) {
+		provider?.log(`[checkpointRestore] disabling checkpoints for this task: ${getErrorMessage(error)}`)
 		task.enableCheckpoints = false
 	}
 }
@@ -387,9 +387,9 @@ export async function checkpointDiff(task: Task, { ts: _ts, previousCommitHash: 
 				}),
 			]),
 		)
-	} catch {
+	} catch (error) {
 		const provider = task.providerRef.deref()
-		provider?.log("[checkpointDiff] disabling checkpoints for this task")
+		provider?.log(`[checkpointDiff] disabling checkpoints for this task: ${getErrorMessage(error)}`)
 		task.enableCheckpoints = false
 	}
 }

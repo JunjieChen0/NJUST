@@ -151,7 +151,7 @@ function parseUpdateFileChunk(
 			break
 		}
 
-		const firstChar = line.charAt(0)
+		const firstChar = line!.charAt(0)
 
 		// Empty line is treated as context
 		if (line === "") {
@@ -164,18 +164,18 @@ function parseUpdateFileChunk(
 		switch (firstChar) {
 			case " ":
 				// Context line
-				chunk.oldLines.push(line.substring(1))
-				chunk.newLines.push(line.substring(1))
+				chunk.oldLines.push(line!.substring(1))
+				chunk.newLines.push(line!.substring(1))
 				parsedLines++
 				break
 			case "+":
 				// Added line
-				chunk.newLines.push(line.substring(1))
+				chunk.newLines.push(line!.substring(1))
 				parsedLines++
 				break
 			case "-":
 				// Removed line
-				chunk.oldLines.push(line.substring(1))
+				chunk.oldLines.push(line!.substring(1))
 				parsedLines++
 				break
 			default:

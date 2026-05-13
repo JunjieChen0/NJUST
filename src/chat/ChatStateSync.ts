@@ -95,7 +95,7 @@ export class ChatStateSync {
 
 				const messages: ClineMessage[] = currentTask.clineMessages || []
 				for (let i = synced.lastSyncedIndex; i < messages.length; i++) {
-					this.renderToChatStream(synced.chatStream, messages[i])
+					this.renderToChatStream(synced.chatStream, messages[i]!)
 				}
 				synced.lastSyncedIndex = messages.length
 

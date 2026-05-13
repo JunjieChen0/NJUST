@@ -128,7 +128,7 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
 			const processedIndices: number[] = []
 
 			for (let i = 0; i < remainingTexts.length; i++) {
-				const text = remainingTexts[i]
+				const text = remainingTexts[i]!
 				const itemTokens = Math.ceil(text.length / 4)
 
 				if (itemTokens > this.maxItemTokens) {
@@ -154,7 +154,7 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
 
 			// Remove processed items from remainingTexts (in reverse order to maintain correct indices)
 			for (let i = processedIndices.length - 1; i >= 0; i--) {
-				remainingTexts.splice(processedIndices[i], 1)
+				remainingTexts.splice(processedIndices[i]!, 1)
 			}
 
 			if (currentBatch.length > 0) {

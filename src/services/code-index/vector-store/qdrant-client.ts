@@ -499,7 +499,7 @@ logger.info("QdrantVectorStore", `Creating new collection ${this.collectionName}
 			})
 
 			// Use 'should' to match any of the file paths (OR condition)
-			const filter = filters.length === 1 ? filters[0] : { should: filters }
+			const filter = filters.length === 1 ? filters[0]! : { should: filters }
 
 			await this.client.delete(this.collectionName, {
 				filter,
@@ -589,7 +589,7 @@ logger.info("QdrantVectorStore", `Creating new collection ${this.collectionName}
 
 			// If marker exists, use it to determine completion status
 			if (metadataPoints.length > 0) {
-				return metadataPoints[0].payload?.indexing_complete === true
+				return metadataPoints[0]!.payload?.indexing_complete === true
 			}
 
 			// Backward compatibility: No marker exists (old index or pre-marker version)

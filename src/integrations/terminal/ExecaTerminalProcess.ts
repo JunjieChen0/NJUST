@@ -69,7 +69,7 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 						psTree(this.pid!, (err, children) => {
 							if (!err && children.length > 0) {
 								// Update PID to the first child (the actual command)
-								const actualPid = parseInt(children[0].PID)
+								const actualPid = parseInt(children[0]!.PID)
 								if (!isNaN(actualPid)) {
 									this.pid = actualPid
 								}

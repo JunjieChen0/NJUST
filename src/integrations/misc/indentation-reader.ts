@@ -170,11 +170,11 @@ function isComment(line: LineRecord): boolean {
  */
 function trimEmptyLines(lines: LineRecord[]): void {
 	// Trim from front
-	while (lines.length > 0 && lines[0].isBlank) {
+	while (lines.length > 0 && lines[0]!.isBlank) {
 		lines.shift()
 	}
 	// Trim from back
-	while (lines.length > 0 && lines[lines.length - 1].isBlank) {
+	while (lines.length > 0 && lines[lines.length - 1]!.isBlank) {
 		lines.pop()
 	}
 }
@@ -188,7 +188,7 @@ function _findHeaderEnd(lines: LineRecord[]): number {
 	let inBlockComment = false
 
 	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i]
+		const line = lines[i]!
 		const trimmed = line.content.trim()
 
 		// Track block comments
@@ -253,11 +253,11 @@ function computeIncludedRanges(lines: LineRecord[]): Array<[number, number]> {
 	if (lines.length === 0) return []
 
 	const ranges: Array<[number, number]> = []
-	let rangeStart = lines[0].lineNumber
-	let rangeEnd = lines[0].lineNumber
+	let rangeStart = lines[0]!.lineNumber
+	let rangeEnd = lines[0]!.lineNumber
 
 	for (let i = 1; i < lines.length; i++) {
-		const lineNum = lines[i].lineNumber
+		const lineNum = lines[i]!.lineNumber
 		if (lineNum === rangeEnd + 1) {
 			// Contiguous
 			rangeEnd = lineNum
@@ -311,7 +311,7 @@ export function readWithIndentation(content: string, options: IndentationReadOpt
 
 	const anchorIdx = anchorLine - 1 // Convert to 0-based
 	const effectiveIndents = computeEffectiveIndents(lines)
-	const anchorIndent = effectiveIndents[anchorIdx]
+	const anchorIndent = effectiveIndents[anchorIdx]!
 
 	// Calculate minimum indent threshold
 	// maxLevels = 0 means unlimited (minIndent = 0)
@@ -331,7 +331,7 @@ export function readWithIndentation(content: string, options: IndentationReadOpt
 
 	// Edge case: if limit is 1, just return the anchor line
 	if (finalLimit === 1) {
-		const singleLine = [lines[anchorIdx]]
+		const singleLine = [lines[anchorIdx]!]
 		return {
 			content: formatWithLineNumbers(singleLine),
 			includedRanges: [[anchorLine, anchorLine]],
@@ -342,7 +342,7 @@ export function readWithIndentation(content: string, options: IndentationReadOpt
 	}
 
 	// Bidirectional expansion from anchor (Codex algorithm)
-	const result: LineRecord[] = [lines[anchorIdx]]
+	const result: LineRecord[] = [lines[anchorIdx]!]
 	let i = anchorIdx - 1 // Up cursor
 	let j = anchorIdx + 1 // Down cursor
 	let iMinCount = 0 // Count of min-indent lines seen going up
@@ -352,13 +352,13 @@ export function readWithIndentation(content: string, options: IndentationReadOpt
 		let progressed = false
 
 		// Expand upward
-		if (i >= 0 && effectiveIndents[i] >= minIndent) {
-			result.unshift(lines[i])
+		if (i >= 0 && effectiveIndents[i]! >= minIndent) {
+			result.unshift(lines[i]!)
 			progressed = true
 
 			// Handle sibling exclusion at min indent
-			if (effectiveIndents[i] === minIndent && !includeSiblings) {
-				const allowHeader = includeHeader && isComment(lines[i])
+			if (effectiveIndents[i]! === minIndent && !includeSiblings) {
+				const allowHeader = includeHeader && isComment(lines[i]!)
 				const canTake = allowHeader || iMinCount === 0
 
 				if (canTake) {
@@ -379,8 +379,8 @@ export function readWithIndentation(content: string, options: IndentationReadOpt
 		if (result.length >= finalLimit) break
 
 		// Expand downward
-		if (j < lines.length && effectiveIndents[j] >= minIndent) {
-			result.push(lines[j])
+		if (j < lines.length && effectiveIndents[j]! >= minIndent) {
+			result.push(lines[j]!)
 			progressed = true
 
 			// Handle sibling exclusion at min indent
