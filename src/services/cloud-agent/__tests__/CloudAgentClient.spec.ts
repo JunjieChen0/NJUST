@@ -215,4 +215,177 @@ describe("CloudAgentClient", () => {
 		},
 		10_000,
 	)
+
+	describe("constructor HTTPS enforcement", () => {
+		it("rejects non-localhost HTTP", () => {
+			expect(() => new CloudAgentClient("http://evil.com", "tok", createCallbacks())).toThrow("requires HTTPS")
+		})
+
+		it("accepts localhost HTTP", () => {
+			expect(() => new CloudAgentClient("http://localhost:3000", "tok", createCallbacks())).not.toThrow()
+		})
+
+		it("accepts 127.0.0.1 HTTP", () => {
+			expect(() => new CloudAgentClient("http://127.0.0.1:4000", "tok", createCallbacks())).not.toThrow()
+		})
+
+		it("accepts HTTPS", () => {
+			expect(() => new CloudAgentClient("https://api.example.com", "tok", createCallbacks())).not.toThrow()
+		})
+	})
+
+	describe("compile", () => {
+		it("returns success result", async () => {
+			const fetchMock = vi.fn().mockResolvedValue(
+				new Response(JSON.stringify({ success: true, output: "" }), { status: 200 }),
+			)
+			globalThis.fetch = fetchMock as unknown as typeof fetch
+
+			const client = new CloudAgentClient("http://localhost:4000", "tok", createCallbacks())
+			const result = await client.compile("sid-1", "/ws")
+
+			expect(result.success).toBe(true)
+			expect(result.output).toBe("")
+			const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+			expect(body).toMatchObject({ session_id: "sid-1", workspace_path: "/ws" })
+		})
+
+		it("returns failure with compile errors", async () => {
+			const fetchMock = vi.fn().mockResolvedValue(
+				new Response(JSON.stringify({ success: false, output: "error: line 5" }), { status: 200 }),
+			)
+			globalThis.fetch = fetchMock as unknown as typeof fetch
+
+			const client = new CloudAgentClient("http://localhost:4000", "tok", createCallbacks())
+			const result = await client.compile("sid-1")
+
+			expect(result.success).toBe(false)
+			expect(result.output).toContain("error: line 5")
+		})
+
+		it("throws on non-OK HTTP", async () => {
+			let callCount = 0
+			const fetchMock = vi.fn().mockImplementation(() => {
+				callCount++
+				return Promise.resolve(new Response("internal error", { status: 500 }))
+			})
+			globalThis.fetch = fetchMock as unknown as typeof fetch
+
+			const client = new CloudAgentClient("http://localhost:4000", "tok", createCallbacks())
+			await expect(client.compile("sid-1")).rejects.toThrow("compile error")
+			expect(callCount).toBeGreaterThanOrEqual(1)
+		}, 15_000)
+	})
+
+	describe("deferred protocol", () => {
+		it("deferredStart sends to correct endpoint with images", async () => {
+			const fetchMock = vi.fn().mockResolvedValue(
+				new Response(
+					JSON.stringify({
+						run_id: "run-1",
+						status: "pending",
+						pending_tools: [{ call_id: "c1", tool: "read_file", arguments: { path: "a.ts" } }],
+					}),
+					{ status: 200 },
+				),
+			)
+			globalThis.fetch = fetchMock as unknown as typeof fetch
+
+			const client = new CloudAgentClient("http://localhost:4000", "tok", createCallbacks())
+			const result = await client.deferredStart("sid-1", "goal", "/ws", ["img"])
+
+			expect(result.run_id).toBe("run-1")
+			expect(result.status).toBe("pending")
+			expect(result.pending_tools!.length).toBe(1)
+
+			const url = fetchMock.mock.calls[0][0] as string
+			expect(url).toContain("/v1/run/deferred/start")
+			const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+			expect(body).toMatchObject({ goal: "goal", session_id: "sid-1", workspace_path: "/ws", images: ["img"] })
+		})
+
+		it("deferredStart returns done status", async () => {
+			const fetchMock = vi.fn().mockResolvedValue(
+				new Response(
+					JSON.stringify({ run_id: "run-2", status: "done", ok: true }),
+					{ status: 200 },
+				),
+			)
+			globalThis.fetch = fetchMock as unknown as typeof fetch
+
+			const client = new CloudAgentClient("http://localhost:4000", "tok", createCallbacks())
+			const result = await client.deferredStart("sid-1", "goal")
+
+			expect(result.status).toBe("done")
+		})
+
+		it("deferredResume sends tool results", async () => {
+			const fetchMock = vi.fn().mockResolvedValue(
+				new Response(
+					JSON.stringify({ run_id: "run-1", status: "done", ok: true }),
+					{ status: 200 },
+				),
+			)
+			globalThis.fetch = fetchMock as unknown as typeof fetch
+
+			const client = new CloudAgentClient("http://localhost:4000", "tok", createCallbacks())
+			const toolResults = [{ call_id: "c1", content: "file content", is_error: false }]
+			const result = await client.deferredResume("run-1", "sid-1", toolResults)
+
+			expect(result.status).toBe("done")
+			const url = fetchMock.mock.calls[0][0] as string
+			expect(url).toContain("/v1/run/deferred/resume")
+			const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+			expect(body).toMatchObject({ run_id: "run-1", session_id: "sid-1", tool_results: toolResults })
+		})
+	})
+
+	describe("sendDeferredAbort (static)", () => {
+		it("handles 404 gracefully (older servers)", async () => {
+			const fetchMock = vi.fn().mockResolvedValue(new Response("not found", { status: 404 }))
+			globalThis.fetch = fetchMock as unknown as typeof fetch
+
+			await CloudAgentClient.sendDeferredAbort("http://localhost:4000", "tok", undefined, "sid-1")
+		})
+
+		it("sends correct body with runId", async () => {
+			const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }))
+			globalThis.fetch = fetchMock as unknown as typeof fetch
+
+			await CloudAgentClient.sendDeferredAbort("http://localhost:4000", "tok", "key", "sid-1", "run-1")
+
+			const url = fetchMock.mock.calls[0][0] as string
+			expect(url).toContain("/v1/run/deferred/abort")
+			const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+			expect(body).toMatchObject({ session_id: "sid-1", run_id: "run-1" })
+			const headers = new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers as HeadersInit)
+			expect(headers.get("X-API-Key")).toBe("key")
+		})
+	})
+
+	describe("disconnect", () => {
+		it("calls sendDeferredAbort with correct params", async () => {
+			const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }))
+			globalThis.fetch = fetchMock as unknown as typeof fetch
+
+			const client = new CloudAgentClient("http://localhost:4000", "tok", createCallbacks(), {
+				apiKey: "mykey",
+			})
+			await client.disconnect("sid-1", "run-1")
+
+			expect(fetchMock).toHaveBeenCalledTimes(1)
+			const url = fetchMock.mock.calls[0][0] as string
+			expect(url).toContain("/v1/run/deferred/abort")
+		})
+
+		it("does nothing when sessionId is empty", async () => {
+			const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }))
+			globalThis.fetch = fetchMock as unknown as typeof fetch
+
+			const client = new CloudAgentClient("http://localhost:4000", "tok", createCallbacks())
+			await client.disconnect("", "run-1")
+
+			expect(fetchMock).not.toHaveBeenCalled()
+		})
+	})
 })

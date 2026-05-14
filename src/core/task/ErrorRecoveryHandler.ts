@@ -51,7 +51,7 @@ export class ErrorRecoveryHandler {
 		}
 	
 		const recoveryAction = mapErrorToRecoveryAction(classified, retryAttempt)
-	
+
 		// Record the retry event for diagnostics
 		await appendRetryEvent(this.task.globalStoragePath, {
 			taskId: this.task.taskId,

@@ -12,6 +12,9 @@ import type { Anthropic } from "@anthropic-ai/sdk"
 import type OpenAI from "openai"
 import pWaitFor from "p-wait-for"
 
+import type { TaskExecutorHost } from "./interfaces/ITaskExecutorHost"
+export type { TaskExecutorHost } from "./interfaces/ITaskExecutorHost"
+
 import type { ITaskHost } from "./interfaces/ITaskHost"
 import type {
 	ClineMessage,
@@ -82,164 +85,7 @@ const USER_MESSAGE_CONTENT_READY_TIMEOUT_MS = 30_000
 // ── Host interface ───────────────────────────────────────────────────────
 // Structural contract: Task implements this shape at runtime.
 // We never `import { Task }` here to avoid circular dependency.
-
-export interface TaskExecutorHost {
-	// Identity
-	readonly taskId: string
-	readonly instanceId: string
-	readonly globalStoragePath: string
-	readonly cwd: string
-
-	// Mutable state accessed by the executor
-	abort: boolean
-	abortReason?: string
-	isPaused: boolean
-	isStreaming: boolean
-	isWaitingForFirstChunk: boolean
-
-	apiConfiguration: ProviderSettings
-	api: ApiHandler
-	apiConversationHistory: ApiMessage[]
-	clineMessages: ClineMessage[]
-	userMessageContent: Anthropic.Messages.ContentBlockParam[]
-	assistantMessageContent: AssistantMessageContent[]
-	assistantMessageSavedToHistory: boolean
-	/** Stream/present gating (presentAssistantMessage) */
-	userMessageContentReady: boolean
-	currentStreamingContentIndex: number
-	didCompleteReadingStream: boolean
-
-	// Sub-delegates
-	stateMachine: { force(state: TaskState): void; readonly state: TaskState }
-	hostRef: WeakRef<ITaskHost>
-	requestBuilder: {
-		prefetchSystemPromptData(): void
-		getSystemPromptParts(): Promise<SystemPromptParts>
-		getSystemPrompt(): Promise<string>
-		condenseContext(): Promise<void>
-		inheritCacheFromParent(parent: any): void
-	}
-	streamProcessor: {
-		maybeWaitForProviderRateLimit(retryAttempt: number): Promise<void>
-		backoffAndAnnounce(retryAttempt: number, error: any): Promise<void>
-		buildCleanConversationHistory(messages: ApiMessage[]): any[]
-		getCurrentProfileId(state: any): string
-		handleContextWindowExceededError(): Promise<void>
-		getFilesReadByRooSafely(context: string): Promise<string[] | undefined>
-	}
-	errorRecovery: {
-		handleApiError(error: any, retryAttempt: number): Promise<{ action: string; nextAttempt: number }>
-		shouldBypassCondense(): boolean
-		recordCompactFailure(error: any): Promise<void>
-		resetCompactFailure(): void
-	}
-	autoApprovalHandler: {
-		checkAutoApprovalLimits(
-			state: any,
-			messages: any,
-			askFn: (type: any, data: any) => Promise<any>,
-		): Promise<{ shouldProceed: boolean }>
-	}
-	tokenGrowthTracker: {
-		addSample(tokens: number): void
-		getSnapshot(): { predictedNextTokens?: number } | undefined
-	}
-	persistentRetryHandler: PersistentRetryManager | undefined
-	parentTask: { getTokenUsage(): TokenUsage } | undefined
-	rooIgnoreController: { dispose(): void } | undefined
-	toolExecution: { dispose(): void; streamingExecutor: { shouldEagerExecute(task: unknown, block: unknown): string | null } }
-	compactFailures: number
-
-	// Token windows
-	requestCacheReadWindow: number[]
-	requestInputTokensWindow: number[]
-
-	// Tool caching
-	cachedToolDefinitions: { mode: string; tools: any[]; time: number } | undefined
-
-	// Request control
-	currentRequestAbortController: AbortController | undefined
-	skipPrevResponseIdOnce: boolean
-	consecutiveMistakeCount: number
-	consecutiveMistakeLimit: number
-	didEditFile: boolean
-
-	// Streaming state
-	abandoned: boolean
-	didRejectTool: boolean
-	didAlreadyUseTool: boolean
-	didToolFailInCurrentTurn: boolean
-	presentAssistantMessageLocked: boolean
-	presentAssistantMessageHasPendingUpdates: boolean
-	consecutiveNoToolUseCount: number
-	consecutiveNoAssistantMessagesCount: number
-	streamingToolCallIndices: Map<string, number>
-	cachedStreamingModel?: any
-	notifier?: { postMessageToWebview(message: any): Promise<void> }
-
-	// Delegated services
-	diffViewProvider: {
-		isEditing: boolean
-		reset(): Promise<void>
-		revertChanges(): Promise<void>
-	}
-	fileContextTracker: any
-
-	// Methods the executor delegates back to
-	say(
-		type: ClineSay,
-		text?: string,
-		images?: string[],
-		partial?: boolean,
-		checkpoint?: Record<string, unknown>,
-		progressStatus?: ToolProgressStatus,
-		options?: { isNonInteractive?: boolean },
-		contextCondense?: ContextCondense,
-		contextTruncation?: ContextTruncation,
-	): Promise<undefined>
-
-	ask(
-		type: ClineAsk,
-		text?: string,
-		partial?: boolean,
-		progressStatus?: ToolProgressStatus,
-		isProtected?: boolean,
-	): Promise<{ response: string; text?: string; images?: string[] }>
-
-	addToApiConversationHistory(message: Anthropic.MessageParam, reasoning?: string): Promise<void>
-	overwriteApiConversationHistory(newHistory: ApiMessage[]): Promise<void>
-	pushToolResultToUserContent(toolResult: Anthropic.ToolResultBlockParam): boolean
-	cancelCurrentRequest(): void
-
-	getTokenUsage(): TokenUsage
-	combineMessages(messages: ClineMessage[]): ClineMessage[]
-	emit(event: string, ...args: any[]): boolean
-
-	// Static field access — provided by the host
-	setLastGlobalApiRequestTime(time: number): void
-	getLastGlobalApiRequestTime(): number
-
-	// Persistence
-	saveClineMessages(): Promise<boolean>
-	refreshWebviewState(): Promise<void>
-	updateClineMessage(message: ClineMessage): Promise<void>
-
-	// Control
-	abortTask(isAbandoned?: boolean): Promise<void>
-	backoffAndAnnounce(retryAttempt: number, error: any): Promise<void>
-	maybeWaitForProviderRateLimit(retryAttempt: number): Promise<void>
-	attemptApiRequest(retryAttempt: number, options?: { skipProviderRateLimit?: boolean }): AsyncGenerator<any, void, unknown>
-
-	/** Delegate call to presentAssistantMessage(host) */
-	presentAssistantMessage(): Promise<void>
-
-	// Streaming lifecycle flags
-	didFinishAbortingStream: boolean
-	currentStreamingDidCheckpoint: boolean
-
-	// Task mode
-	getTaskMode(): string | undefined
-}
+// TaskExecutorHost is now defined in ./interfaces/ITaskExecutorHost.ts
 
 // ── Executor ─────────────────────────────────────────────────────────────
 
