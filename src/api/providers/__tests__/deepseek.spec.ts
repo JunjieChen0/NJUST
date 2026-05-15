@@ -156,13 +156,13 @@ describe("DeepSeekHandler", () => {
 			expect(handler.getModel().id).toBe(mockOptions.apiModelId)
 		})
 
-		it.skip("should throw error if API key is missing", () => {
+		it("should throw error if API key is missing", () => {
 			expect(() => {
 				new DeepSeekHandler({
 					...mockOptions,
 					deepSeekApiKey: undefined,
 				})
-			}).toThrow("DeepSeek API key is required")
+			}).toThrow("DeepSeek API key is required. Please configure it in settings.")
 		})
 
 		it("should use default model ID if not provided", () => {

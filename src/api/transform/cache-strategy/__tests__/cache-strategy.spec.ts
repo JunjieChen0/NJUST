@@ -920,16 +920,13 @@ describe("Cache Strategy", () => {
 		})
 
 		describe("Cache Point Optimization", () => {
-			// Note: This test is skipped because it's meant to verify the documentation is correct,
-			// but the actual implementation behavior is different. The documentation has been updated
-			// to match the correct behavior.
-			it.skip("documentation example 5 verification", () => {
+			it("documentation example 5 verification", () => {
 				// This test verifies that the documentation for Example 5 is correct
 				// In Example 5, the third cache point at index 10 should cover 660 tokens
 				// (260 tokens from messages 7-8 plus 400 tokens from the new messages)
 
 				// Create messages matching Example 5 from documentation
-				const _messages = [
+				const messages = [
 					createMessage("user", "Tell me about machine learning.", 100),
 					createMessage("assistant", "Machine learning is a field of study...", 200),
 					createMessage("user", "What about deep learning?", 100),
@@ -946,7 +943,7 @@ describe("Cache Strategy", () => {
 				]
 
 				// Previous cache point placements from Example 4
-				const _previousCachePointPlacements: CachePointPlacement[] = [
+				const previousCachePointPlacements: CachePointPlacement[] = [
 					{
 						index: 2, // After the second user message
 						type: "message",
@@ -974,6 +971,32 @@ describe("Cache Strategy", () => {
 				// The important part is that our fix ensures that when a cache point is created,
 				// the tokensCovered value represents all tokens from the previous cache point
 				// to the current cache point, not just the tokens in the new messages
+				const config = createConfig({
+					modelInfo: multiPointModelInfo,
+					systemPrompt: "You are a helpful assistant.",
+					messages,
+					usePromptCache: true,
+					previousCachePointPlacements,
+				})
+
+				const strategy = new MultiPointStrategy(config)
+				const result = strategy.determineOptimalCachePoints()
+				const placements = result.messageCachePointPlacements ?? []
+
+				expect(placements.length).toBeGreaterThan(0)
+				expect(placements.length).toBeLessThanOrEqual(multiPointModelInfo.maxCachePoints)
+
+				for (const placement of placements) {
+					expect(placement.type).toBe("message")
+					expect(messages[placement.index]?.role).toBe("user")
+				}
+
+				for (let i = 1; i < placements.length; i++) {
+					expect(placements[i]!.index).toBeGreaterThan(placements[i - 1]!.index)
+				}
+
+				const lastPlacement = placements[placements.length - 1]
+				expect(lastPlacement?.index).toBeGreaterThanOrEqual(8)
 			})
 
 			it("should not combine cache points when new messages have fewer tokens than the smallest combined gap", () => {

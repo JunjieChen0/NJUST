@@ -182,11 +182,11 @@ describe("networkProxy", () => {
 	})
 
 	describe("getProxyConfig", () => {
-		it("should return default config before initialization", () => {
-			// Reset the module to clear internal state
+		it("should return default config before initialization", async () => {
 			vi.resetModules()
+			const { getProxyConfig: freshGetProxyConfig } = await import("../networkProxy")
 
-			const config = getProxyConfig()
+			const config = freshGetProxyConfig()
 
 			expect(config.enabled).toBe(false)
 			expect(config.serverUrl).toBe("http://127.0.0.1:8888") // default value
@@ -283,12 +283,11 @@ describe("networkProxy", () => {
 			expect(isDebugMode()).toBe(true)
 		})
 
-		// Note: This test is skipped because module state persists across tests.
-		// In a real scenario, isDebugMode() returns false before any initialization.
-		// The actual behavior is verified in integration testing.
-		it.skip("should return false before initialization", () => {
-			// This would require full module isolation which isn't practical here
-			expect(isDebugMode()).toBe(false)
+		it("should return false before initialization", async () => {
+			vi.resetModules()
+			const { isDebugMode: freshIsDebugMode } = await import("../networkProxy")
+
+			expect(freshIsDebugMode()).toBe(false)
 		})
 	})
 
