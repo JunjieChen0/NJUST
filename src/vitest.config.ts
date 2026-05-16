@@ -27,6 +27,7 @@ export default defineConfig({
 			exclude: [
 				"**/__tests__/**",
 				"**/__mocks__/**",
+				"**/cangjie-lsp/**",
 				"**/cangjie-context.ts",
 			],
 			thresholds: {
