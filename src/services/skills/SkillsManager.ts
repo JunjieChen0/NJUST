@@ -326,8 +326,8 @@ export class SkillsManager {
 				if (content) {
 					results.push({ name, content: content.instructions })
 				}
-			} catch {
-				// Silently skip skills that fail to load
+			} catch (error) {
+				logger.debug("SkillsManager", `Failed to preload skill '${name}'`, error)
 			}
 		}
 		return results

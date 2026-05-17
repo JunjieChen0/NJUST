@@ -27,18 +27,18 @@ export class WebviewRouter {
 
 	public async postState(): Promise<void> {
 		const state = await this.host.buildState()
-		void this.postMessage({ type: "state", state })
+		await this.postMessage({ type: "state", state })
 	}
 
 	public async postStateWithoutTaskHistory(): Promise<void> {
 		const state = await this.host.buildState()
 		const { taskHistory: _omit, ...rest } = state
-		void this.postMessage({ type: "state", state: rest })
+		await this.postMessage({ type: "state", state: rest })
 	}
 
 	public async postStateWithoutClineMessages(): Promise<void> {
 		const state = await this.host.buildState()
 		const { clineMessages: _omitMessages, taskHistory: _omitHistory, ...rest } = state
-		void this.postMessage({ type: "state", state: rest })
+		await this.postMessage({ type: "state", state: rest })
 	}
 }

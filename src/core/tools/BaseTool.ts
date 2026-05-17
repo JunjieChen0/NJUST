@@ -198,7 +198,7 @@ export abstract class BaseTool<TName extends ToolName> {
 	 * Whether this tool call can be executed concurrently with other tool calls in the same assistant turn.
 	 * Phase-B default is false (safe-by-default). Read-only tools should override to true.
 	 */
-	isConcurrencySafe(_params: ToolParams<TName>): boolean {
+	isConcurrencySafe(_params?: ToolParams<TName>): boolean {
 		return false
 	}
 

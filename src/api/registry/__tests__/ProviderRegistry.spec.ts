@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { ApiHandler } from "../../index"
-import { ProviderRegistry, type ProviderFactory } from "../ProviderRegistry"
+import { ProviderRegistry, createProviderRegistry, type ProviderFactory } from "../ProviderRegistry"
 
 const fakeHandler = {} as ApiHandler
 const fakeFactory: ProviderFactory = () => fakeHandler
@@ -55,5 +55,15 @@ describe("ProviderRegistry", () => {
 		expect(registry.get("anthropic")?.tokenCountingStrategy).toBe("estimated")
 		expect(registry.has("anthropic")).toBe(true)
 		expect(registry.size()).toBe(1)
+	})
+
+	it("creates isolated registries for tests and custom wiring", () => {
+		const first = createProviderRegistry()
+		const second = createProviderRegistry()
+
+		first.register("anthropic", fakeFactory)
+
+		expect(first.has("anthropic")).toBe(true)
+		expect(second.has("anthropic")).toBe(false)
 	})
 })

@@ -75,6 +75,9 @@ describe("Single-open-task invariant", () => {
 				getProviderSettings: vi.fn(() => ({})),
 			},
 		} as unknown as ClineProvider
+		;(provider as any).taskCoordinator = {
+			createTask: (...args: any[]) => (ClineProvider.prototype as any).createTaskInternal.call(provider, ...args),
+		}
 
 		await (ClineProvider.prototype as any).createTask.call(provider, "New task")
 

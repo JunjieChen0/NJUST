@@ -62,6 +62,10 @@ let taskIdCounter = 0
 vi.mock("../../task/Task", () => ({
 	Task: vi.fn().mockImplementation((options) => ({
 		taskId: options.taskId || `test-task-id-${++taskIdCounter}`,
+		_taskMode: options.taskMode,
+		setTaskMode: vi.fn(function (this: { _taskMode?: string }, mode: string) {
+			this._taskMode = mode
+		}),
 		saveClineMessages: vi.fn(),
 		clineMessages: [],
 		apiConversationHistory: [],
@@ -339,6 +343,8 @@ describe("ClineProvider - Sticky Mode", () => {
 			const mockTask = {
 				taskId: "test-task-id",
 				taskMode: "code", // Initial mode
+				_taskMode: "code",
+				setTaskMode: vi.fn(function (this: { _taskMode: string }, mode: string) { this._taskMode = mode }),
 				emit: vi.fn(),
 				saveClineMessages: vi.fn(),
 				clineMessages: [],
@@ -787,6 +793,7 @@ describe("ClineProvider - Sticky Mode", () => {
 			const mockTask = {
 				taskId: "test-task-id",
 				_taskMode: "code",
+				setTaskMode: vi.fn(function (this: { _taskMode: string }, mode: string) { this._taskMode = mode }),
 				emit: vi.fn(),
 				saveClineMessages: vi.fn(),
 				clineMessages: [],
@@ -851,6 +858,7 @@ describe("ClineProvider - Sticky Mode", () => {
 			const mockTask = {
 				taskId: "test-task-id",
 				_taskMode: "code",
+				setTaskMode: vi.fn(function (this: { _taskMode: string }, mode: string) { this._taskMode = mode }),
 				emit: vi.fn(),
 				saveClineMessages: vi.fn().mockImplementation(async () => {
 					// Simulate slow save
@@ -906,6 +914,7 @@ describe("ClineProvider - Sticky Mode", () => {
 			const mockTask = {
 				taskId: "test-task-id",
 				_taskMode: "code",
+				setTaskMode: vi.fn(function (this: { _taskMode: string }, mode: string) { this._taskMode = mode }),
 				emit: vi.fn(),
 				saveClineMessages: vi.fn(),
 				clineMessages: [],
@@ -997,6 +1006,7 @@ describe("ClineProvider - Sticky Mode", () => {
 			const mockTask = {
 				taskId: "test-task-id",
 				_taskMode: "code",
+				setTaskMode: vi.fn(function (this: { _taskMode: string }, mode: string) { this._taskMode = mode }),
 				emit: vi.fn(),
 				saveClineMessages: vi.fn(),
 				clineMessages: [],
@@ -1044,6 +1054,7 @@ describe("ClineProvider - Sticky Mode", () => {
 			const task1 = {
 				taskId: "task-1",
 				_taskMode: "code",
+				setTaskMode: vi.fn(function (this: { _taskMode: string }, mode: string) { this._taskMode = mode }),
 				emit: vi.fn(),
 				saveClineMessages: vi.fn(),
 				clineMessages: [],
@@ -1054,6 +1065,7 @@ describe("ClineProvider - Sticky Mode", () => {
 			const task2 = {
 				taskId: "task-2",
 				_taskMode: "architect",
+				setTaskMode: vi.fn(function (this: { _taskMode: string }, mode: string) { this._taskMode = mode }),
 				emit: vi.fn(),
 				saveClineMessages: vi.fn(),
 				clineMessages: [],
@@ -1064,6 +1076,7 @@ describe("ClineProvider - Sticky Mode", () => {
 			const task3 = {
 				taskId: "task-3",
 				_taskMode: "debug",
+				setTaskMode: vi.fn(function (this: { _taskMode: string }, mode: string) { this._taskMode = mode }),
 				emit: vi.fn(),
 				saveClineMessages: vi.fn(),
 				clineMessages: [],
@@ -1199,6 +1212,7 @@ describe("ClineProvider - Sticky Mode", () => {
 			const tasks = Array.from({ length: 5 }, (_, i) => ({
 				taskId: `task-${i}`,
 				_taskMode: "code",
+				setTaskMode: vi.fn(function (this: { _taskMode: string }, mode: string) { this._taskMode = mode }),
 				emit: vi.fn(),
 				saveClineMessages: vi.fn(),
 				clineMessages: [],

@@ -611,7 +611,7 @@ export async function executeCommandInTerminal(
 		if (exitDetails?.exitCode !== undefined && exitDetails.exitCode !== 0) {
 			const extensionPath = task.providerRef.deref()?.context.extensionPath
 			if (/\b(cjpm|cjc)\b/i.test(resolvedCommand)) {
-				const appendix = buildCangjieExecuteCommandErrorAppendix(result, task.cwd, extensionPath)
+				const appendix = await buildCangjieExecuteCommandErrorAppendix(result, task.cwd, extensionPath)
 				if (appendix) {
 					formattedResult += appendix
 				}

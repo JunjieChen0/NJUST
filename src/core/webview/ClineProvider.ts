@@ -251,6 +251,7 @@ export class ClineProvider
 		// Don't await, allowing activation to continue immediately.
 
 		this._workspaceTracker = new WorkspaceTracker(this)
+		this._workspaceTracker.init?.()
 
 		this.providerSettingsManager = new ProviderSettingsManager(this.context)
 		this.providerSettingsManager.initialize().catch((error) => {
@@ -855,7 +856,7 @@ export class ClineProvider
 				await this.updateTaskHistory({ ...taskHistoryItem, mode: newMode })
 			}
 
-			;(task as any)._taskMode = newMode
+			task.setTaskMode(newMode)
 		} catch (error) {
 			this.log(
 				`Failed to persist mode switch for task ${task.taskId}: ${getErrorMessage(error)}`,
@@ -937,8 +938,7 @@ export class ClineProvider
 			// so we can safely call it without awaiting.
 			task.updateApiConfiguration(providerSettings)
 		} else {
-			// No rebuild needed, just sync apiConfiguration
-			;(task as any).apiConfiguration = providerSettings
+			task.updateApiConfiguration(providerSettings)
 		}
 	}
 
@@ -1773,8 +1773,7 @@ export class ClineProvider
 		options: CreateTaskOptions = {},
 		configuration: NJUST_AI_CJSettings = {},
 	): Promise<Task> {
-		return this.taskCoordinator?.createTask(text, images, parentTask, options, configuration) ??
-			ClineProvider.prototype.createTaskInternal.call(this, text, images, parentTask, options, configuration)
+		return this.taskCoordinator.createTask(text, images, parentTask, options, configuration)
 	}
 
 	private async createTaskInternal(

@@ -109,4 +109,8 @@ export class ProviderRegistry {
 	}
 }
 
+export function createProviderRegistry(dependencies?: IProviderRegistryDependencies): ProviderRegistry {
+	return new ProviderRegistry(dependencies)
+}
+
 export const providerRegistry = new ProviderRegistry()

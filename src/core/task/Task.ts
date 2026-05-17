@@ -929,6 +929,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		return this._taskMode
 	}
 
+	public setTaskMode(mode: string): void {
+		this._taskMode = mode
+	}
+
 	/**
 	 * Wait for the task API config name to be initialized before proceeding.
 	 * This method ensures that any operations depending on the task's provider profile

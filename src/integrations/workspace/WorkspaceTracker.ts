@@ -19,8 +19,15 @@ class WorkspaceTracker {
 	get cwd() {
 		return this.providerRef?.deref()?.cwd ?? getWorkspacePath()
 	}
+
 	constructor(provider: ITaskHost) {
 		this.providerRef = new WeakRef(provider)
+	}
+
+	init(): void {
+		if (this.disposables.length > 0) {
+			return
+		}
 		this.registerListeners()
 	}
 

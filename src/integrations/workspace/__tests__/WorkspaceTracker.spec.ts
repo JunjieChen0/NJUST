@@ -86,6 +86,7 @@ describe("WorkspaceTracker", () => {
 
 		// Create tracker instance
 		workspaceTracker = new WorkspaceTracker(mockProvider)
+		workspaceTracker.init()
 
 		// Ensure the tab change callback was registered
 		expect(registeredTabChangeCallback).not.toBeNull()
@@ -211,6 +212,7 @@ describe("WorkspaceTracker", () => {
 		// Set initial workspace path and create tracker
 		;(getWorkspacePath as Mock).mockReturnValue("/test/workspace")
 		workspaceTracker = new WorkspaceTracker(mockProvider)
+		workspaceTracker.init()
 
 		// Clear any initialization calls
 		vitest.clearAllMocks()
@@ -248,6 +250,7 @@ describe("WorkspaceTracker", () => {
 		// Setup initial workspace path
 		;(getWorkspacePath as Mock).mockReturnValue("/test/workspace")
 		workspaceTracker = new WorkspaceTracker(mockProvider)
+		workspaceTracker.init()
 
 		// Clear any initialization calls
 		vitest.clearAllMocks()
@@ -304,6 +307,7 @@ describe("WorkspaceTracker", () => {
 
 		// Create tracker instance to set initial prevWorkSpacePath
 		workspaceTracker = new WorkspaceTracker(mockProvider)
+		workspaceTracker.init()
 
 		// Change workspace path to trigger update
 		;(getWorkspacePath as Mock).mockReturnValue("/test/new-workspace")

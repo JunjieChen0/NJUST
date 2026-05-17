@@ -1,4 +1,4 @@
-import * as fs from "fs"
+import * as fs from "fs/promises"
 import * as path from "path"
 
 import {
@@ -14,13 +14,26 @@ const ERROR_CONTEXT_RADIUS = 15
 const ERROR_CONTEXT_MAX_LOCATIONS = 8
 const EXEC_CMD_ERROR_MAX_PATTERNS_PER_BLOCK = 5
 
-function formatSingleErrorLocationBlockSync(cwd: string, filePart: string, lineStr: string): string | null {
+async function pathExists(filePath: string): Promise<boolean> {
+	try {
+		await fs.access(filePath)
+		return true
+	} catch {
+		return false
+	}
+}
+
+function resolveErrorFilePath(cwd: string, filePart: string): string {
+	return path.isAbsolute(filePart) ? filePart : path.resolve(cwd, filePart)
+}
+
+async function formatSingleErrorLocationBlock(cwd: string, filePart: string, lineStr: string): Promise<string | null> {
 	const lineNum = parseInt(lineStr, 10) - 1
 	if (Number.isNaN(lineNum) || lineNum < 0) return null
-	const filePath = path.isAbsolute(filePart) ? filePart : path.resolve(cwd, filePart)
+	const filePath = resolveErrorFilePath(cwd, filePart)
 	try {
-		if (!fs.existsSync(filePath)) return null
-		const content = fs.readFileSync(filePath, "utf-8")
+		if (!(await pathExists(filePath))) return null
+		const content = await fs.readFile(filePath, "utf-8")
 		const lines = content.split("\n")
 		const start = Math.max(0, lineNum - ERROR_CONTEXT_RADIUS)
 		const end = Math.min(lines.length, lineNum + ERROR_CONTEXT_RADIUS + 1)
@@ -58,7 +71,7 @@ function formatSingleErrorLocationBlockSync(cwd: string, filePart: string, lineS
 	}
 }
 
-function extractErrorSourceContext(errorOutput: string, cwd: string): string[] {
+async function extractErrorSourceContext(errorOutput: string, cwd: string): Promise<string[]> {
 	const locationRe = /==>\s+(.+?):(\d+):(\d+):/g
 	const contextLines: string[] = []
 	const seen = new Set<string>()
@@ -67,12 +80,12 @@ function extractErrorSourceContext(errorOutput: string, cwd: string): string[] {
 	while ((match = locationRe.exec(errorOutput)) !== null) {
 		const [, filePart, lineStr] = match
 		const lineNum = parseInt(lineStr!, 10) - 1
-		const filePath = path.isAbsolute(filePart!) ? filePart! : path.resolve(cwd, filePart!)
+		const filePath = resolveErrorFilePath(cwd, filePart!)
 		const key = `${filePath}:${lineNum}`
 		if (seen.has(key)) continue
 		seen.add(key)
 
-		const block = formatSingleErrorLocationBlockSync(cwd, filePart!, lineStr!)
+		const block = await formatSingleErrorLocationBlock(cwd, filePart!, lineStr!)
 		if (block) contextLines.push(block)
 
 		if (contextLines.length >= ERROR_CONTEXT_MAX_LOCATIONS) break
@@ -89,9 +102,9 @@ function extractErrorSourceContext(errorOutput: string, cwd: string): string[] {
  * Enhance a cjc/cjlint error message with documentation references and fix suggestions.
  * Called when terminal output contains compilation errors.
  */
-export function enhanceCjcErrorOutput(errorOutput: string, cwd: string, extensionPath?: string): string {
+export async function enhanceCjcErrorOutput(errorOutput: string, cwd: string, extensionPath?: string): Promise<string> {
 	const docsBase = resolveCangjieDocsBasePath(extensionPath)
-	const docsExist = docsBase != null && fs.existsSync(docsBase)
+	const docsExist = docsBase != null && (await pathExists(docsBase))
 
 	const matchedSuggestions: string[] = []
 
@@ -103,7 +116,7 @@ export function enhanceCjcErrorOutput(errorOutput: string, cwd: string, extensio
 		matchedSuggestions.push(`[${pattern.category}] ${pattern.suggestion}${ref}\n  AI 修复指令: ${directive}`)
 	}
 
-	const sourceContexts = extractErrorSourceContext(errorOutput, cwd)
+	const sourceContexts = await extractErrorSourceContext(errorOutput, cwd)
 
 	if (matchedSuggestions.length === 0 && sourceContexts.length === 0) return ""
 
@@ -126,14 +139,22 @@ export function buildCangjieExecuteCommandErrorAppendix(
 	output: string,
 	cwd: string,
 	extensionPath?: string,
-): string {
+): Promise<string> {
+	return buildCangjieExecuteCommandErrorAppendixAsync(output, cwd, extensionPath)
+}
+
+async function buildCangjieExecuteCommandErrorAppendixAsync(
+	output: string,
+	cwd: string,
+	extensionPath?: string,
+): Promise<string> {
 	const normalized = output.replace(/\r\n/g, "\n")
 	if (!/==>\s+/.test(normalized)) {
 		return enhanceCjcErrorOutput(output, cwd, extensionPath)
 	}
 
 	const docsBase = resolveCangjieDocsBasePath(extensionPath)
-	const docsExist = docsBase != null && fs.existsSync(docsBase)
+	const docsExist = docsBase != null && (await pathExists(docsBase))
 	const lines = normalized.split("\n")
 	const isLocationLine = (line: string) => /^==>\s+.+:\d+:\d+:/.test(line.trim())
 
@@ -158,7 +179,8 @@ export function buildCangjieExecuteCommandErrorAppendix(
 		const locMatch = firstNonEmpty.match(/^==>\s+(.+?):(\d+):(\d+):/)
 		const header = locMatch ? `[${locMatch[1]} 第 ${locMatch[2]} 行 col ${locMatch[3]}]` : "[输出片段]"
 
-		const snippet = locMatch != null ? formatSingleErrorLocationBlockSync(cwd, locMatch[1]!, locMatch[2]!) : null
+		const snippet =
+			locMatch != null ? await formatSingleErrorLocationBlock(cwd, locMatch[1]!, locMatch[2]!) : null
 
 		const patterns = getMatchingCjcPatternsByCategory(text)
 		let patternBlock: string

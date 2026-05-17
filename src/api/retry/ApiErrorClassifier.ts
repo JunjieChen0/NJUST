@@ -123,6 +123,8 @@ export type ApiRetryDecision = {
 export function analyzeErrorForRetry(error: unknown): ApiRetryDecision {
 	const status = getStatusFromError(error)
 
+	// Prefer explicit HTTP status when present; provider classifiers are a fallback
+	// for SDK/network errors that carry no reliable status code.
 	const statusCategory = classifyHttpStatus(status)
 	if (statusCategory === ApiErrorCategory.RateLimited) {
 		return {
