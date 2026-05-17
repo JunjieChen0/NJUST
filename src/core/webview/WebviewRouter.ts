@@ -4,14 +4,14 @@ import type { ExtensionMessage, ExtensionState } from "@njust-ai-cj/types"
 
 import { logger } from "../../shared/logger"
 
-export interface WebviewRouterHost {
+export interface IWebviewRouterHost {
 	isDisposed(): boolean
 	getWebview(): vscode.Webview | undefined
 	buildState(): Promise<ExtensionState>
 }
 
 export class WebviewRouter {
-	constructor(private readonly host: WebviewRouterHost) {}
+	constructor(private readonly host: IWebviewRouterHost) {}
 
 	public async postMessage(message: ExtensionMessage): Promise<void> {
 		if (this.host.isDisposed()) {

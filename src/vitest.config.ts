@@ -32,10 +32,10 @@ export default defineConfig({
 				"**/cangjie-context.ts",
 			],
 			thresholds: {
-				lines: 66,
+				lines: 80,
 				functions: 50,
-				branches: 40,
-				statements: 66,
+				branches: 75,
+				statements: 80,
 			},
 		},
 	},

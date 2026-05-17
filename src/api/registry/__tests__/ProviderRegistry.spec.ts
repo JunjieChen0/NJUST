@@ -15,6 +15,24 @@ describe("ProviderRegistry", () => {
 		expect(registry.getTokenCountingStrategy("anthropic")).toBe("native")
 	})
 
+	it("injects shared dependencies into provider options", () => {
+		const toolCallParser = {
+			processFinishReason: () => [],
+			clearRawChunkState: () => undefined,
+			clearAllStreamingToolCalls: () => undefined,
+		}
+		const registry = new ProviderRegistry({ toolCallParser })
+		let injectedParser: unknown
+
+		registry.register("anthropic", (options) => {
+			injectedParser = options.toolCallParser
+			return fakeHandler
+		})
+
+		expect(registry.createHandler({ apiProvider: "anthropic" })).toBe(fakeHandler)
+		expect(injectedParser).toBe(toolCallParser)
+	})
+
 	it("rejects unknown providers instead of falling back", () => {
 		const registry = new ProviderRegistry()
 

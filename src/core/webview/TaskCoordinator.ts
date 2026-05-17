@@ -2,7 +2,7 @@ import type { CreateTaskOptions, HistoryItem, NJUST_AI_CJSettings } from "@njust
 
 import type { Task } from "../task/Task"
 
-export interface TaskCoordinatorHost {
+export interface ITaskCoordinatorHost {
 	getCurrentTask(): Task | undefined
 	getTaskStackSize(): number
 	getCurrentTaskStack(): string[]
@@ -24,7 +24,7 @@ export interface TaskCoordinatorHost {
 }
 
 export class TaskCoordinator {
-	constructor(private readonly host: TaskCoordinatorHost) {}
+	constructor(private readonly host: ITaskCoordinatorHost) {}
 
 	public getCurrentTask(): Task | undefined {
 		return this.host.getCurrentTask()

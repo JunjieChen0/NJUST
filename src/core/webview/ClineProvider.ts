@@ -1745,19 +1745,19 @@ export class ClineProvider
 	 */
 
 	public getCurrentTask(): Task | undefined {
-		return this.taskCoordinator.getCurrentTask()
+		return this.taskCoordinator?.getCurrentTask() ?? this.stack.current
 	}
 
 	getTaskStackSize(): number {
-		return this.taskCoordinator.getTaskStackSize()
+		return this.taskCoordinator?.getTaskStackSize() ?? this.stack.size
 	}
 
 	public getCurrentTaskStack(): string[] {
-		return this.taskCoordinator.getCurrentTaskStack()
+		return this.taskCoordinator?.getCurrentTaskStack() ?? this.stack.taskIds
 	}
 
 	public getRecentTasks(): string[] {
-		return this.taskCoordinator.getRecentTasks()
+		return this.taskCoordinator?.getRecentTasks() ?? this.taskHistory.getRecentTasks()
 	}
 
 	// When initializing a new task, (not from history but from a tool command
@@ -1773,7 +1773,8 @@ export class ClineProvider
 		options: CreateTaskOptions = {},
 		configuration: NJUST_AI_CJSettings = {},
 	): Promise<Task> {
-		return this.taskCoordinator.createTask(text, images, parentTask, options, configuration)
+		return this.taskCoordinator?.createTask(text, images, parentTask, options, configuration) ??
+			ClineProvider.prototype.createTaskInternal.call(this, text, images, parentTask, options, configuration)
 	}
 
 	private async createTaskInternal(
@@ -1871,7 +1872,7 @@ export class ClineProvider
 	}
 
 	public async cancelTask(): Promise<void> {
-		await this.taskCoordinator.cancelTask()
+		await (this.taskCoordinator?.cancelTask() ?? ClineProvider.prototype.cancelTaskInternal.call(this))
 	}
 
 	private async cancelTaskInternal(): Promise<void> {
@@ -1965,7 +1966,7 @@ export class ClineProvider
 	// Clear the current task without treating it as a subtask.
 	// This is used when the user cancels a task that is not a subtask.
 	public async clearTask(): Promise<void> {
-		await this.taskCoordinator.clearTask()
+		await (this.taskCoordinator?.clearTask() ?? ClineProvider.prototype.clearTaskInternal.call(this))
 	}
 
 	private async clearTaskInternal(): Promise<void> {
@@ -1977,7 +1978,11 @@ export class ClineProvider
 	}
 
 	public resumeTask(taskId: string): void {
-		this.taskCoordinator.resumeTask(taskId)
+		if (this.taskCoordinator) {
+			this.taskCoordinator.resumeTask(taskId)
+			return
+		}
+		ClineProvider.prototype.resumeTaskInternal.call(this, taskId)
 	}
 
 	private resumeTaskInternal(taskId: string): void {

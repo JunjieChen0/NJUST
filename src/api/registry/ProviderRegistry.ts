@@ -2,6 +2,7 @@ import { isRetiredProvider, type ProviderSettings } from "@njust-ai-cj/types"
 
 import type { ApiHandler } from "../index"
 import type { ApiHandlerOptions } from "../../shared/api"
+import type { IToolCallParser } from "../interfaces/IToolCallParser"
 import { defaultToolCallParser } from "../../core/assistant-message/ToolCallParserImpl"
 
 export type ProviderId = NonNullable<ProviderSettings["apiProvider"]>
@@ -10,14 +11,18 @@ export type TokenCountingStrategy = "native" | "tiktoken" | "estimated"
 
 export type ProviderFactory = (options: ApiHandlerOptions) => ApiHandler
 
-export interface ProviderRegistration {
+export interface IProviderRegistration {
 	factory: ProviderFactory
 	tokenCountingStrategy: TokenCountingStrategy
 }
 
-export type ProviderRegistrationOptions = {
+export type IProviderRegistrationOptions = {
 	tokenCountingStrategy?: TokenCountingStrategy
 	override?: boolean
+}
+
+export type IProviderRegistryDependencies = {
+	toolCallParser?: IToolCallParser
 }
 
 /**
@@ -31,7 +36,7 @@ export class ProviderRegistry {
 	private readonly factories = new Map<ProviderId, ProviderFactory>()
 	private readonly strategies = new Map<ProviderId, TokenCountingStrategy>()
 
-	constructor() {
+	constructor(private readonly dependencies: IProviderRegistryDependencies = {}) {
 		// Provider auto-registration is handled via import of register-all
 		// at the extension entry point (see src/api/index.ts)
 	}
@@ -40,7 +45,7 @@ export class ProviderRegistry {
 	 * Register (or override) a handler factory for a provider ID.
 	 * Providers can call this at module load time for self-registration.
 	 */
-	register(id: ProviderId, factory: ProviderFactory, strategyOrOptions?: TokenCountingStrategy | ProviderRegistrationOptions): void {
+	register(id: ProviderId, factory: ProviderFactory, strategyOrOptions?: TokenCountingStrategy | IProviderRegistrationOptions): void {
 		const options =
 			typeof strategyOrOptions === "string"
 				? { tokenCountingStrategy: strategyOrOptions }
@@ -63,7 +68,7 @@ export class ProviderRegistry {
 		return this.factories.has(id)
 	}
 
-	get(id: ProviderId): ProviderRegistration | undefined {
+	get(id: ProviderId): IProviderRegistration | undefined {
 		const factory = this.factories.get(id)
 		if (!factory) {
 			return undefined
@@ -86,7 +91,7 @@ export class ProviderRegistry {
 		const { apiProvider, ...optionsBase } = configuration
 		const options: ApiHandlerOptions = {
 			...optionsBase,
-			toolCallParser: defaultToolCallParser,
+			toolCallParser: this.dependencies.toolCallParser ?? defaultToolCallParser,
 		}
 
 		if (apiProvider && isRetiredProvider(apiProvider)) {

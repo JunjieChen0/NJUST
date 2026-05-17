@@ -1,5 +1,5 @@
 import { redactApiSecrets } from "../../utils/redactApiSecrets"
-import { classifyApiError, type ApiErrorKind } from "../../core/errors/apiErrorClassifier"
+import { classifyApiError, type ApiErrorKind } from "@njust-ai-cj/core"
 
 /**
  * Retry / error taxonomy for API calls (report D.2).
