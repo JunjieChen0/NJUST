@@ -27,9 +27,10 @@ export default defineConfig({
 				"src/utils/test-utils.tsx",
 			],
 			thresholds: {
-				lines: 50,
-				functions: 40,
-				branches: 30,
+				lines: 60,
+				functions: 46,
+				branches: 72,
+				statements: 60,
 			},
 		},
 	},

@@ -990,11 +990,15 @@ describe("Cline", () => {
 			let mockProvider: any
 			let mockApiConfig: any
 			let mockDelay: ReturnType<typeof vi.fn>
+			let nowMs: number
+			let performanceNowSpy: ReturnType<typeof vi.spyOn>
 
 			beforeEach(() => {
 				vi.clearAllMocks()
 				// Reset the global timestamp before each test
 				Task.resetGlobalApiRequestTime()
+				nowMs = 1000
+				performanceNowSpy = vi.spyOn(performance, "now").mockImplementation(() => nowMs)
 
 				mockApiConfig = {
 					apiProvider: "anthropic",
@@ -1032,6 +1036,7 @@ describe("Cline", () => {
 			afterEach(() => {
 				// Clean up the global state after each test
 				Task.resetGlobalApiRequestTime()
+				performanceNowSpy.mockRestore()
 			})
 
 			it("should enforce rate limiting across parent and subtask", async () => {
@@ -1164,9 +1169,7 @@ describe("Cline", () => {
 				await parentIterator.next()
 
 				// Simulate time passing (more than rate limit)
-				const originalPerformanceNow = performance.now
-				const mockTime = performance.now() + (mockApiConfig.rateLimitSeconds + 1) * 1000
-				performance.now = vi.fn(() => mockTime)
+				nowMs += (mockApiConfig.rateLimitSeconds + 1) * 1000
 
 				// Clear parent cache to prevent taskMode access in inheritCacheFromParent
 				;(parent.requestBuilder as any).systemPromptPartsCache = undefined
@@ -1191,8 +1194,6 @@ describe("Cline", () => {
 				// Verify no rate limiting was applied
 				expect(mockDelay).not.toHaveBeenCalled()
 
-				// Restore performance.now
-				performance.now = originalPerformanceNow
 			})
 
 			it("should share rate limiting across multiple subtasks", async () => {

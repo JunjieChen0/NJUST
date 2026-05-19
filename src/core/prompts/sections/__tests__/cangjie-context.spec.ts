@@ -1,12 +1,22 @@
 import { describe, it, expect, vi } from "vitest"
 
+const cangjieTestState = vi.hoisted(() => ({
+	diagnostics: [] as Array<[any, any[]]>,
+	activeTextEditor: null as any,
+	activeInfo: null as any,
+	rootCause: vi.fn(),
+	symbolIndex: null as any,
+}))
+
 vi.mock("vscode", () => ({
 	window: {
 		visibleTextEditors: [],
-		activeTextEditor: null,
+		get activeTextEditor() {
+			return cangjieTestState.activeTextEditor
+		},
 	},
 	languages: {
-		getDiagnostics: () => [],
+		getDiagnostics: () => cangjieTestState.diagnostics,
 	},
 	workspace: {
 		getConfiguration: () => ({
@@ -44,20 +54,85 @@ vi.mock("vscode", () => ({
 	},
 }))
 
+vi.mock("../CangjieErrorAnalyzer", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../CangjieErrorAnalyzer")>()
+	return {
+		...actual,
+		normalizeDiagnosticCode: (diagnostic: any) => (diagnostic.code == null ? undefined : String(diagnostic.code)),
+		resolveCjcPatternForDiagnostic: (diagnostic: any) =>
+			/type mismatch|expected/i.test(diagnostic.message)
+				? {
+						category: "Type mismatch",
+						suggestion: "Convert the value before assignment.",
+						docPaths: ["types/conversion.md"],
+						priority: 90,
+					}
+				: undefined,
+		buildDiagnosticPatternCache: (diagnostics: any[]) =>
+			new Map(
+				diagnostics.map((diagnostic) => [
+					diagnostic,
+					{ priority: /high priority/i.test(diagnostic.message) ? 100 : 10 },
+				]),
+			),
+	}
+})
+
+vi.mock("../CangjieSymbolExtractor", () => ({
+	getActiveCangjieFileInfo: () => cangjieTestState.activeInfo,
+}))
+
+vi.mock("../../../../services/cangjie-lsp/cangjieDiagnosticRootCause", () => ({
+	traceDiagnosticRootCause: cangjieTestState.rootCause,
+}))
+
+vi.mock("../../../../services/cangjie-lsp/CangjieSymbolIndex", () => ({
+	CangjieSymbolIndex: {
+		getInstance: () => cangjieTestState.symbolIndex,
+	},
+}))
+
 import * as fs from "fs"
 import * as path from "path"
 import * as os from "os"
+import * as vscode from "vscode"
 
+import { estimateCangjieContextTokensForTest, extractImports } from "../cangjie-context"
 import {
-	estimateCangjieContextTokensForTest,
-	extractImports,
-} from "../cangjie-context"
-import { parseCjpmToml } from "../cangjieContext/cjpmProjectParser"
+	buildAutoCorpusQueries,
+	buildStdlibSignatureHintsSection,
+	diagnosticToCorpusQuery,
+	importPathToCorpusQuery,
+} from "../cangjieContext/corpusQueryBuilding"
 import {
-	testLearnedFixPatternMatchesMessage,
-	testNormalizeLearnedFixText,
-} from "../cangjieContext/learnedFixMatching"
+	buildCompactProjectOverviewSection,
+	parseCjpmToml,
+	parseCjpmTomlContent,
+	readWorkspaceMemberDependencies,
+	scanPackageHierarchy,
+} from "../cangjieContext/cjpmProjectParser"
+import {
+	buildConversionHintByMessage,
+	buildDiagnosticAugmentationLines,
+	collectDiagnosticSnapshot,
+	diagnosticTypeFingerprint,
+	mapDiagnosticsToDocContext,
+	normalizeDiagnosticMessageForAggregation,
+	sampleCangjieDiagnostics,
+} from "../cangjieContext/diagnosticHandling"
+import { testLearnedFixPatternMatchesMessage, testNormalizeLearnedFixText } from "../cangjieContext/learnedFixMatching"
 import { userMessageSuggestsCangjie } from "../cangjieContext/cacheManagement"
+
+const makeDiagnostic = (
+	message: string,
+	severity: number = vscode.DiagnosticSeverity.Error,
+	line = 0,
+	code?: string | number,
+) => {
+	const diagnostic = new vscode.Diagnostic(new vscode.Range(line, 0, line, 5), message, severity as any)
+	diagnostic.code = code
+	return diagnostic
+}
 
 describe("userMessageSuggestsCangjie (Ask/Architect 语料触发)", () => {
 	it("matches toolchain tokens and 仓颉", () => {
@@ -104,10 +179,7 @@ describe("learned-fix similarity (Cangjie Dev)", () => {
 			errorPattern: "type mismatch: expected Int32, found String",
 			fix: "cast or parse",
 		}
-		const ok = testLearnedFixPatternMatchesMessage(
-			p,
-			"类型不匹配：需要 Int32 但得到了 String",
-		)
+		const ok = testLearnedFixPatternMatchesMessage(p, "类型不匹配：需要 Int32 但得到了 String")
 		expect(ok).toBe(true)
 	})
 
@@ -134,6 +206,65 @@ import std.console.*
 		expect(im).toContain("std.io")
 		expect(im).toContain("std.collection")
 		expect(im).toContain("std.console")
+	})
+})
+
+describe("corpus query building", () => {
+	it("converts import paths into compact search terms", () => {
+		expect(importPathToCorpusQuery("std.collection.HashMap")).toBe("collection HashMap")
+		expect(importPathToCorpusQuery("std.console.*")).toBe("std console")
+		expect(importPathToCorpusQuery("*")).toBeNull()
+		expect(importPathToCorpusQuery("LocalModule")).toBe("LocalModule")
+	})
+
+	it("derives diagnostic queries from plain messages", () => {
+		const diagnostic = {
+			message: "error: custom package foo failed at line 42 because helper token vanished",
+		} as any
+
+		const query = diagnosticToCorpusQuery(diagnostic)
+
+		expect(query).toContain("custom")
+		expect(query).toContain("package")
+		expect(query).not.toContain("42")
+	})
+
+	it("groups std imports by family and limits merged queries", () => {
+		const diagnostics = [
+			{ message: "error: undeclared identifier println" },
+			{ message: "warning: type mismatch expected Int64 found String" },
+		] as any[]
+
+		const queries = buildAutoCorpusQueries(
+			[
+				"std.collection.HashMap",
+				"std.collection.ArrayList",
+				"std.io.File",
+				"my.project.LocalType",
+				"other.module.Helper",
+			],
+			diagnostics,
+		)
+
+		expect(queries.length).toBeLessThanOrEqual(5)
+		expect(queries.some((q) => q.includes("collection HashMap"))).toBe(true)
+		expect(queries.some((q) => q.includes("io File"))).toBe(true)
+		expect(queries.some((q) => q.includes("project LocalType"))).toBe(true)
+		expect(queries.at(-1)?.length).toBeGreaterThan(0)
+	})
+
+	it("returns stdlib signature hints for matching standard imports", async () => {
+		const section = await buildStdlibSignatureHintsSection(
+			["std.collection.HashMap", "std.io.File", "local.Project"],
+			null,
+		)
+
+		expect(section).toBeTruthy()
+		expect(section).toContain("std.collection")
+	})
+
+	it("omits stdlib signature hints when no std imports match", async () => {
+		await expect(buildStdlibSignatureHintsSection(["local.Project"], null)).resolves.toBeNull()
 	})
 })
 
@@ -204,3 +335,201 @@ peer = { path = "../peer" }
 	})
 })
 
+describe("diagnostic handling", () => {
+	it("builds stable fingerprints from quoted and primitive types", () => {
+		expect(diagnosticTypeFingerprint("expected `Foo Bar` but got `Baz`")).toBe("foobar|baz")
+		expect(diagnosticTypeFingerprint("expected Int64 but got String and Int64")).toBe("int64|string")
+		expect(diagnosticTypeFingerprint("plain message")).toBe("")
+	})
+
+	it("normalizes diagnostic messages for aggregation", () => {
+		const normalized = normalizeDiagnosticMessageForAggregation(
+			"[E001] D:\\proj\\src\\main.cj: type mismatch expected `Foo Bar`",
+		)
+
+		expect(normalized).not.toContain("D:\\proj")
+		expect(normalized).not.toContain("[E001]")
+		expect(normalized).toContain("type mismatch")
+		expect(normalized).toContain("foobar")
+	})
+
+	it("collects Cangjie diagnostics and ignores non-Cangjie files", () => {
+		const cjUri = { fsPath: path.join("D:", "proj", "main.cj"), toString: () => "file:///D:/proj/main.cj" }
+		const tsUri = { fsPath: path.join("D:", "proj", "main.ts"), toString: () => "file:///D:/proj/main.ts" }
+		const diagnostic = makeDiagnostic("type mismatch expected Int64", vscode.DiagnosticSeverity.Error, 3, "E001")
+		cangjieTestState.diagnostics = [
+			[cjUri, [diagnostic]],
+			[tsUri, [makeDiagnostic("ignored")]],
+		]
+
+		const snapshot = collectDiagnosticSnapshot()
+
+		expect(snapshot.allCjDiags).toEqual([diagnostic])
+		expect(snapshot.byFile.size).toBe(1)
+		expect(snapshot.diagSummaryHash).toBeGreaterThan(0)
+		cangjieTestState.diagnostics = []
+	})
+
+	it("samples diagnostics by severity, aggregation bucket, and limits", () => {
+		const first = makeDiagnostic(
+			"high priority type mismatch expected Int64",
+			vscode.DiagnosticSeverity.Error,
+			0,
+			"E1",
+		)
+		const duplicate = makeDiagnostic(
+			"high priority type mismatch expected Int64",
+			vscode.DiagnosticSeverity.Error,
+			2,
+			"E1",
+		)
+		const warning = makeDiagnostic("warning: unused value", vscode.DiagnosticSeverity.Warning, 5, "W1")
+		const info = makeDiagnostic("info only", vscode.DiagnosticSeverity.Information, 7, "I1")
+
+		const result = sampleCangjieDiagnostics([warning, info, duplicate, first], { maxErrors: 1, maxWarnings: 1 })
+
+		expect(result.total).toBe(4)
+		expect(result.sampled).toHaveLength(2)
+		expect(result.sampled[0]?.message).toContain("high priority")
+		expect(result.sampled[0]?.message).toContain("2")
+		expect(result.sampled[1]).toBe(warning)
+		expect(result.omitted).toBe(1)
+	})
+
+	it("maps diagnostics to doc context and conversion hints", () => {
+		const diagnostic = makeDiagnostic("type mismatch expected String", vscode.DiagnosticSeverity.Error, 0, "E001")
+		const lines = mapDiagnosticsToDocContext(
+			[diagnostic, diagnostic],
+			"D:\\docs",
+			new Map([[diagnostic.message, "Try String.from(value)."]]),
+		)
+
+		expect(lines).toHaveLength(1)
+		expect(lines[0]).toContain("Type mismatch")
+		expect(lines[0]).toContain("code: E001")
+		expect(lines[0]).toContain("types/conversion.md")
+		expect(lines[0]).toContain("Try String.from(value).")
+	})
+
+	it("adds root-cause and conversion augmentation lines once", () => {
+		const diagnostic = makeDiagnostic("type mismatch expected String", vscode.DiagnosticSeverity.Error, 0, "E002")
+		cangjieTestState.rootCause.mockReturnValue("root declaration has incompatible type")
+
+		const lines = buildDiagnosticAugmentationLines(
+			[diagnostic, diagnostic],
+			"D:\\proj",
+			new Map([[diagnostic.message, "Use explicit conversion."]]),
+			new Map(),
+		)
+
+		expect(lines).toEqual(["- root declaration has incompatible type", "- Use explicit conversion."])
+		cangjieTestState.rootCause.mockReset()
+	})
+
+	it("builds conversion hints only for matching diagnostic messages", () => {
+		cangjieTestState.symbolIndex = {
+			getConversionHintFromDiagnosticMessage: vi.fn((message: string) =>
+				message.includes("String") ? "Use String.from" : undefined,
+			),
+		}
+
+		const matching = makeDiagnostic("type mismatch expected String", vscode.DiagnosticSeverity.Error)
+		const ignored = makeDiagnostic("unrelated parser error", vscode.DiagnosticSeverity.Error)
+		const hints = buildConversionHintByMessage([matching, ignored])
+
+		expect(hints.get(matching.message)).toBe("Use String.from")
+		expect(hints.has(ignored.message)).toBe(false)
+		cangjieTestState.symbolIndex = null
+	})
+})
+
+describe("cjpm project parser helpers", () => {
+	it("parses package dependencies from TOML content without reading files", async () => {
+		const info = await parseCjpmTomlContent(
+			`
+[package]
+name = "demo"
+version = "1.2.3"
+output-type = "static"
+src-dir = "source"
+
+[dependencies]
+local = { path = "../local" }
+remote = { git = "https://example.test/repo.git", branch = "main" }
+tagged = { git = "https://example.test/repo.git", tag = "v1" }
+`,
+			process.cwd(),
+		)
+
+		expect(info).toMatchObject({
+			name: "demo",
+			version: "1.2.3",
+			outputType: "static",
+			srcDir: "source",
+			isWorkspace: false,
+		})
+		expect(info?.dependencies?.local?.path).toBe("../local")
+		expect(info?.dependencies?.remote?.branch).toBe("main")
+		expect(info?.dependencies?.tagged?.tag).toBe("v1")
+	})
+
+	it("reads dependency display from member metadata before touching files", async () => {
+		const deps = await readWorkspaceMemberDependencies(process.cwd(), {
+			name: "core",
+			path: "core",
+			outputType: "static",
+			dependencyDisplay: ["a", "b", "c", "d", "e", "f"],
+		})
+
+		expect(deps).toEqual(["a", "b", "c", "d", "e"])
+	})
+
+	it("scans package hierarchy with source, test, main, and child packages", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "roo-cjpm-scan-"))
+		const leaf = path.join(root, "src", "network", "http")
+		fs.mkdirSync(leaf, { recursive: true })
+		fs.writeFileSync(path.join(root, "src", "main.cj"), "main() {}", "utf-8")
+		fs.writeFileSync(path.join(root, "src", "main_test.cj"), "test {}", "utf-8")
+		fs.writeFileSync(path.join(leaf, "client.cj"), "package demo.network.http", "utf-8")
+
+		const tree = await scanPackageHierarchy(root, "src", "demo")
+
+		expect(tree).toMatchObject({
+			packageName: "demo",
+			dirPath: "src",
+			sourceFiles: ["main.cj"],
+			testFiles: ["main_test.cj"],
+			hasMain: true,
+		})
+		expect(tree?.children[0]?.children[0]).toMatchObject({
+			packageName: "demo.network.http",
+			dirPath: "src/network/http",
+			sourceFiles: ["client.cj"],
+		})
+	})
+
+	it("builds a compact overview for single-module projects", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "roo-cjpm-overview-"))
+		fs.mkdirSync(path.join(root, "src", "sub"), { recursive: true })
+		fs.writeFileSync(path.join(root, "src", "main.cj"), "main() {}", "utf-8")
+		fs.writeFileSync(path.join(root, "src", "sub", "helper.cj"), "package demo.sub", "utf-8")
+
+		const section = await buildCompactProjectOverviewSection(
+			root,
+			{
+				name: "demo",
+				version: "0.1.0",
+				outputType: "executable",
+				isWorkspace: false,
+				srcDir: "src",
+			},
+			"demo.sub",
+			path.join(root, "src", "sub", "helper.cj"),
+		)
+
+		expect(section).toContain("demo")
+		expect(section).toContain("executable")
+		expect(section).toContain("src/")
+		expect(section).toContain("demo.sub")
+	})
+})

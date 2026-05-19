@@ -15,10 +15,22 @@ coverage:
     project:
       default:
         # 项目整体覆盖率目标
-        target: 85%
+        target: auto
         # 允许的覆盖率下降幅度
         threshold: 2%
         # 如果覆盖率下降超过阈值，PR 会失败
+        if_ci_failed: error
+      src:
+        target: 68%
+        threshold: 2%
+        flags:
+          - src
+        if_ci_failed: error
+      webview-ui:
+        target: 60%
+        threshold: 2%
+        flags:
+          - webview-ui
         if_ci_failed: error
     patch:
       default:

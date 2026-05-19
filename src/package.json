@@ -1222,7 +1222,7 @@
 		}
 	},
 	"scripts": {
-		"lint": "eslint . --ext=ts --max-warnings=500",
+		"lint": "eslint . --ext=ts --max-warnings=200",
 		"check-types": "tsc --noEmit",
 		"test": "vitest run",
 		"format": "prettier --write .",

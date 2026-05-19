@@ -194,5 +194,12 @@ export default defineConfig(({ mode }) => {
 			exclude: ["@vscode/codicons", "vscode-oniguruma", "shiki"],
 		},
 		assetsInclude: ["**/*.wasm", "**/*.wav"],
+		...(mode === "production"
+			? {
+					esbuild: {
+						drop: ["console", "debugger"] as const,
+					},
+				}
+			: {}),
 	}
 })

@@ -40,7 +40,7 @@
 	"devDependencies": {
 		"@njust-ai-cj/config-eslint": "workspace:^",
 		"@njust-ai-cj/config-typescript": "workspace:^",
-		"@types/node": "^24.1.0",
+		"@types/node": "20.x",
 		"@types/react": "^19.1.6",
 		"ink-testing-library": "^4.0.0",
 		"rimraf": "^6.0.1",
