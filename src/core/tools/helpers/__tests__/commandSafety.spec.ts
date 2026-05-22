@@ -42,6 +42,18 @@ describe("checkCommandSafety", () => {
 		expect(result.shellAnalysis.riskLevel).toBe(riskLevel)
 	})
 
+	it.each(["cat /etc/shadow", "cat ~/.ssh/id_rsa", "type ~/.aws/credentials", "head ~/.kube/config"])(
+		"does not allowlist sensitive file reads in %s",
+		(command) => {
+			const result = checkCommandSafety(command)
+
+			expect(result.safe).toBe(false)
+			expect(result.riskLevel).toBe("medium")
+			expect(result.shellAnalysis.riskLevel).toBe("medium")
+			expect(result.reasons.some((reason) => reason.startsWith("[SENSITIVE]"))).toBe(true)
+		},
+	)
+
 	it.each([
 		["psql -c 'DROP TABLE users'", "[SQL] SQL DROP"],
 		["mysql -e 'TRUNCATE TABLE audit_logs'", "[SQL] SQL TRUNCATE TABLE"],

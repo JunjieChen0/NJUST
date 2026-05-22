@@ -78,6 +78,14 @@ describe("PermissionRuleEngine", () => {
 			expect(recordSecurityMetric).toHaveBeenCalledWith("permission_bypass_deny", expect.any(Object))
 		})
 
+		it("denies sensitive file reads in bypass mode", () => {
+			const engine = new PermissionRuleEngine()
+			engine.setMode("bypass")
+
+			expect(engine.evaluate("execute_command", { command: "cat ~/.ssh/id_rsa" }, destructive)).toBe("deny")
+			expect(recordSecurityMetric).toHaveBeenCalledWith("permission_bypass_deny", expect.any(Object))
+		})
+
 		it("allows hardened tools in bypass mode when classifier passes", () => {
 			const engine = new PermissionRuleEngine()
 			engine.setMode("bypass")

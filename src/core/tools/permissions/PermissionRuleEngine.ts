@@ -257,10 +257,10 @@ export class PermissionRuleEngine {
 				// the classifier chain so that dangerous commands / network ops /
 				// secrets are blocked automatically.
 				const classifierAction = this.runClassifierChainSync(toolName, params, toolMeta)
-				if (classifierAction === "deny") {
+				if (classifierAction === "deny" || classifierAction === "ask") {
 					logger.warn(
 						"PermissionRuleEngine",
-						`Permission mode is "bypass" but classifier denied tool=${toolName}. params=${audit}`,
+						`Permission mode is "bypass" but classifier blocked tool=${toolName}. params=${audit}`,
 					)
 					recordSecurityMetric("permission_bypass_deny", { tool: toolName, paramSummary: audit })
 					return "deny"
@@ -396,7 +396,7 @@ export class PermissionRuleEngine {
 				const audit = summarizeParamsForAudit(toolName, params)
 				// Run classifier chain even in bypass mode (dangerous command / network / secrets checks).
 				const classifierAction = this.runClassifierChainSync(toolName, params, toolMeta)
-				if (classifierAction === "deny") {
+				if (classifierAction === "deny" || classifierAction === "ask") {
 					recordSecurityMetric("permission_bypass_deny", { tool: toolName, paramSummary: audit })
 					return "deny"
 				}

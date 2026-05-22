@@ -376,7 +376,6 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 			}
 
 			const start = Date.now()
-			await this.safeClean(this.git)
 			await this.git.reset(["--hard", commitHash])
 
 			// Remove all checkpoints after the specified commitHash.

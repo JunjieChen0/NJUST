@@ -305,6 +305,20 @@ describe.each([[RepoPerTaskCheckpointService, "RepoPerTaskCheckpointService"]])(
 				expect(await fs.readFile(testFile, "utf-8")).toBe("Changed tracked file")
 			})
 
+			it("does not delete workspace files created after the target checkpoint", async () => {
+				await fs.writeFile(testFile, "Checkpointed content")
+				const commit = await service.saveCheckpoint("Checkpoint tracked content")
+				expect(commit?.commit).toBeTruthy()
+
+				const localOnlyFile = path.join(service.workspaceDir, "local-only.txt")
+				await fs.writeFile(localOnlyFile, "Local work that is not in the checkpoint")
+
+				await service.restoreCheckpoint(commit!.commit)
+
+				expect(await fs.readFile(localOnlyFile, "utf-8")).toBe("Local work that is not in the checkpoint")
+				expect(await fs.readFile(testFile, "utf-8")).toBe("Checkpointed content")
+			})
+
 			it("handles file deletions correctly", async () => {
 				await fs.writeFile(testFile, "I am tracked!")
 				const untrackedFile = path.join(service.workspaceDir, "new.txt")
