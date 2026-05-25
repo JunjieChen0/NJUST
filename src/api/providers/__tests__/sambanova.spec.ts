@@ -127,9 +127,13 @@ describe("SambaNovaHandler", () => {
 		mockCreate.mockImplementationOnce(() => {
 			return {
 				[Symbol.asyncIterator]: () => ({
-					async next() {
-						return { done: true }
-					},
+					next: vitest
+						.fn()
+						.mockResolvedValueOnce({
+							done: false,
+							value: { choices: [{ delta: { content: "test" } }] },
+						})
+						.mockResolvedValueOnce({ done: true }),
 				}),
 			}
 		})

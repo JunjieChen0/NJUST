@@ -378,7 +378,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 		return content
 	}
 
-	override async *createMessage(
+	protected async *createMessageInner(
 		systemPrompt: string,
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
@@ -604,6 +604,14 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 			}
 			throw error
 		}
+	}
+
+	override async *createMessage(
+		systemPrompt: string,
+		messages: Anthropic.Messages.MessageParam[],
+		metadata?: ApiHandlerCreateMessageMetadata,
+	): ApiStream {
+		yield* this.guardEmptyStream(this.createMessageInner(systemPrompt, messages, metadata))
 	}
 }
 

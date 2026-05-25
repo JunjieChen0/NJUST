@@ -11,6 +11,18 @@ import { computeBackoffMs, delayMs, DEFAULT_API_RETRY_OPTIONS, type ApiRetryOpti
 import { analyzeErrorForRetry } from "../retry/ApiErrorClassifier"
 import { taskEventBus } from "../../core/events/TaskEventBus"
 
+export const CONTENT_CHUNK_TYPES: ReadonlySet<string> = new Set([
+	"text",
+	"reasoning",
+	"tool_call",
+	"tool_call_start",
+	"tool_call_delta",
+	"tool_call_end",
+	"tool_call_partial",
+	"grounding",
+	"thinking_complete",
+])
+
 type JsonSchemaObject = {
 	type?: string | string[]
 	properties?: Record<string, JsonSchemaObject>
@@ -191,6 +203,23 @@ export abstract class BaseProvider implements ApiHandler {
 		}
 
 		return countTokensDetailed(content, { useWorker: true })
+	}
+
+	protected async *guardEmptyStream(stream: ApiStream): ApiStream {
+		let hasContent = false
+		for await (const chunk of stream) {
+			if (CONTENT_CHUNK_TYPES.has(chunk.type)) {
+				hasContent = true
+			}
+			yield chunk
+		}
+		if (!hasContent) {
+			const name = this.constructor.name
+			throw new Error(
+				`[${name}] The language model did not provide any assistant messages. ` +
+					`This may indicate an issue with the API or the model's output.`,
+			)
+		}
 	}
 
 	/**

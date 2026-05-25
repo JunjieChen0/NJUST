@@ -270,6 +270,14 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
 	): ApiStream {
+		yield* this.guardEmptyStream(this.createMessageInner(systemPrompt, messages, metadata))
+	}
+
+	protected async *createMessageInner(
+		systemPrompt: string,
+		messages: Anthropic.Messages.MessageParam[],
+		metadata?: ApiHandlerCreateMessageMetadata,
+	): ApiStream {
 		const model = this.getModel()
 		yield* this.handleResponsesApiMessage(model, systemPrompt, messages, metadata)
 	}

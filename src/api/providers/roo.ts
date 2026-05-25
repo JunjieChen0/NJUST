@@ -128,6 +128,14 @@ export class RooHandler extends BaseOpenAiCompatibleProvider<string> {
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
 	): ApiStream {
+		yield* this.guardEmptyStream(this.createMessageInner(systemPrompt, messages, metadata))
+	}
+
+	protected override async *createMessageInner(
+		systemPrompt: string,
+		messages: Anthropic.Messages.MessageParam[],
+		metadata?: ApiHandlerCreateMessageMetadata,
+	): ApiStream {
 		try {
 			// Reset reasoning_details accumulator for this request
 			this.currentReasoningDetails = []

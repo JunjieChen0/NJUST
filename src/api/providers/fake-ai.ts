@@ -5,6 +5,7 @@ import type { ModelInfo } from "@njust-ai-cj/types"
 import type { ApiHandler, SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../types"
 import type { ApiHandlerOptions } from "../../shared/api"
 import { ApiStream } from "../transform/stream"
+import { CONTENT_CHUNK_TYPES } from "./base-provider"
 
 interface FakeAI {
 	/**
@@ -64,7 +65,23 @@ export class FakeAIHandler implements ApiHandler, SingleCompletionHandler {
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
 	): ApiStream {
-		yield* this.ai.createMessage(systemPrompt, messages, metadata)
+		yield* this.guardEmptyStream(this.ai.createMessage(systemPrompt, messages, metadata))
+	}
+
+	private async *guardEmptyStream(stream: ApiStream): ApiStream {
+		let hasContent = false
+		for await (const chunk of stream) {
+			if (CONTENT_CHUNK_TYPES.has(chunk.type)) {
+				hasContent = true
+			}
+			yield chunk
+		}
+		if (!hasContent) {
+			throw new Error(
+				`[FakeAI] The language model did not provide any assistant messages. ` +
+					`This may indicate an issue with the API or the model's output.`,
+			)
+		}
 	}
 
 	getModel(): { id: string; info: ModelInfo } {

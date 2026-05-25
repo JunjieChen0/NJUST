@@ -119,6 +119,14 @@ export abstract class BaseOpenAiCompatibleProvider<ModelName extends string>
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
 	): ApiStream {
+		yield* this.guardEmptyStream(this.createMessageInner(systemPrompt, messages, metadata))
+	}
+
+	protected async *createMessageInner(
+		systemPrompt: string,
+		messages: Anthropic.Messages.MessageParam[],
+		metadata?: ApiHandlerCreateMessageMetadata,
+	): ApiStream {
 		const stream = await this.createStream(systemPrompt, messages, metadata)
 
 		const matcher = new TagMatcher(

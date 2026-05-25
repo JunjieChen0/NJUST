@@ -63,6 +63,14 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
 	): ApiStream {
+		yield* this.guardEmptyStream(this.createMessageInner(systemPrompt, messages, metadata))
+	}
+
+	protected async *createMessageInner(
+		systemPrompt: string,
+		messages: Anthropic.Messages.MessageParam[],
+		metadata?: ApiHandlerCreateMessageMetadata,
+	): ApiStream {
 		try {
 			let stream: AnthropicStream<Anthropic.Messages.RawMessageStreamEvent>
 			const cacheControl: CacheControlEphemeral = { type: "ephemeral" }
@@ -195,7 +203,7 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 							stream: true,
 							...nativeToolParams,
 						},
-						// Prompt caching is now GA �?no special beta header needed.
+						// Prompt caching is now GA — no special beta header needed.
 						// Pass remaining betas (e.g. fine-grained-tool-streaming, context-1m) if any.
 						betas && betas.length > 0 ? { headers: { "anthropic-beta": betas.join(",") } } : undefined,
 					)

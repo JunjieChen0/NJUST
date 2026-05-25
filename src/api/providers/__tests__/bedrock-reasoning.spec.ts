@@ -119,6 +119,12 @@ describe("AwsBedrockHandler - Extended Thinking", () => {
 			mockSend.mockResolvedValue({
 				stream: (async function* () {
 					yield { messageStart: { role: "assistant" } }
+					yield {
+						contentBlockStart: {
+							start: { text: "test" },
+							contentBlockIndex: 0,
+						},
+					}
 					yield { metadata: { usage: { inputTokens: 100, outputTokens: 50 } } }
 				})(),
 			})
@@ -164,6 +170,12 @@ describe("AwsBedrockHandler - Extended Thinking", () => {
 			mockSend.mockResolvedValue({
 				stream: (async function* () {
 					yield { messageStart: { role: "assistant" } }
+					yield {
+						contentBlockStart: {
+							start: { text: "test" },
+							contentBlockIndex: 0,
+						},
+					}
 				})(),
 			})
 

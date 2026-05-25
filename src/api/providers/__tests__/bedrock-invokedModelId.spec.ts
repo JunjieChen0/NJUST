@@ -304,20 +304,25 @@ describe("AwsBedrockHandler with invokedModelId", () => {
 
 		// Mock the stream with a valid invokedModelId
 		mockSend.mockImplementationOnce(async () => {
-			return {
-				stream: createMockStream([
-					// Event with valid invokedModelId
-					{
-						trace: {
-							promptRouter: {
-								invokedModelId:
-									"arn:aws:bedrock:us-east-1:123456789:foundation-model/anthropic.claude-3-sonnet-20240229-v1:0",
+				return {
+					stream: createMockStream([
+						{
+							trace: {
+								promptRouter: {
+									invokedModelId:
+										"arn:aws:bedrock:us-east-1:123456789:foundation-model/anthropic.claude-3-sonnet-20240229-v1:0",
+								},
 							},
 						},
-					},
-				]),
-			}
-		})
+						{
+							contentBlockStart: {
+								start: { text: "test" },
+								contentBlockIndex: 0,
+							},
+						},
+					]),
+				}
+			})
 
 		// Mock getModel to throw an error when called with the model name
 		vitest.spyOn(handler, "getModel").mockImplementation((modelName?: string) => {

@@ -23,9 +23,18 @@ vi.mock("@aws-sdk/credential-providers", () => {
 
 // Mock BedrockRuntimeClient and ConverseStreamCommand
 vi.mock("@aws-sdk/client-bedrock-runtime", () => {
-	const mockSend = vi.fn().mockResolvedValue({
-		stream: [],
-	})
+	const mockSend = vi.fn().mockImplementation(() =>
+		Promise.resolve({
+			stream: (async function* () {
+				yield {
+					contentBlockStart: {
+						start: { text: "test" },
+						contentBlockIndex: 0,
+					},
+				}
+			})(),
+		}),
+	)
 	const mockConverseStreamCommand = vi.fn()
 
 	return {

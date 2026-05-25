@@ -375,9 +375,13 @@ describe("ZAiHandler", () => {
 			mockCreate.mockImplementationOnce(() => {
 				return {
 					[Symbol.asyncIterator]: () => ({
-						async next() {
-							return { done: true }
-						},
+						next: vitest
+							.fn()
+							.mockResolvedValueOnce({
+								done: false,
+								value: { choices: [{ delta: { content: "test" } }] },
+							})
+							.mockResolvedValueOnce({ done: true }),
 					}),
 				}
 			})
@@ -411,15 +415,18 @@ describe("ZAiHandler", () => {
 				apiModelId: "glm-4.7",
 				zaiApiKey: "test-zai-api-key",
 				zaiApiLine: "international_coding",
-				// No reasoningEffort setting - should use model default (medium)
 			})
 
 			mockCreate.mockImplementationOnce(() => {
 				return {
 					[Symbol.asyncIterator]: () => ({
-						async next() {
-							return { done: true }
-						},
+						next: vitest
+							.fn()
+							.mockResolvedValueOnce({
+								done: false,
+								value: { choices: [{ delta: { content: "test" } }] },
+							})
+							.mockResolvedValueOnce({ done: true }),
 					}),
 				}
 			})
@@ -448,9 +455,13 @@ describe("ZAiHandler", () => {
 			mockCreate.mockImplementationOnce(() => {
 				return {
 					[Symbol.asyncIterator]: () => ({
-						async next() {
-							return { done: true }
-						},
+						next: vitest
+							.fn()
+							.mockResolvedValueOnce({
+								done: false,
+								value: { choices: [{ delta: { content: "test" } }] },
+							})
+							.mockResolvedValueOnce({ done: true }),
 					}),
 				}
 			})
@@ -479,9 +490,13 @@ describe("ZAiHandler", () => {
 			mockCreate.mockImplementationOnce(() => {
 				return {
 					[Symbol.asyncIterator]: () => ({
-						async next() {
-							return { done: true }
-						},
+						next: vitest
+							.fn()
+							.mockResolvedValueOnce({
+								done: false,
+								value: { choices: [{ delta: { content: "test" } }] },
+							})
+							.mockResolvedValueOnce({ done: true }),
 					}),
 				}
 			})
@@ -508,9 +523,13 @@ describe("ZAiHandler", () => {
 			mockCreate.mockImplementationOnce(() => {
 				return {
 					[Symbol.asyncIterator]: () => ({
-						async next() {
-							return { done: true }
-						},
+						next: vitest
+							.fn()
+							.mockResolvedValueOnce({
+								done: false,
+								value: { choices: [{ delta: { content: "test" } }] },
+							})
+							.mockResolvedValueOnce({ done: true }),
 					}),
 				}
 			})

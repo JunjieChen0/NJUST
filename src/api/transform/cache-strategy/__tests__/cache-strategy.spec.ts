@@ -311,6 +311,13 @@ describe("Cache Strategy", () => {
 				stream: {
 					[Symbol.asyncIterator]: async function* () {
 						yield {
+							contentBlockStart: {
+								start: {
+									text: "test",
+								},
+							},
+						}
+						yield {
 							metadata: {
 								usage: {
 									inputTokens: 10,
@@ -453,6 +460,13 @@ describe("Cache Strategy", () => {
 				stream: {
 					[Symbol.asyncIterator]: async function* () {
 						yield {
+							contentBlockStart: {
+								start: {
+									text: "test",
+								},
+							},
+						}
+						yield {
 							metadata: {
 								usage: {
 									inputTokens: 10,
@@ -534,6 +548,13 @@ describe("Cache Strategy", () => {
 				stream: {
 					[Symbol.asyncIterator]: async function* () {
 						yield {
+							contentBlockStart: {
+								start: {
+									text: "test",
+								},
+							},
+						}
+						yield {
 							metadata: {
 								usage: {
 									inputTokens: 10,
@@ -596,8 +617,17 @@ describe("Cache Strategy", () => {
 				},
 			}
 
+			const contentStartEvent = {
+				contentBlockStart: {
+					start: {
+						text: "test",
+					},
+				},
+			}
+
 			const mockStream = {
 				[Symbol.asyncIterator]: async function* () {
+					yield contentStartEvent
 					yield mockApiResponse
 				},
 			}
@@ -623,9 +653,9 @@ describe("Cache Strategy", () => {
 
 			// Verify that usage results with cache tokens are yielded
 			expect(chunks.length).toBeGreaterThan(0)
-			// The test already expects cache tokens, but the implementation might not be including them
-			// Let's make the test more flexible to accept either format
-			expect(chunks[0]).toMatchObject({
+			const usageChunks = chunks.filter((c: any) => c.type === "usage")
+			expect(usageChunks.length).toBeGreaterThan(0)
+			expect(usageChunks[0]).toMatchObject({
 				type: "usage",
 				inputTokens: 10,
 				outputTokens: 5,

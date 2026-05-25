@@ -286,9 +286,17 @@ describe("MiniMaxHandler", () => {
 
 			mockCreate.mockResolvedValueOnce({
 				[Symbol.asyncIterator]: () => ({
-					async next() {
-						return { done: true }
-					},
+					next: vitest
+						.fn()
+						.mockResolvedValueOnce({
+							done: false,
+							value: {
+								type: "content_block_start",
+								index: 0,
+								content_block: { type: "text", text: "test" },
+							},
+						})
+						.mockResolvedValueOnce({ done: true }),
 				}),
 			})
 
@@ -313,9 +321,17 @@ describe("MiniMaxHandler", () => {
 		it("should use temperature 1 by default", async () => {
 			mockCreate.mockResolvedValueOnce({
 				[Symbol.asyncIterator]: () => ({
-					async next() {
-						return { done: true }
-					},
+					next: vitest
+						.fn()
+						.mockResolvedValueOnce({
+							done: false,
+							value: {
+								type: "content_block_start",
+								index: 0,
+								content_block: { type: "text", text: "test" },
+							},
+						})
+						.mockResolvedValueOnce({ done: true }),
 				}),
 			})
 

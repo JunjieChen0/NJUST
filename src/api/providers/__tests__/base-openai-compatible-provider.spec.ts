@@ -334,9 +334,13 @@ describe("BaseOpenAiCompatibleProvider", () => {
 			mockCreate.mockImplementationOnce(() => {
 				return {
 					[Symbol.asyncIterator]: () => ({
-						async next() {
-							return { done: true }
-						},
+						next: vi
+							.fn()
+							.mockResolvedValueOnce({
+								done: false,
+								value: { choices: [{ delta: { content: "test" } }] },
+							})
+							.mockResolvedValueOnce({ done: true }),
 					}),
 				}
 			})

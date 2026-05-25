@@ -380,6 +380,20 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			}
 		},
 	): ApiStream {
+		yield* this.guardEmptyStream(this.createMessageInner(systemPrompt, messages, metadata))
+	}
+
+	protected async *createMessageInner(
+		systemPrompt: string,
+		messages: Anthropic.Messages.MessageParam[],
+		metadata?: ApiHandlerCreateMessageMetadata & {
+			thinking?: {
+				enabled: boolean
+				maxTokens?: number
+				maxThinkingTokens?: number
+			}
+		},
+	): ApiStream {
 		const modelConfig = this.getModel()
 		const usePromptCache = Boolean(
 			(this.options.awsUsePromptCache ?? true) && this.supportsAwsPromptCache(modelConfig),
@@ -1416,7 +1430,7 @@ Please try:
 			logLevel: "error",
 		},
 		ON_DEMAND_NOT_SUPPORTED: {
-			patterns: ["with on-demand throughput isn’t supported."],
+			patterns: ["with on-demand throughput isn't supported."],
 			messageTemplate: `
 1. Try enabling cross-region inference in settings.
 2. Or, create an inference profile and then leverage the "Use custom ARN..." option of the model selector in settings.`,

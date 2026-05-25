@@ -715,6 +715,11 @@ describe("VertexHandler", () => {
 								},
 							},
 						}
+						yield {
+							type: "content_block_start",
+							index: 0,
+							content_block: { type: "text", text: "test" },
+						}
 					},
 				}
 			})
@@ -977,6 +982,11 @@ describe("VertexHandler", () => {
 						},
 					},
 				},
+				{
+					type: "content_block_start",
+					index: 0,
+					content_block: { type: "text", text: "test" },
+				},
 			]
 
 			const asyncIterator = {
@@ -1022,6 +1032,11 @@ describe("VertexHandler", () => {
 							output_tokens: 0,
 						},
 					},
+				},
+				{
+					type: "content_block_start",
+					index: 0,
+					content_block: { type: "text", text: "test" },
 				},
 			]
 
@@ -1181,6 +1196,11 @@ describe("VertexHandler", () => {
 						},
 					},
 				},
+				{
+					type: "content_block_start",
+					index: 0,
+					content_block: { type: "text", text: "test" },
+				},
 			]
 
 			const asyncIterator = {
@@ -1240,6 +1260,11 @@ describe("VertexHandler", () => {
 							output_tokens: 0,
 						},
 					},
+				},
+				{
+					type: "content_block_start",
+					index: 0,
+					content_block: { type: "text", text: "test" },
 				},
 			]
 

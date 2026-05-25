@@ -81,7 +81,14 @@ describe("AwsBedrockHandler Native Tool Calling", () => {
 
 		// Mock the stream response
 		mockSend.mockResolvedValue({
-			stream: [],
+			stream: (async function* () {
+				yield {
+					contentBlockStart: {
+						start: { text: "test" },
+						contentBlockIndex: 0,
+					},
+				}
+			})(),
 		})
 	})
 

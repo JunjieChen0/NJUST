@@ -302,7 +302,7 @@ describe("VercelAiGatewayHandler", () => {
 						yield {
 							choices: [
 								{
-									delta: {},
+									delta: { content: "test" },
 									index: 0,
 								},
 							],

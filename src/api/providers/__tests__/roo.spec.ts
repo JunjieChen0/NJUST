@@ -227,15 +227,11 @@ describe("RooHandler", () => {
 			})
 
 			const stream = handler.createMessage(systemPrompt, messages)
-			const chunks: any[] = []
-			for await (const chunk of stream) {
-				chunks.push(chunk)
-			}
-
-			const textChunks = chunks.filter((chunk) => chunk.type === "text")
-			expect(textChunks).toHaveLength(0)
-			const usageChunks = chunks.filter((chunk) => chunk.type === "usage")
-			expect(usageChunks).toHaveLength(1)
+			await expect(async () => {
+				for await (const _chunk of stream) {
+					// consume
+				}
+			}).rejects.toThrow("did not provide any assistant messages")
 		})
 
 		it("should handle multiple messages in conversation", async () => {

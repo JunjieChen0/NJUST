@@ -89,13 +89,16 @@ describe("XAIHandler", () => {
 			reasoningEffort: "high",
 		})
 
-		// Setup mock for streaming response
 		mockCreate.mockImplementationOnce(() => {
 			return {
 				[Symbol.asyncIterator]: () => ({
-					async next() {
-						return { done: true }
-					},
+					next: vi
+						.fn()
+						.mockResolvedValueOnce({
+							done: false,
+							value: { choices: [{ delta: { content: "test" } }] },
+						})
+						.mockResolvedValueOnce({ done: true }),
 				}),
 			}
 		})
@@ -119,13 +122,16 @@ describe("XAIHandler", () => {
 			reasoningEffort: "high",
 		})
 
-		// Setup mock for streaming response
 		mockCreate.mockImplementationOnce(() => {
 			return {
 				[Symbol.asyncIterator]: () => ({
-					async next() {
-						return { done: true }
-					},
+					next: vi
+						.fn()
+						.mockResolvedValueOnce({
+							done: false,
+							value: { choices: [{ delta: { content: "test" } }] },
+						})
+						.mockResolvedValueOnce({ done: true }),
 				}),
 			}
 		})
@@ -264,13 +270,16 @@ describe("XAIHandler", () => {
 		const modelInfo = xaiModels[modelId]
 		const handlerWithModel = new XAIHandler({ xaiApiKey: "test-api-key", apiModelId: modelId })
 
-		// Setup mock for streaming response
 		mockCreate.mockImplementationOnce(() => {
 			return {
 				[Symbol.asyncIterator]: () => ({
-					async next() {
-						return { done: true }
-					},
+					next: vi
+						.fn()
+						.mockResolvedValueOnce({
+							done: false,
+							value: { choices: [{ delta: { content: "test" } }] },
+						})
+						.mockResolvedValueOnce({ done: true }),
 				}),
 			}
 		})
@@ -320,9 +329,13 @@ describe("XAIHandler", () => {
 			mockCreate.mockImplementationOnce(() => {
 				return {
 					[Symbol.asyncIterator]: () => ({
-						async next() {
-							return { done: true }
-						},
+						next: vi
+							.fn()
+							.mockResolvedValueOnce({
+								done: false,
+								value: { choices: [{ delta: { content: "test" } }] },
+							})
+							.mockResolvedValueOnce({ done: true }),
 					}),
 				}
 			})
@@ -354,9 +367,13 @@ describe("XAIHandler", () => {
 			mockCreate.mockImplementationOnce(() => {
 				return {
 					[Symbol.asyncIterator]: () => ({
-						async next() {
-							return { done: true }
-						},
+						next: vi
+							.fn()
+							.mockResolvedValueOnce({
+								done: false,
+								value: { choices: [{ delta: { content: "test" } }] },
+							})
+							.mockResolvedValueOnce({ done: true }),
 					}),
 				}
 			})
@@ -381,9 +398,13 @@ describe("XAIHandler", () => {
 			mockCreate.mockImplementationOnce(() => {
 				return {
 					[Symbol.asyncIterator]: () => ({
-						async next() {
-							return { done: true }
-						},
+						next: vi
+							.fn()
+							.mockResolvedValueOnce({
+								done: false,
+								value: { choices: [{ delta: { content: "test" } }] },
+							})
+							.mockResolvedValueOnce({ done: true }),
 					}),
 				}
 			})
@@ -486,9 +507,13 @@ describe("XAIHandler", () => {
 			mockCreate.mockImplementationOnce(() => {
 				return {
 					[Symbol.asyncIterator]: () => ({
-						async next() {
-							return { done: true }
-						},
+						next: vi
+							.fn()
+							.mockResolvedValueOnce({
+								done: false,
+								value: { choices: [{ delta: { content: "test" } }] },
+							})
+							.mockResolvedValueOnce({ done: true }),
 					}),
 				}
 			})

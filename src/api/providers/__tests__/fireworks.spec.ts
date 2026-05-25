@@ -425,9 +425,13 @@ describe("FireworksHandler", () => {
 		mockCreate.mockImplementationOnce(() => {
 			return {
 				[Symbol.asyncIterator]: () => ({
-					async next() {
-						return { done: true }
-					},
+					next: vitest
+						.fn()
+						.mockResolvedValueOnce({
+							done: false,
+							value: { choices: [{ delta: { content: "test" } }] },
+						})
+						.mockResolvedValueOnce({ done: true }),
 				}),
 			}
 		})
@@ -460,9 +464,13 @@ describe("FireworksHandler", () => {
 
 		mockCreate.mockImplementationOnce(() => ({
 			[Symbol.asyncIterator]: () => ({
-				async next() {
-					return { done: true }
-				},
+				next: vitest
+					.fn()
+					.mockResolvedValueOnce({
+						done: false,
+						value: { choices: [{ delta: { content: "test" } }] },
+					})
+					.mockResolvedValueOnce({ done: true }),
 			}),
 		}))
 
@@ -486,9 +494,13 @@ describe("FireworksHandler", () => {
 
 		mockCreate.mockImplementationOnce(() => ({
 			[Symbol.asyncIterator]: () => ({
-				async next() {
-					return { done: true }
-				},
+				next: vitest
+					.fn()
+					.mockResolvedValueOnce({
+						done: false,
+						value: { choices: [{ delta: { content: "test" } }] },
+					})
+					.mockResolvedValueOnce({ done: true }),
 			}),
 		}))
 
@@ -514,9 +526,13 @@ describe("FireworksHandler", () => {
 
 		mockCreate.mockImplementationOnce(() => ({
 			[Symbol.asyncIterator]: () => ({
-				async next() {
-					return { done: true }
-				},
+				next: vitest
+					.fn()
+					.mockResolvedValueOnce({
+						done: false,
+						value: { choices: [{ delta: { content: "test" } }] },
+					})
+					.mockResolvedValueOnce({ done: true }),
 			}),
 		}))
 
