@@ -19,6 +19,8 @@ import {
 	fireworksModels,
 	minimaxModels,
 	basetenModels,
+	mimoModels,
+	mimoTokenPlanModels,
 } from "@njust-ai-cj/core/providers"
 
 export const MODELS_BY_PROVIDER: Partial<Record<ProviderName, Record<string, ModelInfo>>> = {
@@ -41,6 +43,8 @@ export const MODELS_BY_PROVIDER: Partial<Record<ProviderName, Record<string, Mod
 	qwen: qwenModels,
 	doubao: doubaoModels,
 	glm: glmModels,
+	mimo: mimoModels,
+	"mimo-token-plan": mimoTokenPlanModels,
 }
 
 export const PROVIDERS = [
@@ -72,4 +76,6 @@ export const PROVIDERS = [
 	{ value: "qwen", label: "Qwen (通义千问)", proxy: false },
 	{ value: "doubao", label: "Doubao (豆包)", proxy: false },
 	{ value: "glm", label: "GLM (智谱清言)", proxy: false },
+	{ value: "mimo", label: "Xiaomi MiMo", proxy: false },
+	{ value: "mimo-token-plan", label: "Xiaomi MiMo Token Plan", proxy: false },
 ].sort((a, b) => a.label.localeCompare(b.label))

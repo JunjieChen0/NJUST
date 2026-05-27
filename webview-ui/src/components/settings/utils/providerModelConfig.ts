@@ -19,6 +19,8 @@ import {
 	qwenDefaultModelId,
 	doubaoDefaultModelId,
 	glmDefaultModelId,
+	mimoDefaultModelId,
+	mimoTokenPlanDefaultModelId,
 } from "@njust-ai-cj/core/providers"
 
 import { MODELS_BY_PROVIDER } from "../constants"
@@ -50,6 +52,8 @@ export const PROVIDER_SERVICE_CONFIG: Partial<Record<ProviderName, ProviderServi
 		serviceUrl: "https://console.volcengine.com/ark/region:ark+cn-beijing/endpoint",
 	},
 	glm: { serviceName: "GLM (智谱清言)", serviceUrl: "https://open.bigmodel.cn" },
+	mimo: { serviceName: "Xiaomi MiMo", serviceUrl: "https://platform.xiaomimimo.com" },
+	"mimo-token-plan": { serviceName: "Xiaomi MiMo Token Plan", serviceUrl: "https://platform.xiaomimimo.com" },
 	ollama: { serviceName: "Ollama", serviceUrl: "https://ollama.ai" },
 	lmstudio: { serviceName: "LM Studio", serviceUrl: "https://lmstudio.ai/docs" },
 	"vscode-lm": {
@@ -77,6 +81,8 @@ export const PROVIDER_DEFAULT_MODEL_IDS: Partial<Record<ProviderName, string>> =
 	qwen: qwenDefaultModelId,
 	doubao: doubaoDefaultModelId,
 	glm: glmDefaultModelId,
+	mimo: mimoDefaultModelId,
+	"mimo-token-plan": mimoTokenPlanDefaultModelId,
 }
 
 export const getProviderServiceConfig = (provider: ProviderName): ProviderServiceConfig => {

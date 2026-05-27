@@ -37,6 +37,8 @@ import {
 	qwenDefaultModelId,
 	doubaoDefaultModelId,
 	glmDefaultModelId,
+	mimoDefaultModelId,
+	mimoTokenPlanDefaultModelId,
 } from "@njust-ai-cj/core/providers"
 
 import {
@@ -99,6 +101,8 @@ import {
 	Qwen,
 	Doubao,
 	Glm,
+	Mimo,
+	MimoTokenPlan,
 } from "./providers"
 
 import { MODELS_BY_PROVIDER, PROVIDERS } from "./constants"
@@ -351,6 +355,8 @@ const ApiOptions = ({
 				qwen: { field: "apiModelId", default: qwenDefaultModelId },
 				doubao: { field: "apiModelId", default: doubaoDefaultModelId },
 				glm: { field: "apiModelId", default: glmDefaultModelId },
+				mimo: { field: "apiModelId", default: mimoDefaultModelId },
+				"mimo-token-plan": { field: "apiModelId", default: mimoTokenPlanDefaultModelId },
 				mistral: { field: "apiModelId", default: mistralDefaultModelId },
 				xai: { field: "apiModelId", default: xaiDefaultModelId },
 				baseten: { field: "apiModelId", default: basetenDefaultModelId },
@@ -420,6 +426,8 @@ const ApiOptions = ({
 			qwen: "https://help.aliyun.com/zh/model-studio/",
 			doubao: "https://www.volcengine.com/docs/82379/1330626",
 			glm: "https://open.bigmodel.cn/dev/api",
+			mimo: "https://platform.xiaomimimo.com",
+			"mimo-token-plan": "https://platform.xiaomimimo.com",
 			moonshot: "https://platform.moonshot.cn/docs",
 			minimax: "https://platform.minimaxi.com/document",
 			zai: "https://z.ai/docs",
@@ -679,6 +687,22 @@ const ApiOptions = ({
 
 					{selectedProvider === "glm" && (
 						<Glm
+							apiConfiguration={apiConfiguration}
+							setApiConfigurationField={setApiConfigurationField}
+							simplifySettings={fromWelcomeView}
+						/>
+					)}
+
+					{selectedProvider === "mimo" && (
+						<Mimo
+							apiConfiguration={apiConfiguration}
+							setApiConfigurationField={setApiConfigurationField}
+							simplifySettings={fromWelcomeView}
+						/>
+					)}
+
+					{selectedProvider === "mimo-token-plan" && (
+						<MimoTokenPlan
 							apiConfiguration={apiConfiguration}
 							setApiConfigurationField={setApiConfigurationField}
 							simplifySettings={fromWelcomeView}
