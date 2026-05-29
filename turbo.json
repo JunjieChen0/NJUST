@@ -2,7 +2,9 @@
 	"$schema": "https://turbo.build/schema.json",
 	"tasks": {
 		"lint": {},
-		"check-types": {},
+		"check-types": {
+			"dependsOn": ["@njust-ai-cj/types#build"]
+		},
 		"test": {
 			"dependsOn": ["@njust-ai-cj/types#build"]
 		},
