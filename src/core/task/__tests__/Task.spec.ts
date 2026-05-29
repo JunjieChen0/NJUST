@@ -12,6 +12,18 @@ import type { GlobalState, ProviderSettings, ModelInfo } from "@njust-ai-cj/type
 import { TelemetryService } from "@njust-ai-cj/telemetry"
 
 import { Task } from "../Task"
+
+vi.mock("@njust-ai-cj/telemetry", () => ({
+	TelemetryService: {
+		reportError: vi.fn(),
+		hasInstance: vi.fn().mockReturnValue(false),
+		createInstance: vi.fn(),
+		instance: {
+			captureTaskCreated: vi.fn(),
+			captureTaskRestarted: vi.fn(),
+		},
+	},
+}))
 import { createTestProvider } from "./testProviderFactory"
 import { ApiStreamChunk } from "../../../api/transform/stream"
 import { processUserContentMentions } from "../../mentions/processUserContentMentions"
