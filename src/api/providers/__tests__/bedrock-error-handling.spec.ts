@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 const mockCaptureException = vi.hoisted(() => vi.fn())
 vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
+		reportError: vi.fn(),
 		hasInstance: () => true,
 		instance: {
 			captureException: mockCaptureException,

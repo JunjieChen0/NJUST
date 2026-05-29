@@ -4,6 +4,7 @@
 import { describe, it, test, expect, vi, beforeEach, beforeAll, afterAll } from "vitest"
 import Anthropic from "@anthropic-ai/sdk"
 import * as fs from "fs/promises"
+import * as path from "path"
 import * as vscode from "vscode"
 import axios from "axios"
 
@@ -2096,10 +2097,10 @@ describe("Project MCP Settings", () => {
 		expect(mockedFs.mkdir).toHaveBeenCalledWith(".njust_ai", { recursive: true })
 
 		// Verify file was created with default content
-		expect(safeWriteJson).toHaveBeenCalledWith(".njust_ai\\mcp.json", { mcpServers: {} }, { prettyPrint: true })
+		expect(safeWriteJson).toHaveBeenCalledWith(path.join(".njust_ai", "mcp.json"), { mcpServers: {} }, { prettyPrint: true })
 
 		// Check that openFile was called
-		expect(openFileSpy).toHaveBeenCalledWith(".njust_ai\\mcp.json")
+		expect(openFileSpy).toHaveBeenCalledWith(path.join(".njust_ai", "mcp.json"))
 	})
 
 	test("handles openProjectMcpSettings when workspace is not open", async () => {

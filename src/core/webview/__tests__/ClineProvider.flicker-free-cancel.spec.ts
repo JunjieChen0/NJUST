@@ -70,6 +70,7 @@ vi.mock("../../../utils/path", () => ({
 // Mock TelemetryService
 vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
+		reportError: vi.fn(),
 		instance: {
 			setProvider: vi.fn(),
 			captureTaskCreated: vi.fn(),

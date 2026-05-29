@@ -11,6 +11,7 @@ import {
 // Mock TelemetryService
 vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
+		reportError: vi.fn(),
 		hasInstance: vi.fn(() => true),
 		instance: {
 			captureException: vi.fn(),

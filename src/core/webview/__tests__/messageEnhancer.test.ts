@@ -19,7 +19,11 @@ vi.mock("../../../shared/logger", () => ({
 
 // Mock dependencies
 vi.mock("../../../utils/single-completion-handler")
-vi.mock("@njust-ai-cj/telemetry")
+vi.mock("@njust-ai-cj/telemetry", () => ({
+	TelemetryService: {
+		reportError: vi.fn(),
+	},
+}))
 
 describe("MessageEnhancer", () => {
 	let mockProviderSettingsManager: ProviderSettingsManager

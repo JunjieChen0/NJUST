@@ -12,6 +12,7 @@ vi.mock("../../tools/validateToolUse", () => ({
 }))
 vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
+		reportError: vi.fn(),
 		instance: {
 			captureToolUsage: vi.fn(),
 			captureConsecutiveMistakeError: vi.fn(),

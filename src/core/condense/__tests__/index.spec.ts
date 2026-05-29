@@ -27,6 +27,7 @@ vi.mock("../../../api/transform/image-cleaning", () => ({
 
 vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
+		reportError: vi.fn(),
 		instance: {
 			captureContextCondensed: vi.fn(),
 		},

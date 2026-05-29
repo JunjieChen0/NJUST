@@ -11,6 +11,7 @@ vi.mock("safe-stable-stringify", () => ({
 // Mock TelemetryService
 vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
+		reportError: vi.fn(),
 		instance: {
 			captureTaskCompleted: vi.fn(),
 			startSpan: vi.fn().mockReturnValue({
@@ -61,12 +62,12 @@ import type { Task } from "../core/task/Task"
 import { readTaskMessages } from "../core/task-persistence/taskMessages"
 import { readApiMessages } from "../core/task-persistence"
 
-describe("Nested delegation resume (A â†’ B â†’ C)", () => {
+describe("Nested delegation resume (A â†?B â†?C)", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks()
 	})
 
-	it("C completes â†’ reopens B; then B completes â†’ reopens A; emits correct events; no resume_task asks", async () => {
+	it("C completes â†?reopens B; then B completes â†?reopens A; emits correct events; no resume_task asks", async () => {
 		// Track which task is "current" to satisfy provider.reopenParentFromDelegation() child-close logic
 		let currentActiveId: string | undefined = "C"
 

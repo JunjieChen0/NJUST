@@ -5,6 +5,7 @@ const mockCaptureException = vi.fn()
 
 vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
+		reportError: vi.fn(),
 		hasInstance: () => true,
 		instance: {
 			captureException: (...args: unknown[]) => mockCaptureException(...args),

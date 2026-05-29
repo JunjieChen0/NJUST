@@ -9,7 +9,8 @@ const { sharedMockGet, sharedMockSet, sharedMockDel } = vi.hoisted(() => ({
 }))
 
 vi.mock("@njust-ai-cj/telemetry", () => ({
-	TelemetryService: { instance: { captureEvent: vi.fn() } },
+	TelemetryService: {
+		reportError: vi.fn(), instance: { captureEvent: vi.fn() } },
 }))
 
 vi.mock("node-cache", () => ({

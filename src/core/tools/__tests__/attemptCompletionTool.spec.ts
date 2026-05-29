@@ -18,6 +18,7 @@ const { mockCaptureTaskCompleted } = vi.hoisted(() => ({
 }))
 vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
+		reportError: vi.fn(),
 		instance: {
 			captureTaskCompleted: mockCaptureTaskCompleted,
 			captureEvent: vi.fn(),

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from "vitest"
 
 vi.mock("@njust-ai-cj/telemetry", () => ({
-	TelemetryService: { instance: { captureSlidingWindowTruncation: vi.fn() } },
+	TelemetryService: {
+		reportError: vi.fn(), instance: { captureSlidingWindowTruncation: vi.fn() } },
 }))
 
 import { truncateConversation, MAX_CONSECUTIVE_COMPACT_FAILURES } from "../index"

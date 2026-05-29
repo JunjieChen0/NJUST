@@ -10,6 +10,7 @@ import type { ITaskHost } from "../interfaces/ITaskHost"
 
 vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
+		reportError: vi.fn(),
 		hasInstance: vi.fn().mockReturnValue(true),
 		createInstance: vi.fn(),
 		get instance() {

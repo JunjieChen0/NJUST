@@ -6,6 +6,7 @@ import type { ToolUse } from "../../../shared/tools"
 
 vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
+		reportError: vi.fn(),
 		instance: {
 			captureEvent: vi.fn(),
 			startSpan: vi.fn(() => ({ traceId: "t", spanId: "s" })),

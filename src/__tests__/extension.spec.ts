@@ -169,6 +169,7 @@ vi.mock("fs", () => ({
 
 vi.mock("@njust-ai-cj/telemetry", () => ({
 	TelemetryService: {
+		reportError: vi.fn(),
 		createInstance: vi.fn().mockReturnValue({
 			register: vi.fn(),
 			setProvider: vi.fn(),
