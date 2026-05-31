@@ -63,6 +63,10 @@ vi.mock("../../../integrations/terminal/TerminalRegistry", () => ({
 	},
 }))
 
+vi.mock("../../../utils/safeWriteJson", () => ({
+	safeWriteJson: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock("@njust-ai/telemetry", () => ({
 	TelemetryService: {
 		reportError: vi.fn(),
@@ -95,8 +99,10 @@ vi.mock("execa", () => ({
 // Mock fs/promises
 vi.mock("fs/promises", () => ({
 	mkdir: vi.fn().mockResolvedValue(undefined),
+	access: vi.fn().mockResolvedValue(undefined),
 	writeFile: vi.fn().mockResolvedValue(undefined),
 	readFile: vi.fn().mockResolvedValue("[]"),
+	rename: vi.fn().mockResolvedValue(undefined),
 	unlink: vi.fn().mockResolvedValue(undefined),
 	rmdir: vi.fn().mockResolvedValue(undefined),
 }))
