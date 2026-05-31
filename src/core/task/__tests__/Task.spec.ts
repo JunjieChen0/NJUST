@@ -11,7 +11,14 @@ import { Anthropic } from "@anthropic-ai/sdk"
 import type { GlobalState, ProviderSettings, ModelInfo } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
 
+// Mock delay before importing Task so retry and rate-limit tests do not use real timers.
+vi.mock("delay", () => ({
+	__esModule: true,
+	default: vi.fn().mockResolvedValue(undefined),
+}))
+
 import { Task } from "../Task"
+import { TaskRequestBuilder } from "../TaskRequestBuilder"
 
 if (process.env.CI) {
 	vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 })
@@ -42,6 +49,30 @@ vi.mock("../../../api", () => ({
 		countTokens: vi.fn().mockResolvedValue(0),
 		dispose: vi.fn(),
 	})),
+}))
+
+vi.mock("../../../services/rate-limiter/TokenBucketRateLimiter", () => ({
+	TokenBucketRateLimiter: {
+		getInstance: vi.fn(() => ({
+			wait: vi.fn().mockResolvedValue(0),
+			drain: vi.fn(),
+			reset: vi.fn(),
+			setConfig: vi.fn(),
+			getStats: vi.fn().mockReturnValue(null),
+		})),
+		resetInstance: vi.fn(),
+	},
+}))
+
+vi.mock("../build-tools", () => ({
+	buildNativeToolsArrayWithRestrictions: vi.fn().mockResolvedValue({
+		tools: [],
+		allowedFunctionNames: undefined,
+	}),
+}))
+
+vi.mock("../../prompts/toolPromptConsistency", () => ({
+	checkToolPromptConsistency: vi.fn(),
 }))
 
 vi.mock("../../../integrations/terminal/TerminalRegistry", () => ({
@@ -101,12 +132,6 @@ import { ApiStreamChunk } from "../../../api/transform/stream"
 import { processUserContentMentions } from "../../mentions/processUserContentMentions"
 import { MultiSearchReplaceDiffStrategy } from "../../diff/strategies/multi-search-replace"
 import { getLastGlobalApiRequestTime } from "../globalApiTiming"
-
-// Mock delay before any imports that might use it
-vi.mock("delay", () => ({
-	__esModule: true,
-	default: vi.fn().mockResolvedValue(undefined),
-}))
 
 vi.mock("../../../services/cloud-agent/ProfileStorageService", () => ({
 	getProfileStorageService: vi.fn(() => ({
@@ -328,6 +353,13 @@ const mockMessages = [
 	},
 ]
 
+const mockSystemPromptParts = {
+	fullPrompt: "mock system prompt",
+	staticPart: "mock system prompt",
+	dynamicPart: "",
+	perToolHashes: {},
+}
+
 describe("Cline", () => {
 
 	let mockProvider: any
@@ -336,6 +368,10 @@ describe("Cline", () => {
 	let mockExtensionContext: vscode.ExtensionContext
 
 	beforeEach(() => {
+		vi.spyOn(TaskRequestBuilder.prototype, "prefetchSystemPromptData").mockResolvedValue(undefined)
+		vi.spyOn(TaskRequestBuilder.prototype, "getSystemPromptParts").mockResolvedValue(mockSystemPromptParts)
+		vi.spyOn(TaskRequestBuilder.prototype, "getSystemPrompt").mockResolvedValue(mockSystemPromptParts.fullPrompt)
+
 		if (!TelemetryService.hasInstance()) {
 			TelemetryService.createInstance([])
 		}
@@ -919,6 +955,10 @@ describe("Cline", () => {
 					unattendedMaxRetryAttempts: 1,
 					requestDelaySeconds: 1,
 				})
+				;(cline as any).persistentRetryHandler = {
+					isEligible: vi.fn().mockReturnValue(false),
+					cancel: vi.fn(),
+				}
 
 				const iterator = cline.attemptApiRequest(0)
 				await expect(iterator.next()).rejects.toThrow("Unattended retry limit reached")
