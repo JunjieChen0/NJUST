@@ -36,13 +36,34 @@ vi.mock("p-wait-for", () => ({
 	default: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock("fs/promises", () => ({
-	mkdir: vi.fn().mockResolvedValue(undefined),
-	writeFile: vi.fn().mockResolvedValue(undefined),
-	readFile: vi.fn().mockResolvedValue(""),
-	unlink: vi.fn().mockResolvedValue(undefined),
-	rmdir: vi.fn().mockResolvedValue(undefined),
+vi.mock("fs", () => ({
+	watch: vi.fn(() => ({
+		on: vi.fn(),
+		close: vi.fn(),
+	})),
 }))
+
+vi.mock("fs/promises", () => {
+	const mockFs = {
+		mkdir: vi.fn().mockResolvedValue(undefined),
+		writeFile: vi.fn().mockResolvedValue(undefined),
+		readFile: vi.fn().mockImplementation(async (filePath: string) => {
+			if (String(filePath).includes("mcp")) {
+				return JSON.stringify({ mcpServers: {} })
+			}
+
+			return ""
+		}),
+		unlink: vi.fn().mockResolvedValue(undefined),
+		rmdir: vi.fn().mockResolvedValue(undefined),
+		access: vi.fn().mockResolvedValue(undefined),
+	}
+
+	return {
+		...mockFs,
+		default: mockFs,
+	}
+})
 
 vi.mock("axios", () => ({
 	default: {
@@ -67,6 +88,7 @@ vi.mock("../../../utils/storage", () => ({
 	getSettingsDirectoryPath: vi.fn().mockResolvedValue("/test/settings/path"),
 	getTaskDirectoryPath: vi.fn().mockResolvedValue("/test/task/path"),
 	getGlobalStoragePath: vi.fn().mockResolvedValue("/test/storage/path"),
+	getStorageBasePath: vi.fn().mockResolvedValue("/test/storage/path"),
 }))
 
 vi.mock("@modelcontextprotocol/sdk/types.js", () => ({
