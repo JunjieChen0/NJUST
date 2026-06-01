@@ -718,27 +718,47 @@ export async function finalizeStreamResponse(config: FinalizeConfig): Promise<Fi
 					),
 			)
 
-			logger.error(
-				"TaskStreamConsumer",
-				`userMessageContentReady timed out after ${USER_MESSAGE_CONTENT_READY_TIMEOUT_MS}ms ` +
-					`(taskId=${t.taskId}, instance=${t.instanceId}, contentIndex=${t.currentStreamingContentIndex}, ` +
-					`blocks=${t.assistantMessageContent.length}, pendingTools=${pendingToolBlocks.length})`,
-			)
+			const isAttemptCompletionWaitingForUser =
+				pendingToolBlocks.some((b: UnsafeAny) => b.name === "attempt_completion") &&
+				t.clineMessages.some(
+					(m: UnsafeAny) => m.type === "ask" && m.ask === "completion_result" && !m.isAnswered,
+				)
 
-			for (const block of pendingToolBlocks) {
-				const toolUseId = (block as ToolUse | McpToolUse).id ?? ""
-				t.pushToolResultToUserContent({
-					type: "tool_result",
-					tool_use_id: sanitizeToolUseId(toolUseId),
-					content: formatResponse.toolError(
-						"Tool execution timed out — the handler did not return a result within the allowed window.",
-					),
-					is_error: true,
-				})
+			if (isAttemptCompletionWaitingForUser) {
+				logger.info(
+					"TaskStreamConsumer",
+					"userMessageContentReady timed out, but attempt_completion is waiting for user confirmation. Continuing to wait without timeout.",
+				)
+
+				await pWaitFor(() => t.userMessageContentReady || t.abort || t.abandoned || t.taskCompleted)
+
+				if (t.abort || t.abandoned) {
+					t.stateMachine.force(TaskState.ERROR)
+					throw new TaskAbortedError(t.taskId, t.instanceId)
+				}
+			} else {
+				logger.error(
+					"TaskStreamConsumer",
+					`userMessageContentReady timed out after ${USER_MESSAGE_CONTENT_READY_TIMEOUT_MS}ms ` +
+						`(taskId=${t.taskId}, instance=${t.instanceId}, contentIndex=${t.currentStreamingContentIndex}, ` +
+						`blocks=${t.assistantMessageContent.length}, pendingTools=${pendingToolBlocks.length})`,
+				)
+
+				for (const block of pendingToolBlocks) {
+					const toolUseId = (block as ToolUse | McpToolUse).id ?? ""
+					t.pushToolResultToUserContent({
+						type: "tool_result",
+						tool_use_id: sanitizeToolUseId(toolUseId),
+						content: formatResponse.toolError(
+							"Tool execution timed out — the handler did not return a result within the allowed window.",
+						),
+						is_error: true,
+					})
+				}
+
+				markUserContentReadyIfDrained(t as UnsafeAny)
+				t.userMessageContentReady = true
 			}
-
-			markUserContentReadyIfDrained(t as UnsafeAny)
-			t.userMessageContentReady = true
 		}
 
 		debugLog(

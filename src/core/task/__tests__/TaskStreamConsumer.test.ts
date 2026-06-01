@@ -5,6 +5,7 @@ import type { StackItem, FinalizeToolUseFn } from "../TaskStreamConsumer"
 import type { TaskExecutorHost } from "../interfaces/ITaskExecutorHost"
 import { TaskState } from "../TaskStateMachine"
 import { NativeToolCallParser } from "../../assistant-message/NativeToolCallParser"
+import { logger } from "../../../shared/logger"
 
 vi.mock("../../../shared/logger", () => ({
 	logger: {
@@ -502,6 +503,136 @@ describe("TaskStreamConsumer — consumeApiStream", () => {
 
 		expect(result.pendingGroundingSources).toHaveLength(2)
 		expect(result.pendingGroundingSources[0].url).toBe("https://example.com/1")
+	})
+})
+
+describe("TaskStreamConsumer timeout handling", () => {
+	let toolCallParser: NativeToolCallParser
+
+	beforeEach(async () => {
+		vi.clearAllMocks()
+		const pWaitFor = vi.mocked((await import("p-wait-for")).default)
+		pWaitFor.mockReset()
+		pWaitFor.mockResolvedValue(undefined)
+		toolCallParser = new NativeToolCallParser()
+	})
+
+	it("does not inject a timeout error when attempt_completion is waiting for user confirmation", async () => {
+		const pWaitFor = (await import("p-wait-for")).default as any
+		let secondWaitResolvedFromUserMessageContentReady = false
+
+		const host = createMockHost({ taskCompleted: false, userMessageContentReady: false })
+		pWaitFor.mockRejectedValueOnce(new Error("Timeout")).mockImplementationOnce(async (condition: () => boolean) => {
+			host.userMessageContentReady = true
+			secondWaitResolvedFromUserMessageContentReady = condition()
+			host.taskCompleted = true
+		})
+		;(host as any).assistantMessageContent = [
+			{
+				type: "tool_use",
+				name: "attempt_completion",
+				params: { result: "Task completed" },
+				id: "tu_1",
+			},
+		]
+		;(host as any).clineMessages = [
+			{ type: "ask", ask: "completion_result", text: "", ts: Date.now(), isAnswered: false },
+		]
+
+		const result = await finalizeStreamResponse({
+			task: host,
+			toolCallParser,
+			placeFinalizedStreamingToolUse: noopFinalizeToolUse,
+			consumptionResult: {
+				assistantMessage: "Task completed",
+				reasoningMessage: "",
+				pendingGroundingSources: [],
+				action: "proceed",
+			},
+			requestProfileId: "test-attempt-completion-timeout",
+			lastApiReqIndex: -1,
+			retryAttempt: 0,
+			currentUserContent: [],
+			stack: [],
+		})
+
+		expect(host.pushToolResultToUserContent).not.toHaveBeenCalled()
+		expect(secondWaitResolvedFromUserMessageContentReady).toBe(true)
+		expect(logger.info).toHaveBeenCalledWith(
+			"TaskStreamConsumer",
+			expect.stringContaining("attempt_completion is waiting for user confirmation"),
+		)
+		expect(result.action).toBe("done")
+	})
+
+	it("injects a timeout error for other pending tools", async () => {
+		const pWaitFor = (await import("p-wait-for")).default as any
+		pWaitFor.mockRejectedValueOnce(new Error("Timeout"))
+
+		const host = createMockHost({ userMessageContentReady: false })
+		;(host as any).assistantMessageContent = [
+			{ type: "tool_use", name: "read_file", params: { path: "README.md" }, id: "tu_1" },
+		]
+
+		await finalizeStreamResponse({
+			task: host,
+			toolCallParser,
+			placeFinalizedStreamingToolUse: noopFinalizeToolUse,
+			consumptionResult: {
+				assistantMessage: "Reading file",
+				reasoningMessage: "",
+				pendingGroundingSources: [],
+				action: "proceed",
+			},
+			requestProfileId: "test-read-file-timeout",
+			lastApiReqIndex: -1,
+			retryAttempt: 0,
+			currentUserContent: [],
+			stack: [],
+		})
+
+		expect(host.pushToolResultToUserContent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "tool_result",
+				tool_use_id: "tu_1",
+				is_error: true,
+			}),
+		)
+	})
+
+	it("injects a timeout error for attempt_completion without a pending completion ask", async () => {
+		const pWaitFor = (await import("p-wait-for")).default as any
+		pWaitFor.mockRejectedValueOnce(new Error("Timeout"))
+
+		const host = createMockHost({ userMessageContentReady: false })
+		;(host as any).assistantMessageContent = [
+			{ type: "tool_use", name: "attempt_completion", params: { result: "Done" }, id: "tu_1" },
+		]
+
+		await finalizeStreamResponse({
+			task: host,
+			toolCallParser,
+			placeFinalizedStreamingToolUse: noopFinalizeToolUse,
+			consumptionResult: {
+				assistantMessage: "Done",
+				reasoningMessage: "",
+				pendingGroundingSources: [],
+				action: "proceed",
+			},
+			requestProfileId: "test-attempt-completion-timeout-without-ask",
+			lastApiReqIndex: -1,
+			retryAttempt: 0,
+			currentUserContent: [],
+			stack: [],
+		})
+
+		expect(host.pushToolResultToUserContent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "tool_result",
+				tool_use_id: "tu_1",
+				is_error: true,
+			}),
+		)
 	})
 })
 
