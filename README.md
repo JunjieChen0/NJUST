@@ -625,3 +625,38 @@ pnpm install:vsix
 ## 许可证
 
 [Apache 2.0](./LICENSE)
+
+## Cangjie Agent 开发模式
+
+Cangjie Agent 是仅用于 Cangjie Dev Mode 的实验性编排能力，默认关闭。开启后，用户提交任务时会先生成结构化任务计划，再按步骤执行，并在仓颉代码写入或修改后通过编译门禁执行 `cjpm build`。编译失败时，Agent 会在配置的最大次数内尝试自动修复；多轮失败后停止自动循环，并输出诊断报告供人工处理。
+
+### 配置项
+
+```json
+{
+  "njust-ai-cj.cangjieAgent.enabled": false,
+  "njust-ai-cj.cangjieAgent.maxRepairAttempts": 5,
+  "njust-ai-cj.cangjieAgent.autoResume": false
+}
+```
+
+- `njust-ai-cj.cangjieAgent.enabled`：是否启用 Cangjie Agent。默认关闭。
+- `njust-ai-cj.cangjieAgent.maxRepairAttempts`：编译失败后的最大自动修复次数，默认 5。
+- `njust-ai-cj.cangjieAgent.autoResume`：VS Code 重启或任务中断后是否自动恢复未完成的 Agent 任务，默认关闭。
+
+### 工作流程
+
+1. 仅在 Cangjie Dev Mode 且 `cangjieAgent.enabled=true` 时启用。
+2. 用户提交需求后，Agent 先生成任务计划。
+3. Agent 按计划顺序执行步骤，不重写现有 LLM 请求和工具调用主流程。
+4. 当 `.cj` 文件或 `cjpm.toml` 被写入/修改后，Agent 执行 `cjpm build`。
+5. 编译成功后继续后续步骤或输出最终总结。
+6. 编译失败后进入自动修复循环，达到最大次数仍失败则输出诊断报告。
+7. 关闭 Agent 后，Cangjie Dev Mode 回到原有流程。
+
+### 兼容性边界
+
+- 不影响 Ask、Architect、Code 模式。
+- 不修改 Cloud Agent 流程。
+- 不绕过已有 Cangjie 安全限制和运行时策略。
+- Agent 初始化失败或执行中出现不可恢复异常时，会提示错误并回退或停止自动流程。
