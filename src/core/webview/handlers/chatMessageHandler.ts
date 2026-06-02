@@ -522,9 +522,9 @@ async function handleDownloadErrorDiagnostics(context: MessageHandlerContext, me
 async function handleWebviewError(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
 	if (message.text) {
 		const error = new Error("Webview ErrorBoundary caught an error")
-		error.stack = `${error.message}\n${message.text}`
+		error.stack = `${error.message}\n${message.text.slice(0, 3000)}`
 		if (message.context) {
-			error.stack = `${error.stack}\n\nComponent Stack:\n${message.context}`
+			error.stack = `${error.stack}\n\nComponent Stack:\n${message.context.slice(0, 3000)}`
 		}
 		TelemetryService.reportError(error, TelemetryEventName.WEBVIEW_ERROR)
 		context.provider.log(`[Webview ErrorBoundary]\nStack: ${message.text}\nContext: ${message.context || "none"}`)

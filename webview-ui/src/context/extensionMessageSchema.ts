@@ -83,22 +83,9 @@ const handledExtensionMessageSchema = z.discriminatedUnion("type", [
 
 export type ParsedExtensionStateMessage = z.infer<typeof handledExtensionMessageSchema>
 
-const handledMessageTypes: Set<string> = new Set([
-	"state",
-	"action",
-	"theme",
-	"workspaceUpdated",
-	"commands",
-	"messageUpdated",
-	"skills",
-	"mcpServers",
-	"currentCheckpointUpdated",
-	"listApiConfig",
-	"routerModels",
-	"taskHistoryUpdated",
-	"taskHistoryItemUpdated",
-	"taskMetrics",
-])
+const handledMessageTypes: Set<string> = new Set(
+	handledExtensionMessageSchema.options.map((schema) => schema.shape.type.value as string),
+)
 
 export function parseExtensionStateMessage(data: unknown): ParsedExtensionStateMessage | undefined {
 	if (!data || typeof data !== "object") {

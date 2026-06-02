@@ -78,9 +78,11 @@ export class ChatParticipantHandler {
 
 			this.activeStreams.set(taskId, stream)
 
-			await this.streamTaskOutput(task, stream, token)
-
-			this.activeStreams.delete(taskId)
+			try {
+				await this.streamTaskOutput(task, stream, token)
+			} finally {
+				this.activeStreams.delete(taskId)
+			}
 
 			return {
 				metadata: {
@@ -90,7 +92,9 @@ export class ChatParticipantHandler {
 			}
 		} catch (error) {
 			const message = getErrorMessage(error)
-			stream.markdown(`**Error:** ${message}`)
+			try {
+				stream.markdown(`**Error:** ${message}`)
+			} catch {}
 			this.outputChannel.appendLine(`[ChatParticipant] Error: ${message}`)
 			TelemetryService.reportError(error, TelemetryEventName.EXTENSION_INIT_ERROR)
 			return { metadata: { command } }
@@ -104,6 +108,8 @@ export class ChatParticipantHandler {
 	): Promise<void> {
 		return new Promise<void>((resolve) => {
 			let resolved = false
+			// eslint-disable-next-line prefer-const
+			let fallbackTimer: ReturnType<typeof setTimeout> | undefined
 			const renderedMessageIds = new Set<string>()
 			const getRenderKey = (message: ClineMessage) => message.id || `ts:${message.ts}`
 
@@ -143,6 +149,7 @@ export class ChatParticipantHandler {
 				if (resolved) return
 				resolved = true
 				clearInterval(safetyTimer)
+				if (fallbackTimer) clearTimeout(fallbackTimer)
 				// Remove all event listeners to prevent leaks
 				task.off(NJUST_AIEventName.Message, onMessage)
 				task.off(NJUST_AIEventName.TaskCompleted, onComplete)
@@ -173,7 +180,7 @@ export class ChatParticipantHandler {
 			}
 
 			// Timeout fallback
-			setTimeout(
+			fallbackTimer = setTimeout(
 				() => {
 					if (!resolved) {
 						cleanup()

@@ -158,6 +158,18 @@ export const ExtensionStateContext = createContext<ExtensionStateContextType | u
 export const mergeExtensionState = (prevState: ExtensionState, newState: Partial<ExtensionState>) => {
 	const { customModePrompts: prevCustomModePrompts, experiments: prevExperiments, ...prevRest } = prevState
 
+	// Guard asynchronous state fields with a global version counter.
+	// Prevents stale state pushes (apiConfiguration, skills, taskHistory)
+	// from overwriting newer data when independent update channels race.
+	const globalSeq = newState.globalSeq ?? 0
+	const prevGlobalSeq = prevState.globalSeq ?? 0
+	if (globalSeq > 0 && prevGlobalSeq > 0 && globalSeq < prevGlobalSeq) {
+		// Stale push — discard async fields from this update
+		newState.apiConfiguration = prevState.apiConfiguration
+		newState.skills = prevState.skills
+		newState.taskHistory = prevState.taskHistory
+	}
+
 	const {
 		apiConfiguration,
 		customModePrompts: newCustomModePrompts,
@@ -183,18 +195,6 @@ export const mergeExtensionState = (prevState: ExtensionState, newState: Partial
 	) {
 		rest.clineMessages = prevState.clineMessages
 		rest.clineMessagesSeq = prevState.clineMessagesSeq
-	}
-
-	// Guard asynchronous state fields with a global version counter.
-	// Prevents stale state pushes (apiConfiguration, skills, taskHistory)
-	// from overwriting newer data when independent update channels race.
-	const globalSeq = newState.globalSeq ?? 0
-	const prevGlobalSeq = prevState.globalSeq ?? 0
-	if (globalSeq > 0 && prevGlobalSeq > 0 && globalSeq < prevGlobalSeq) {
-		// Stale push — discard async fields from this update
-		newState.apiConfiguration = prevState.apiConfiguration
-		newState.skills = prevState.skills
-		newState.taskHistory = prevState.taskHistory
 	}
 
 	// Note that we completely replace the previous apiConfiguration and customSupportPrompts objects
@@ -471,9 +471,11 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 				}
 				case "taskMetrics": {
 					if (message.taskMetrics) {
-						const metrics = narrow<TaskMetricsSnapshot>(message.taskMetrics)!
-						setLatestTaskMetrics(metrics)
-						setTaskMetricsHistory((prev) => [...prev.slice(-29), metrics])
+						const metrics = narrow<TaskMetricsSnapshot>(message.taskMetrics)
+						if (metrics) {
+							setLatestTaskMetrics(metrics)
+							setTaskMetricsHistory((prev) => [...prev.slice(-29), metrics])
+						}
 					}
 					break
 				}

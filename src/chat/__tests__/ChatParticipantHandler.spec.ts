@@ -3,6 +3,7 @@ import { ChatParticipantHandler } from "../ChatParticipantHandler"
 import { TelemetryEventName, NJUST_AIEventName } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { renderClineMessage } from "../message-renderer"
+import * as vscode from "vscode"
 
 vi.mock("@njust-ai/telemetry")
 vi.mock("../message-renderer")
@@ -42,12 +43,21 @@ describe("ChatParticipantHandler", () => {
 			subscriptions: { push: vi.fn() },
 		}
 		outputChannel = { appendLine: vi.fn() }
+
+		// Re-apply mock implementations that are cleared by vi.resetAllMocks()
+		;(vscode.chat.createChatParticipant as any).mockReturnValue({
+			iconPath: undefined,
+			followupProvider: undefined,
+			onDidReceiveFeedback: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+			dispose: vi.fn(),
+		})
+
 		handler = new ChatParticipantHandler(provider as any, context, outputChannel)
 	})
 
 	afterEach(() => {
 		vi.useRealTimers()
-		vi.clearAllMocks()
+		vi.resetAllMocks()
 	})
 
 	it("should cleanup listeners and resolve when task completes", async () => {

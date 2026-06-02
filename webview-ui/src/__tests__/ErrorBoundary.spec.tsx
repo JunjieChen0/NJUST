@@ -140,17 +140,27 @@ describe("ErrorBoundary", () => {
 
 	it("resets error state when Retry button is clicked", async () => {
 		const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+		let shouldThrow = true
+		const ToggleError = () => {
+			if (shouldThrow) {
+				throw new Error("Retry test error")
+			}
+			return <div data-testid="recovered">Recovered!</div>
+		}
+
 		render(
 			<ErrorBoundary>
-				<ErrorThrower shouldThrow={true} message="Retry test error" />
+				<ToggleError />
 			</ErrorBoundary>,
 		)
 		await waitFor(() => {
 			expect(screen.getByText(/errorBoundary.errorStack/)).toBeInTheDocument()
 		})
+		shouldThrow = false // Fix itself before retry
 		screen.getByText("Retry").click()
 		await waitFor(() => {
-			expect(screen.getByText(/errorBoundary.errorStack/)).toBeInTheDocument()
+			expect(screen.getByTestId("recovered")).toBeInTheDocument()
+			expect(screen.queryByText(/errorBoundary.errorStack/)).not.toBeInTheDocument()
 		})
 		spy.mockRestore()
 	})

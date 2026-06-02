@@ -24,7 +24,7 @@ describe("ChatStateSync", () => {
 	afterEach(() => {
 		sync.dispose()
 		vi.useRealTimers()
-		vi.clearAllMocks()
+		vi.resetAllMocks()
 	})
 
 	it("should retry up to 5 times with exponential backoff if task is not ready", () => {

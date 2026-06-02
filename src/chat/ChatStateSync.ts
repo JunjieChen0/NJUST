@@ -174,7 +174,7 @@ export class ChatStateSync {
 			clearTimeout(timer)
 		}
 		this.retryTimers.clear()
-		for (const [taskId] of this.taskCleanupFns) {
+		for (const taskId of Array.from(this.taskCleanupFns.keys())) {
 			this.unsubscribeFromTask(taskId)
 		}
 		this.syncedTasks.clear()

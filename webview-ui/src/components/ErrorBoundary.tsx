@@ -30,9 +30,15 @@ class ErrorBoundary extends Component<ErrorProps, ErrorState> {
 
 	async componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
 		const componentStack = errorInfo.componentStack || ""
-		const enhancedError = await enhanceErrorWithSourceMaps(error, componentStack)
-		const finalError = enhancedError.sourceMappedStack || enhancedError.stack || ""
-		const finalStack = enhancedError.sourceMappedComponentStack || componentStack
+		let finalError = error.stack || error.message || ""
+		let finalStack = componentStack
+		try {
+			const enhancedError = await enhanceErrorWithSourceMaps(error, componentStack)
+			finalError = enhancedError.sourceMappedStack || enhancedError.stack || finalError
+			finalStack = enhancedError.sourceMappedComponentStack || finalStack
+		} catch (e) {
+			console.error("Failed to enhance error with source maps:", e)
+		}
 
 		try {
 			vscode.postMessage({

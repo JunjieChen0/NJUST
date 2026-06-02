@@ -76,7 +76,7 @@ import {
 	CodeActionProvider,
 } from "./activate"
 import { initializeI18n } from "./i18n"
-import { ChatParticipantHandler, registerLMTools, ChatStateSync } from "./chat"
+import { ChatParticipantHandler, registerLMTools } from "./chat"
 import { InlineCompletionProvider } from "./services/inline-completion/InlineCompletionProvider"
 import { resolveInlineCompletionApiHandler } from "./services/inline-completion/inlineCompletionApi"
 import { getErrorMessage } from "./shared/error-utils"
@@ -160,7 +160,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		TelemetryService.reportError(error, TelemetryEventName.UTILITY_ERROR)
 		// Re-throw to preserve Node.js default fatal behavior.
 		// VSCode extension host will log and deactivate the extension.
-		throw error
+		// Wrap in setTimeout to allow telemetry to flush before the fatal crash.
+		setTimeout(() => {
+			throw error
+		}, 100)
 	})
 	outputChannel = vscode.window.createOutputChannel(Package.outputChannel)
 	context.subscriptions.push(outputChannel)
@@ -247,7 +250,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Initialize global state if not already set.
 	if (!context.globalState.get("allowedCommands")) {
-		context.globalState.update("allowedCommands", defaultCommands)
+		await context.globalState.update("allowedCommands", defaultCommands)
 	}
 
 	// Auto-generate Cloud Agent device token on first activation.
@@ -474,8 +477,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push({ dispose: () => chatParticipant.dispose() })
 
 	// Initialize Chat <-> Webview state synchronization.
-	const chatStateSync = new ChatStateSync(provider, outputChannel)
-	context.subscriptions.push({ dispose: () => chatStateSync.dispose() })
+	// TODO: ChatStateSync is currently disabled pending future feature rollout.
+	// Uncomment the following lines to enable state synchronization when ready.
+	// const chatStateSync = new ChatStateSync(provider, outputChannel)
+	// context.subscriptions.push({ dispose: () => chatStateSync.dispose() })
 
 	// Register Njust-AI's native tools as VSCode Language Model Tools.
 	registerLMTools(context, provider, outputChannel)
