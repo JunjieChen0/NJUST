@@ -17,6 +17,21 @@
 			"outputs": ["dist/**"],
 			"inputs": ["src/**", "package.json", "tsconfig.json", "tsup.config.ts", "vite.config.ts"]
 		},
+		"bundle": {
+			"dependsOn": ["^build"],
+			"outputs": ["dist/**"]
+		},
+		"bundle:nightly": {
+			"outputs": ["build/**"]
+		},
+		"vsix": {
+			"dependsOn": ["^build"],
+			"outputs": ["../bin/**"]
+		},
+		"vsix:nightly": {
+			"dependsOn": ["^build"],
+			"outputs": ["../../../bin/**"]
+		},
 		"watch:tsc": {
 			"cache": false
 		}

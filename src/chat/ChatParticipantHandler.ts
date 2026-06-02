@@ -1,10 +1,12 @@
 import * as vscode from "vscode"
 
 import type { ClineProvider } from "../core/webview/ClineProvider"
-import type { ClineMessage } from "@njust-ai/types"
-import { TelemetryEventName } from "@njust-ai/types"
+import { renderClineMessage } from "./message-renderer"
+import { TelemetryEventName, NJUST_AIEventName, type ClineMessage } from "@njust-ai/types"
+import type { Task } from "../core/task/Task"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { getErrorMessage } from "../shared/error-utils"
+import { logger } from "../shared/logger"
 
 const PARTICIPANT_ID = "njust-ai.agent"
 
@@ -67,9 +69,7 @@ export class ChatParticipantHandler {
 
 		try {
 			const previousMessages = this.buildContextFromHistory(chatContext)
-			const fullPrompt = previousMessages
-				? `${previousMessages}\n\nUser: ${request.prompt}`
-				: request.prompt
+			const fullPrompt = previousMessages ? `${previousMessages}\n\nUser: ${request.prompt}` : request.prompt
 
 			await this.provider.handleModeSwitch(modeSlug as UnsafeAny)
 
@@ -78,9 +78,11 @@ export class ChatParticipantHandler {
 
 			this.activeStreams.set(taskId, stream)
 
-			await this.streamTaskOutput(task, stream, token)
-
-			this.activeStreams.delete(taskId)
+			try {
+				await this.streamTaskOutput(task, stream, token)
+			} finally {
+				this.activeStreams.delete(taskId)
+			}
 
 			return {
 				metadata: {
@@ -90,7 +92,9 @@ export class ChatParticipantHandler {
 			}
 		} catch (error) {
 			const message = getErrorMessage(error)
-			stream.markdown(`**Error:** ${message}`)
+			try {
+				stream.markdown(`**Error:** ${message}`)
+			} catch {}
 			this.outputChannel.appendLine(`[ChatParticipant] Error: ${message}`)
 			TelemetryService.reportError(error, TelemetryEventName.EXTENSION_INIT_ERROR)
 			return { metadata: { command } }
@@ -98,134 +102,94 @@ export class ChatParticipantHandler {
 	}
 
 	private async streamTaskOutput(
-		task: UnsafeAny,
+		task: Task,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
 	): Promise<void> {
 		return new Promise<void>((resolve) => {
-			let lastMessageCount = 0
 			let resolved = false
+			// eslint-disable-next-line prefer-const
+			let fallbackTimer: ReturnType<typeof setTimeout> | undefined
+			const renderedMessageIds = new Set<string>()
+			const getRenderKey = (message: ClineMessage) => message.id || `ts:${message.ts}`
+
+			const onMessage = (data: { action: "created" | "updated"; message: ClineMessage }) => {
+				if (resolved || data.action !== "created") return
+				const renderKey = getRenderKey(data.message)
+				if (renderedMessageIds.has(renderKey)) return
+				renderedMessageIds.add(renderKey)
+				try {
+					renderClineMessage(stream, data.message)
+				} catch (err) {
+					logger.error("ChatParticipantHandler", "Error rendering message:", err)
+					TelemetryService.reportError(err, TelemetryEventName.TASK_LIFECYCLE_ERROR)
+				}
+			}
+
+			const onComplete = () => {
+				cleanup()
+				resolve()
+			}
+
+			const onAbort = () => {
+				cleanup()
+				resolve()
+			}
+
+			// Safety timer: catches didFinishAbortingStream / abandoned states
+			// that may not emit a corresponding event.
+			const safetyTimer = setInterval(() => {
+				if (task.didFinishAbortingStream || task.abandoned) {
+					cleanup()
+					resolve()
+				}
+			}, 3000)
 
 			const cleanup = () => {
 				if (resolved) return
 				resolved = true
-				clearInterval(pollInterval)
+				clearInterval(safetyTimer)
+				if (fallbackTimer) clearTimeout(fallbackTimer)
+				// Remove all event listeners to prevent leaks
+				task.off(NJUST_AIEventName.Message, onMessage)
+				task.off(NJUST_AIEventName.TaskCompleted, onComplete)
+				task.off(NJUST_AIEventName.TaskAborted, onAbort)
 			}
 
 			token.onCancellationRequested(() => {
-				task.abortTask?.()
+				void task.abortTask()
 				cleanup()
 				resolve()
 			})
 
-			const pollInterval = setInterval(() => {
-				if (resolved) {
-					clearInterval(pollInterval)
-					return
-				}
+			task.on(NJUST_AIEventName.Message, onMessage)
+			task.on(NJUST_AIEventName.TaskCompleted, onComplete)
+			task.on(NJUST_AIEventName.TaskAborted, onAbort)
 
+			// Replay messages emitted during task.start() before subscription
+			for (const existingMsg of task.clineMessages || []) {
+				if (resolved) break
+				const renderKey = getRenderKey(existingMsg)
+				if (renderedMessageIds.has(renderKey)) continue
+				renderedMessageIds.add(renderKey)
 				try {
-					const messages: ClineMessage[] = task.clineMessages || []
+					renderClineMessage(stream, existingMsg)
+				} catch (err) {
+					logger.error("ChatParticipantHandler", "Error replaying message:", err)
+				}
+			}
 
-					for (let i = lastMessageCount; i < messages.length; i++) {
-						const msg = messages[i]!
-						this.renderClineMessage(msg, stream)
-					}
-					lastMessageCount = messages.length
-
-					if (task.didFinishAbortingStream || task.abandoned) {
+			// Timeout fallback
+			fallbackTimer = setTimeout(
+				() => {
+					if (!resolved) {
 						cleanup()
 						resolve()
 					}
-				} catch {
-					cleanup()
-					resolve()
-				}
-			}, 200)
-
-			const checkCompletion = () => {
-				if (resolved) return
-
-				const messages: ClineMessage[] = task.clineMessages || []
-				const lastMsg = messages[messages.length - 1]
-
-				if (lastMsg?.type === "say" && lastMsg.say === "completion_result") {
-					cleanup()
-					resolve()
-				}
-			}
-
-			task.on?.("message", checkCompletion)
-			task.on?.("taskCompleted", () => {
-				cleanup()
-				resolve()
-			})
-
-			setTimeout(() => {
-				if (!resolved) {
-					cleanup()
-					resolve()
-				}
-			}, 5 * 60 * 1000)
+				},
+				5 * 60 * 1000,
+			)
 		})
-	}
-
-	private renderClineMessage(msg: ClineMessage, stream: vscode.ChatResponseStream): void {
-		if (msg.type === "say") {
-			switch (msg.say) {
-				case "text":
-					if (msg.text) {
-						stream.markdown(msg.text)
-					}
-					break
-				case "tool":
-					if (msg.text) {
-						try {
-							const toolData = JSON.parse(msg.text)
-							stream.progress(`Using tool: ${toolData.tool || "UnsafeAny"}`)
-						} catch {
-							stream.progress("Executing tool...")
-						}
-					}
-					break
-				case "completion_result":
-					if (msg.text) {
-						stream.markdown(`\n\n---\n**Result:** ${msg.text}`)
-					}
-					break
-				case "error":
-					if (msg.text) {
-						stream.markdown(`\n**Error:** ${msg.text}`)
-					}
-					break
-				case "shell_integration_warning":
-					break
-				default:
-					break
-			}
-		} else if (msg.type === "ask") {
-			switch (msg.ask) {
-				case "tool":
-					if (msg.text) {
-						try {
-							const toolData = JSON.parse(msg.text)
-							stream.markdown(
-								`\n> **Tool approval needed:** ${toolData.tool || "UnsafeAny"}\n> Use the Njust-AI sidebar to approve or reject.\n`,
-							)
-						} catch {
-							stream.markdown("\n> **Tool approval needed.** Use the Njust-AI sidebar to approve or reject.\n")
-						}
-					}
-					break
-				case "followup":
-					if (msg.text) {
-						stream.markdown(`\n**Question:** ${msg.text}\n`)
-					}
-					break
-				default:
-					break
-			}
-		}
 	}
 
 	private buildContextFromHistory(chatContext: vscode.ChatContext): string | undefined {
