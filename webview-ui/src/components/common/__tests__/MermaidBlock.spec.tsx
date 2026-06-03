@@ -41,7 +41,8 @@ vi.mock("@src/utils/vscode", () => ({
 // Mock useDebounceEffect to run synchronously
 vi.mock("@src/utils/useDebounceEffect", () => ({
 	useDebounceEffect: (fn: () => void, _delay: number, deps: any[]) => {
-		React.useEffect(fn, deps)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		React.useEffect(() => fn(), deps)
 	},
 }))
 
