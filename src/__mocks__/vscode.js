@@ -56,12 +56,37 @@ export const workspace = {
 	},
 }
 
+const mockStatusBarItem = () => ({
+	show: () => {},
+	hide: () => {},
+	dispose: () => {},
+	text: "",
+	tooltip: "",
+	name: "",
+	command: "",
+	backgroundColor: undefined,
+	priority: 0,
+	alignment: 1,
+})
+
+export const StatusBarAlignment = {
+	Left: 1,
+	Right: 2,
+}
+
+export const ThemeColor = class {
+	constructor(id) {
+		this.id = id
+	}
+}
+
 export const window = {
 	activeTextEditor: null,
 	onDidChangeActiveTextEditor: () => mockDisposable,
 	showErrorMessage: () => Promise.resolve(),
 	showWarningMessage: () => Promise.resolve(),
 	showInformationMessage: () => Promise.resolve(),
+	createStatusBarItem: (_alignment, _priority) => mockStatusBarItem(),
 	createOutputChannel: () => ({
 		appendLine: () => {},
 		append: () => {},
@@ -171,4 +196,6 @@ export default {
 	EventEmitter,
 	CodeAction,
 	CodeActionKind,
+	StatusBarAlignment,
+	ThemeColor,
 }

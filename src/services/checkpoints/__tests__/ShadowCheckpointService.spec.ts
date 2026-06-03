@@ -37,8 +37,8 @@ const removeTempDir = async (dir: string) => {
 
 const createGit = (baseDir: string | { baseDir: string }) =>
 	typeof baseDir === "string"
-		? simpleGit({ baseDir, unsafe: { allowUnsafeEditor: true } })
-		: simpleGit({ ...baseDir, unsafe: { allowUnsafeEditor: true } })
+		? simpleGit({ baseDir, unsafe: { allowUnsafeEditor: true, allowUnsafeAskPass: true } })
+		: simpleGit({ ...baseDir, unsafe: { allowUnsafeEditor: true, allowUnsafeAskPass: true } })
 
 const withoutGitEnv = () => {
 	const env: Record<string, string> = {}

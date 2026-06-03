@@ -171,7 +171,15 @@ export class QwenCodeHandler extends BaseProvider implements SingleCompletionHan
 
 		const filePath = getQwenCachedCredentialPath(this.options.qwenCodeOauthPath)
 		try {
-			await fs.writeFile(filePath, JSON.stringify(newCredentials, null, 2))
+			await fs.writeFile(filePath, JSON.stringify(newCredentials, null, 2), { mode: 0o600 })
+			// Restrict file permissions on Unix-like systems (owner read/write only)
+			if (process.platform !== "win32") {
+				try {
+					await fs.chmod(filePath, 0o600)
+				} catch {
+					// chmod may fail on some filesystems; non-fatal
+				}
+			}
 		} catch (error) {
 			logger.error("QwenCode", "Failed to save refreshed credentials:", error)
 			TelemetryService.reportError(error, TelemetryEventName.API_PROVIDER_ERROR)

@@ -110,6 +110,12 @@ vi.mock("vscode", () => {
 				dispose: vi.fn(),
 			}
 		}),
+		StatusBarAlignment: { Left: 1, Right: 2 },
+		ThemeColor: class {
+			constructor(id) {
+				this.id = id
+			}
+		},
 	}
 })
 
@@ -202,6 +208,7 @@ vi.mock("../services/cloud-agent/deviceToken", () => ({ setDeviceToken: vi.fn() 
 vi.mock("../services/cloud-agent/ProfileStorageService", () => ({
 	ProfileStorageService: vi.fn(function () {
 		return {
+			initialize: vi.fn().mockResolvedValue(undefined),
 			getProfiles: vi.fn(() => []),
 			getProfile: vi.fn(() => undefined),
 			getActiveProfile: vi.fn(() => undefined),

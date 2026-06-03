@@ -69,6 +69,7 @@ function createSanitizedGit(baseDir: string): SimpleGit {
 		config: [],
 		unsafe: {
 			allowUnsafeTemplateDir: true,
+			allowUnsafeAskPass: true,
 		},
 	}
 

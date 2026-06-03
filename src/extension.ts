@@ -31,6 +31,8 @@ import { CangjieCodeActionProvider } from "./services/cangjie-lsp/CangjieCodeAct
 import { checkAndPromptSdkSetup } from "./services/cangjie-lsp/CangjieSdkSetup"
 import { probeCangjieToolchain } from "./services/cangjie-lsp/cangjieToolUtils"
 import { setDeviceToken } from "./services/cloud-agent/deviceToken"
+import { AuditLogger } from "./services/AuditLogger"
+import { AuditSink } from "./services/AuditSink"
 import { CangjieDocumentSymbolProvider } from "./services/cangjie-lsp/CangjieDocumentSymbolProvider"
 import { CangjieFoldingRangeProvider } from "./services/cangjie-lsp/CangjieFoldingRangeProvider"
 import { CangjieHoverProvider } from "./services/cangjie-lsp/CangjieHoverProvider"
@@ -100,6 +102,8 @@ let cangjieSymbolIndex: CangjieSymbolIndex | undefined
 let cangjieCompileGuard: CangjieCompileGuard | undefined
 let cangjieDebugFactory: CangjieDebugAdapterFactory | undefined
 let rooToolsMcpServer: RooToolsMcpServer | undefined
+let auditLogger: AuditLogger | undefined
+let auditSink: AuditSink | undefined
 
 let lastCangjieToolchainGapWarn = 0
 
@@ -205,6 +209,10 @@ export async function activate(context: vscode.ExtensionContext) {
 		TelemetryService.createInstance({ telemetryDir: context.globalStorageUri.fsPath })
 	}
 
+	// Initialize audit log system (NDJSON in globalStorage/audit/)
+	auditLogger = new AuditLogger(context.globalStorageUri.fsPath)
+	auditSink = new AuditSink(auditLogger)
+
 	initTestCleanup(context.workspaceState)
 	void cleanupOrphanedTestFiles(context.globalStorageUri.fsPath)
 		.then((r) => {
@@ -279,7 +287,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	const { ProfileStorageService, setProfileStorageService } = await import(
 		"./services/cloud-agent/ProfileStorageService"
 	)
-	const profileStorage = new ProfileStorageService(context.globalState, context.workspaceState)
+	const profileStorage = new ProfileStorageService(context.globalState, context.workspaceState, context.secrets)
+	await profileStorage.initialize()
 	setProfileStorageService(profileStorage)
 	const migratedProfile = await profileStorage.migrateFromLegacyConfig()
 	if (migratedProfile) {
@@ -841,6 +850,17 @@ export async function activate(context: vscode.ExtensionContext) {
 		outputChannel.appendLine(`[StartupProfiler] ${JSON.stringify(profile)}`)
 	}
 
+	// Report activation performance to telemetry (Task 2.1)
+	if (TelemetryService.hasInstance()) {
+		const activateEntry = profile.find((e) => e.name === "activate")
+		const activationMs = activateEntry?.durationMs ?? 0
+		TelemetryService.instance.captureEvent(TelemetryEventName.EXTENSION_ACTIVATED, {
+			activationMs,
+			coldStart: !context.globalState.get<boolean>("hasActivatedBefore"),
+		})
+		void context.globalState.update("hasActivatedBefore", true)
+	}
+
 	return new API(outputChannel, provider, socketPath, enableLogging)
 }
 
@@ -875,6 +895,16 @@ export async function deactivate() {
 
 	await McpServerManager.cleanup(extensionContext)
 	TerminalRegistry.cleanup()
+
+	// Flush audit log before exit
+	if (auditSink) {
+		auditSink.dispose()
+		auditSink = undefined
+	}
+	if (auditLogger) {
+		await auditLogger.dispose()
+		auditLogger = undefined
+	}
 
 	// Flush telemetry before exit
 	if (TelemetryService.hasInstance()) {
