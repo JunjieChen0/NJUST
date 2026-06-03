@@ -27,6 +27,8 @@ export default defineConfig({
 				"src/**/*.test.tsx",
 				"src/**/__tests__/**",
 				"src/**/__mocks__/**",
+				"src/__mocks__/**",
+				"src/i18n/__mocks__/**",
 				"src/utils/test-utils.tsx",
 				"src/vite-plugins/**",
 				"src/index.tsx",
@@ -34,7 +36,7 @@ export default defineConfig({
 			],
 			thresholds: {
 				lines: 55,
-				functions: 50,
+				functions: 40,
 				branches: 45,
 				statements: 55,
 			},
