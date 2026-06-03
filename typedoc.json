@@ -1,0 +1,11 @@
+{
+	"$schema": "https://typedoc.org/schema.json",
+	"entryPoints": ["src/extension.ts", "packages/core/src/index.ts", "packages/telemetry/src/index.ts"],
+	"out": "docs/api",
+	"plugin": ["typedoc-plugin-markdown"],
+	"excludePrivate": true,
+	"excludeInternal": true,
+	"readme": "none",
+	"name": "Njust-AI Internal API",
+	"tsconfig": "src/tsconfig.json"
+}

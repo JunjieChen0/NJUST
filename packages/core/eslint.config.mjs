@@ -7,6 +7,18 @@ export default [
 		files: ["**/*.ts"],
 		rules: {
 			"no-console": "error",
+			"no-restricted-imports": [
+				"error",
+				{
+					patterns: [
+						{
+							group: ["vscode", "vscode/*"],
+							message:
+								"packages/core must remain platform-agnostic. Do not import 'vscode'. Use interface injection instead.",
+						},
+					],
+				},
+			],
 		},
 	},
 	{

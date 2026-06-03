@@ -31,6 +31,7 @@ export const TelemetryEventName = {
 
 	// P2 — reserved for extension init, git, storage, search, parser, utility
 	EXTENSION_INIT_ERROR: "extension_init_error",
+	EXTENSION_ACTIVATED: "extension_activated",
 	GIT_ERROR: "git_error",
 	STORAGE_ERROR: "storage_error",
 	SEARCH_ERROR: "search_error",

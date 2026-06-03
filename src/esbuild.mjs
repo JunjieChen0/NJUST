@@ -50,12 +50,12 @@ async function main() {
 				build.onEnd(() => {
 					copyPaths(
 						[
-						["../README.md", "README.md"],
-						["../CHANGELOG.md", "CHANGELOG.md"],
-						["../LICENSE", "LICENSE"],
-						["node_modules/vscode-material-icons/generated", "assets/vscode-material-icons"],
-						["../webview-ui/audio", "webview-ui/audio"],
-						["../webview-ui/build", "webview-ui/build"],
+							["../README.md", "README.md"],
+							["../CHANGELOG.md", "CHANGELOG.md"],
+							["../LICENSE", "LICENSE"],
+							["node_modules/vscode-material-icons/generated", "assets/vscode-material-icons"],
+							["../webview-ui/audio", "webview-ui/audio"],
+							["../webview-ui/build", "webview-ui/build"],
 						],
 						srcDir,
 						buildDir,
@@ -99,6 +99,7 @@ async function main() {
 	const extensionConfig = {
 		...buildOptions,
 		plugins,
+		metafile: true,
 		entryPoints: ["extension.ts"],
 		outfile: "dist/extension.js",
 		// global-agent must be external because it dynamically patches Node.js http/https modules
@@ -126,7 +127,16 @@ async function main() {
 		copyLocales(srcDir, distDir)
 		setupLocaleWatcher(srcDir, distDir)
 	} else {
-		await Promise.all([extensionCtx.rebuild(), workerCtx.rebuild()])
+		const [extensionResult] = await Promise.all([extensionCtx.rebuild(), workerCtx.rebuild()])
+
+		// Write metafile for bundle analysis
+		if (extensionResult.metafile) {
+			const metafilePath = path.join(distDir, "metafile.json")
+			fs.writeFileSync(metafilePath, JSON.stringify(extensionResult.metafile))
+			const analysis = await esbuild.analyzeMetafile(extensionResult.metafile, { verbose: false })
+			console.log(`\n[${name}] Bundle analysis:\n${analysis}\n`)
+		}
+
 		await Promise.all([extensionCtx.dispose(), workerCtx.dispose()])
 	}
 }

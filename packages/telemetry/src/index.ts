@@ -27,10 +27,36 @@ interface TelemetryInitOptions {
 }
 
 const ALLOWED_KEYS = new Set([
-	"taskId", "mode", "tool", "provider", "model", "duration",
-	"tokenUsage", "inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens",
-	"isAutomatic", "hasCustomPrompt", "isSubtask", "attempts", "failures",
-	"success", "error_type", "status_code", "event",
+	"taskId",
+	"mode",
+	"tool",
+	"provider",
+	"model",
+	"duration",
+	"tokenUsage",
+	"inputTokens",
+	"outputTokens",
+	"cacheReadTokens",
+	"cacheWriteTokens",
+	"isAutomatic",
+	"hasCustomPrompt",
+	"isSubtask",
+	"attempts",
+	"failures",
+	"success",
+	"error_type",
+	"status_code",
+	"event",
+	// Activation performance (Task 2.1)
+	"activationMs",
+	"coldStart",
+	// Performance aggregation (Task 2.2)
+	"ttft",
+	"e2e",
+	"toolDuration",
+	"errorCount",
+	"compactions",
+	"cacheHitRate",
 ])
 
 function sanitize(props: Record<string, any> | undefined): Record<string, any> {
@@ -111,7 +137,11 @@ export class TelemetryService {
 			void this.batcher.shutdown()
 		}
 		for (const [, span] of this.spanStore) {
-			try { span.end() } catch { /* no-op */ }
+			try {
+				span.end()
+			} catch {
+				/* no-op */
+			}
 		}
 		this.spanStore.clear()
 	}
@@ -173,7 +203,9 @@ export class TelemetryService {
 				}
 				span.addEvent(name, safe)
 				span.end()
-			} catch { /* no-op */ }
+			} catch {
+				/* no-op */
+			}
 		}
 	}
 
@@ -195,7 +227,7 @@ export class TelemetryService {
 
 	captureError(error: any, properties?: Record<string, any>): void {
 		this.emit("error", {
-			error_type: typeof error === "string" ? error : error?.message ?? String(error),
+			error_type: typeof error === "string" ? error : (error?.message ?? String(error)),
 			...properties,
 		})
 	}
@@ -219,7 +251,7 @@ export class TelemetryService {
 	captureException(error: any, context?: string | Record<string, any>): void {
 		const ctx = typeof context === "string" ? { event: context } : context
 		this.emit("exception", {
-			error_type: typeof error === "string" ? error : error?.message ?? String(error),
+			error_type: typeof error === "string" ? error : (error?.message ?? String(error)),
 			...ctx,
 		})
 	}
@@ -253,7 +285,7 @@ export class TelemetryService {
 	}
 
 	captureTaskCompleted(taskId: string | Record<string, any>): void {
-		const id = typeof taskId === "string" ? taskId : taskId?.taskId ?? "unknown"
+		const id = typeof taskId === "string" ? taskId : (taskId?.taskId ?? "unknown")
 		this.emit("task_completed", { taskId: id })
 	}
 
@@ -274,22 +306,22 @@ export class TelemetryService {
 	}
 
 	captureToolUsage(taskId: string | Record<string, any>, tool?: string): void {
-		const id = typeof taskId === "string" ? taskId : taskId?.taskId ?? "unknown"
+		const id = typeof taskId === "string" ? taskId : (taskId?.taskId ?? "unknown")
 		this.emit("tool_usage", { taskId: id, tool })
 	}
 
 	captureCheckpointCreated(taskId: string | Record<string, any>): void {
-		const id = typeof taskId === "string" ? taskId : taskId?.taskId ?? "unknown"
+		const id = typeof taskId === "string" ? taskId : (taskId?.taskId ?? "unknown")
 		this.emit("checkpoint_created", { taskId: id })
 	}
 
 	captureCheckpointRestored(taskId: string | Record<string, any>): void {
-		const id = typeof taskId === "string" ? taskId : taskId?.taskId ?? "unknown"
+		const id = typeof taskId === "string" ? taskId : (taskId?.taskId ?? "unknown")
 		this.emit("checkpoint_restored", { taskId: id })
 	}
 
 	captureCheckpointDiffed(taskId: string | Record<string, any>): void {
-		const id = typeof taskId === "string" ? taskId : taskId?.taskId ?? "unknown"
+		const id = typeof taskId === "string" ? taskId : (taskId?.taskId ?? "unknown")
 		this.emit("checkpoint_diffed", { taskId: id })
 	}
 
@@ -302,13 +334,13 @@ export class TelemetryService {
 	}
 
 	captureSlidingWindowTruncation(taskId: string | Record<string, any>): void {
-		const id = typeof taskId === "string" ? taskId : taskId?.taskId ?? "unknown"
+		const id = typeof taskId === "string" ? taskId : (taskId?.taskId ?? "unknown")
 		this.emit("sliding_window_truncation", { taskId: id })
 	}
 
 	captureShellIntegrationError(error: any): void {
 		this.emit("shell_integration_error", {
-			error_type: typeof error === "string" ? error : error?.message ?? String(error),
+			error_type: typeof error === "string" ? error : (error?.message ?? String(error)),
 		})
 	}
 

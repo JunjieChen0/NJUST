@@ -12,6 +12,9 @@
 
 # Include the built extension
 !dist
+# Exclude build artifacts not needed at runtime
+dist/**/*.map
+dist/metafile.json
 
 # Include the built webview
 !**/*.map
