@@ -24,10 +24,16 @@ AGENTS.local.md
 .test_env
 .vscode-test/
 
-# Docs - ignore all except examples
+# Docs - ignore all except examples, adr, baseline, runbooks
 docs/*
 !docs/examples/
 !docs/examples/**
+!docs/adr/
+!docs/adr/**
+!docs/baseline/
+!docs/baseline/**
+!docs/runbooks/
+!docs/runbooks/**
 
 # Dotenv
 .env
