@@ -78,10 +78,19 @@ export interface TaskAskSayHost {
 	denyAsk(opts?: { text?: string; images?: string[] }): void
 	supersedePendingAsk(): void
 	handleWebviewAskResponse(askResponse: ClineAskResponse, text?: string, images?: string[]): void
+	updateApiConfiguration(newApiConfiguration: UnsafeAny): void
 	formatResponse: {
 		toolError(error: string): string
 		missingToolParameterError(paramName: string): string
 	}
 }
 
-export type { ClineAsk, ClineAskResponse, ClineMessage, ToolProgressStatus, ContextCondense, ContextTruncation, ToolName }
+export type {
+	ClineAsk,
+	ClineAskResponse,
+	ClineMessage,
+	ToolProgressStatus,
+	ContextCondense,
+	ContextTruncation,
+	ToolName,
+}

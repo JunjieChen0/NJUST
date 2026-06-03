@@ -1,8 +1,5 @@
 import type { Anthropic } from "@anthropic-ai/sdk"
-import type {
-	ClineApiReqCancelReason,
-	ClineMessage,
-} from "@njust-ai/types"
+import type { ClineApiReqCancelReason, ClineMessage } from "@njust-ai/types"
 import {
 	clineApiReqInfoSchema,
 	DEFAULT_AUTO_CONDENSE_CONTEXT_PERCENT,
@@ -19,16 +16,10 @@ import type { ToolUse, McpToolUse } from "../../shared/tools"
 import type { TypedBlock } from "../assistant-message/types"
 
 import { NativeToolCallParser } from "../assistant-message/NativeToolCallParser"
-import {
-	processTaskStreamChunk,
-	finalizePendingStreamingToolCalls,
-} from "./TaskStreamChunkProcessor"
+import { processTaskStreamChunk, finalizePendingStreamingToolCalls } from "./TaskStreamChunkProcessor"
 import { TaskState } from "./TaskStateMachine"
 import { TaskAbortedError } from "./TaskErrors"
-import {
-	handleMidStreamFailure,
-	handleEmptyAssistantResponse,
-} from "./TaskRetryHandler"
+import { handleMidStreamFailure, handleEmptyAssistantResponse } from "./TaskRetryHandler"
 
 import { findLastIndex } from "../../shared/array"
 import { calculateApiCostAnthropic, calculateApiCostOpenAI } from "../../shared/cost"
@@ -37,11 +28,11 @@ import { isAnyToolUse, isToolUseBlock } from "../assistant-message/types"
 import { formatResponse } from "../prompts/responses"
 import { willManageContext } from "../context-management"
 import { globalQueryProfiler } from "../../utils/queryProfiler"
+import { TelemetryService } from "@njust-ai/telemetry"
 import { globalCacheMetrics } from "../../utils/cacheMetrics"
 import { globalPromptCacheBreakDetector } from "../prompts/promptCacheBreakDetection"
 import { sanitizeToolUseId } from "../../utils/tool-id"
 import { logger } from "../../shared/logger"
-import { TelemetryService } from "@njust-ai/telemetry"
 import { getErrorMessage } from "../../shared/error-utils"
 import { debugLog } from "../../utils/debugLog"
 import { t as i18nT } from "../../i18n"
@@ -113,9 +104,7 @@ export async function consumeApiStream(config: ConsumeStreamConfig): Promise<Str
 			return
 		}
 
-		const existingData = clineApiReqInfoSchema.parse(
-			JSON.parse(t.clineMessages[lastApiReqIndex].text || "{}"),
-		)
+		const existingData = clineApiReqInfoSchema.parse(JSON.parse(t.clineMessages[lastApiReqIndex].text || "{}"))
 
 		const modelId = getModelId(t.apiConfiguration)
 		const apiProvider = t.apiConfiguration.apiProvider
@@ -133,13 +122,7 @@ export async function consumeApiStream(config: ConsumeStreamConfig): Promise<Str
 						cacheWriteTokens,
 						cacheReadTokens,
 					)
-				: calculateApiCostOpenAI(
-						streamModelInfo,
-						inputTokens,
-						outputTokens,
-						cacheWriteTokens,
-						cacheReadTokens,
-					)
+				: calculateApiCostOpenAI(streamModelInfo, inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens)
 
 		t.clineMessages[lastApiReqIndex].text = JSON.stringify({
 			...existingData,
@@ -231,10 +214,7 @@ export async function consumeApiStream(config: ConsumeStreamConfig): Promise<Str
 				},
 			})
 			if (t.abort) {
-				logger.info(
-					"TaskStreamConsumer",
-					`Aborting stream for task ${t.taskId}, abandoned = ${t.abandoned}`,
-				)
+				logger.info("TaskStreamConsumer", `Aborting stream for task ${t.taskId}, abandoned = ${t.abandoned}`)
 
 				if (!t.abandoned) {
 					await abortStream("user_cancelled")
@@ -284,12 +264,7 @@ export async function consumeApiStream(config: ConsumeStreamConfig): Promise<Str
 				},
 				messageIndex: number = apiReqIndex,
 			) => {
-				if (
-					tokens.input > 0 ||
-					tokens.output > 0 ||
-					tokens.cacheWrite > 0 ||
-					tokens.cacheRead > 0
-				) {
+				if (tokens.input > 0 || tokens.output > 0 || tokens.cacheWrite > 0 || tokens.cacheRead > 0) {
 					inputTokens = tokens.input
 					outputTokens = tokens.output
 					cacheWriteTokens = tokens.cacheWrite
@@ -449,13 +424,11 @@ export async function consumeApiStream(config: ConsumeStreamConfig): Promise<Str
 				}
 			} catch (error) {
 				logger.error("TaskStreamConsumer", "Error draining stream for usage data:", error)
-				TelemetryService.reportError(error instanceof Error ? error : new Error(String(error)), TelemetryEventName.UTILITY_ERROR)
-				if (
-					bgInputTokens > 0 ||
-					bgOutputTokens > 0 ||
-					bgCacheWriteTokens > 0 ||
-					bgCacheReadTokens > 0
-				) {
+				TelemetryService.reportError(
+					error instanceof Error ? error : new Error(String(error)),
+					TelemetryEventName.UTILITY_ERROR,
+				)
+				if (bgInputTokens > 0 || bgOutputTokens > 0 || bgCacheWriteTokens > 0 || bgCacheReadTokens > 0) {
 					await captureUsageData(
 						{
 							input: bgInputTokens,
@@ -472,7 +445,10 @@ export async function consumeApiStream(config: ConsumeStreamConfig): Promise<Str
 
 		drainStreamInBackgroundToFindAllUsage(lastApiReqIndex).catch((error) => {
 			logger.error("TaskStreamConsumer", "Background usage collection failed:", error)
-			TelemetryService.reportError(error instanceof Error ? error : new Error(String(error)), TelemetryEventName.UTILITY_ERROR)
+			TelemetryService.reportError(
+				error instanceof Error ? error : new Error(String(error)),
+				TelemetryEventName.UTILITY_ERROR,
+			)
 		})
 	} catch (error) {
 		if (!t.abandoned) {
@@ -507,6 +483,17 @@ export async function consumeApiStream(config: ConsumeStreamConfig): Promise<Str
 				"TaskStreamConsumer",
 				`Query Profiler: task=${profile.taskId} model=${profile.modelId} ttftMs=${profile.ttftMs ?? -1} e2eMs=${profile.e2eMs ?? -1} aborted=${profile.aborted}`,
 			)
+			// Report query performance to telemetry (Task 2.2)
+			try {
+				TelemetryService.instance.captureEvent("query.completed", {
+					model: profile.modelId,
+					ttft: profile.ttftMs ?? -1,
+					e2e: profile.e2eMs ?? -1,
+					success: !profile.aborted && !profile.error,
+				})
+			} catch {
+				// Telemetry failure is non-fatal
+			}
 		}
 		t.currentRequestAbortController = undefined
 	}
@@ -689,10 +676,13 @@ export async function finalizeStreamResponse(config: FinalizeConfig): Promise<Fi
 	}
 
 	if (partialBlocks.length > 0) {
-	void t.presentAssistantMessage().catch((error) => {
-		logger.error("presentAssistantMessage failed", error)
-		TelemetryService.reportError(error instanceof Error ? error : new Error(String(error)), TelemetryEventName.UTILITY_ERROR)
-	})
+		void t.presentAssistantMessage().catch((error) => {
+			logger.error("presentAssistantMessage failed", error)
+			TelemetryService.reportError(
+				error instanceof Error ? error : new Error(String(error)),
+				TelemetryEventName.UTILITY_ERROR,
+			)
+		})
 	}
 
 	if (hasTextContent || hasToolUses) {
@@ -713,8 +703,7 @@ export async function finalizeStreamResponse(config: FinalizeConfig): Promise<Fi
 					(b.type === "tool_use" || b.type === "mcp_tool_use") &&
 					b.id &&
 					!t.userMessageContent.some(
-						(r: UnsafeAny) =>
-							r.type === "tool_result" && r.tool_use_id === sanitizeToolUseId(b.id),
+						(r: UnsafeAny) => r.type === "tool_result" && r.tool_use_id === sanitizeToolUseId(b.id),
 					),
 			)
 
@@ -786,9 +775,7 @@ export async function finalizeStreamResponse(config: FinalizeConfig): Promise<Fi
 				await t.say("error", "MODEL_NO_TOOLS_USED")
 				t.consecutiveMistakeCount++
 
-				const lastUserMsg = t.apiConversationHistory
-					.filter((m: UnsafeAny) => m.role === "user")
-					.pop()
+				const lastUserMsg = t.apiConversationHistory.filter((m: UnsafeAny) => m.role === "user").pop()
 				const wasInterrupted =
 					lastUserMsg &&
 					Array.isArray(lastUserMsg.content) &&
@@ -801,9 +788,7 @@ export async function finalizeStreamResponse(config: FinalizeConfig): Promise<Fi
 
 				t.userMessageContent.push({
 					type: "text",
-					text: wasInterrupted
-						? formatResponse.noToolsUsedWithInterruptHint()
-						: formatResponse.noToolsUsed(),
+					text: wasInterrupted ? formatResponse.noToolsUsedWithInterruptHint() : formatResponse.noToolsUsed(),
 				})
 			} else {
 				t.userMessageContent.push({

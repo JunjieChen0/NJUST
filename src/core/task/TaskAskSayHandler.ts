@@ -8,12 +8,16 @@
  * Phase 1: Extract ask/say logic from Task.ts
  * Phase 2 (future): Move webview response handling here once host surface is reduced
  */
-import type { ClineAsk, ClineAskResponse, ClineSay, ToolProgressStatus, ContextCondense, ContextTruncation, ToolName } from "@njust-ai/types"
-import {
-	isInteractiveAsk,
-	isIdleAsk,
-	isResumableAsk,
+import type {
+	ClineAsk,
+	ClineAskResponse,
+	ClineSay,
+	ToolProgressStatus,
+	ContextCondense,
+	ContextTruncation,
+	ToolName,
 } from "@njust-ai/types"
+import { isInteractiveAsk, isIdleAsk, isResumableAsk } from "@njust-ai/types"
 import { findLastIndex } from "../../shared/array"
 import { formatResponse } from "../../core/prompts/responses"
 import { NJUST_AIEventName, TelemetryEventName } from "@njust-ai/types"
@@ -58,7 +62,14 @@ export class TaskAskSayHandler {
 				} else {
 					askTs = Date.now()
 					this.host.lastMessageTs = askTs
-					await this.host.addToClineMessages({ ts: askTs, type: "ask", ask: type, text, partial, isProtected })
+					await this.host.addToClineMessages({
+						ts: askTs,
+						type: "ask",
+						ask: type,
+						text,
+						partial,
+						isProtected,
+					})
 					throw new AskIgnoredError("new partial")
 				}
 			} else {
@@ -345,5 +356,41 @@ export class TaskAskSayHandler {
 			`Njust-AI tried to use ${toolName}${relPath ? ` for '${relPath.toPosix()}'` : ""} without value for required parameter '${paramName}'. Retrying...`,
 		)
 		return formatResponse.toolError(formatResponse.missingToolParameterError(paramName))
+	}
+
+	async submitUserMessage(text: string, images?: string[], mode?: string, providerProfile?: string): Promise<void> {
+		try {
+			text = (text ?? "").trim()
+			images = images ?? []
+
+			if (text.length === 0 && images.length === 0) {
+				return
+			}
+
+			const provider = this.host.hostRef.deref()
+
+			if (provider) {
+				if (mode) {
+					await provider.setMode(mode)
+				}
+
+				if (providerProfile) {
+					await provider.setProviderProfile(providerProfile)
+
+					const newState = await provider.getState()
+					if (newState?.apiConfiguration) {
+						this.host.updateApiConfiguration(newState.apiConfiguration)
+					}
+				}
+
+				this.host.emit(NJUST_AIEventName.TaskUserMessage, this.host.taskId)
+				this.host.handleWebviewAskResponse("messageResponse", text, images)
+			} else {
+				logger.error("TaskAskSayHandler", "submitUserMessage: Provider reference lost")
+			}
+		} catch (error) {
+			logger.error("TaskAskSayHandler", "submitUserMessage: Failed to submit user message:", error)
+			TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
+		}
 	}
 }

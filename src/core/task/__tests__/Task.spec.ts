@@ -1867,7 +1867,9 @@ describe("Cline", () => {
 				// Should log error but not throw
 				await task.submitUserMessage("test message")
 
-				expect(consoleErrorSpy).toHaveBeenCalledWith("[Task] submitUserMessage: Provider reference lost")
+				expect(consoleErrorSpy).toHaveBeenCalledWith(
+					"[TaskAskSayHandler] submitUserMessage: Provider reference lost",
+				)
 				expect(handleResponseSpy).not.toHaveBeenCalled()
 
 				// Restore console.error

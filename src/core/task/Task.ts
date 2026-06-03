@@ -61,7 +61,7 @@ import { RooTerminalProcess } from "../../integrations/terminal/types"
 
 // utils
 import { getWorkspacePath } from "../../utils/path"
-import type { ICloudAgentHost } from "./interfaces/ICloudAgentHost"
+import { createCloudAgentHost } from "./createCloudAgentHost"
 import { tokenCountCache } from "../../utils/tokenCountCache"
 
 // prompts
@@ -186,91 +186,16 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 */
 	public cachedToolDefinitions?: { mode: string; tools: UnsafeAny[]; time: number }
 
-	/**
-	 * The mode associated with this task. Persisted across sessions
-	 * to maintain user context when reopening tasks from history.
-	 *
-	 * ## Lifecycle
-	 *
-	 * ### For new tasks:
-	 * 1. Initially `undefined` during construction
-	 * 2. Asynchronously initialized from provider state via `initializeTaskMode()`
-	 * 3. Falls back to `defaultModeSlug` if provider state is unavailable
-	 *
-	 * ### For history items:
-	 * 1. Immediately set from `historyItem.mode` during construction
-	 * 2. Falls back to `defaultModeSlug` if mode is not stored in history
-	 *
-	 * ## Important
-	 * This property should NOT be accessed directly until `taskModeReady` promise resolves.
-	 * Use `getTaskMode()` for async access or `taskMode` getter for sync access after initialization.
-	 *
-	 * @private
-	 * @see {@link getTaskMode} - For safe async access
-	 * @see {@link taskMode} - For sync access after initialization
-	 * @see {@link waitForModeInitialization} - To ensure initialization is complete
-	 */
+	/** Task mode. Async-initialized from provider state; falls back to defaultModeSlug. Access via getTaskMode() or taskMode getter after taskModeReady resolves. */
 	private _taskMode: string | undefined
 
-	/**
-	 * Promise that resolves when the task mode has been initialized.
-	 * This ensures async mode initialization completes before the task is used.
-	 *
-	 * ## Purpose
-	 * - Prevents race conditions when accessing task mode
-	 * - Ensures provider state is properly loaded before mode-dependent operations
-	 * - Provides a synchronization point for async initialization
-	 *
-	 * ## Resolution timing
-	 * - For history items: Resolves immediately (sync initialization)
-	 * - For new tasks: Resolves after provider state is fetched (async initialization)
-	 *
-	 * @private
-	 * @see {@link waitForModeInitialization} - Public method to await this promise
-	 */
+	/** Resolves when task mode initialization completes. History items resolve immediately; new tasks after provider state fetch. */
 	private taskModeReady: Promise<void>
 
-	/**
-	 * The API configuration name (provider profile) associated with this task.
-	 * Persisted across sessions to maintain the provider profile when reopening tasks from history.
-	 *
-	 * ## Lifecycle
-	 *
-	 * ### For new tasks:
-	 * 1. Initially `undefined` during construction
-	 * 2. Asynchronously initialized from provider state via `initializeTaskApiConfigName()`
-	 * 3. Falls back to "default" if provider state is unavailable
-	 *
-	 * ### For history items:
-	 * 1. Immediately set from `historyItem.apiConfigName` during construction
-	 * 2. Falls back to undefined if not stored in history (for backward compatibility)
-	 *
-	 * ## Important
-	 * If you need a non-`undefined` provider profile (e.g., for profile-dependent operations),
-	 * wait for `taskApiConfigReady` first (or use `getTaskApiConfigName()`).
-	 * The sync `taskApiConfigName` getter may return `undefined` for backward compatibility.
-	 *
-	 * @private
-	 * @see {@link getTaskApiConfigName} - For safe async access
-	 * @see {@link taskApiConfigName} - For sync access after initialization
-	 */
+	/** Provider profile name. Async-initialized from provider state; falls back to "default". May be undefined for backward compat. */
 	private _taskApiConfigName: string | undefined
 
-	/**
-	 * Promise that resolves when the task API config name has been initialized.
-	 * This ensures async API config name initialization completes before the task is used.
-	 *
-	 * ## Purpose
-	 * - Prevents race conditions when accessing task API config name
-	 * - Ensures provider state is properly loaded before profile-dependent operations
-	 * - Provides a synchronization point for async initialization
-	 *
-	 * ## Resolution timing
-	 * - For history items: Resolves immediately (sync initialization)
-	 * - For new tasks: Resolves after provider state is fetched (async initialization)
-	 *
-	 * @private
-	 */
+	/** Resolves when API config name initialization completes. */
 	private taskApiConfigReady: Promise<void>
 
 	hostRef: WeakRef<ITaskHost>
@@ -754,27 +679,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		}
 	}
 
-	/**
-	 * Initialize the task mode from the provider state.
-	 * This method handles async initialization with proper error handling.
-	 *
-	 * ## Flow
-	 * 1. Attempts to fetch the current mode from provider state
-	 * 2. Sets `_taskMode` to the fetched mode or `defaultModeSlug` if unavailable
-	 * 3. Handles errors gracefully by falling back to default mode
-	 * 4. Logs any initialization errors for debugging
-	 *
-	 * ## Error handling
-	 * - Network failures when fetching provider state
-	 * - Provider not yet initialized
-	 * - Invalid state structure
-	 *
-	 * All errors result in fallback to `defaultModeSlug` to ensure task can proceed.
-	 *
-	 * @private
-	 * @param provider - The ClineProvider instance to fetch state from
-	 * @returns Promise that resolves when initialization is complete
-	 */
+	/** Initialize task mode from provider state. Falls back to defaultModeSlug on error. */
 	private async initializeTaskMode(host: ITaskHost): Promise<void> {
 		try {
 			const state = await host.getState()
@@ -788,27 +693,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		}
 	}
 
-	/**
-	 * Initialize the task API config name from the provider state.
-	 * This method handles async initialization with proper error handling.
-	 *
-	 * ## Flow
-	 * 1. Attempts to fetch the current API config name from provider state
-	 * 2. Sets `_taskApiConfigName` to the fetched name or "default" if unavailable
-	 * 3. Handles errors gracefully by falling back to "default"
-	 * 4. Logs any initialization errors for debugging
-	 *
-	 * ## Error handling
-	 * - Network failures when fetching provider state
-	 * - Provider not yet initialized
-	 * - Invalid state structure
-	 *
-	 * All errors result in fallback to "default" to ensure task can proceed.
-	 *
-	 * @private
-	 * @param provider - The ClineProvider instance to fetch state from
-	 * @returns Promise that resolves when initialization is complete
-	 */
+	/** Initialize API config name from provider state. Falls back to "default" on error. */
 	private async initializeTaskApiConfigName(host: ITaskHost): Promise<void> {
 		try {
 			const state = await host.getState()
@@ -829,12 +714,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		}
 	}
 
-	/**
-	 * Sets up a listener for provider profile changes.
-	 *
-	 * @private
-	 * @param provider - The ClineProvider instance to listen to
-	 */
+	/** Subscribe to provider profile changes; update API config when profile switches. */
 	private setupProviderProfileChangeListener(host: ITaskHost): void {
 		// Only set up listener if provider has the on method (may not exist in test mocks)
 		if (typeof host.on !== "function") {
@@ -862,88 +742,18 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		host.on(NJUST_AIEventName.ProviderProfileChanged, this.providerProfileChangeListener)
 	}
 
-	/**
-	 * Wait for the task mode to be initialized before proceeding.
-	 * This method ensures that any operations depending on the task mode
-	 * will have access to the correct mode value.
-	 *
-	 * ## When to use
-	 * - Before accessing mode-specific configurations
-	 * - When switching between tasks with different modes
-	 * - Before operations that depend on mode-based permissions
-	 *
-	 * ## Example usage
-	 * ```typescript
-	 * // Wait for mode initialization before mode-dependent operations
-	 * await task.waitForModeInitialization();
-	 * const mode = task.taskMode; // Now safe to access synchronously
-	 *
-	 * // Or use with getTaskMode() for a one-liner
-	 * const mode = await task.getTaskMode(); // Internally waits for initialization
-	 * ```
-	 *
-	 * @returns Promise that resolves when the task mode is initialized
-	 * @public
-	 */
+	/** Await task mode initialization. */
 	public async waitForModeInitialization(): Promise<void> {
 		return this.taskModeReady
 	}
 
-	/**
-	 * Get the task mode asynchronously, ensuring it's properly initialized.
-	 * This is the recommended way to access the task mode as it guarantees
-	 * the mode is available before returning.
-	 *
-	 * ## Async behavior
-	 * - Internally waits for `taskModeReady` promise to resolve
-	 * - Returns the initialized mode or `defaultModeSlug` as fallback
-	 * - Safe to call multiple times - subsequent calls return immediately if already initialized
-	 *
-	 * ## Example usage
-	 * ```typescript
-	 * // Safe async access
-	 * const mode = await task.getTaskMode();
-	 * console.log(`Task is running in ${mode} mode`);
-	 *
-	 * // Use in conditional logic
-	 * if (await task.getTaskMode() === 'architect') {
-	 *   // Perform architect-specific operations
-	 * }
-	 * ```
-	 *
-	 * @returns Promise resolving to the task mode string
-	 * @public
-	 */
+	/** Get task mode (async, waits for init). Falls back to defaultModeSlug. */
 	public async getTaskMode(): Promise<string> {
 		await this.taskModeReady
 		return this._taskMode || defaultModeSlug
 	}
 
-	/**
-	 * Get the task mode synchronously. This should only be used when you're certain
-	 * that the mode has already been initialized (e.g., after waitForModeInitialization).
-	 *
-	 * ## When to use
-	 * - In synchronous contexts where async/await is not available
-	 * - After explicitly waiting for initialization via `waitForModeInitialization()`
-	 * - In event handlers or callbacks where mode is guaranteed to be initialized
-	 *
-	 * ## Example usage
-	 * ```typescript
-	 * // After ensuring initialization
-	 * await task.waitForModeInitialization();
-	 * const mode = task.taskMode; // Safe synchronous access
-	 *
-	 * // In an event handler after task is started
-	 * task.on('taskStarted', () => {
-	 *   console.log(`Task started in ${task.taskMode} mode`); // Safe here
-	 * });
-	 * ```
-	 *
-	 * @throws {Error} If the mode hasn't been initialized yet
-	 * @returns The task mode string
-	 * @public
-	 */
+	/** Synchronous task mode getter. Throws if not yet initialized. */
 	public get taskMode(): string {
 		if (this._taskMode === undefined) {
 			throw new Error("Task mode accessed before initialization. Use getTaskMode() or wait for taskModeReady.")
@@ -956,69 +766,23 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this._taskMode = mode
 	}
 
-	/**
-	 * Wait for the task API config name to be initialized before proceeding.
-	 * This method ensures that any operations depending on the task's provider profile
-	 * will have access to the correct value.
-	 *
-	 * ## When to use
-	 * - Before accessing provider profile-specific configurations
-	 * - When switching between tasks with different provider profiles
-	 * - Before operations that depend on the provider profile
-	 *
-	 * @returns Promise that resolves when the task API config name is initialized
-	 * @public
-	 */
+	/** Await API config name initialization. */
 	public async waitForApiConfigInitialization(): Promise<void> {
 		return this.taskApiConfigReady
 	}
 
-	/**
-	 * Get the task API config name asynchronously, ensuring it's properly initialized.
-	 * This is the recommended way to access the task's provider profile as it guarantees
-	 * the value is available before returning.
-	 *
-	 * ## Async behavior
-	 * - Internally waits for `taskApiConfigReady` promise to resolve
-	 * - Returns the initialized API config name or undefined as fallback
-	 * - Safe to call multiple times - subsequent calls return immediately if already initialized
-	 *
-	 * @returns Promise resolving to the task API config name string or undefined
-	 * @public
-	 */
+	/** Get API config name (async, waits for init). May return undefined for backward compat. */
 	public async getTaskApiConfigName(): Promise<string | undefined> {
 		await this.taskApiConfigReady
 		return this._taskApiConfigName
 	}
 
-	/**
-	 * Get the task API config name synchronously. This should only be used when you're certain
-	 * that the value has already been initialized (e.g., after waitForApiConfigInitialization).
-	 *
-	 * ## When to use
-	 * - In synchronous contexts where async/await is not available
-	 * - After explicitly waiting for initialization via `waitForApiConfigInitialization()`
-	 * - In event handlers or callbacks where API config name is guaranteed to be initialized
-	 *
-	 * Note: Unlike taskMode, this getter does not throw if uninitialized since the API config
-	 * name can legitimately be undefined (backward compatibility with tasks created before
-	 * this feature was added).
-	 *
-	 * @returns The task API config name string or undefined
-	 * @public
-	 */
+	/** Synchronous API config name getter. Returns undefined if not yet initialized (backward compat). */
 	public get taskApiConfigName(): string | undefined {
 		return this._taskApiConfigName
 	}
 
-	/**
-	 * Update the task's API config name. This is called when the user switches
-	 * provider profiles while a task is active, allowing the task to remember
-	 * its new provider profile.
-	 *
-	 * @param apiConfigName - The new API config name to set
-	 * @internal
-	 */
+	/** @internal Update API config name (called on provider profile switch). */
 	public setTaskApiConfigName(apiConfigName: string | undefined): void {
 		this._taskApiConfigName = apiConfigName
 	}
@@ -1257,45 +1021,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		mode?: string,
 		providerProfile?: string,
 	): Promise<void> {
-		try {
-			text = (text ?? "").trim()
-			images = images ?? []
-
-			if (text.length === 0 && images.length === 0) {
-				return
-			}
-
-			const provider = this.hostRef.deref()
-
-			if (provider) {
-				if (mode) {
-					await provider.setMode(mode)
-				}
-
-				if (providerProfile) {
-					await provider.setProviderProfile(providerProfile)
-
-					// Update this task's API configuration to match the new profile
-					// This ensures the parser state is synchronized with the selected model
-					const newState = await provider.getState()
-					if (newState?.apiConfiguration) {
-						this.updateApiConfiguration(newState.apiConfiguration)
-					}
-				}
-
-				this.emit(NJUST_AIEventName.TaskUserMessage, this.taskId)
-
-				// Handle the message directly instead of routing through the webview.
-				// This avoids a race condition where the webview's message state hasn't
-				// hydrated yet, causing it to interpret the message as a new task request.
-				this.handleWebviewAskResponse("messageResponse", text, images)
-			} else {
-				logger.error("Task", "submitUserMessage: Provider reference lost")
-			}
-		} catch (error) {
-			logger.error("Task", "submitUserMessage: Failed to submit user message:", error)
-			TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
-		}
+		return this.askSayHandler.submitUserMessage(text, images, mode, providerProfile)
 	}
 
 	handleTerminalOperation(terminalOperation: "continue" | "abort") {
@@ -1517,31 +1243,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	// Cloud Agent orchestration delegated to CloudAgentOrchestrator
 
 	private async initiateCloudAgentLoop(userMessage: string, images?: string[]): Promise<void> {
-		const host: ICloudAgentHost = {
-			taskId: this.taskId,
-			cwd: this.cwd,
-			get abort() {
-				return (this as UnsafeAny as { _task: Task })._task?.abort ?? false
-			},
-			rooIgnoreController: this.rooIgnoreController,
-			rooProtectedController: this.rooProtectedController,
-			say: (type, text?, imgs?) => this.say(type, text, imgs),
-			ask: (type, text?, partial?) => this.ask(type, text, partial),
-			emit: (event, ...args) => EventEmitter.prototype.emit.call(this, event, ...args) as boolean,
-			setCurrentRequestAbortController: (ctrl) => {
-				this.currentRequestAbortController = ctrl
-			},
-			compileLocal: async (cwd) => {
-				const provider = this.hostRef.deref()
-				if (!provider?.compileLocal) {
-					throw new Error("本地编译功能未配置，请确认 Cangjie SDK 已安装。")
-				}
-				return provider.compileLocal(cwd)
-			},
-		}
-		// Patch the abort getter to actually read from this task instance
-		Object.defineProperty(host, "abort", { get: () => this.abort })
-
+		const host = createCloudAgentHost(this as UnsafeAny as Parameters<typeof createCloudAgentHost>[0])
 		const { CloudAgentOrchestrator } = await import("./CloudAgentOrchestrator")
 		const orchestrator = new CloudAgentOrchestrator(host)
 		await orchestrator.run(userMessage, images)
@@ -1773,13 +1475,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			if (!this.messageQueueService.isEmpty()) {
 				const queued = this.messageQueueService.dequeueMessage()
 				if (queued) {
-				this.queuedMessageTimer = setTimeout(() => {
-					this.queuedMessageTimer = undefined
-					this.submitUserMessage(queued.text, queued.images).catch((err) => {
-						logger.error("Task", "Failed to submit queued message:", err)
-						TelemetryService.reportError(err, TelemetryEventName.TASK_LIFECYCLE_ERROR)
-					})
-				}, 0)
+					this.queuedMessageTimer = setTimeout(() => {
+						this.queuedMessageTimer = undefined
+						this.submitUserMessage(queued.text, queued.images).catch((err) => {
+							logger.error("Task", "Failed to submit queued message:", err)
+							TelemetryService.reportError(err, TelemetryEventName.TASK_LIFECYCLE_ERROR)
+						})
+					}, 0)
 				}
 			}
 		} catch (e) {
