@@ -3,7 +3,7 @@ import Mocha from "mocha"
 import { glob } from "glob"
 import * as vscode from "vscode"
 
-import { NJUST_AIEventName, type NJUST_AIAPI } from "@njust-ai/types"
+import { NJUST_AIEventName, type NJUST_AIAPI, type UnsafeAny } from "@njust-ai/types"
 
 import { waitFor } from "./utils"
 
@@ -45,7 +45,7 @@ export async function run() {
 	const api = extension.isActive ? extension.exports : await extension.activate()
 
 	if (process.env.MOCK_API_URL) {
-		await api.setConfiguration({
+		const mockConfig = {
 			apiProvider: "openai" as const,
 			openAiBaseUrl: `${process.env.MOCK_API_URL}/v1`,
 			openAiApiKey: "mock-key",
@@ -53,7 +53,43 @@ export async function run() {
 			openAiStreamingEnabled: true,
 			autoApprovalEnabled: true,
 			alwaysAllowSubtasks: true,
-		})
+		}
+		await api.setConfiguration(mockConfig)
+
+		// Verify mock server is reachable before proceeding.
+		try {
+			const healthRes = await fetch(`${process.env.MOCK_API_URL}/health`)
+			if (!healthRes.ok) {
+				console.warn(`Mock API health check returned ${healthRes.status}`)
+			}
+		} catch (err) {
+			console.error(`Mock API health check failed: ${err instanceof Error ? err.message : String(err)}`)
+		}
+
+		// Verify that the provider configuration (including secret keys) was persisted.
+		// getConfiguration() strips secrets, so we access the internal contextProxy.
+		const internalConfig = (api as UnsafeAny).sidebarProvider?.contextProxy?.getValues?.()
+		if (!internalConfig?.openAiApiKey) {
+			console.error(
+				"[e2e setup] CRITICAL: openAiApiKey is missing after setConfiguration. " +
+					`apiProvider=${internalConfig?.apiProvider}, ` +
+					`openAiBaseUrl=${internalConfig?.openAiBaseUrl}, ` +
+					`openAiModelId=${internalConfig?.openAiModelId}. ` +
+					"Attempting direct secret store as fallback...",
+			)
+			// Fallback: directly call storeSecret to ensure the key is in the cache.
+			const contextProxy = (api as UnsafeAny).sidebarProvider?.contextProxy
+			if (contextProxy?.storeSecret) {
+				await contextProxy.storeSecret("openAiApiKey", "mock-key")
+				// Verify the fallback worked.
+				const retryConfig = contextProxy.getValues?.()
+				if (retryConfig?.openAiApiKey) {
+					console.log("[e2e setup] Fallback storeSecret succeeded - openAiApiKey is now present.")
+				} else {
+					console.error("[e2e setup] Fallback storeSecret also failed. Tests will likely fail.")
+				}
+			}
+		}
 	} else {
 		await api.setConfiguration({
 			apiProvider: "openrouter" as const,
