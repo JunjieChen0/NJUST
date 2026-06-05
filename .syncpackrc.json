@@ -24,6 +24,12 @@
 			"range": "workspace:*"
 		},
 		{
+			"label": "TypeScript uses tilde range to stay within eslint compat",
+			"dependencies": ["typescript"],
+			"dependencyTypes": ["prod", "dev"],
+			"range": "~"
+		},
+		{
 			"label": "All dependencies use caret ranges",
 			"range": "^",
 			"dependencyTypes": ["prod", "dev"]
