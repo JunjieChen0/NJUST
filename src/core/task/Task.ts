@@ -195,6 +195,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	public memrlIntent: string = ""
 	/** MemRL: guard so the episode is persisted exactly once per task. */
 	private memrlPersisted = false
+	/** MemRL: set when the agent invokes attempt_completion (its own success signal). */
+	private completionAttempted = false
 
 	/** Task mode. Async-initialized from provider state; falls back to defaultModeSlug. Access via getTaskMode() or taskMode getter after taskModeReady resolves. */
 	private _taskMode: string | undefined
@@ -1197,6 +1199,18 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	/**
+	 * MemRL: the agent invoked attempt_completion (declared the task done). This is
+	 * the success signal we reward on — independent of whether the user clicks the
+	 * approval button (which is a separate UX gate that often never fires).
+	 */
+	public markAttemptedCompletion(): void {
+		this.completionAttempted = true
+		// Persist the episode the moment the agent declares completion — don't wait
+		// for the user's approval button or task dispose (which often never happen).
+		this.persistMemrlEpisode()
+	}
+
+	/**
 	 * MemRL: persist the current task as an episodic memory exactly once.
 	 * Called on completion (markTaskCompleted, reward 1.0) and as a fallback when
 	 * the task loop unwinds on abort/error (reward 0.0). Idempotent per task.
@@ -1207,7 +1221,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		if (!memoryManager) return
 		this.memrlPersisted = true
 		const stm = memoryManager.getStm(this.taskId)
-		const reward = this.taskCompleted ? 1.0 : 0.0
+		// Success = the agent reached attempt_completion OR the user accepted it.
+		const reward = this.taskCompleted || this.completionAttempted ? 1.0 : 0.0
 		memoryManager.afterRun(this.taskId, this.memrlIntent || this.taskId, stm.summarize(), reward)
 	}
 
@@ -1294,6 +1309,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		const memrlIntent = userMessage.slice(0, 500) || this.taskId
 		this.memrlIntent = memrlIntent
 		this.memrlPersisted = false
+		this.completionAttempted = false
 		if (memoryManager) {
 			memoryManager.updateDependencies(this.api)
 			try {
@@ -1346,6 +1362,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				.slice(0, 500) || this.taskId
 		this.memrlIntent = memrlIntent
 		this.memrlPersisted = false
+		this.completionAttempted = false
 		if (memoryManager) {
 			memoryManager.updateDependencies(this.api)
 			try {

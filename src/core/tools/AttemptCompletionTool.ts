@@ -143,6 +143,10 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 				}
 			}
 
+			// MemRL: the agent has declared the task done by invoking attempt_completion.
+			// Record this as the success signal regardless of the user's approval action.
+			task.markAttemptedCompletion()
+
 			const { response, text, images } = await task.ask("completion_result", "", false)
 
 			if (response === "yesButtonClicked") {
