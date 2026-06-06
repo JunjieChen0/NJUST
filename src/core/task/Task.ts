@@ -187,6 +187,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 */
 	public cachedToolDefinitions?: { mode: string; tools: UnsafeAny[]; time: number }
 
+	/** MemRL: episodic hints retrieved before this task run, injected into system prompt. */
+	public memrlEpisodicHints: string = ""
+	/** MemRL: learned LTM rule cards retrieved before this task run, injected into system prompt. */
+	public memrlLtmRules: string = ""
+
 	/** Task mode. Async-initialized from provider state; falls back to defaultModeSlug. Access via getTaskMode() or taskMode getter after taskModeReady resolves. */
 	private _taskMode: string | undefined
 
@@ -1259,7 +1264,33 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		const host = createCloudAgentHost(this as UnsafeAny as Parameters<typeof createCloudAgentHost>[0])
 		const { CloudAgentOrchestrator } = await import("./CloudAgentOrchestrator")
 		const orchestrator = new CloudAgentOrchestrator(host)
-		await orchestrator.run(userMessage, images)
+
+		// MemRL: inject dependencies and retrieve hints before running
+		const memrlProvider = this.hostRef.deref()
+		const memoryManager = memrlProvider?.getMemoryManager(this.cwd)
+		const memrlIntent = userMessage.slice(0, 500) || this.taskId
+		if (memoryManager) {
+			memoryManager.updateDependencies(this.api)
+			try {
+				const { episodicHints, ltmRules } = await memoryManager.beforeRun(this.taskId, memrlIntent)
+				this.memrlEpisodicHints = episodicHints
+				this.memrlLtmRules = ltmRules
+				this.requestBuilder["systemPromptPartsCache"] = undefined
+			} catch {
+				/* non-blocking */
+			}
+		}
+
+		try {
+			await orchestrator.run(userMessage, images)
+		} finally {
+			// MemRL: afterRun — guaranteed even on abort/error
+			if (memoryManager) {
+				const stm = memoryManager.getStm(this.taskId)
+				const reward = this.taskCompleted ? 1.0 : 0.0
+				memoryManager.afterRun(this.taskId, memrlIntent, stm.summarize(), reward)
+			}
+		}
 	}
 
 	// Task Loop
@@ -1282,28 +1313,60 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			},
 		})
 
+		// MemRL: inject dependencies then retrieve episodic hints + LTM rules before the loop.
+		// Intent is extracted from userContent (apiConversationHistory is still empty here).
+		const memoryManager = provider?.getMemoryManager(this.cwd)
+		const memrlIntent =
+			userContent
+				.filter((b): b is { type: "text"; text: string } => b.type === "text" && "text" in b)
+				.map((b) => b.text)
+				.join(" ")
+				.trim()
+				.slice(0, 500) || this.taskId
+		if (memoryManager) {
+			memoryManager.updateDependencies(this.api)
+			try {
+				const { episodicHints, ltmRules } = await memoryManager.beforeRun(this.taskId, memrlIntent)
+				this.memrlEpisodicHints = episodicHints
+				this.memrlLtmRules = ltmRules
+				// Invalidate the cached system prompt so the new hints are injected.
+				this.requestBuilder["systemPromptPartsCache"] = undefined
+			} catch {
+				// Non-blocking: failures must not prevent task execution.
+			}
+		}
+
 		let nextUserContent = userContent
 		let includeFileDetails = true
 
 		this.emit(NJUST_AIEventName.TaskStarted)
 
-		while (!this.abort && !this.taskCompleted) {
-			const didEndLoop = await this.recursivelyMakeClineRequests(nextUserContent, includeFileDetails)
-			includeFileDetails = false
+		try {
+			while (!this.abort && !this.taskCompleted) {
+				const didEndLoop = await this.recursivelyMakeClineRequests(nextUserContent, includeFileDetails)
+				includeFileDetails = false
 
-			if (didEndLoop) {
-				// Only happens when max requests is hit and user denies
-				// resetting the count, or an unexpected error is caught.
-				break
+				if (didEndLoop) {
+					// Only happens when max requests is hit and user denies
+					// resetting the count, or an unexpected error is caught.
+					break
+				}
+
+				if (this.taskCompleted) {
+					// attempt_completion was accepted — stop without
+					// re-prompting the model.
+					break
+				}
+
+				nextUserContent = [{ type: "text", text: formatResponse.noToolsUsed() }]
 			}
-
-			if (this.taskCompleted) {
-				// attempt_completion was accepted — stop without
-				// re-prompting the model.
-				break
+		} finally {
+			// MemRL: afterRun — persist episode + update Q, guaranteed even on abort/error.
+			if (memoryManager) {
+				const stm = memoryManager.getStm(this.taskId)
+				const reward = this.taskCompleted ? 1.0 : 0.0
+				memoryManager.afterRun(this.taskId, memrlIntent, stm.summarize(), reward)
 			}
-
-			nextUserContent = [{ type: "text", text: formatResponse.noToolsUsed() }]
 		}
 	}
 
