@@ -142,7 +142,7 @@ Here's an example of how your output should be structured:
 
 Please provide your summary based on the conversation so far, following this structure and ensuring precision and thoroughness in your response.
 
-Note: Any <command> blocks from the original task will be automatically appended to your summary wrapped in <system-reminder> tags. You do not need to include them in your summary text.
+Note: Any [SLASH-COMMAND: ...] blocks from the original task will be automatically appended to your summary wrapped in [SYSTEM-REMINDER] tags. You do not need to include them in your summary text.
 
 There may be additional summarization instructions provided in the included context. If so, remember to follow these instructions when creating the above summary. Examples of instructions include:
 <example>
@@ -246,7 +246,11 @@ export const supportPrompt = {
 	get: (customSupportPrompts: Record<string, UnsafeAny> | undefined, type: SupportPromptType): string => {
 		return customSupportPrompts?.[type] ?? supportPromptConfigs[type].template
 	},
-	create: (type: SupportPromptType, params: PromptParams, customSupportPrompts?: Record<string, UnsafeAny>): string => {
+	create: (
+		type: SupportPromptType,
+		params: PromptParams,
+		customSupportPrompts?: Record<string, UnsafeAny>,
+	): string => {
 		const template = supportPrompt.get(customSupportPrompts, type)
 		return createPrompt(template, params)
 	},

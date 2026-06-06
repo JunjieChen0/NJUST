@@ -20,7 +20,7 @@ function isTreeSitterErrorString(definitions: string): boolean {
 export interface FoldedFileContextResult {
 	/** The formatted string containing all folded file definitions (joined) */
 	content: string
-	/** Individual file sections, each in its own <system-reminder> block */
+	/** Individual file sections, each in its own [SYSTEM-REMINDER] block */
 	sections: string[]
 	/** Number of files successfully processed */
 	filesProcessed: number
@@ -49,7 +49,7 @@ export interface FoldedFileContextOptions {
  * a condensed representation showing only function signatures, class declarations,
  * and other important structural definitions - hiding implementation bodies.
  *
- * Each file is wrapped in its own `<system-reminder>` block during context condensation,
+ * Each file is wrapped in its own `[SYSTEM-REMINDER]` block during context condensation,
  * allowing the model to retain awareness of file structure without consuming excessive tokens.
  *
  * @param filePaths - Array of file paths to process (relative to cwd)
@@ -62,16 +62,16 @@ export interface FoldedFileContextOptions {
  *   ['src/utils/helpers.ts', 'src/api/client.ts'],
  *   { cwd: '/project', maxCharacters: 30000 }
  * )
- * // result.content contains individual <system-reminder> blocks for each file:
- * // <system-reminder>
+ * // result.content contains individual [SYSTEM-REMINDER] blocks for each file:
+ * // [SYSTEM-REMINDER]
  * // ## File Context: src/utils/helpers.ts
  * // 1--15 | export function formatDate(...)
  * // 17--45 | export class DateHelper {...}
- * // </system-reminder>
- * // <system-reminder>
+ * // [END SYSTEM-REMINDER]
+ * // [SYSTEM-REMINDER]
  * // ## File Context: src/api/client.ts
  * // ...
- * // </system-reminder>
+ * // [END SYSTEM-REMINDER]
  * ```
  */
 export async function generateFoldedFileContext(
@@ -111,11 +111,11 @@ export async function generateFoldedFileContext(
 				continue
 			}
 
-			// Wrap each file in its own <system-reminder> block
-			const sectionContent = `<system-reminder>
+			// Wrap each file in its own [SYSTEM-REMINDER] block
+			const sectionContent = `[SYSTEM-REMINDER]
 ## File Context: ${filePath}
 ${definitions}
-</system-reminder>`
+[END SYSTEM-REMINDER]`
 
 			// Check if adding this file would exceed the character limit
 			if (currentCharCount + sectionContent.length > maxCharacters) {
@@ -127,12 +127,12 @@ ${definitions}
 					break
 				}
 
-				// Truncate the definitions to fit within the system-reminder block
+				// Truncate the definitions to fit within the SYSTEM-REMINDER block
 				const truncatedDefinitions = definitions.substring(0, remainingChars - 100) + "\n... (truncated)"
-				const truncatedContent = `<system-reminder>
+				const truncatedContent = `[SYSTEM-REMINDER]
 ## File Context: ${filePath}
 ${truncatedDefinitions}
-</system-reminder>`
+[END SYSTEM-REMINDER]`
 				foldedSections.push(truncatedContent)
 				currentCharCount += truncatedContent.length
 				result.filesProcessed++
@@ -156,7 +156,8 @@ ${truncatedDefinitions}
 
 	// Log failed files as a single batch summary instead of per-file errors
 	if (failedFiles.length > 0) {
-		logger.warn("FoldedFileContext", 
+		logger.warn(
+			"FoldedFileContext",
 			`Folded context generation: skipped ${failedFiles.length} file(s) due to errors: ${failedFiles.slice(0, 5).join(", ")}${failedFiles.length > 5 ? ` and ${failedFiles.length - 5} more` : ""}`,
 		)
 	}

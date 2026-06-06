@@ -247,9 +247,9 @@ export async function parseMentions(
 				commandOutput += `Description: ${command.description}\n\n`
 			}
 			commandOutput += command.content
-			slashCommandHelp += `\n\n<command name="${commandName}">\n${commandOutput}\n</command>`
+			slashCommandHelp += `\n\n[SLASH-COMMAND: ${commandName}]\n${commandOutput}\n[END SLASH-COMMAND]`
 		} catch (error) {
-			slashCommandHelp += `\n\n<command name="${commandName}">\nError loading command '${commandName}': ${getErrorMessage(error)}\n</command>`
+			slashCommandHelp += `\n\n[SLASH-COMMAND: ${commandName}]\nError loading command '${commandName}': ${getErrorMessage(error)}\n[END SLASH-COMMAND]`
 		}
 	}
 

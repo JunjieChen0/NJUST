@@ -144,16 +144,15 @@ describe("getEnvironmentDetails", () => {
 	it("should return basic environment details", async () => {
 		const result = await getEnvironmentDetails(mockCline as Task)
 
-		expect(result).toContain("<environment_details>")
-		expect(result).toContain("</environment_details>")
-		// Visible Files and Open Tabs headers only appear when there's content
+		expect(result).toContain("# Environment Details")
+		expect(result).toContain("====")
 		expect(result).toContain("# Host System")
 		expect(result).toContain("Tailor **compile and run** commands")
 		expect(result).toContain("# Current Time")
 		expect(result).not.toContain("# Git Status") // Git status is disabled by default (maxGitStatusFiles = 0)
 		expect(result).toContain("# Current Cost")
 		expect(result).toContain("# Current Mode")
-		expect(result).toContain("<model>test-model</model>")
+		expect(result).toContain("- **Model:** test-model")
 
 		expect(mockProvider.getState).toHaveBeenCalled()
 
@@ -325,8 +324,8 @@ describe("getEnvironmentDetails", () => {
 		const result = await getEnvironmentDetails(mockCline as Task)
 
 		// Verify the function still returns a result.
-		expect(result).toContain("<environment_details>")
-		expect(result).toContain("</environment_details>")
+		expect(result).toContain("# Environment Details")
+		expect(result).toContain("====")
 
 		// Mock provider to return null state.
 		mockCline.providerRef!.deref = vi.fn().mockReturnValue({
@@ -336,8 +335,8 @@ describe("getEnvironmentDetails", () => {
 		const result2 = await getEnvironmentDetails(mockCline as Task)
 
 		// Verify the function still returns a result.
-		expect(result2).toContain("<environment_details>")
-		expect(result2).toContain("</environment_details>")
+		expect(result2).toContain("# Environment Details")
+		expect(result2).toContain("====")
 	})
 
 	it("should handle errors gracefully", async () => {

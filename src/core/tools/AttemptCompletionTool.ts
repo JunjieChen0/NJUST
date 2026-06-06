@@ -137,7 +137,10 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 							"AttemptCompletionTool",
 							`Failed to get history for task ${task.taskId}: ${(err as Error)?.message ?? String(err)}. Skipping delegation.`,
 						)
-						TelemetryService.reportError(err instanceof Error ? err : new Error(String(err)), TelemetryEventName.UTILITY_ERROR)
+						TelemetryService.reportError(
+							err instanceof Error ? err : new Error(String(err)),
+							TelemetryEventName.UTILITY_ERROR,
+						)
 						// Fall through to normal completion ask flow
 					}
 				}
@@ -153,7 +156,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 			// User provided feedback - push tool result to continue the conversation
 			await task.say("user_feedback", text ?? "", images)
 
-			const feedbackText = `<user_message>\n${text}\n</user_message>`
+			const feedbackText = `[USER-MESSAGE]\n${text}\n[END USER-MESSAGE]`
 			pushToolResult(formatResponse.toolResult(feedbackText, images))
 		} catch (error) {
 			await handleError("completing task", error as Error)
@@ -227,7 +230,9 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 		task.emitFinalTokenUsageUpdate()
 
 		TelemetryService.instance.captureTaskCompleted(task.taskId)
-		task.emit(NJUST_AIEventName.TaskCompleted, task.taskId, task.getTokenUsage(), task.toolUsage, { isSubtask: !!task.parentTaskId })
+		task.emit(NJUST_AIEventName.TaskCompleted, task.taskId, task.getTokenUsage(), task.toolUsage, {
+			isSubtask: !!task.parentTaskId,
+		})
 
 		// Signal the outer loop to stop re-prompting the model with
 		// noToolsUsed() after the user accepts this completion.

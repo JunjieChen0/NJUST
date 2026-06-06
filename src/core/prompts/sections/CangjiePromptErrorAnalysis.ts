@@ -110,7 +110,9 @@ export async function enhanceCjcErrorOutput(errorOutput: string, cwd: string, ex
 
 	for (const pattern of getMatchingCjcPatternsByCategory(errorOutput)) {
 		const docPaths =
-			docsBase && docsExist ? pattern.docPaths.map((p) => path.join(docsBase, p).replace(/\\/g, "/")).join(", ") : ""
+			docsBase && docsExist
+				? pattern.docPaths.map((p) => path.join(docsBase, p).replace(/\\/g, "/")).join(", ")
+				: ""
 		const ref = docPaths ? ` (参考: ${docPaths})` : ""
 		const directive = pattern.fixDirective ?? pattern.suggestion
 		matchedSuggestions.push(`[${pattern.category}] ${pattern.suggestion}${ref}\n  AI 修复指令: ${directive}`)
@@ -128,7 +130,7 @@ export async function enhanceCjcErrorOutput(errorOutput: string, cwd: string, ex
 		parts.push(matchedSuggestions.join("\n"))
 	}
 
-	return `\n\n<cangjie_error_hints>\n${parts.join("\n\n")}\n</cangjie_error_hints>`
+	return `\n\n====\n## Cangjie Error Fix Hints\n\n${parts.join("\n\n")}\n====`
 }
 
 /**
@@ -179,8 +181,7 @@ async function buildCangjieExecuteCommandErrorAppendixAsync(
 		const locMatch = firstNonEmpty.match(/^==>\s+(.+?):(\d+):(\d+):/)
 		const header = locMatch ? `[${locMatch[1]} 第 ${locMatch[2]} 行 col ${locMatch[3]}]` : "[输出片段]"
 
-		const snippet =
-			locMatch != null ? await formatSingleErrorLocationBlock(cwd, locMatch[1]!, locMatch[2]!) : null
+		const snippet = locMatch != null ? await formatSingleErrorLocationBlock(cwd, locMatch[1]!, locMatch[2]!) : null
 
 		const patterns = getMatchingCjcPatternsByCategory(text)
 		let patternBlock: string
@@ -226,7 +227,7 @@ async function buildCangjieExecuteCommandErrorAppendixAsync(
 			? `\n\n检测到 ${errorCount} 处错误。建议集中修复最可能是根因的 import/符号问题，而非逐个修复所有错误。修复根因后重新编译，观察剩余错误是否减少。`
 			: ""
 
-	return `\n\n<cangjie_error_hints>\n按错误位置就近整理（每段含编译原文、源码上下文与建议）:\n\n${sections.join("\n\n---\n\n")}${repairPriority}${failureHint}\n</cangjie_error_hints>`
+	return `\n\n====\n## Cangjie Error Fix Hints\n\n按错误位置就近整理（每段含编译原文、源码上下文与建议）:\n\n${sections.join("\n\n---\n\n")}${repairPriority}${failureHint}\n====`
 }
 
 export const getErrorFixDirective = getAnalyzerErrorFixDirective

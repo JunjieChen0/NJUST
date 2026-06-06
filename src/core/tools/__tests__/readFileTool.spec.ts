@@ -73,11 +73,11 @@ vi.mock("../../prompts/responses", () => ({
 		toolDenied: vi.fn(() => "The user denied this operation."),
 		toolDeniedWithFeedback: vi.fn(
 			(feedback?: string) =>
-				`The user denied this operation and responded with the message:\n<user_message>\n${feedback}\n</user_message>`,
+				`The user denied this operation and responded with the message:\n[USER-MESSAGE]\n${feedback}\n[END USER-MESSAGE]`,
 		),
 		toolApprovedWithFeedback: vi.fn(
 			(feedback?: string) =>
-				`The user approved this operation and responded with the message:\n<user_message>\n${feedback}\n</user_message>`,
+				`The user approved this operation and responded with the message:\n[USER-MESSAGE]\n${feedback}\n[END USER-MESSAGE]`,
 		),
 		rooIgnoreError: vi.fn(
 			(filePath: string) =>

@@ -149,7 +149,7 @@ export class TaskLifecycleHandler {
 					.initiateTaskLoop([
 						{
 							type: "text",
-							text: `<user_message>\n${task}\n</user_message>`,
+							text: `[USER-MESSAGE]\n${task}\n[END USER-MESSAGE]`,
 						},
 						...imageBlocks,
 					])
@@ -346,7 +346,7 @@ export class TaskLifecycleHandler {
 			if (responseText) {
 				newUserContent.push({
 					type: "text",
-					text: `<user_message>\n${responseText}\n</user_message>`,
+					text: `[USER-MESSAGE]\n${responseText}\n[END USER-MESSAGE]`,
 				})
 			}
 
@@ -535,12 +535,10 @@ export class TaskLifecycleHandler {
 
 		safeDispose("DiffViewProvider", () => {
 			if (t.isStreaming && t.diffViewProvider.isEditing) {
-				t.diffViewProvider
-					.revertChanges()
-					.catch((error: UnsafeAny) => {
-						logger.error("TaskLifecycleHandler", "DiffViewProvider revertChanges failed:", error)
-						TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
-					})
+				t.diffViewProvider.revertChanges().catch((error: UnsafeAny) => {
+					logger.error("TaskLifecycleHandler", "DiffViewProvider revertChanges failed:", error)
+					TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
+				})
 			}
 		})
 	}

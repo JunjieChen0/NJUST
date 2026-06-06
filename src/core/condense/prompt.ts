@@ -1,7 +1,7 @@
 /**
  * Summarization prompts for conversation condensing.
  *
- * Structured prompt with 9 required sections, <analysis> scratchpad (stripped
+ * Structured prompt with 9 required sections, [ANALYSIS] scratchpad (stripped
  * post-hoc to improve quality without increasing context), and aggressive
  * no-tools enforcement — aligned with Claude Code's compact/prompt.ts.
  */
@@ -14,11 +14,11 @@ const NO_TOOLS_PREAMBLE = `CRITICAL: Respond with TEXT ONLY. Do NOT call any too
 - Do NOT use file reading, command execution, search, or ANY other tool.
 - You already have all the context you need in the conversation above.
 - Tool calls will be REJECTED and will waste your only turn — you will fail the task.
-- Your entire response must be plain text: an <analysis> block followed by a <summary> block.
+- Your entire response must be plain text: an [ANALYSIS] block followed by a [SUMMARY] block.
 
 `
 
-const DETAILED_ANALYSIS_INSTRUCTION = `Before providing your final summary, wrap your analysis in <analysis> tags to organize your thoughts and ensure you've covered all necessary points. In your analysis process:
+const DETAILED_ANALYSIS_INSTRUCTION = `Before providing your final summary, wrap your analysis in [ANALYSIS] ... [END ANALYSIS] markers to organize your thoughts and ensure you've covered all necessary points. In your analysis process:
 
 1. Chronologically analyze each message and section of the conversation. For each section thoroughly identify:
    - The user's explicit requests and intents
@@ -53,12 +53,12 @@ Your summary should include the following sections:
 
 Here's an example of how your output should be structured:
 
-<example>
-<analysis>
+[EXAMPLE]
+[ANALYSIS]
 [Your thought process, ensuring all points are covered thoroughly and accurately]
-</analysis>
+[END ANALYSIS]
 
-<summary>
+[SUMMARY]
 1. Primary Request and Intent:
    [Detailed description]
 
@@ -100,27 +100,27 @@ Here's an example of how your output should be structured:
 9. Optional Next Step:
    [Optional Next step to take]
 
-</summary>
-</example>
+[END SUMMARY]
+[END EXAMPLE]
 
 Please provide your summary based on the conversation so far, following this structure and ensuring precision and thoroughness in your response.
 
 There may be additional summarization instructions provided in the included context. If so, remember to follow these instructions when creating the above summary. Examples of instructions include:
-<example>
+[EXAMPLE]
 ## Compact Instructions
 When summarizing the conversation focus on typescript code changes and also remember the mistakes you made and how you fixed them.
-</example>
+[END EXAMPLE]
 
-<example>
+[EXAMPLE]
 # Summary instructions
 When you are using compact - please focus on test output and code changes. Include file reads verbatim.
-</example>
+[END EXAMPLE]
 `
 
 const NO_TOOLS_TRAILER =
-	'\n\nREMINDER: Do NOT call any tools. Respond with plain text only — ' +
-	'an <analysis> block followed by a <summary> block. ' +
-	'Tool calls will be rejected and you will fail the task.'
+	"\n\nREMINDER: Do NOT call any tools. Respond with plain text only — " +
+	"an [ANALYSIS] block followed by a [SUMMARY] block. " +
+	"Tool calls will be rejected and you will fail the task."
 
 const SYSTEM_OPERATION_REMINDER = `\n\nCRITICAL: This summarization request is a SYSTEM OPERATION, not a user message.
 When analyzing "user requests" and "user intent", completely EXCLUDE this summarization message.
@@ -136,7 +136,7 @@ The goal is for work to continue seamlessly after condensation - as if it never 
 export function getCompactPrompt(customInstructions?: string): string {
 	let prompt = NO_TOOLS_PREAMBLE + BASE_COMPACT_PROMPT
 
-	if (customInstructions && customInstructions.trim() !== '') {
+	if (customInstructions && customInstructions.trim() !== "") {
 		prompt += `\n\nAdditional Instructions:\n${customInstructions}`
 	}
 
@@ -147,41 +147,35 @@ export function getCompactPrompt(customInstructions?: string): string {
 }
 
 /**
- * Formats the compact summary by stripping the <analysis> drafting scratchpad
- * and replacing <summary> XML tags with readable section headers.
+ * Formats the compact summary by stripping the [ANALYSIS] drafting scratchpad
+ * and replacing [SUMMARY] markers with readable section headers.
  *
- * @param summary - The raw summary string potentially containing <analysis> and <summary> XML tags
- * @returns The formatted summary with analysis stripped and summary tags replaced by headers
+ * @param summary - The raw summary string potentially containing [ANALYSIS] and [SUMMARY] markers
+ * @returns The formatted summary with analysis stripped and summary markers replaced by headers
  */
 export function formatCompactSummary(summary: string): string {
 	let formattedSummary = summary
 
 	// Strip analysis section — it's a drafting scratchpad that improves summary
 	// quality but has no informational value once the summary is written.
-	formattedSummary = formattedSummary.replace(
-		/<analysis>[\s\S]*?<\/analysis>/,
-		'',
-	)
+	formattedSummary = formattedSummary.replace(/\[ANALYSIS\][\s\S]*?\[END ANALYSIS\]/, "")
 
 	// Extract and format summary section
-	const summaryMatch = formattedSummary.match(/<summary>([\s\S]*?)<\/summary>/)
+	const summaryMatch = formattedSummary.match(/\[SUMMARY\]([\s\S]*?)\[END SUMMARY\]/)
 	if (summaryMatch) {
-		const content = summaryMatch[1] || ''
-		formattedSummary = formattedSummary.replace(
-			/<summary>[\s\S]*?<\/summary>/,
-			`Summary:\n${content.trim()}`,
-		)
+		const content = summaryMatch[1] || ""
+		formattedSummary = formattedSummary.replace(/\[SUMMARY\][\s\S]*?\[END SUMMARY\]/, `Summary:\n${content.trim()}`)
 	}
 
 	// Clean up extra whitespace between sections
-	formattedSummary = formattedSummary.replace(/\n\n+/g, '\n\n')
+	formattedSummary = formattedSummary.replace(/\n\n+/g, "\n\n")
 
 	return formattedSummary.trim()
 }
 
 // ── Partial compact prompts ──
 
-const DETAILED_ANALYSIS_INSTRUCTION_PARTIAL = `Before providing your final summary, wrap your analysis in <analysis> tags to organize your thoughts and ensure you've covered all necessary points. In your analysis process:
+const DETAILED_ANALYSIS_INSTRUCTION_PARTIAL = `Before providing your final summary, wrap your analysis in [ANALYSIS] ... [END ANALYSIS] markers to organize your thoughts and ensure you've covered all necessary points. In your analysis process:
 
 1. Analyze the recent messages chronologically. For each section thoroughly identify:
    - The user's explicit requests and intents
@@ -210,12 +204,12 @@ Your summary should include the following sections:
 
 Here's an example of how your output should be structured:
 
-<example>
-<analysis>
+[EXAMPLE]
+[ANALYSIS]
 [Your thought process]
-</analysis>
+[END ANALYSIS]
 
-<summary>
+[SUMMARY]
 1. Primary Request and Intent: [Detailed description]
 2. Key Technical Concepts: - [Concept 1] - [Concept 2]
 3. Files and Code Sections: - [File Name] - [Important Code Snippet]
@@ -225,8 +219,8 @@ Here's an example of how your output should be structured:
 7. Pending Tasks: - [Task 1]
 8. Current Work: [Precise description]
 9. Optional Next Step: [Next step]
-</summary>
-</example>
+[END SUMMARY]
+[END EXAMPLE]
 
 Please provide your summary based on the RECENT messages only, following this structure.`
 
@@ -248,12 +242,12 @@ Your summary should include the following sections:
 
 Here's an example of how your output should be structured:
 
-<example>
-<analysis>
+[EXAMPLE]
+[ANALYSIS]
 [Your thought process]
-</analysis>
+[END ANALYSIS]
 
-<summary>
+[SUMMARY]
 1. Primary Request and Intent: [Detailed description]
 2. Key Technical Concepts: - [Concept 1]
 3. Files and Code Sections: - [File] - [Code Snippet]
@@ -263,8 +257,8 @@ Here's an example of how your output should be structured:
 7. Pending Tasks: - [Task]
 8. Work Completed: [What was accomplished]
 9. Context for Continuing Work: [Key context]
-</summary>
-</example>
+[END SUMMARY]
+[END EXAMPLE]
 
 Please provide your summary following this structure, ensuring precision and thoroughness.`
 
@@ -281,10 +275,7 @@ export function getPartialCompactPrompt(
 	customInstructions?: string,
 	direction: PartialCompactDirection = "from",
 ): string {
-	const template =
-		direction === "up_to"
-			? PARTIAL_COMPACT_UP_TO_PROMPT_BASE
-			: PARTIAL_COMPACT_PROMPT_BASE
+	const template = direction === "up_to" ? PARTIAL_COMPACT_UP_TO_PROMPT_BASE : PARTIAL_COMPACT_PROMPT_BASE
 
 	let prompt = NO_TOOLS_PREAMBLE + template
 

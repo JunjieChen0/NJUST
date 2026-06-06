@@ -7,10 +7,7 @@ import { getMatchingCjcPatternsByCategory } from "../../../../services/cangjie-l
 import { mergeStdlibConstraintHintsFromCorpus } from "../../../../services/cangjie-lsp/stdlibConstraintHints"
 import { resolveCangjieDocsBasePath } from "../CangjieDocsResolver"
 import { resolveCjcPatternForDiagnostic as _resolveCjcPatternForDiagnostic } from "../CangjieErrorAnalyzer"
-import {
-	STDLIB_API_SIGNATURE_HINTS,
-	STDLIB_CRITICAL_SIGNATURES,
-} from "./stdlibSignatures"
+import { STDLIB_API_SIGNATURE_HINTS, STDLIB_CRITICAL_SIGNATURES } from "./stdlibSignatures"
 import { CORPUS_BM25_MAX_CHUNKS_PER_PATH } from "./budget"
 import { readFileUtf8Lru } from "./cacheManagement"
 
@@ -44,9 +41,7 @@ export function diagnosticToCorpusQuery(d: vscode.Diagnostic): string | null {
 		return `${resolved.category} ${head}`.slice(0, 120)
 	}
 	const cleaned = raw.replace(/^(error|warning)\s*[:\d[\]]*\s*/i, "")
-	const words = cleaned
-		.split(/\s+/)
-		.filter((w) => w.length > 2 && !/^\d+$/.test(w) && !/^[|:=]+$/.test(w))
+	const words = cleaned.split(/\s+/).filter((w) => w.length > 2 && !/^\d+$/.test(w) && !/^[|:=]+$/.test(w))
 	const fromWords = words.slice(0, 5).join(" ")
 	return (fromWords || cleaned).slice(0, 90) || null
 }
@@ -155,9 +150,8 @@ export async function buildStdlibSignatureHintsSection(
 			criticalLines.push(`### ${key} 关键签名\n\`\`\`\n${sig}\n\`\`\``)
 		}
 	}
-	const criticalBlock = criticalLines.length > 0
-		? `\n\n## 标准库关键 API 签名（参数级精度）\n\n${criticalLines.join("\n\n")}`
-		: ""
+	const criticalBlock =
+		criticalLines.length > 0 ? `\n\n## 标准库关键 API 签名（参数级精度）\n\n${criticalLines.join("\n\n")}` : ""
 
 	return `## 标准库 API 摘要（预置速查）\n\n${lines.join("\n")}\n\n详细签名仍以语料库 libs/ 与 manual/ 为准。${criticalBlock}`
 }
@@ -274,21 +268,24 @@ export async function buildCorpusExtraFewShotSection(
 	)
 }
 
-export async function buildAutoCorpusSearchSection(
+export function buildAutoCorpusSearchSection(
 	docsBase: string,
 	imports: string[],
 	diagnostics: vscode.Diagnostic[],
-): Promise<string | null> {
+): string | null {
 	try {
 		const corpusIndex = getCorpusSingleton(docsBase)
 		if (corpusIndex.isAvailable) {
 			const queries = buildAutoCorpusQueries(imports, diagnostics)
-			const unique = new Map<string, { hit: import("../../../../services/cangjie-corpus/CangjieCorpusSemanticIndex").SemanticSearchResult; score: number }>()
+			const unique = new Map<
+				string,
+				{
+					hit: import("../../../../services/cangjie-corpus/CangjieCorpusSemanticIndex").SemanticSearchResult
+					score: number
+				}
+			>()
 			const searchOpts = { maxChunksPerPath: CORPUS_BM25_MAX_CHUNKS_PER_PATH }
-			const hitLists =
-				queries.length > 0
-					? corpusIndex.searchBatch(queries, 12, undefined, searchOpts)
-					: []
+			const hitLists = queries.length > 0 ? corpusIndex.searchBatch(queries, 12, undefined, searchOpts) : []
 			for (let qi = 0; qi < hitLists.length; qi++) {
 				const hits = hitLists[qi]!
 				const maxS = hits.reduce((m, h) => Math.max(m, h.score), 0)
@@ -301,11 +298,17 @@ export async function buildAutoCorpusSearchSection(
 					}
 				}
 			}
-			const top = [...unique.values()].sort((a, b) => b.score - a.score).slice(0, 7).map((x) => x.hit)
+			const top = [...unique.values()]
+				.sort((a, b) => b.score - a.score)
+				.slice(0, 7)
+				.map((x) => x.hit)
 			if (top.length > 0) {
-				const hints = top.map((h) =>
-					`### ${h.heading}\n来源: \`${h.relPath}\` (L${h.startLine})\n\`\`\`\n${h.snippet.slice(0, 800)}\n\`\`\``
-				).join("\n\n")
+				const hints = top
+					.map(
+						(h) =>
+							`### ${h.heading}\n来源: \`${h.relPath}\` (L${h.startLine})\n\`\`\`\n${h.snippet.slice(0, 800)}\n\`\`\``,
+					)
+					.join("\n\n")
 				return `## 语料库自动检索结果（基于当前 import 与诊断）\n\n${hints}`
 			}
 		}
@@ -330,14 +333,18 @@ export function buildCompileErrorCorpusSearch(
 		const matchedPatterns = getMatchingCjcPatternsByCategory(compileOutput)
 		if (matchedPatterns.length === 0) return null
 
-		const queries = matchedPatterns
-			.slice(0, 4)
-			.map((p) => `${p.category} 修复 示例`)
+		const queries = matchedPatterns.slice(0, 4).map((p) => `${p.category} 修复 示例`)
 
 		const searchOpts = { maxChunksPerPath: 2 }
 		const hitLists = corpusIndex.searchBatch(queries, 8, undefined, searchOpts)
 
-		const unique = new Map<string, { hit: import("../../../../services/cangjie-corpus/CangjieCorpusSemanticIndex").SemanticSearchResult; score: number }>()
+		const unique = new Map<
+			string,
+			{
+				hit: import("../../../../services/cangjie-corpus/CangjieCorpusSemanticIndex").SemanticSearchResult
+				score: number
+			}
+		>()
 		for (let qi = 0; qi < hitLists.length; qi++) {
 			const hits = hitLists[qi]!
 			const maxS = hits.reduce((m, h) => Math.max(m, h.score), 0)
@@ -371,11 +378,10 @@ export function buildCompileErrorCorpusSearch(
 		if (snippets.length === 0) return null
 
 		return (
-			`\n\n<cangjie_corpus_for_error>\n` +
-			`## 编译错误相关语料参考（自动检索）\n\n` +
+			`\n\n====\n## Cangjie Corpus Reference\n\n` +
 			`以下文档片段与当前编译错误相关，可参考修复：\n\n` +
 			snippets.join("\n\n") +
-			`\n</cangjie_corpus_for_error>`
+			`\n====`
 		)
 	} catch {
 		return null

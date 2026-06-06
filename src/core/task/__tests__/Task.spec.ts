@@ -1116,7 +1116,7 @@ describe("Cline", () => {
 			})
 
 			describe("processUserContentMentions", () => {
-				it("should process mentions in user_message tags", async () => {
+				it("should process mentions in USER-MESSAGE tags", async () => {
 					const [cline, task] = Task.create({
 						provider: mockProvider,
 						apiConfiguration: mockApiConfig,
@@ -1130,7 +1130,7 @@ describe("Cline", () => {
 						} as const,
 						{
 							type: "text",
-							text: "<user_message>Text with 'some/path' (see below for file content) in user_message tags</user_message>",
+							text: "[USER-MESSAGE]Text with 'some/path' (see below for file content) in USER-MESSAGE tags[END USER-MESSAGE]",
 						} as const,
 						{
 							type: "tool_result",
@@ -1138,7 +1138,7 @@ describe("Cline", () => {
 							content: [
 								{
 									type: "text",
-									text: "<user_message>Check 'some/path' (see below for file content)</user_message>",
+									text: "[USER-MESSAGE]Check 'some/path' (see below for file content)[END USER-MESSAGE]",
 								},
 							],
 						} as Anthropic.ToolResultBlockParam,
@@ -1165,18 +1165,18 @@ describe("Cline", () => {
 						"Regular text with 'some/path' (see below for file content)",
 					)
 
-					// Text within user_message tags should be processed
+					// Text within USER-MESSAGE tags should be processed
 					expect((processedContent[1] as Anthropic.TextBlockParam).text).toContain("processed:")
 					expect((processedContent[1] as Anthropic.TextBlockParam).text).toContain(
-						"<user_message>Text with 'some/path' (see below for file content) in user_message tags</user_message>",
+						"[USER-MESSAGE]Text with 'some/path' (see below for file content) in USER-MESSAGE tags[END USER-MESSAGE]",
 					)
 
-					// user_message tag content should be processed
+					// USER-MESSAGE tag content should be processed
 					const toolResult1 = processedContent[2] as Anthropic.ToolResultBlockParam
 					const content1 = Array.isArray(toolResult1.content) ? toolResult1.content[0] : toolResult1.content
 					expect((content1 as Anthropic.TextBlockParam).text).toContain("processed:")
 					expect((content1 as Anthropic.TextBlockParam).text).toContain(
-						"<user_message>Check 'some/path' (see below for file content)</user_message>",
+						"[USER-MESSAGE]Check 'some/path' (see below for file content)[END USER-MESSAGE]",
 					)
 
 					// Regular tool result should not be processed

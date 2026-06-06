@@ -205,7 +205,7 @@ describe("TaskLifecycleHandler", () => {
 
 		expect(host.initiateCloudAgentLoop).not.toHaveBeenCalled()
 		expect(host.initiateTaskLoop).toHaveBeenCalledWith([
-			{ type: "text", text: "<user_message>\ncompile\n</user_message>" },
+			{ type: "text", text: "[USER-MESSAGE]\ncompile\n[END USER-MESSAGE]" },
 		])
 	})
 
@@ -354,7 +354,7 @@ describe("TaskLifecycleHandler", () => {
 		expect(host.overwriteApiConversationHistory).toHaveBeenCalledWith([])
 		const newUserContent = host.initiateTaskLoop.mock.calls[0][0]
 		expect(newUserContent[0]).toEqual({ type: "text", text: "old request" })
-		expect(newUserContent[1]).toEqual({ type: "text", text: "<user_message>\ncontinue\n</user_message>" })
+		expect(newUserContent[1]).toEqual({ type: "text", text: "[USER-MESSAGE]\ncontinue\n[END USER-MESSAGE]" })
 		expect(newUserContent.length).toBeGreaterThan(2)
 	})
 

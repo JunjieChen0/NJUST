@@ -173,8 +173,7 @@ export function injectSyntheticToolResults(messages: ApiMessage[]): ApiMessage[]
 
 	// Timestamp is one tick after the last input message so the synthetic
 	// message sits between the original conversation and the summary message.
-	const lastInputTs =
-		messages.length > 0 ? (messages[messages.length - 1]!.ts ?? Date.now()) : Date.now()
+	const lastInputTs = messages.length > 0 ? (messages[messages.length - 1]!.ts ?? Date.now()) : Date.now()
 	const syntheticMessage: ApiMessage = {
 		role: "user",
 		content: syntheticResults,
@@ -185,7 +184,7 @@ export function injectSyntheticToolResults(messages: ApiMessage[]): ApiMessage[]
 }
 
 /**
- * Extracts <command> blocks from a message's content.
+ * Extracts [SLASH-COMMAND: ...] blocks from a message's content.
  * These blocks represent active workflows that must be preserved across condensings.
  *
  * @param message - The message to extract command blocks from
@@ -207,8 +206,8 @@ export function extractCommandBlocks(message: ApiMessage): string {
 		return ""
 	}
 
-	// Match all <command> blocks including their content
-	const commandRegex = /<command[^>]*>[\s\S]*?<\/command>/g
+	// Match all [SLASH-COMMAND: ...] blocks including their content
+	const commandRegex = /\[SLASH-COMMAND:[^\]]*\][\s\S]*?\[END SLASH-COMMAND\]/g
 	const matches = text.match(commandRegex)
 
 	if (!matches || matches.length === 0) {
@@ -249,7 +248,7 @@ export type SummarizeConversationOptions = {
  * - The summary becomes a user message (not assistant)
  * - Post-condense, the model sees only the summary (true fresh start)
  * - All messages are still stored but tagged with condenseParent
- * - <command> blocks from the original task are preserved across condensings
+ * - [SLASH-COMMAND: ...] blocks from the original task are preserved across condensings
  * - File context (folded code definitions) can be preserved for continuity
  *
  * Environment details handling:
@@ -317,10 +316,9 @@ async function compactWithPTLRetry(
 
 			if (isPTL && retry < maxRetries && retryMessages.length > 2) {
 				const dropCount = Math.max(2, Math.floor(retryMessages.length * 0.25))
-				retryMessages = retryMessages.slice(
-					-Math.max(2, retryMessages.length - dropCount),
-				)
-				logger.warn("Condense", 
+				retryMessages = retryMessages.slice(-Math.max(2, retryMessages.length - dropCount))
+				logger.warn(
+					"Condense",
 					`[summarizeConversation] PTL retry ${retry + 1}/${maxRetries}: ` +
 						`dropping oldest messages, ${retryMessages.length} remaining`,
 				)
@@ -423,12 +421,14 @@ export async function summarizeConversation(options: SummarizeConversationOption
 				summary = cacheResult.summary
 				cost = cacheResult.cost
 				outputTokens = cacheResult.outputTokens
-				logger.info("Condense",
+				logger.info(
+					"Condense",
 					`[summarizeConversation] Cache-sharing path succeeded: outputTokens=${outputTokens}`,
 				)
 			}
 		} catch (err) {
-			logger.warn("Condense", 
+			logger.warn(
+				"Condense",
 				"[summarizeConversation] Cache-sharing path failed, falling back to simplified path:",
 				getErrorMessage(err),
 			)
@@ -522,20 +522,20 @@ export async function summarizeConversation(options: SummarizeConversationOption
 		{ type: "text", text: `## Conversation Summary\n${summary}` },
 	]
 
-	// Add command blocks (active workflows) in their own system-reminder block if present
+	// Add command blocks (active workflows) in their own SYSTEM-REMINDER block if present
 	if (commandBlocks) {
 		summaryContent.push({
 			type: "text",
-			text: `<system-reminder>
+			text: `[SYSTEM-REMINDER]
 ## Active Workflows
 The following directives must be maintained across all future condensings:
 ${commandBlocks}
-</system-reminder>`,
+[END SYSTEM-REMINDER]`,
 		})
 	}
 
 	// Generate and add folded file context (smart code folding) if file paths are provided
-	// Each file gets its own <system-reminder> block as a separate content block
+	// Each file gets its own [SYSTEM-REMINDER] block as a separate content block
 	if (filesReadByRoo && filesReadByRoo.length > 0 && cwd) {
 		try {
 			const foldedResult = await generateFoldedFileContext(filesReadByRoo, {
@@ -625,7 +625,7 @@ ${commandBlocks}
 	const systemPromptMessage: ApiMessage = { role: "user", content: systemPrompt }
 
 	// Count actual summaryMessage content directly instead of using outputTokens as a proxy
-	// This ensures we account for wrapper text (## Conversation Summary, <system-reminder>, <environment_details>)
+	// This ensures we account for wrapper text (## Conversation Summary, [SYSTEM-REMINDER], [SLASH-COMMAND], **Environment Details**)
 	const contextBlocks = [systemPromptMessage, summaryMessage].flatMap((message) =>
 		typeof message.content === "string" ? [{ text: message.content, type: "text" as const }] : message.content,
 	)
@@ -738,9 +738,7 @@ export function getEffectiveApiHistory(messages: ApiMessage[]): ApiMessage[] {
 		// and haven't been condensed yet (typically empty right after compaction,
 		// grows as the conversation continues).
 		const summaryIndex = messages.indexOf(lastSummary)
-		const workingWindow = messages.slice(summaryIndex).filter(
-			(msg) => !msg.isSummary && !msg.condenseParent,
-		)
+		const workingWindow = messages.slice(summaryIndex).filter((msg) => !msg.isSummary && !msg.condenseParent)
 
 		let effectiveMessages = [...allSummaries, ...workingWindow]
 		effectiveMessages = filterOrphanToolResults(effectiveMessages)
@@ -884,9 +882,7 @@ export type SummarizePartialOptions = {
  * - direction 'up_to': summarizes messages BEFORE the pivot, keeps later ones.
  *   Prompt cache is invalidated since the summary precedes the kept messages.
  */
-export async function summarizePartialConversation(
-	options: SummarizePartialOptions,
-): Promise<SummarizeResponse> {
+export async function summarizePartialConversation(options: SummarizePartialOptions): Promise<SummarizeResponse> {
 	const {
 		messages,
 		pivotIndex,
@@ -904,15 +900,9 @@ export async function summarizePartialConversation(
 		return { ...response, error: "Invalid pivot index for partial compaction" }
 	}
 
-	const messagesToSummarize =
-		direction === "up_to"
-			? messages.slice(0, pivotIndex)
-			: messages.slice(pivotIndex)
+	const messagesToSummarize = direction === "up_to" ? messages.slice(0, pivotIndex) : messages.slice(pivotIndex)
 
-	const messagesToKeep =
-		direction === "up_to"
-			? messages.slice(pivotIndex)
-			: messages.slice(0, pivotIndex)
+	const messagesToKeep = direction === "up_to" ? messages.slice(pivotIndex) : messages.slice(0, pivotIndex)
 
 	if (messagesToSummarize.length === 0) {
 		return {
@@ -925,8 +915,7 @@ export async function summarizePartialConversation(
 	}
 
 	const condenseId = crypto.randomUUID()
-	const condenseInstructions =
-		customCondensingPrompt?.trim() || supportPrompt.default.CONDENSE || ""
+	const condenseInstructions = customCondensingPrompt?.trim() || supportPrompt.default.CONDENSE || ""
 
 	const finalRequestMessage: Anthropic.MessageParam = {
 		role: "user",
@@ -935,8 +924,7 @@ export async function summarizePartialConversation(
 
 	// For 'up_to': send only messagesToSummarize (cache hit on prefix)
 	// For 'from': send all messages (cache on early prefix)
-	const apiMessages =
-		direction === "up_to" ? messagesToSummarize : messages
+	const apiMessages = direction === "up_to" ? messagesToSummarize : messages
 
 	const messagesWithToolResults = injectSyntheticToolResults(apiMessages)
 	const messagesWithTextToolBlocks = transformMessagesForCondensing(
@@ -1026,4 +1014,3 @@ export async function summarizePartialConversation(
 		condenseId,
 	}
 }
-

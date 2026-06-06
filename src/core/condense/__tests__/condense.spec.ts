@@ -211,21 +211,24 @@ describe("Condense", () => {
 		it("should extract command blocks from string content", () => {
 			const message: ApiMessage = {
 				role: "user",
-				content: 'Some text <command name="prr">/prr #123</command> more text',
+				content: "Some text [SLASH-COMMAND: prr]/prr #123[END SLASH-COMMAND] more text",
 			}
 
 			const result = extractCommandBlocks(message)
-			expect(result).toBe('<command name="prr">/prr #123</command>')
+			expect(result).toBe("[SLASH-COMMAND: prr]/prr #123[END SLASH-COMMAND]")
 		})
 
 		it("should extract multiple command blocks", () => {
 			const message: ApiMessage = {
 				role: "user",
-				content: '<command name="prr">/prr #123</command> text <command name="mode">/mode code</command>',
+				content:
+					"[SLASH-COMMAND: prr]/prr #123[END SLASH-COMMAND] text [SLASH-COMMAND: mode]/mode code[END SLASH-COMMAND]",
 			}
 
 			const result = extractCommandBlocks(message)
-			expect(result).toBe('<command name="prr">/prr #123</command>\n<command name="mode">/mode code</command>')
+			expect(result).toBe(
+				"[SLASH-COMMAND: prr]/prr #123[END SLASH-COMMAND]\n[SLASH-COMMAND: mode]/mode code[END SLASH-COMMAND]",
+			)
 		})
 
 		it("should extract command blocks from array content", () => {
@@ -233,12 +236,12 @@ describe("Condense", () => {
 				role: "user",
 				content: [
 					{ type: "text", text: "Some user text" },
-					{ type: "text", text: '<command name="prr">Help content</command>' },
+					{ type: "text", text: "[SLASH-COMMAND: prr]Help content[END SLASH-COMMAND]" },
 				],
 			}
 
 			const result = extractCommandBlocks(message)
-			expect(result).toBe('<command name="prr">Help content</command>')
+			expect(result).toBe("[SLASH-COMMAND: prr]Help content[END SLASH-COMMAND]")
 		})
 
 		it("should return empty string when no command blocks found", () => {
@@ -254,10 +257,10 @@ describe("Condense", () => {
 		it("should handle multiline command blocks", () => {
 			const message: ApiMessage = {
 				role: "user",
-				content: `<command name="prr">
+				content: `[SLASH-COMMAND: prr]
 Line 1
 Line 2
-</command>`,
+[END SLASH-COMMAND]`,
 			}
 
 			const result = extractCommandBlocks(message)
@@ -330,13 +333,13 @@ Line 2
 			}
 		})
 
-		it("should preserve <command> blocks in the summary", async () => {
+		it("should preserve [SLASH-COMMAND] blocks in the summary", async () => {
 			const messages: ApiMessage[] = [
 				{
 					role: "user",
 					content: [
 						{ type: "text", text: "Some user text" },
-						{ type: "text", text: '<command name="prr">Help content</command>' },
+						{ type: "text", text: "[SLASH-COMMAND: prr]Help content[END SLASH-COMMAND]" },
 					],
 				},
 				{ role: "assistant", content: "Second message" },
@@ -363,11 +366,11 @@ Line 2
 			const contentArray = summaryMessage!.content as any[]
 			// Summary content is split into separate text blocks:
 			// - First block: "## Conversation Summary\n..."
-			// - Second block: "<system-reminder>..." with command blocks
+			// - Second block: "[SYSTEM-REMINDER]..." with command blocks
 			expect(contentArray).toHaveLength(2)
 			expect(contentArray[0].text).toContain("## Conversation Summary")
-			expect(contentArray[1].text).toContain('<command name="prr">')
-			expect(contentArray[1].text).toContain("<system-reminder>")
+			expect(contentArray[1].text).toContain("[SLASH-COMMAND: prr]")
+			expect(contentArray[1].text).toContain("[SYSTEM-REMINDER]")
 			expect(contentArray[1].text).toContain("Active Workflows")
 		})
 

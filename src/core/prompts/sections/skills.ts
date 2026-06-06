@@ -41,15 +41,6 @@ export function filterCangjieSkillRoutingRows(markdown: string, discoveredSkillN
 	return out.join("\n")
 }
 
-function escapeXml(value: string): string {
-	return value
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&apos;")
-}
-
 /**
  * Generate the skills section for the system prompt.
  * Only includes skills relevant to the current mode.
@@ -79,50 +70,44 @@ export async function getSkillsSection(
 	}
 	if (skills.length === 0) return ""
 
-	const skillsXml = skills
+	const skillsListing = skills
 		.map((skill) => {
-			const name = escapeXml(skill.name)
-			const description = escapeXml(skill.description)
-			const locationLine = `\n    <location>${escapeXml(skill.path)}</location>`
-			return `  <skill>\n    <name>${name}</name>\n    <description>${description}</description>${locationLine}\n  </skill>`
+			return `### ${skill.name}\n- **Description:** ${skill.description}\n- **Location:** ${skill.path}`
 		})
-		.join("\n")
+		.join("\n\n")
 
 	const cangjieTieBreakNote = ""
 
 	return `====
 
-AVAILABLE SKILLS
+## Available Skills
 
-<available_skills>
-${skillsXml}
-</available_skills>
+${skillsListing}
 
-<mandatory_skill_check>
+## Mandatory Skill Check
+
 REQUIRED PRECONDITION
 
 Before producing ANY user-facing response, you MUST perform a skill applicability check.
 
 Step 1: Skill Evaluation
-- Evaluate the user's request against ALL available skill <description> entries in <available_skills>.
+- Evaluate the user's request against ALL available skill descriptions above.
 - Determine whether at least one skill clearly and unambiguously applies.
 
 Step 2: Branching Decision
 
-<if_skill_applies>
+### When A Skill Applies
 - Select EXACTLY ONE skill per turn.
-- Disambiguation: when multiple skills match, pick the one whose <description> most precisely covers the user's primary intent. If the mode's customInstructions contain a skill routing table, follow it.
+- Disambiguation: when multiple skills match, pick the one whose description most precisely covers the user's primary intent. If the mode's customInstructions contain a skill routing table, follow it.
 - Cross-turn loading: if the request spans two skills, load the highest-priority one now and note the secondary skill for a follow-up turn.
 - Use the skill tool to load the selected skill by name.
 - Load the skill's instructions fully into context BEFORE continuing.
 - Follow the skill instructions precisely.
 - Do NOT respond outside the skill-defined flow.
-</if_skill_applies>
 
-<if_no_skill_applies>
+### When No Skill Applies
 - Proceed with a normal response.
 - Do NOT load any SKILL.md files.
-</if_no_skill_applies>
 
 CONSTRAINTS:
 - Do NOT load every skill up front.
@@ -130,9 +115,8 @@ CONSTRAINTS:
 - Do NOT reload a skill whose instructions already appear in this conversation.
 - Do NOT skip this check.
 - FAILURE to perform this check is an error.
-</mandatory_skill_check>
 
-<linked_file_handling>
+## Linked File Handling
 - When a skill is loaded, ONLY the skill instructions are present.
 - Files linked from the skill are NOT loaded automatically.
 - The model MUST explicitly decide to read a linked file based on task relevance.
@@ -140,19 +124,15 @@ CONSTRAINTS:
 - Prefer reading the minimum necessary linked file.
 - Avoid reading multiple linked files unless required.
 - Treat linked files as progressive disclosure, not mandatory context.
-</linked_file_handling>
 
-<context_notes>
+## Context Notes
 - The skill list is already filtered for the current mode: "${currentMode}".
 - Mode-specific skills may come from skills-${currentMode}/ with project-level overrides taking precedence over global skills.${cangjieTieBreakNote}
-</context_notes>
 
-<internal_verification>
+## Internal Verification
 This section is for internal control only.
 Do NOT include this section in user-facing output.
 
-After completing the evaluation, internally confirm:
-<skill_check_completed>true|false</skill_check_completed>
-</internal_verification>
+After completing the evaluation, internally confirm: \`skill_check_completed: true | false\`
 `
 }

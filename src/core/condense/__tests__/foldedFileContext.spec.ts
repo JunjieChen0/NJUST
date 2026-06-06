@@ -54,9 +54,9 @@ describe("foldedFileContext", () => {
 
 			const result = await generateFoldedFileContext(["/test/user.ts"], { cwd: "/test" })
 
-			// Each file should be wrapped in its own <system-reminder> block
-			expect(result.content).toContain("<system-reminder>")
-			expect(result.content).toContain("</system-reminder>")
+			// Each file should be wrapped in its own [SYSTEM-REMINDER] block
+			expect(result.content).toContain("[SYSTEM-REMINDER]")
+			expect(result.content).toContain("[END SYSTEM-REMINDER]")
 			expect(result.content).toContain("## File Context: /test/user.ts")
 			expect(result.content).toContain("interface User")
 			expect(result.content).toContain("function createUser")
@@ -73,7 +73,7 @@ describe("foldedFileContext", () => {
 
 			const result = await generateFoldedFileContext(["/test/utils.js"], { cwd: "/test" })
 
-			expect(result.content).toContain("<system-reminder>")
+			expect(result.content).toContain("[SYSTEM-REMINDER]")
 			expect(result.content).toContain("## File Context: /test/utils.js")
 			expect(result.content).toContain("function greet")
 			expect(result.content).toContain("class Calculator")
@@ -159,7 +159,7 @@ describe("foldedFileContext", () => {
 
 			const result = await generateFoldedFileContext(["/test/person.py"], { cwd: "/test" })
 
-			expect(result.content).toContain("<system-reminder>")
+			expect(result.content).toContain("[SYSTEM-REMINDER]")
 			expect(result.content).toContain("## File Context: /test/person.py")
 			expect(result.content).toContain("def greet")
 			expect(result.content).toContain("class Person")
@@ -182,8 +182,8 @@ describe("foldedFileContext", () => {
 
 			const result = await generateFoldedFileContext(["/test/api.ts", "/test/models.ts"], { cwd: "/test" })
 
-			// Each file should have its own <system-reminder> block
-			const systemReminderMatches = result.content.match(/<system-reminder>/g)
+			// Each file should have its own [SYSTEM-REMINDER] block
+			const systemReminderMatches = result.content.match(/\[SYSTEM-REMINDER\]/g)
 			expect(systemReminderMatches).toHaveLength(2)
 
 			// sections array should have separate entries for each file
@@ -277,16 +277,16 @@ describe("foldedFileContext", () => {
 
 			// Mock generateFoldedFileContext to return the expected folded sections
 			const mockFoldedSections = [
-				`<system-reminder>
+				`[SYSTEM-REMINDER]
 ## File Context: src/user.ts
 1--5 | export interface User
 7--12 | export function createUser(name: string): User
 14--28 | export class UserService
-</system-reminder>`,
-				`<system-reminder>
+[END SYSTEM-REMINDER]`,
+				`[SYSTEM-REMINDER]
 ## File Context: src/api.ts
 1--3 | export async function fetchData(url: string): Promise<any>
-</system-reminder>`,
+[END SYSTEM-REMINDER]`,
 			]
 
 			mockedGenerateFoldedFileContext.mockResolvedValue({
@@ -338,11 +338,11 @@ describe("foldedFileContext", () => {
 			expect(userFileBlock).toBeDefined()
 			expect(apiFileBlock).toBeDefined()
 
-			// Each file block should have its own <system-reminder> tags
-			expect(userFileBlock.text).toContain("<system-reminder>")
+			// Each file block should have its own [SYSTEM-REMINDER] tags
+			expect(userFileBlock.text).toContain("[SYSTEM-REMINDER]")
 			expect(userFileBlock.text).toContain("export interface User")
 
-			expect(apiFileBlock.text).toContain("<system-reminder>")
+			expect(apiFileBlock.text).toContain("[SYSTEM-REMINDER]")
 			expect(apiFileBlock.text).toContain("fetchData")
 		})
 

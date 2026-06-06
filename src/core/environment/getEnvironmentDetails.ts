@@ -86,7 +86,9 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 		await pWaitFor(() => busyTerminals.every((t) => !TerminalRegistry.isProcessHot(t.id)), {
 			interval: 100,
 			timeout: 2_000,
-		}).catch(() => { /* best-effort; timeout is expected when terminals stay busy */ })
+		}).catch(() => {
+			/* best-effort; timeout is expected when terminals stay busy */
+		})
 	}
 
 	// Reset, this lets us know when to wait for saved files to update terminals.
@@ -156,8 +158,6 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 		}
 	}
 
-
-
 	// Add recently modified files section.
 	const recentlyModifiedFiles = cline.fileContextTracker.getAndClearRecentlyModifiedFiles()
 
@@ -223,9 +223,9 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 	})
 
 	details += `\n\n# Current Mode\n`
-	details += `<slug>${currentMode}</slug>\n`
-	details += `<name>${modeDetails.name}</name>\n`
-	details += `<model>${modelId}</model>\n`
+	details += `- **Slug:** ${currentMode}\n`
+	details += `- **Name:** ${modeDetails.name}\n`
+	details += `- **Model:** ${modelId}\n`
 
 	details += `\n\n# Host System\n${formatHostExecuteCommandHints()}\n`
 
@@ -265,5 +265,5 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 			? state.apiConfiguration.todoListEnabled
 			: true
 	const reminderSection = todoListEnabled ? formatReminderSection(cline.todoList) : ""
-	return `<environment_details>\n${details.trim()}\n${reminderSection}\n</environment_details>`
+	return `====\n# Environment Details\n\n${details.trim()}\n${reminderSection}\n====`
 }

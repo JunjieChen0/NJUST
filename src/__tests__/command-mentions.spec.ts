@@ -40,9 +40,9 @@ describe("Command Mentions", () => {
 			const result = await callParseMentions(input)
 
 			expect(mockGetCommand).toHaveBeenCalledWith("/test/cwd", "setup")
-			expect(result.slashCommandHelp).toContain('<command name="setup">')
+			expect(result.slashCommandHelp).toContain("[SLASH-COMMAND: setup]")
 			expect(result.slashCommandHelp).toContain(commandContent)
-			expect(result.slashCommandHelp).toContain("</command>")
+			expect(result.slashCommandHelp).toContain("[END SLASH-COMMAND]")
 			expect(result.text).toContain("Please help me set up the project")
 		})
 
@@ -83,9 +83,9 @@ describe("Command Mentions", () => {
 			expect(mockGetCommand).toHaveBeenCalledWith("/test/cwd", "setup")
 			expect(mockGetCommand).toHaveBeenCalledWith("/test/cwd", "deploy")
 			expect(mockGetCommand).toHaveBeenCalledTimes(2) // Each unique command called once (optimized)
-			expect(result.slashCommandHelp).toContain('<command name="setup">')
+			expect(result.slashCommandHelp).toContain("[SLASH-COMMAND: setup]")
 			expect(result.slashCommandHelp).toContain("# Setup Environment")
-			expect(result.slashCommandHelp).toContain('<command name="deploy">')
+			expect(result.slashCommandHelp).toContain("[SLASH-COMMAND: deploy]")
 			expect(result.slashCommandHelp).toContain("# Deploy Environment")
 		})
 
@@ -170,7 +170,7 @@ describe("Command Mentions", () => {
 			)
 
 			expect(skillsManager.getSkillContent).not.toHaveBeenCalled()
-			expect(result.slashCommandHelp).toContain('<command name="setup">')
+			expect(result.slashCommandHelp).toContain("[SLASH-COMMAND: setup]")
 			expect(result.slashCommandHelp).not.toContain("Skill: setup")
 		})
 
@@ -199,9 +199,9 @@ describe("Command Mentions", () => {
 			const input = "/error-command test"
 			const result = await callParseMentions(input)
 
-			expect(result.slashCommandHelp).toContain('<command name="error-command">')
+			expect(result.slashCommandHelp).toContain("[SLASH-COMMAND: error-command]")
 			expect(result.slashCommandHelp).toContain("# Error command")
-			expect(result.slashCommandHelp).toContain("</command>")
+			expect(result.slashCommandHelp).toContain("[END SLASH-COMMAND]")
 		})
 
 		it("should handle command names with hyphens and underscores at start", async () => {
@@ -216,7 +216,7 @@ describe("Command Mentions", () => {
 			const result = await callParseMentions(input)
 
 			expect(mockGetCommand).toHaveBeenCalledWith("/test/cwd", "setup-dev")
-			expect(result.slashCommandHelp).toContain('<command name="setup-dev">')
+			expect(result.slashCommandHelp).toContain("[SLASH-COMMAND: setup-dev]")
 			expect(result.slashCommandHelp).toContain("# Dev setup")
 		})
 
@@ -246,13 +246,13 @@ npm install
 			const input = "/complex command"
 			const result = await callParseMentions(input)
 
-			expect(result.slashCommandHelp).toContain('<command name="complex">')
+			expect(result.slashCommandHelp).toContain("[SLASH-COMMAND: complex]")
 			expect(result.slashCommandHelp).toContain("# Complex Command")
 			expect(result.slashCommandHelp).toContain("```bash")
 			expect(result.slashCommandHelp).toContain("npm install")
 			expect(result.slashCommandHelp).toContain("- Check file1.js")
 			expect(result.slashCommandHelp).toContain("> **Note**: This is important!")
-			expect(result.slashCommandHelp).toContain("</command>")
+			expect(result.slashCommandHelp).toContain("[END SLASH-COMMAND]")
 		})
 
 		it("should handle empty command content", async () => {
@@ -266,8 +266,8 @@ npm install
 			const input = "/empty command"
 			const result = await callParseMentions(input)
 
-			expect(result.slashCommandHelp).toContain('<command name="empty">')
-			expect(result.slashCommandHelp).toContain("</command>")
+			expect(result.slashCommandHelp).toContain("[SLASH-COMMAND: empty]")
+			expect(result.slashCommandHelp).toContain("[END SLASH-COMMAND]")
 			// Should still include the command tags even with empty content
 		})
 	})

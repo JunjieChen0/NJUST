@@ -59,7 +59,7 @@ describe("CangjiePromptErrorAnalysis", () => {
 
 		const appendix = await enhanceCjcErrorOutput(output, "C:/workspace", "C:/ext")
 
-		expect(appendix).toContain("<cangjie_error_hints>")
+		expect(appendix).toContain("## Cangjie Error Fix Hints")
 		expect(appendix).toContain("src/main.cj")
 		expect(appendix).toContain("missing import")
 		expect(fsMock.readFile).toHaveBeenCalledWith(expect.stringContaining("main.cj"), "utf-8")
@@ -76,7 +76,7 @@ describe("CangjiePromptErrorAnalysis", () => {
 
 		const appendix = await buildCangjieExecuteCommandErrorAppendix(output, "C:/workspace", "C:/ext")
 
-		expect(appendix).toContain("<cangjie_error_hints>")
+		expect(appendix).toContain("## Cangjie Error Fix Hints")
 		expect(appendix).toContain("missing_symbol")
 		expect(appendix).toContain("add import")
 	})

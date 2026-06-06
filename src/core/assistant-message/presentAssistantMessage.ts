@@ -33,6 +33,7 @@ import { sanitizeToolUseId } from "../../utils/tool-id"
 import { getToolResultBudget, truncateToolResult, estimateTokens } from "../tools/toolResultBudget"
 import type { AssistantMessageContent, TypedBlock } from "./types"
 import { markUserContentReadyIfDrained } from "./streamState"
+import { sanitizeXmlToolCalls, parseXmlToolCalls } from "./sanitizeXmlToolCalls"
 
 export { markUserContentReadyIfDrained } from "./streamState"
 
@@ -344,6 +345,59 @@ export async function presentAssistantMessage(cline: Task) {
 						// Strip any streamed <thinking> tags from text output.
 						content = content.replace(/<thinking>\s?/g, "")
 						content = content.replace(/\s?<\/thinking>/g, "")
+
+						// Detect and handle XML-style tool call markup that some
+						// models emit in text instead of using native function calling.
+						//
+						// Strategy: parse the XML into native ToolUse objects and inject
+						// them into the content array so the dispatch loop executes them
+						// transparently.  If parsing fails (invalid tool name, bad args),
+						// fall back to the original sanitize-and-report behaviour.
+						const parsed = parseXmlToolCalls(content)
+						if (parsed.hadXmlToolCalls) {
+							content = parsed.content
+
+							if (parsed.parsedToolCalls.length > 0) {
+								// Successfully parsed — inject ToolUse blocks into the
+								// dispatch queue.  The while-loop in presentAssistantMessage
+								// will pick them up on subsequent iterations and execute
+								// them via the normal "tool_use" path.
+								for (const toolCall of parsed.parsedToolCalls) {
+									cline.assistantMessageContent.push(toolCall as AssistantMessageContent)
+								}
+
+								// Gentle corrective guidance so the model switches to
+								// native tool calling on the next turn.
+								const guidance =
+									"[System: XML tool calls were detected and converted to native tool calls. " +
+									"Please use native tool calling (the tool_calls API field) in future responses " +
+									"instead of emitting XML markup in text content.]"
+								cline.userMessageContent.push({ type: "text", text: guidance })
+								logger.warn(
+									"PresentAssistantMessage",
+									`Converted ${parsed.parsedToolCalls.length} XML tool call(s) to native format`,
+								)
+							} else {
+								// XML was detected but no valid tool calls could be parsed.
+								// Fall back to sanitize + error report.
+								const sanitized = sanitizeXmlToolCalls(content)
+								if (sanitized.hadXmlToolCalls) {
+									content = sanitized.content
+								}
+								const xmlToolCallError =
+									"XML tool calls are not supported. " +
+									"Use native tool calling (the tool_calls API field) instead of " +
+									"emitting XML markup in text content. " +
+									"The XML tool call markup has been stripped from this response."
+								cline.consecutiveMistakeCount++
+								await cline.say("error", xmlToolCallError)
+								cline.userMessageContent.push({ type: "text", text: xmlToolCallError })
+								logger.warn(
+									"PresentAssistantMessage",
+									"Stripped unparseable XML tool call markup from text block",
+								)
+							}
+						}
 					}
 
 					await cline.say("text", content, undefined, block.partial)

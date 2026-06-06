@@ -58,11 +58,11 @@ export async function processUserContentMentions({
 	let commandMode: string | undefined
 
 	// Process userContent array, which contains text and image parts.
-	// We need to apply parseMentions() to TextPart's text that contains "<user_message>".
+	// We need to apply parseMentions() to TextPart's text that contains "[USER-MESSAGE]".
 	const content = (
 		await Promise.all(
 			userContent.map(async (block) => {
-				const shouldProcessMentions = (text: string) => text.includes("<user_message>")
+				const shouldProcessMentions = (text: string) => text.includes("[USER-MESSAGE]")
 
 				if (block.type === "text") {
 					if (shouldProcessMentions(block.text)) {

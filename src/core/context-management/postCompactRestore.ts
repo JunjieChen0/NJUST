@@ -153,7 +153,7 @@ export function postCompactRestore(messages: ApiMessage[], options?: RestoreOpti
 			const label = skill.path ? `${skill.name} (${skill.path})` : skill.name
 			restoredParts.push(
 				`### Active Skill: ${label}\n\`\`\`\n${truncated}\n\`\`\`\n` +
-				`[... skill content may be truncated; re-read the skill file if you need full context]`,
+					`[... skill content may be truncated; re-read the skill file if you need full context]`,
 			)
 		}
 	}
@@ -168,8 +168,8 @@ export function postCompactRestore(messages: ApiMessage[], options?: RestoreOpti
 	if (options.isPlanMode) {
 		restoredParts.push(
 			`### Plan Mode Active\n` +
-			`The user is in plan mode. Do NOT make edits or run tools without explicit approval. ` +
-			`Present your plan and wait for the user to approve before implementing.`,
+				`The user is in plan mode. Do NOT make edits or run tools without explicit approval. ` +
+				`Present your plan and wait for the user to approve before implementing.`,
 		)
 	}
 
@@ -210,10 +210,10 @@ export function postCompactRestore(messages: ApiMessage[], options?: RestoreOpti
 	const restoreMessage: ApiMessage = {
 		role: "user",
 		content:
-			`<system-reminder>\n` +
+			`[SYSTEM-REMINDER]\n` +
 			`[Context restored after compaction — these resources were recently used and are re-injected so you don't have to re-read them]\n\n` +
 			`${restoredParts.join("\n\n")}\n` +
-			`</system-reminder>`,
+			`[END SYSTEM-REMINDER]`,
 		ts: Date.now(),
 	}
 

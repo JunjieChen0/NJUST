@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest"
 import { getSkillsSection, filterCangjieSkillRoutingRows } from "../skills"
 
 describe("getSkillsSection", () => {
-	it("should emit <available_skills> XML with name, description, and location", async () => {
+	it("should emit Markdown skills section with name, description, and location", async () => {
 		const mockSkillsManager = {
 			getSkillsForMode: vi.fn().mockReturnValue([
 				{
@@ -17,19 +17,16 @@ describe("getSkillsSection", () => {
 
 		const result = await getSkillsSection(mockSkillsManager, "code")
 
-		expect(result).toContain("<available_skills>")
-		expect(result).toContain("</available_skills>")
-		expect(result).toContain("<skill>")
-		expect(result).toContain("<name>pdf-processing</name>")
-		// Ensure XML escaping for '&'
-		expect(result).toContain("<description>Extracts text &amp; tables from PDFs</description>")
+		expect(result).toContain("## Available Skills")
+		expect(result).toContain("### pdf-processing")
+		// No XML escaping — '&' passes through as-is in Markdown
+		expect(result).toContain("**Description:** Extracts text & tables from PDFs")
 		// For filesystem-based agents, location should be the absolute path to SKILL.md
-		expect(result).toContain("<location>/abs/path/pdf-processing/SKILL.md</location>")
+		expect(result).toContain("**Location:** /abs/path/pdf-processing/SKILL.md")
 	})
 
 	it("filterCangjieSkillRoutingRows removes rows for undiscovered skills", () => {
-		const md =
-			"| a | **`cangjie-cjpm`** | x |\n| b | **`missing-skill`** | y |\n| c | no-skill-cell | z |\n"
+		const md = "| a | **`cangjie-cjpm`** | x |\n| b | **`missing-skill`** | y |\n| c | no-skill-cell | z |\n"
 		const filtered = filterCangjieSkillRoutingRows(md, new Set(["cangjie-cjpm"]))
 		expect(filtered).toContain("cangjie-cjpm")
 		expect(filtered).not.toContain("missing-skill")
@@ -58,11 +55,11 @@ describe("getSkillsSection", () => {
 		expect(plain).toBe("")
 
 		const build = await getSkillsSection(mockSkillsManager, "cangjie", "cjpm build fails")
-		expect(build).toContain("<name>cangjie-cjpm</name>")
+		expect(build).toContain("### cangjie-cjpm")
 		expect(build).not.toContain("skills-enhancement-plan")
 
 		const learning = await getSkillsSection(mockSkillsManager, "cangjie", "制定学习规划")
-		expect(learning).toContain("<name>skills-enhancement-plan</name>")
+		expect(learning).toContain("### skills-enhancement-plan")
 		expect(learning).not.toContain("cangjie-cjpm")
 	})
 

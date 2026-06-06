@@ -32,11 +32,11 @@ describe("processUserContentMentions", () => {
 	})
 
 	describe("content processing", () => {
-		it("should process text blocks with <user_message> tags", async () => {
+		it("should process text blocks with [USER-MESSAGE] tags", async () => {
 			const userContent = [
 				{
 					type: "text" as const,
-					text: "<user_message>Do something</user_message>",
+					text: "[USER-MESSAGE]Do something[END USER-MESSAGE]",
 				},
 			]
 
@@ -49,12 +49,12 @@ describe("processUserContentMentions", () => {
 			expect(parseMentions).toHaveBeenCalled()
 			expect(result.content[0]).toEqual({
 				type: "text",
-				text: "parsed: <user_message>Do something</user_message>",
+				text: "parsed: [USER-MESSAGE]Do something[END USER-MESSAGE]",
 			})
 			expect(result.mode).toBeUndefined()
 		})
 
-		it("should not process text blocks without user_message tags", async () => {
+		it("should not process text blocks without USER-MESSAGE tags", async () => {
 			const userContent = [
 				{
 					type: "text" as const,
@@ -78,7 +78,7 @@ describe("processUserContentMentions", () => {
 				{
 					type: "tool_result" as const,
 					tool_use_id: "123",
-					content: "<user_message>Tool feedback</user_message>",
+					content: "[USER-MESSAGE]Tool feedback[END USER-MESSAGE]",
 				},
 			]
 
@@ -96,7 +96,7 @@ describe("processUserContentMentions", () => {
 				content: [
 					{
 						type: "text",
-						text: "parsed: <user_message>Tool feedback</user_message>",
+						text: "parsed: [USER-MESSAGE]Tool feedback[END USER-MESSAGE]",
 					},
 				],
 			})
@@ -111,7 +111,7 @@ describe("processUserContentMentions", () => {
 					content: [
 						{
 							type: "text" as const,
-							text: "<user_message>Array task</user_message>",
+							text: "[USER-MESSAGE]Array task[END USER-MESSAGE]",
 						},
 						{
 							type: "text" as const,
@@ -134,7 +134,7 @@ describe("processUserContentMentions", () => {
 				content: [
 					{
 						type: "text",
-						text: "parsed: <user_message>Array task</user_message>",
+						text: "parsed: [USER-MESSAGE]Array task[END USER-MESSAGE]",
 					},
 					{
 						type: "text",
@@ -149,7 +149,7 @@ describe("processUserContentMentions", () => {
 			const userContent = [
 				{
 					type: "text" as const,
-					text: "<user_message>First task</user_message>",
+					text: "[USER-MESSAGE]First task[END USER-MESSAGE]",
 				},
 				{
 					type: "image" as const,
@@ -168,7 +168,7 @@ describe("processUserContentMentions", () => {
 			expect(result.content).toHaveLength(2)
 			expect(result.content[0]).toEqual({
 				type: "text",
-				text: "parsed: <user_message>First task</user_message>",
+				text: "parsed: [USER-MESSAGE]First task[END USER-MESSAGE]",
 			})
 			expect(result.content[1]).toEqual(userContent[1]) // Image block unchanged
 			expect(result.mode).toBeUndefined()
@@ -180,7 +180,7 @@ describe("processUserContentMentions", () => {
 			const userContent = [
 				{
 					type: "text" as const,
-					text: "<user_message>Test default</user_message>",
+					text: "[USER-MESSAGE]Test default[END USER-MESSAGE]",
 				},
 			]
 
@@ -191,7 +191,7 @@ describe("processUserContentMentions", () => {
 			})
 
 			expect(parseMentions).toHaveBeenCalledWith(
-				"<user_message>Test default</user_message>",
+				"[USER-MESSAGE]Test default[END USER-MESSAGE]",
 				"/test",
 				mockFileContextTracker,
 				undefined,
@@ -207,7 +207,7 @@ describe("processUserContentMentions", () => {
 			const userContent = [
 				{
 					type: "text" as const,
-					text: "<user_message>Test explicit false</user_message>",
+					text: "[USER-MESSAGE]Test explicit false[END USER-MESSAGE]",
 				},
 			]
 
@@ -219,7 +219,7 @@ describe("processUserContentMentions", () => {
 			})
 
 			expect(parseMentions).toHaveBeenCalledWith(
-				"<user_message>Test explicit false</user_message>",
+				"[USER-MESSAGE]Test explicit false[END USER-MESSAGE]",
 				"/test",
 				mockFileContextTracker,
 				undefined,
@@ -244,7 +244,7 @@ describe("processUserContentMentions", () => {
 			const userContent = [
 				{
 					type: "text" as const,
-					text: "<user_message>Run command</user_message>",
+					text: "[USER-MESSAGE]Run command[END USER-MESSAGE]",
 				},
 			]
 
@@ -277,7 +277,7 @@ describe("processUserContentMentions", () => {
 				{
 					type: "tool_result" as const,
 					tool_use_id: "123",
-					content: "<user_message>Tool output</user_message>",
+					content: "[USER-MESSAGE]Tool output[END USER-MESSAGE]",
 				},
 			]
 
@@ -319,7 +319,7 @@ describe("processUserContentMentions", () => {
 					content: [
 						{
 							type: "text" as const,
-							text: "<user_message>Array item</user_message>",
+							text: "[USER-MESSAGE]Array item[END USER-MESSAGE]",
 						},
 					],
 				},

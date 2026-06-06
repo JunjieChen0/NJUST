@@ -230,7 +230,7 @@ describe("Task Tool History Handling", () => {
 					},
 					{
 						type: "text" as const,
-						text: "Another message with <user_message> tags",
+						text: "Another message with [USER-MESSAGE] tags",
 					},
 					{
 						type: "tool_result" as const,

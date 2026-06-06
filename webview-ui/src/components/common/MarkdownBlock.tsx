@@ -69,10 +69,7 @@ const StyledMarkdown = styled.div`
 		color: var(--vscode-errorForeground);
 	}
 
-	font-family:
-		var(--njust-ai-font-body, var(--njust-ai-font-serif)),
-		var(--vscode-font-family),
-		sans-serif;
+	font-family: var(--njust-ai-font-body, var(--njust-ai-font-serif)), var(--vscode-font-family), sans-serif;
 
 	font-size: var(--vscode-font-size, 13px);
 
@@ -195,6 +192,25 @@ const StyledMarkdown = styled.div`
 `
 
 const MarkdownBlock = memo(({ markdown }: MarkdownBlockProps) => {
+	// Safety net: strip known system-level XML tags that models may
+	// accidentally emit in text content instead of using native function
+	// calling.  This prevents them from rendering as HTML elements in the DOM.
+	const safeMarkdown = useMemo(() => {
+		if (!markdown) return markdown
+		// Build the regex at call time to avoid issues with angle brackets in source.
+		const systemXmlTagsRe = new RegExp(
+			[
+				"<\\/?tool_call\\s*>",
+				"<\\/?function\\s*=\\s*\\w+\\s*>",
+				"<\\/?function\\s*>",
+				"<\\/?parameter\\s*=\\s*\\w+\\s*>",
+				"<\\/?parameter\\s*>",
+			].join("|"),
+			"g",
+		)
+		return markdown.replace(systemXmlTagsRe, "")
+	}, [markdown])
+
 	const components = useMemo(
 		() => ({
 			table: ({ children, ...props }: any) => {
@@ -319,7 +335,7 @@ const MarkdownBlock = memo(({ markdown }: MarkdownBlockProps) => {
 				]}
 				rehypePlugins={[rehypeKatex as any]}
 				components={components}>
-				{markdown || ""}
+				{safeMarkdown || ""}
 			</ReactMarkdown>
 		</StyledMarkdown>
 	)

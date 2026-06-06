@@ -571,7 +571,7 @@ describe("attemptCompletionTool", () => {
 					expect.anything(),
 					expect.anything(),
 				)
-				expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("<user_message>"), undefined)
+				expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("[USER-MESSAGE]"), undefined)
 			})
 		})
 	})
