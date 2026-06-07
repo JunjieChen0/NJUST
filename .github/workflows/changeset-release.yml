@@ -25,7 +25,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Git Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
           ref: ${{ env.GIT_REF }}
@@ -83,7 +83,7 @@ jobs:
           fi
 
       - name: Checkout Repo
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
@@ -107,7 +107,7 @@ jobs:
       # Add label to indicate changelog has been formatted
       - name: Add changelog-ready label
         if: ${{ !contains(github.event.pull_request.labels.*.name, 'changelog-ready') }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
