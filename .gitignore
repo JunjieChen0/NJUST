@@ -110,6 +110,9 @@ devflow/
 .opencode/
 .reasonix/
 
+# Copied skills folder
+skill/
+
 # Local analysis outputs and credentials
 .scannerwork/
 sonar-project.properties
