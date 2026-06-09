@@ -20,6 +20,7 @@ export default defineConfig({
 		watch: false,
 		reporters,
 		silent: false,
+		maxWorkers: process.env.CI ? 2 : undefined,
 		testTimeout: 30_000,
 		hookTimeout: 30_000,
 		onConsoleLog,

@@ -66,6 +66,7 @@ jobs:
         name: platform-unit-test (${{ matrix.name }})
         runs-on: ${{ matrix.os }}
         strategy:
+            fail-fast: false
             matrix:
                 include:
                     - os: ubuntu-latest
@@ -103,6 +104,7 @@ jobs:
         name: coverage (${{ matrix.name }})
         runs-on: ubuntu-latest
         strategy:
+            fail-fast: false
             matrix:
                 include:
                     - name: src
