@@ -158,6 +158,7 @@
 			"cannot_read_source": "Cannot read source file.",
 			"cjpm_not_found": "cjpm not found. Ensure Cangjie SDK is installed and CANGJIE_HOME is set.",
 			"invalid_identifier": "Please enter a valid Cangjie identifier",
+			"invalid_target_path": "Invalid target path: {{path}}. Path must be within the workspace and cannot contain path traversal sequences.",
 			"no_cjpm_workspace": "No cjpm workspace found (cjpm.toml missing). Cannot run this command."
 		},
 		"cloud_agent": {

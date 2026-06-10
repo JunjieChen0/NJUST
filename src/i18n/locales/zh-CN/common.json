@@ -163,6 +163,7 @@
 			"cannot_read_source": "无法读取源文件内容。",
 			"cjpm_not_found": "未找到 cjpm。请确认已安装仓颉 SDK 并设置 CANGJIE_HOME。",
 			"invalid_identifier": "请输入合法的仓颉标识符",
+			"invalid_target_path": "无效的目标路径：{{path}}。路径必须位于工作区内，不能包含路径穿越序列。",
 			"no_cjpm_workspace": "未找到 cjpm 工作区（缺少 cjpm.toml）。无法运行此命令。"
 		},
 		"cloud_agent": {

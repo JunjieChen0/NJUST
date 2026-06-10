@@ -105,7 +105,13 @@ export class CangjieRefactoringProvider implements vscode.CodeActionProvider {
 		})
 		if (!targetPath || targetPath === relSource) return
 
-		const absTarget = path.join(workspaceFolder.uri.fsPath, targetPath)
+		// Security: prevent path traversal by resolving and validating the target path
+		const absTarget = path.resolve(workspaceFolder.uri.fsPath, targetPath)
+		const workspaceRoot = path.resolve(workspaceFolder.uri.fsPath)
+		if (!absTarget.startsWith(workspaceRoot + path.sep) && absTarget !== workspaceRoot) {
+			void vscode.window.showErrorMessage(t("errors.cangjie_lsp.invalid_target_path", { path: targetPath }))
+			return
+		}
 		const targetDir = path.dirname(absTarget)
 
 		if (!fs.existsSync(targetDir)) {

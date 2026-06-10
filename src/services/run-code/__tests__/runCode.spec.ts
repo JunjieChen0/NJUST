@@ -517,6 +517,42 @@ describe("runCode", () => {
 		)
 	})
 
+	it("rejects file paths with shell injection characters", async () => {
+		// Test that malicious filenames are rejected before execution
+		const maliciousPaths = [
+			'D:\\repo\\src\\script"; rm -rf /; "#.py',
+			"D:\\repo\\src\\script&&whoami#.js",
+			"D:\\repo\\src\\script`whoami`.ts",
+			"D:\\repo\\src\\script$(whoami).rb",
+		]
+
+		for (const maliciousPath of maliciousPaths) {
+			vi.clearAllMocks()
+			setEditor(maliciousPath, "python")
+			vi.mocked(fs.existsSync).mockReturnValue(false)
+
+			await runActiveEditorCode(outputChannelMock)
+			// Should show error message instead of executing
+			expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining("shell metacharacters"))
+			// Terminal should NOT be created/used for malicious paths
+			expect(terminalMock.sendText).not.toHaveBeenCalled()
+		}
+	})
+
+	it("handles file paths with quotes safely", async () => {
+		const quotedPath = 'D:\\repo\\src\\script"with"quotes.py'
+		setEditor(quotedPath, "python")
+		vi.mocked(fs.existsSync).mockReturnValue(false)
+
+		await runActiveEditorCode(outputChannelMock)
+		const sentCommand = terminalMock.sendText.mock.calls[0][0]
+		// The inner quotes should be escaped
+		expect(sentCommand).toContain('\\"')
+		// Should not have unbalanced quotes
+		const quoteCount = (sentCommand.match(/"/g) || []).length
+		expect(quoteCount % 2).toBe(0)
+	})
+
 	it("builds LaTeX command using latexmk", async () => {
 		setEditor("D:\\repo\\src\\main.tex", "latex")
 		await runActiveEditorCode(outputChannelMock)

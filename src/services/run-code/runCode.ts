@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
+import * as shellQuote from "shell-quote"
 import { resolveCangjieToolPath, buildCangjieToolEnv, CJC_CONFIG_KEY } from "../cangjie-lsp/cangjieToolUtils"
 import { buildMatlabRunConfig } from "../matlab/matlabRunner"
 import { resolveMatlabRuntime } from "../matlab/matlabToolUtils"
@@ -19,6 +20,32 @@ const isWin = process.platform === "win32"
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Detect shell metacharacters that could lead to command injection.
+ * These characters can break out of quoted strings or execute arbitrary commands.
+ */
+function containsShellMetacharacters(p: string): boolean {
+	return /[\&\|\;\<\>\(\)\$\`\!\n\r]/.test(p)
+}
+
+/**
+ * Quote a file path for safe use in shell commands.
+ * Uses double quotes with escaping for special characters.
+ * This prevents shell injection while ensuring the command works on both platforms.
+ * If the path contains shell metacharacters that cannot be safely escaped, an error is thrown.
+ */
+function quotePath(p: string): string {
+	if (containsShellMetacharacters(p)) {
+		throw new Error(
+			`File path contains shell metacharacters and cannot be safely executed: ${p}. ` +
+				`Please rename the file to remove special characters like &, |, ;, <, >, $, \`, !.`,
+		)
+	}
+	// Escape double quotes and backticks to prevent breaking out of the quoted string.
+	const escaped = p.replace(/"/g, '\\"').replace(/`/g, "\\`")
+	return `"${escaped}"`
+}
 
 /**
  * Chain multiple shell commands with short-circuit on failure.
@@ -49,13 +76,10 @@ function findProjectRoot(startDir: string, markers: string[]): string | undefine
 
 function listSourceFiles(dir: string, extensions: string[]): string[] {
 	try {
-		return fs
-			.readdirSync(dir)
-			.filter((f) => {
-				const ext = path.extname(f).toLowerCase()
-				return extensions.includes(ext) && fs.statSync(path.join(dir, f)).isFile()
-			})
-			.map((f) => `"${f}"`)
+		return fs.readdirSync(dir).filter((f) => {
+			const ext = path.extname(f).toLowerCase()
+			return extensions.includes(ext) && fs.statSync(path.join(dir, f)).isFile()
+		})
 	} catch {
 		return []
 	}
@@ -75,9 +99,9 @@ function buildPythonConfig(filePath: string): RunConfig {
 	const pyprojectRoot = findProjectRoot(fileDir, ["pyproject.toml"])
 	if (pyprojectRoot) {
 		if (fs.existsSync(path.join(pyprojectRoot, "poetry.lock"))) {
-			return { command: `poetry run python "${filePath}"`, cwd: pyprojectRoot }
+			return { command: `poetry run python ${quotePath(filePath)}`, cwd: pyprojectRoot }
 		}
-		return { command: `python "${filePath}"`, cwd: pyprojectRoot }
+		return { command: `python ${quotePath(filePath)}`, cwd: pyprojectRoot }
 	}
 
 	if (fs.existsSync(path.join(fileDir, "__main__.py"))) {
@@ -86,7 +110,7 @@ function buildPythonConfig(filePath: string): RunConfig {
 		return { command: `python -m ${pkgName}`, cwd: pkgDir }
 	}
 
-	return { command: `python "${filePath}"` }
+	return { command: `python ${quotePath(filePath)}` }
 }
 
 function buildJavaScriptConfig(filePath: string): RunConfig {
@@ -107,7 +131,7 @@ function buildJavaScriptConfig(filePath: string): RunConfig {
 		}
 	}
 
-	return { command: `node "${filePath}"` }
+	return { command: `node ${quotePath(filePath)}` }
 }
 
 function buildTypeScriptConfig(filePath: string): RunConfig {
@@ -128,7 +152,7 @@ function buildTypeScriptConfig(filePath: string): RunConfig {
 		}
 	}
 
-	return { command: `npx tsx "${filePath}"` }
+	return { command: `npx tsx ${quotePath(filePath)}` }
 }
 
 function buildCConfig(filePath: string): RunConfig {
@@ -139,9 +163,9 @@ function buildCConfig(filePath: string): RunConfig {
 		const bd = path.join(cmakeRoot, "build")
 		return {
 			command: chain(
-				`cmake -S "${cmakeRoot}" -B "${bd}"`,
-				`cmake --build "${bd}"`,
-				`cmake --build "${bd}" --target run`,
+				`cmake -S ${quotePath(cmakeRoot)} -B ${quotePath(bd)}`,
+				`cmake --build ${quotePath(bd)}`,
+				`cmake --build ${quotePath(bd)} --target run`,
 			),
 			cwd: cmakeRoot,
 		}
@@ -154,12 +178,13 @@ function buildCConfig(filePath: string): RunConfig {
 
 	const base = path.basename(filePath, ".c")
 	const cFiles = listSourceFiles(fileDir, [".c"])
+	const cFilesQuoted = cFiles.map(quotePath)
 	if (cFiles.length > 1) {
 		const out = exeName(base)
-		return { command: chain(`gcc ${cFiles.join(" ")} -o ${out}`, out), cwd: fileDir }
+		return { command: chain(`gcc ${cFilesQuoted.join(" ")} -o ${out}`, out), cwd: fileDir }
 	}
 	const out = exeName(base)
-	return { command: chain(`gcc "${path.basename(filePath)}" -o ${out}`, out), cwd: fileDir }
+	return { command: chain(`gcc ${quotePath(path.basename(filePath))} -o ${out}`, out), cwd: fileDir }
 }
 
 function buildCppConfig(filePath: string): RunConfig {
@@ -170,9 +195,9 @@ function buildCppConfig(filePath: string): RunConfig {
 		const bd = path.join(cmakeRoot, "build")
 		return {
 			command: chain(
-				`cmake -S "${cmakeRoot}" -B "${bd}"`,
-				`cmake --build "${bd}"`,
-				`cmake --build "${bd}" --target run`,
+				`cmake -S ${quotePath(cmakeRoot)} -B ${quotePath(bd)}`,
+				`cmake --build ${quotePath(bd)}`,
+				`cmake --build ${quotePath(bd)} --target run`,
 			),
 			cwd: cmakeRoot,
 		}
@@ -185,12 +210,13 @@ function buildCppConfig(filePath: string): RunConfig {
 
 	const base = path.basename(filePath, path.extname(filePath))
 	const cppFiles = listSourceFiles(fileDir, [".cpp", ".cc", ".cxx"])
+	const cppFilesQuoted = cppFiles.map(quotePath)
 	if (cppFiles.length > 1) {
 		const out = exeName(base)
-		return { command: chain(`g++ ${cppFiles.join(" ")} -o ${out}`, out), cwd: fileDir }
+		return { command: chain(`g++ ${cppFilesQuoted.join(" ")} -o ${out}`, out), cwd: fileDir }
 	}
 	const out = exeName(base)
-	return { command: chain(`g++ "${path.basename(filePath)}" -o ${out}`, out), cwd: fileDir }
+	return { command: chain(`g++ ${quotePath(path.basename(filePath))} -o ${out}`, out), cwd: fileDir }
 }
 
 function buildJavaConfig(filePath: string): RunConfig {
@@ -211,11 +237,12 @@ function buildJavaConfig(filePath: string): RunConfig {
 
 	const className = path.basename(filePath, ".java")
 	const javaFiles = listSourceFiles(fileDir, [".java"])
+	const javaFilesQuoted = javaFiles.map(quotePath)
 	if (javaFiles.length > 1) {
-		return { command: chain(`javac ${javaFiles.join(" ")}`, `java ${className}`), cwd: fileDir }
+		return { command: chain(`javac ${javaFilesQuoted.join(" ")}`, `java ${className}`), cwd: fileDir }
 	}
 
-	return { command: chain(`javac "${path.basename(filePath)}"`, `java ${className}`), cwd: fileDir }
+	return { command: chain(`javac ${quotePath(path.basename(filePath))}`, `java ${className}`), cwd: fileDir }
 }
 
 function buildGoConfig(filePath: string): RunConfig {
@@ -232,7 +259,7 @@ function buildGoConfig(filePath: string): RunConfig {
 		return { command: "go run .", cwd: fileDir }
 	}
 
-	return { command: `go run "${filePath}"` }
+	return { command: `go run ${quotePath(filePath)}` }
 }
 
 function buildRustConfig(filePath: string): RunConfig {
@@ -245,7 +272,7 @@ function buildRustConfig(filePath: string): RunConfig {
 
 	const base = path.basename(filePath, ".rs")
 	const out = exeName(base)
-	return { command: chain(`rustc "${filePath}" -o ${out}`, out), cwd: fileDir }
+	return { command: chain(`rustc ${quotePath(filePath)} -o ${out}`, out), cwd: fileDir }
 }
 
 function buildMatlabConfig(filePath: string, _workDir: string): RunConfig | undefined {
@@ -275,19 +302,24 @@ function buildCangjieConfig(filePath: string): RunConfig {
 	const cjpmRoot = findProjectRoot(fileDir, ["cjpm.toml"])
 	if (cjpmRoot) {
 		const cjpm = resolveCangjieToolPath("cjpm", "cangjieTools.cjpmPath") || "cjpm"
-		const cmd = isWin ? `& "${cjpm}" run` : `"${cjpm}" run`
+		const cmd = isWin ? `& ${quotePath(cjpm)} run` : `${quotePath(cjpm)} run`
 		return { command: cmd, cwd: cjpmRoot, env }
 	}
 
 	const cjc = resolveCangjieToolPath("cjc", CJC_CONFIG_KEY) || "cjc"
 	const base = path.basename(filePath, ".cj")
 	const cjFiles = listSourceFiles(fileDir, [".cj"])
+	const cjFilesQuoted = cjFiles.map(quotePath)
 	if (cjFiles.length > 1) {
 		const out = exeName(base)
-		return { command: chain(`"${cjc}" ${cjFiles.join(" ")} -o ${out}`, out), cwd: fileDir, env }
+		return { command: chain(`${quotePath(cjc)} ${cjFilesQuoted.join(" ")} -o ${out}`, out), cwd: fileDir, env }
 	}
 	const out = exeName(base)
-	return { command: chain(`"${cjc}" "${path.basename(filePath)}" -o ${out}`, out), cwd: fileDir, env }
+	return {
+		command: chain(`${quotePath(cjc)} ${quotePath(path.basename(filePath))} -o ${out}`, out),
+		cwd: fileDir,
+		env,
+	}
 }
 
 function buildKotlinConfig(filePath: string): RunConfig {
@@ -302,16 +334,20 @@ function buildKotlinConfig(filePath: string): RunConfig {
 
 	const base = path.basename(filePath, ".kt")
 	const ktFiles = listSourceFiles(fileDir, [".kt"])
+	const ktFilesQuoted = ktFiles.map(quotePath)
 	if (ktFiles.length > 1) {
 		return {
-			command: chain(`kotlinc ${ktFiles.join(" ")} -include-runtime -d "${base}.jar"`, `java -jar "${base}.jar"`),
+			command: chain(
+				`kotlinc ${ktFilesQuoted.join(" ")} -include-runtime -d "${base}.jar"`,
+				`java -jar "${base}.jar"`,
+			),
 			cwd: fileDir,
 		}
 	}
 
 	return {
 		command: chain(
-			`kotlinc "${path.basename(filePath)}" -include-runtime -d "${base}.jar"`,
+			`kotlinc ${quotePath(path.basename(filePath))} -include-runtime -d "${base}.jar"`,
 			`java -jar "${base}.jar"`,
 		),
 		cwd: fileDir,
@@ -321,7 +357,7 @@ function buildKotlinConfig(filePath: string): RunConfig {
 function buildDartConfig(filePath: string): RunConfig {
 	const fileDir = path.dirname(filePath)
 	const pubRoot = findProjectRoot(fileDir, ["pubspec.yaml"])
-	return { command: `dart run "${filePath}"`, cwd: pubRoot || fileDir }
+	return { command: `dart run ${quotePath(filePath)}`, cwd: pubRoot || fileDir }
 }
 
 function buildSwiftConfig(filePath: string): RunConfig {
@@ -333,13 +369,14 @@ function buildSwiftConfig(filePath: string): RunConfig {
 	}
 
 	const swiftFiles = listSourceFiles(fileDir, [".swift"])
+	const swiftFilesQuoted = swiftFiles.map(quotePath)
 	if (swiftFiles.length > 1) {
 		const base = path.basename(filePath, ".swift")
 		const out = exeName(base)
-		return { command: chain(`swiftc ${swiftFiles.join(" ")} -o ${out}`, out), cwd: fileDir }
+		return { command: chain(`swiftc ${swiftFilesQuoted.join(" ")} -o ${out}`, out), cwd: fileDir }
 	}
 
-	return { command: `swift "${filePath}"` }
+	return { command: `swift ${quotePath(filePath)}` }
 }
 
 /**
@@ -353,7 +390,7 @@ function buildLatexConfig(filePath: string, _workDir: string): RunConfig {
 	const engine = (cfg.get<string>("latex.engine") ?? "latexmk").toLowerCase()
 	const extra = cfg.get<string[]>("latex.extraArgs") ?? []
 
-	const quoteArg = (a: string) => (/\s|[&|<>]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)
+	const quoteArg = (a: string) => shellQuote.quote([a])
 
 	if (engine === "latexmk") {
 		const bin = quoteArg(resolveLatexmkExecutable(cfg.get<string>("latex.latexmkPath")))
@@ -392,13 +429,13 @@ const LANGUAGE_RUN_MAP: Record<string, RunConfigBuilder> = {
 	kotlin: buildKotlinConfig,
 	dart: buildDartConfig,
 	swift: buildSwiftConfig,
-	ruby: (fp) => ({ command: `ruby "${fp}"` }),
-	php: (fp) => ({ command: `php "${fp}"` }),
-	shellscript: (fp) => ({ command: `bash "${fp}"` }),
-	powershell: (fp) => ({ command: `powershell -ExecutionPolicy Bypass -File "${fp}"` }),
-	lua: (fp) => ({ command: `lua "${fp}"` }),
-	perl: (fp) => ({ command: `perl "${fp}"` }),
-	r: (fp) => ({ command: `Rscript "${fp}"` }),
+	ruby: (fp) => ({ command: `ruby ${quotePath(fp)}` }),
+	php: (fp) => ({ command: `php ${quotePath(fp)}` }),
+	shellscript: (fp) => ({ command: `bash ${quotePath(fp)}` }),
+	powershell: (fp) => ({ command: `powershell -ExecutionPolicy Bypass -File ${quotePath(fp)}` }),
+	lua: (fp) => ({ command: `lua ${quotePath(fp)}` }),
+	perl: (fp) => ({ command: `perl ${quotePath(fp)}` }),
+	r: (fp) => ({ command: `Rscript ${quotePath(fp)}` }),
 	matlab: buildMatlabConfig,
 	latex: buildLatexConfig,
 	tex: buildLatexConfig,
@@ -492,7 +529,14 @@ export async function runActiveEditorCode(outputChannel: vscode.OutputChannel): 
 
 	const filePath = document.fileName
 	const workDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || path.dirname(filePath)
-	const config = builder(filePath, workDir)
+	let config: RunConfig | undefined
+	try {
+		config = builder(filePath, workDir)
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error)
+		vscode.window.showErrorMessage(`Run Code failed: ${message}`)
+		return
+	}
 	if (!config) {
 		if (language !== "matlab") {
 			vscode.window.showWarningMessage("Failed to generate run command for this file.")

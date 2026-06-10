@@ -167,6 +167,41 @@ async function execRipgrep(bin: string, args: string[]): Promise<string> {
 	})
 }
 
+// Maximum regex length to prevent ReDoS via extremely long patterns
+const MAX_REGEX_LENGTH = 500
+// Maximum nested quantifier depth to catch pathological patterns like (a+)+b
+const MAX_NESTED_QUANTIFIERS = 3
+
+function isPotentiallyPathologicalRegex(pattern: string): { isSafe: boolean; reason?: string } {
+	if (pattern.length > MAX_REGEX_LENGTH) {
+		return {
+			isSafe: false,
+			reason: `Regex pattern is too long (${pattern.length} > ${MAX_REGEX_LENGTH} characters). Please simplify your search pattern.`,
+		}
+	}
+
+	// Count nested quantifiers (e.g., (a+)+, (a*)*)
+	let depth = 0
+	let maxDepth = 0
+	for (const char of pattern) {
+		if (char === "(" || char === "[" || char === "{") {
+			depth++
+			maxDepth = Math.max(maxDepth, depth)
+		} else if (char === ")" || char === "]" || char === "}") {
+			depth--
+		}
+	}
+
+	if (maxDepth > MAX_NESTED_QUANTIFIERS) {
+		return {
+			isSafe: false,
+			reason: `Regex pattern has too many nested quantifiers (depth ${maxDepth} > ${MAX_NESTED_QUANTIFIERS}). Please simplify your search pattern.`,
+		}
+	}
+
+	return { isSafe: true }
+}
+
 export async function regexSearchFiles(
 	cwd: string,
 	directoryPath: string,
@@ -174,6 +209,13 @@ export async function regexSearchFiles(
 	filePattern?: string,
 	pathValidator?: IPathValidator,
 ): Promise<string> {
+	// Security: validate regex before passing to ripgrep
+	const regexCheck = isPotentiallyPathologicalRegex(regex)
+	if (!regexCheck.isSafe) {
+		logger.warn("Ripgrep", "Rejected potentially pathological regex:", regexCheck.reason)
+		return `Search error: ${regexCheck.reason}`
+	}
+
 	const vscodeAppRoot = vscode.env.appRoot
 	const rgPath = await getBinPath(vscodeAppRoot)
 

@@ -1288,14 +1288,18 @@ export class ClineProvider
 		task.abandoned = true
 
 		await pWaitFor(
-			() =>
-				this.getCurrentTask()! === undefined ||
-				this.getCurrentTask()!.isStreaming === false ||
-				this.getCurrentTask()!.didFinishAbortingStream ||
-				// If only the first chunk is processed, then there's no
-				// need to wait for graceful abort (closes edits, browser,
-				// etc).
-				this.getCurrentTask()!.isWaitingForFirstChunk,
+			() => {
+				const currentTask = this.getCurrentTask()
+				return (
+					currentTask === undefined ||
+					currentTask.isStreaming === false ||
+					currentTask.didFinishAbortingStream ||
+					// If only the first chunk is processed, then there's no
+					// need to wait for graceful abort (closes edits, browser,
+					// etc).
+					currentTask.isWaitingForFirstChunk
+				)
+			},
 			{
 				timeout: 3_000,
 			},

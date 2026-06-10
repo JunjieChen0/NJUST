@@ -252,6 +252,13 @@ export async function execCommand(
 	const safetyWarning =
 		safetyCheck.riskLevel === "dangerous" ? `\n[Safety warning] ${safetyCheck.reasons.join("; ")}` : ""
 
+	// Hard defense: reject command chains even if previous checks were bypassed
+	if (COMMAND_CHAIN_RE.test(params.command)) {
+		throw new Error(
+			`Command contains shell chaining operators (&&, ||, ;, |, &) which are not allowed in MCP context: ${params.command}`,
+		)
+	}
+
 	const timeoutMs = Math.max(1, Math.min(300, params.timeout ?? 30)) * 1000
 
 	return new Promise<string>((resolve, reject) => {

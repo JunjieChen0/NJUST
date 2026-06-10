@@ -45,6 +45,24 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 		const normalizedCommand = normalizeDotSlashCommandForWindowsShell(command, shellPath)
 		this.command = normalizedCommand
 
+		// Security: block commands with dangerous shell metacharacters that could
+		// bypass higher-level approval checks (BashCommandAnalyzer, PermissionRuleEngine).
+		const DANGEROUS_SHELL_CHARS = /[;&|]|\$\(|`|\$\{/g
+		if (DANGEROUS_SHELL_CHARS.test(normalizedCommand)) {
+			logger.error(
+				"ExecaTerminalProcess",
+				"Command blocked: contains dangerous shell metacharacters:",
+				normalizedCommand,
+			)
+			this.emit(
+				"error",
+				new Error(
+					"Command blocked for security: contains shell chaining or substitution operators. Please use simple commands only.",
+				),
+			)
+			return
+		}
+
 		try {
 			this.isHot = true
 
