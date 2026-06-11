@@ -150,7 +150,9 @@ describe("networkProxy", () => {
 
 			void initializeNetworkProxy(context, mockOutputChannel)
 
-			expect(process.env.NODE_TLS_REJECT_UNAUTHORIZED).toBe("0")
+			// NOTE: We no longer globally set NODE_TLS_REJECT_UNAUTHORIZED.
+			// Per-agent rejectUnauthorized is used instead (e.g., in configureUndiciProxy).
+			expect(process.env.NODE_TLS_REJECT_UNAUTHORIZED).toBeUndefined()
 		})
 
 		it("should register configuration change listener in debug mode", () => {
