@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import * as fs from "fs"
 import * as path from "path"
+import * as shellQuote from "shell-quote"
 import { TelemetryEventName } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { Package } from "../shared/package"
@@ -296,7 +297,7 @@ function registerCangjieTestCommands(context: vscode.ExtensionContext): void {
 			const cwd = folder?.uri.fsPath
 			const terminal = vscode.window.createTerminal({ name: "Cangjie Test", cwd })
 			terminal.show()
-			terminal.sendText(`cjpm test --filter "${testName}"`)
+			terminal.sendText(`cjpm test --filter ${shellQuote.quote([testName])}`)
 		}),
 	)
 	context.subscriptions.push(
