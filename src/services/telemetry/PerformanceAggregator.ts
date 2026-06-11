@@ -10,6 +10,7 @@
 
 import { TelemetryService } from "@njust-ai/telemetry"
 import { ToolHookManager } from "../../core/tools/ToolHookManager"
+import type { PreToolUseHook, PostToolUseHook, PostToolUseFailureHook } from "../../core/tools/toolHooks"
 import { logger } from "../../shared/logger"
 
 interface ToolTiming {
@@ -94,29 +95,32 @@ export class PerformanceAggregator {
 	): PerformanceAggregator {
 		const aggregator = new PerformanceAggregator(taskId)
 
-		const postHook = async (
-			toolName: string,
-			_input: Record<string, unknown>,
-			_result: unknown,
-			ctx: { taskId: string; toolUseId: string },
-		) => {
-			if (ctx.taskId !== taskId) return
-			// Estimate duration from hook timing (PostToolUse fires after tool completes)
-			// Since we don't have the exact duration, we use a placeholder.
-			// In a future iteration, BaseTool can attach duration to the result.
-			aggregator.recordToolExecution(toolName, 0)
+		const toolStartTimes = new Map<string, number>()
+
+		const preHook: PreToolUseHook = async (_toolName, _input, ctx) => {
+			if (ctx.taskId !== taskId) return { allow: true }
+			toolStartTimes.set(ctx.toolUseId, Date.now())
+			return { allow: true }
 		}
 
-		const failureHook = async (
-			_toolName: string,
-			_input: Record<string, unknown>,
-			_error: Error,
-			ctx: { taskId: string },
-		) => {
+		const postHook: PostToolUseHook = async (toolName, _input, _result, ctx) => {
 			if (ctx.taskId !== taskId) return
+			const startTime = toolStartTimes.get(ctx.toolUseId)
+			const durationMs = startTime ? Date.now() - startTime : 0
+			toolStartTimes.delete(ctx.toolUseId)
+			aggregator.recordToolExecution(toolName, durationMs)
+		}
+
+		const failureHook: PostToolUseFailureHook = async (_toolName, _input, _error, ctx) => {
+			if (ctx.taskId !== taskId) return
+			const startTime = toolStartTimes.get(ctx.toolUseId)
+			if (startTime !== undefined) {
+				toolStartTimes.delete(ctx.toolUseId)
+			}
 			aggregator.recordError()
 		}
 
+		hookManager.registerPreHook(preHook)
 		hookManager.registerPostHook(postHook)
 		hookManager.registerFailureHook(failureHook)
 
