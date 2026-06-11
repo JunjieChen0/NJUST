@@ -5,9 +5,10 @@ import { resolveVerbosity } from "../src/utils/vitest-verbosity"
 const { silent, reporters } = resolveVerbosity()
 
 export default defineConfig({
+	root: __dirname,
 	test: {
 		globals: true,
-		setupFiles: ["./vitest.setup.ts"],
+		setupFiles: [path.resolve(__dirname, "./vitest.setup.ts")],
 		watch: false,
 		reporters,
 		silent,
