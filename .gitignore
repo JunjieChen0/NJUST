@@ -30,7 +30,7 @@ AGENTS.local.md
 # Local ripgrep binary copied from VSCode install (dev-only workaround)
 .rg/
 
-# Docs - ignore all except examples, adr, baseline, runbooks
+# Docs - ignore all except examples, adr, baseline, runbooks, compose
 docs/*
 !docs/examples/
 !docs/examples/**
@@ -40,6 +40,8 @@ docs/*
 !docs/baseline/**
 !docs/runbooks/
 !docs/runbooks/**
+!docs/compose/
+!docs/compose/**
 
 # Dotenv
 .env

@@ -29,11 +29,12 @@ This file provides guidance to agents when working with code in this repository.
 - **强制 Legacy 模式**：MCP **不走 deferred 协议**。`CloudAgentOrchestrator.run()` 中 `profile.protocolType !== "mcp"` 时才进入 `runDeferredLoop`。原因是 MCP 的 `submit_task` 工具在**服务端内聚**了 deferred 逻辑（start/resume 循环在服务器内部完成），客户端只需一次性调用并等待最终响应。
 
 - **Callback Handler**：`McpProtocolAdapter` 在 `connect()` 后自动注册 4 类 notification + 1 类 request handler：
-  - `notifications/cloudagent/text` → `onText`
-  - `notifications/cloudagent/reasoning` → `onReasoning`
-  - `notifications/cloudagent/done` → `onDone`
-  - `cloudagent/executeTool` → `onToolExecute`（当前默认返回错误，未实现本地工具桥接）
-  `CloudAgentClient` 在构造函数中通过 `setCallbackHandler()` 注入。所有 handler 均包裹 try-catch，错误只打 `warn` 不抛异常。
+
+    - `notifications/cloudagent/text` → `onText`
+    - `notifications/cloudagent/reasoning` → `onReasoning`
+    - `notifications/cloudagent/done` → `onDone`
+    - `cloudagent/executeTool` → `onToolExecute`（当前默认返回错误，未实现本地工具桥接）
+      `CloudAgentClient` 在构造函数中通过 `setCallbackHandler()` 注入。所有 handler 均包裹 try-catch，错误只打 `warn` 不抛异常。
 
 - **连接生命周期**：同步 `initialize()` → 异步 `connect()`（MCP 握手）→ `callTool()` → `disconnect()`。`connect()` 集成 `AbortSignal` timeout（`Promise.race`）。`CloudAgentClient.withMcpAdapter()` 包装调用：异常时自动 `disconnect()`，成功路径的释放由 `CloudAgentOrchestrator.runLegacy()` 的 `finally` 块负责。
 
@@ -45,3 +46,4 @@ This file provides guidance to agents when working with code in this repository.
 
 - **删除文件前必须用户确认**：Agent 在执行任何 `git rm`、手动删除文件、或通过代码逻辑删除用户工作区文件的操作前，**必须先向用户展示待删除文件列表并获得明确确认**（如用户回复 "确认删除" 或选择 "是"）。禁止在未经用户许可的情况下静默删除任何文件。此约束适用于代码提交、重构、清理等所有场景。
 - **提交代码前必须用户确认**：Agent 在执行 `git commit` 或等效提交操作前，**必须先向用户展示本次提交的变更摘要（受影响的文件列表和关键修改点）并获得明确确认**。禁止在未经用户许可的情况下静默提交任何代码。
+- Test Naming Convention: All new test files MUST use `.test.ts` / `.test.tsx` suffix (not `.spec.ts`). Existing `.spec.ts` files are grandfathered. See `docs/compose/task-lists/test-naming-convention.md` for details.
