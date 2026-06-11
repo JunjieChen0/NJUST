@@ -283,7 +283,7 @@ export abstract class BaseTool<TName extends ToolName> {
 	/**
 	 * Create an observable view of the tool input for UI/hooks/logging.
 	 *
-	 * The original input is never modified — derived fields are computed
+	 * The original input is never modified �?derived fields are computed
 	 * separately. This protects the prompt cache from invalidation when
 	 * preprocessInput() would otherwise mutate the cached representation.
 	 *
@@ -466,7 +466,7 @@ export abstract class BaseTool<TName extends ToolName> {
 				return
 			}
 
-			// Validation pipeline: Zod schema → preprocessInput → business logic
+			// Validation pipeline: Zod schema �?preprocessInput �?business logic
 			// Step 1: Zod schema validation (structural)
 			if (this.inputSchema) {
 				const validator = createToolValidator(this.inputSchema)
@@ -527,7 +527,7 @@ export abstract class BaseTool<TName extends ToolName> {
 						params = preResult.modifiedInput as ToolParams<TName>
 					}
 				} catch (hookErr) {
-					logger.warn("BaseTool", "Pre-hook error (ignored):", hookErr)
+					logger.error("BaseTool", "Pre-hook error (logged but not blocking):", hookErr)
 				}
 			}
 
@@ -551,7 +551,7 @@ export abstract class BaseTool<TName extends ToolName> {
 						hookContext,
 					)
 				} catch (hookErr) {
-					logger.warn("BaseTool", "PermissionDenied hook error (ignored):", hookErr)
+					logger.error("BaseTool", "PermissionDenied hook error (logged but not blocking):", hookErr)
 				}
 				return
 			}
@@ -577,7 +577,7 @@ export abstract class BaseTool<TName extends ToolName> {
 						params = preResult.modifiedInput as ToolParams<TName>
 					}
 				} catch (hookErr) {
-					logger.warn("BaseTool", "Pre-hook error (ignored):", hookErr)
+					logger.error("BaseTool", "Pre-hook error (logged but not blocking):", hookErr)
 				}
 			}
 
@@ -712,7 +712,7 @@ export abstract class BaseTool<TName extends ToolName> {
 							hookContext,
 						)
 					} catch (hookErr) {
-						logger.warn("BaseTool", "Post-hook error (ignored):", hookErr)
+						logger.error("BaseTool", "Post-hook error (logged but not blocking):", hookErr)
 					}
 					toolSpan.end("ok", { stage: "execute", attempts: attempt })
 					return
@@ -737,7 +737,7 @@ export abstract class BaseTool<TName extends ToolName> {
 				const error = lastError instanceof Error ? lastError : new Error(String(lastError))
 				await hookManager.runFailureHooks(this.name, params as Record<string, UnsafeAny>, error, hookContext)
 			} catch (hookErr) {
-				logger.warn("BaseTool", "Failure-hook error (ignored):", hookErr)
+				logger.error("BaseTool", "Failure-hook error (logged but not blocking):", hookErr)
 			}
 			toolSpan.end("error", {
 				stage: "execute",

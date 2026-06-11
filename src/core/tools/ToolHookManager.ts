@@ -158,7 +158,7 @@ export class ToolHookManager {
 					currentInput = result.modifiedInput
 				}
 			} catch (err) {
-				logger.warn("ToolHookManager", "Pre-hook error (ignored):", err)
+				logger.error("ToolHookManager", "Pre-hook error (logged but not blocking):", err)
 				// Hook failure does not block execution
 			}
 		}
@@ -180,7 +180,7 @@ export class ToolHookManager {
 			try {
 				await hook(toolName, input, result, context)
 			} catch (err) {
-				logger.warn("ToolHookManager", "Post-hook error (ignored):", err)
+				logger.error("ToolHookManager", "Post-hook error (logged but not blocking):", err)
 			}
 		}
 	}
@@ -198,7 +198,7 @@ export class ToolHookManager {
 			try {
 				await hook(toolName, input, error, context)
 			} catch (err) {
-				logger.warn("ToolHookManager", "Failure-hook error (ignored):", err)
+				logger.error("ToolHookManager", "Failure-hook error (logged but not blocking):", err)
 			}
 		}
 	}
@@ -218,7 +218,7 @@ export class ToolHookManager {
 			try {
 				await hook(toolName, input, reason, context)
 			} catch (err) {
-				logger.warn("ToolHookManager", "PermissionDenied hook error (ignored):", err)
+				logger.error("ToolHookManager", "PermissionDenied hook error (logged but not blocking):", err)
 			}
 		}
 	}
@@ -231,7 +231,7 @@ export class ToolHookManager {
 			try {
 				await hook(context)
 			} catch (err) {
-				logger.warn("ToolHookManager", "SessionStart hook error (ignored):", err)
+				logger.error("ToolHookManager", "SessionStart hook error (logged but not blocking):", err)
 			}
 		}
 	}
@@ -244,7 +244,7 @@ export class ToolHookManager {
 			try {
 				await hook(context)
 			} catch (err) {
-				logger.warn("ToolHookManager", "SessionEnd hook error (ignored):", err)
+				logger.error("ToolHookManager", "SessionEnd hook error (logged but not blocking):", err)
 			}
 		}
 	}
@@ -257,7 +257,7 @@ export class ToolHookManager {
 			try {
 				await hook(context)
 			} catch (err) {
-				logger.warn("ToolHookManager", "Setup hook error (ignored):", err)
+				logger.error("ToolHookManager", "Setup hook error (logged but not blocking):", err)
 			}
 		}
 	}
@@ -270,7 +270,7 @@ export class ToolHookManager {
 			try {
 				await hook(context)
 			} catch (err) {
-				logger.warn("ToolHookManager", "Stop hook error (ignored):", err)
+				logger.error("ToolHookManager", "Stop hook error (logged but not blocking):", err)
 			}
 		}
 	}
@@ -283,7 +283,7 @@ export class ToolHookManager {
 			try {
 				await hook(parentTaskId, agentType, context)
 			} catch (err) {
-				logger.warn("ToolHookManager", "SubagentStart hook error (ignored):", err)
+				logger.error("ToolHookManager", "SubagentStart hook error (logged but not blocking):", err)
 			}
 		}
 	}
@@ -301,7 +301,7 @@ export class ToolHookManager {
 			try {
 				await hook(parentTaskId, agentType, success, context)
 			} catch (err) {
-				logger.warn("ToolHookManager", "SubagentStop hook error (ignored):", err)
+				logger.error("ToolHookManager", "SubagentStop hook error (logged but not blocking):", err)
 			}
 		}
 	}
@@ -329,7 +329,7 @@ export class ToolHookManager {
 			try {
 				await hook(context)
 			} catch (err) {
-				logger.warn("ToolHookManager", "PostCompact hook error (ignored):", err)
+				logger.error("ToolHookManager", "PostCompact hook error (logged but not blocking):", err)
 			}
 		}
 	}
