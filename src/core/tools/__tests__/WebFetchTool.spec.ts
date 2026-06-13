@@ -182,3 +182,92 @@ describe("webFetchTool", () => {
 		expect(callbacks.handleError).toHaveBeenCalledWith("web fetch", expect.objectContaining({ message: "boom" }))
 	})
 })
+
+describe("webFetchTool > manual redirect loop", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		axiosIsAxiosErrorMock.mockReturnValue(false)
+		assertSafeOutboundUrlMock.mockImplementation(async (url: string) => new URL(url))
+		dnsLookupMock.mockResolvedValue([{ address: "93.184.216.34" }])
+	})
+
+	it("follows safe redirect within limit", async () => {
+		axiosGetMock
+			.mockResolvedValueOnce({ status: 302, headers: { location: "https://safe-target.com/page" }, data: "" })
+			.mockResolvedValueOnce({ status: 200, headers: {}, data: "<html><body>Final</body></html>" })
+		const callbacks = createCallbacks()
+
+		await webFetchTool.execute({ url: "https://example.com/start" }, {} as any, callbacks as any)
+
+		expect(assertSafeOutboundUrlMock).toHaveBeenCalledTimes(2)
+		expect(assertSafeOutboundUrlMock).toHaveBeenNthCalledWith(1, "https://example.com/start")
+		expect(assertSafeOutboundUrlMock).toHaveBeenNthCalledWith(2, "https://safe-target.com/page")
+		expect(callbacks.pushToolResult).toHaveBeenCalledWith("Final")
+	})
+
+	it("resolves relative redirect URL", async () => {
+		axiosGetMock
+			.mockResolvedValueOnce({ status: 302, headers: { location: "/relative-path" }, data: "" })
+			.mockResolvedValueOnce({ status: 200, headers: {}, data: "relative content" })
+		const callbacks = createCallbacks()
+
+		await webFetchTool.execute({ url: "https://example.com/base" }, {} as any, callbacks as any)
+
+		expect(assertSafeOutboundUrlMock).toHaveBeenNthCalledWith(2, "https://example.com/relative-path")
+		expect(callbacks.pushToolResult).toHaveBeenCalledWith("relative content")
+	})
+
+	it("blocks redirect to private IP (SSRF)", async () => {
+		assertSafeOutboundUrlMock
+			.mockResolvedValueOnce(new URL("https://example.com"))
+			.mockRejectedValueOnce(new Error("Blocked private IP: 127.0.0.1"))
+		axiosGetMock.mockResolvedValueOnce({ status: 302, headers: { location: "http://127.0.0.1/secret" }, data: "" })
+		const callbacks = createCallbacks()
+
+		await webFetchTool.execute({ url: "https://example.com" }, {} as any, callbacks as any)
+
+		expect(callbacks.handleError).toHaveBeenCalledWith(
+			"web fetch",
+			expect.objectContaining({ message: expect.stringContaining("Blocked private IP") }),
+		)
+		expect(callbacks.pushToolResult).not.toHaveBeenCalled()
+	})
+
+	it("stops after max redirects", async () => {
+		// Provide 6 redirects; loop should execute 6 requests then break
+		// (5 redirects following + 1 more that triggers redirectCount >= MAX check)
+		for (let i = 0; i < 6; i++) {
+			axiosGetMock.mockResolvedValueOnce({
+				status: 302,
+				headers: { location: `https://example.com/step${i + 1}` },
+				data: "",
+			})
+		}
+		const callbacks = createCallbacks()
+
+		await webFetchTool.execute({ url: "https://example.com" }, {} as any, callbacks as any)
+
+		// 5 redirects followed by 1 final request that detects redirectCount limit
+		expect(axiosGetMock).toHaveBeenCalledTimes(6)
+	})
+
+	it("no redirect returns normally", async () => {
+		axiosGetMock.mockResolvedValueOnce({ status: 200, headers: {}, data: "<html><body>OK</body></html>" })
+		const callbacks = createCallbacks()
+
+		await webFetchTool.execute({ url: "https://example.com" }, {} as any, callbacks as any)
+
+		expect(callbacks.pushToolResult).toHaveBeenCalledWith("OK")
+		expect(assertSafeOutboundUrlMock).toHaveBeenCalledTimes(1)
+	})
+
+	it("missing location header breaks loop", async () => {
+		axiosGetMock.mockResolvedValueOnce({ status: 302, headers: {}, data: "no-location" })
+		const callbacks = createCallbacks()
+
+		await webFetchTool.execute({ url: "https://example.com" }, {} as any, callbacks as any)
+
+		// No Location header → break → pushes the 302 response as result
+		expect(callbacks.pushToolResult).toHaveBeenCalledWith("no-location")
+	})
+})

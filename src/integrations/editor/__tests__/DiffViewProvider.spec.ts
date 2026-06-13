@@ -22,6 +22,14 @@ vi.mock("../../../utils/fs", () => ({
 	createDirectoriesForFile: vi.fn().mockResolvedValue([]),
 }))
 
+// Mock pathUtils (isPathOutsideWorkspace defaults to false = within workspace)
+vi.mock("../../../utils/pathUtils", () => ({
+	isPathOutsideWorkspace: vi.fn((filePath: string) => {
+		// Default: return true only for paths containing "outside"
+		return filePath.includes("outside")
+	}),
+}))
+
 // Mock path
 vi.mock("path", () => ({
 	resolve: vi.fn((cwd, relPath) => `${cwd}/${relPath}`),
@@ -30,6 +38,10 @@ vi.mock("path", () => ({
 
 // Mock vscode
 vi.mock("vscode", () => ({
+	TabInputText: class TabInputText {
+		uri: any
+		constructor(uri: any) { this.uri = uri }
+	},
 	workspace: {
 		applyEdit: vi.fn(),
 		onDidOpenTextDocument: vi.fn(function () {
@@ -544,4 +556,26 @@ describe("DiffViewProvider", () => {
 			expect(vscode.languages.getDiagnostics).toHaveBeenCalled()
 		})
 	})
+})
+
+describe("DiffViewProvider > open method > workspace boundary", () => {
+	let diffViewProvider: DiffViewProvider
+
+	beforeEach(() => {
+		diffViewProvider = new DiffViewProvider("/mock/cwd", {} as any)
+		diffViewProvider.editType = "modify"
+	})
+
+	it("throws when path is outside workspace", async () => {
+		await expect(
+			diffViewProvider.open("../outside/test.md"),
+		).rejects.toThrow("DiffViewProvider.open: path outside workspace")
+	})
+
+	it("throws when path contains escaping segments", async () => {
+		await expect(
+			diffViewProvider.open("safe/../../outside/test.md"),
+		).rejects.toThrow("DiffViewProvider.open: path outside workspace")
+	})
+
 })

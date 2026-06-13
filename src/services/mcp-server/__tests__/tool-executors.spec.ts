@@ -330,3 +330,114 @@ describe("symlink escape prevention", () => {
 		)
 	})
 })
+
+describe("COMMAND_CHAIN_RE regex security", () => {
+	// Duplicate the regex for direct testing (same pattern as tool-executors.ts)
+	const RE = /(?:^|\s)(?:&&|\|\||[;&|])(?:\s|$)|[\r\n]/
+
+	it("catches && chaining", () => {
+		expect(RE.test("echo a && echo b")).toBe(true)
+	})
+
+	it("catches || chaining", () => {
+		expect(RE.test("echo a || echo b")).toBe(true)
+	})
+
+	it("catches ; chaining", () => {
+		expect(RE.test("echo a ; echo b")).toBe(true)
+	})
+
+	it("catches | pipe", () => {
+		expect(RE.test("echo a | wc")).toBe(true)
+	})
+
+	it("catches newline", () => {
+		expect(RE.test("echo a\necho b")).toBe(true)
+	})
+
+	it("allows simple command", () => {
+		expect(RE.test("echo hello")).toBe(false)
+	})
+
+	it("does not flag double space", () => {
+		expect(RE.test("echo  hello")).toBe(false)
+	})
+
+	it("rejects && via execCommand hard defense", async () => {
+		const tempDir = await mkdtemp(path.join(tmpdir(), "test-cc-"))
+		try {
+			const wc = path.join(tempDir, "workspace")
+			await fs.mkdir(wc, { recursive: true })
+			await expect(
+				execCommand(wc, { command: "echo a && echo b" }),
+			).rejects.toThrow("Command contains shell chaining operators")
+		} finally {
+			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
+		}
+	}, 10000)
+
+	it("rejects || via execCommand hard defense", async () => {
+		const tempDir = await mkdtemp(path.join(tmpdir(), "test-cc-"))
+		try {
+			const wc = path.join(tempDir, "workspace")
+			await fs.mkdir(wc, { recursive: true })
+			await expect(
+				execCommand(wc, { command: "echo a || echo b" }),
+			).rejects.toThrow("Command contains shell chaining operators")
+		} finally {
+			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
+		}
+	}, 10000)
+
+	it("rejects ; via execCommand hard defense", async () => {
+		const tempDir = await mkdtemp(path.join(tmpdir(), "test-cc-"))
+		try {
+			const wc = path.join(tempDir, "workspace")
+			await fs.mkdir(wc, { recursive: true })
+			await expect(
+				execCommand(wc, { command: "echo a ; echo b" }),
+			).rejects.toThrow("Command contains shell chaining operators")
+		} finally {
+			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
+		}
+	}, 10000)
+
+	it("rejects | via execCommand hard defense", async () => {
+		const tempDir = await mkdtemp(path.join(tmpdir(), "test-cc-"))
+		try {
+			const wc = path.join(tempDir, "workspace")
+			await fs.mkdir(wc, { recursive: true })
+			await expect(
+				execCommand(wc, { command: "echo a | wc" }),
+			).rejects.toThrow("Command contains shell chaining operators")
+		} finally {
+			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
+		}
+	}, 10000)
+
+	it("rejects newline via execCommand hard defense", async () => {
+		const tempDir = await mkdtemp(path.join(tmpdir(), "test-cc-"))
+		try {
+			const wc = path.join(tempDir, "workspace")
+			await fs.mkdir(wc, { recursive: true })
+			await expect(
+				execCommand(wc, { command: "echo a\necho b" }),
+			).rejects.toThrow("Command contains shell chaining operators")
+		} finally {
+			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
+		}
+	}, 10000)
+
+	it("newline with allowedCommands is caught by parseCommand", async () => {
+		const tempDir = await mkdtemp(path.join(tmpdir(), "test-cc-"))
+		try {
+			const wc = path.join(tempDir, "workspace")
+			await fs.mkdir(wc, { recursive: true })
+			await expect(
+				execCommand(wc, { command: "echo a\necho b" }, ["echo"]),
+			).rejects.toThrow()
+		} finally {
+			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
+		}
+	}, 10000)
+})

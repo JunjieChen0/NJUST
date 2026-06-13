@@ -101,25 +101,44 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 
 			await reportProgress?.({ icon: "globe", text: `Fetching ${url}` })
 
-			const response = await axios.get(url, {
-				timeout: MAX_TIMEOUT_MS,
-				maxRedirects: 5,
-				maxContentLength: MAX_BODY_BYTES,
-				maxBodyLength: MAX_BODY_BYTES,
-				// Validate each redirect target through the same SSRF guard as the initial URL
-				beforeRedirect: async (_options, responseHeaders) => {
-					const location = (responseHeaders as Record<string, UnsafeAny>)?.location
-					if (location && typeof location === "string") {
-						await assertSafeOutboundUrl(location)
-					}
-				},
-				responseType: format === "json" ? "json" : "text",
-				headers: {
-					"User-Agent": "Mozilla/5.0 (compatible; NjustAi/1.0; +https://github.com/JunjieChen0/Njust-AI)",
-					Accept: format === "json" ? "application/json" : "text/html,application/xhtml+xml,*/*",
-				},
-				validateStatus: (status) => status < 400,
-			})
+			// Manual redirect loop with SSRF guard at each step
+			const MAX_REDIRECTS = 5
+			let currentUrl = url
+			let redirectCount = 0
+			let response
+
+			while (true) {
+				response = await axios.get(currentUrl, {
+					timeout: MAX_TIMEOUT_MS,
+					maxRedirects: 0,
+					maxContentLength: MAX_BODY_BYTES,
+					maxBodyLength: MAX_BODY_BYTES,
+					responseType: format === "json" ? "json" : "text",
+					headers: {
+						"User-Agent": "Mozilla/5.0 (compatible; NjustAi/1.0; +https://github.com/JunjieChen0/Njust-AI)",
+						Accept: format === "json" ? "application/json" : "text/html,application/xhtml+xml,*/*",
+					},
+					validateStatus: (status) => status < 400,
+				})
+
+				// Check for 3xx redirect
+				if (
+					response.status >= 300 && response.status < 400 &&
+					redirectCount < MAX_REDIRECTS
+				) {
+					const location = response.headers?.location as string | undefined
+					if (!location) break
+
+					// Resolve relative URL and SSRF-guard each redirect target
+					const redirectUrl = new URL(location, currentUrl).href
+					await assertSafeOutboundUrl(redirectUrl)
+
+					currentUrl = redirectUrl
+					redirectCount++
+					continue
+				}
+				break
+			}
 
 			// DNS rebinding check: compare pre-request and post-request IPs
 			if (preRequestIPs && preRequestIPs.size > 0) {

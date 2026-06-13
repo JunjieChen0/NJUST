@@ -8,6 +8,7 @@ import { listFiles } from "../../services/glob/list-files"
 import { checkCommandSafety } from "../../core/tools/helpers/commandSafety"
 import { filterSensitiveEnv } from "../../utils/env"
 import { getCommandDecision } from "../../core/auto-approval"
+import { parseCommand } from "../../shared/parse-command"
 import { detectCangjieHome } from "../cangjie-lsp/cangjieToolUtils"
 import type { IPathValidator, IWriteProtector } from "../cloud-agent/interfaces/IPathAccessController"
 
@@ -25,7 +26,7 @@ function extractFirstCommandToken(command: string): string {
 	return spaceIdx > 0 ? trimmed.slice(0, spaceIdx) : trimmed
 }
 
-const COMMAND_CHAIN_RE = /(?:^|\s)(?:&&|\|\||[;&|])(?:\s|$)/
+const COMMAND_CHAIN_RE = /(?:^|\s)(?:&&|\|\||[;&|])(?:\s|$)|[\r\n]/
 
 /**
  * Resolves the real path of a file, handling non-existent files by
@@ -225,8 +226,16 @@ export async function execCommand(
 
 		if (decision === "ask_user") {
 			const cangjieHome = detectCangjieHome()
-			if (cangjieHome && !COMMAND_CHAIN_RE.test(params.command)) {
-				const firstToken = extractFirstCommandToken(params.command)
+			if (cangjieHome) {
+				// 逐命令验证：解析子命令，拒绝多命令链
+				const subCommands = parseCommand(params.command)
+				if (subCommands.length > 1) {
+					throw new Error(`Command requires explicit approval: ${params.command}`)
+				}
+				if (subCommands.length === 0 || COMMAND_CHAIN_RE.test(params.command)) {
+					throw new Error(`Command requires explicit approval: ${params.command}`)
+				}
+				const firstToken = extractFirstCommandToken(subCommands[0])
 				const normalizedHome = path.normalize(cangjieHome) + path.sep
 				const normalizedToken = path.normalize(firstToken)
 				const isSdkCommand =

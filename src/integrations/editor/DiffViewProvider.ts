@@ -9,6 +9,7 @@ import { type ClineSayTool, DEFAULT_WRITE_DELAY_MS, TelemetryEventName } from "@
 
 import { logger } from "../../shared/logger"
 import { createDirectoriesForFile } from "../../utils/fs"
+import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { arePathsEqual, getReadablePath } from "../../utils/path"
 import { formatResponse } from "../../core/prompts/responses"
 import { diagnosticsToProblemsString, getNewDiagnostics } from "../diagnostics"
@@ -51,6 +52,12 @@ export class DiffViewProvider {
 		this.relPath = relPath
 		const fileExists = this.editType === "modify"
 		const absolutePath = path.resolve(this.cwd, relPath)
+
+		// Boundary check: reject paths outside workspace before any file system operation
+		if (isPathOutsideWorkspace(absolutePath)) {
+			throw new Error(`DiffViewProvider.open: path outside workspace: ${relPath}`)
+		}
+
 		this.isEditing = true
 
 		// If the file is already open, ensure it's not dirty before getting its

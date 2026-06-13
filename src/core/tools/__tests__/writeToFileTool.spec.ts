@@ -385,12 +385,18 @@ describe("writeToFileTool", () => {
 			expect(mockCline.didEditFile).toBe(true)
 		})
 
-		it("processes files outside workspace boundary", async () => {
+		it("rejects files outside workspace boundary", async () => {
 			mockedIsPathOutsideWorkspace.mockReturnValue(true)
 
 			await executeWriteFileTool({})
 
-			expect(mockedIsPathOutsideWorkspace).toHaveBeenCalled()
+			expect(mockCline.consecutiveMistakeCount).toBeGreaterThan(0)
+			expect(mockCline.recordToolError).toHaveBeenCalledWith("write_to_file")
+			// pushToolResult may receive extra args from the handler wrapper
+			const firstCallArg = mockPushToolResult.mock.calls[0]?.[0]
+			expect(firstCallArg).toEqual(expect.stringContaining("Safety: cannot write"))
+			expect(mockCline.diffViewProvider.open).not.toHaveBeenCalled()
+			expect(mockCline.diffViewProvider.reset).toHaveBeenCalled()
 		})
 
 		it("processes files with large content", async () => {
@@ -426,6 +432,17 @@ describe("writeToFileTool", () => {
 			expect(mockCline.ask).toHaveBeenCalled()
 			expect(mockCline.diffViewProvider.open).toHaveBeenCalledWith(testFilePath)
 			expect(mockCline.diffViewProvider.update).toHaveBeenCalledWith(testContent, false)
+		})
+		it("skips file operations when path is outside workspace (partial)", async () => {
+			mockedIsPathOutsideWorkspace.mockReturnValue(true)
+
+			// Two calls needed for path to stabilize via hasPathStabilized
+			await executeWriteFileTool({}, { isPartial: true })
+			await executeWriteFileTool({}, { isPartial: true })
+
+			expect(mockedCreateDirectoriesForFile).not.toHaveBeenCalled()
+			expect(mockCline.diffViewProvider.open).not.toHaveBeenCalled()
+			expect(mockCline.ask).not.toHaveBeenCalled()
 		})
 	})
 
