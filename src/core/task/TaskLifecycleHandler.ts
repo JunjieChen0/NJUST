@@ -139,7 +139,7 @@ export class TaskLifecycleHandler {
 			const mode = await t.getTaskMode()
 
 			if (mode === DEFAULT_MODE_SLUG) {
-				await t.initiateCloudAgentLoop(task ?? "", images).catch((error: UnsafeAny) => {
+				await t.initiateCloudAgentLoop(task ?? "", images).catch((error: unknown) => {
 					if (t.abandoned === true || t.abortReason === "user_cancelled") {
 						return
 					}
@@ -156,7 +156,7 @@ export class TaskLifecycleHandler {
 						},
 						...imageBlocks,
 					])
-					.catch((error: UnsafeAny) => {
+					.catch((error: unknown) => {
 						if (t.abandoned === true || t.abortReason === "user_cancelled") {
 							return
 						}
@@ -403,7 +403,7 @@ export class TaskLifecycleHandler {
 				const metricsPath = path.join(taskDir, "task-metrics.jsonl")
 				await fs.appendFile(metricsPath, `${JSON.stringify(payload)}\n`, "utf8")
 			})
-			.catch((error: UnsafeAny) => {
+			.catch((error: unknown) => {
 				logger.error("TaskLifecycleHandler", `Failed to persist metrics for task ${t.taskId}:`, error)
 				TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
 			})
@@ -511,14 +511,14 @@ export class TaskLifecycleHandler {
 			.then(({ TerminalRegistry }) => {
 				TerminalRegistry.releaseTerminalsForTask(t.taskId)
 			})
-			.catch((error: UnsafeAny) => {
+			.catch((error: unknown) => {
 				logger.error("TaskLifecycleHandler", "Error releasing terminals:", error)
 				TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
 			})
 
 		void getTaskDirectoryPath(t.globalStoragePath, t.taskId)
 			.then((taskDir: string) => OutputInterceptor.cleanup(path.join(taskDir, "command-output")))
-			.catch((error: UnsafeAny) => {
+			.catch((error: unknown) => {
 				logger.error("TaskLifecycleHandler", "Error cleaning up command output artifacts:", error)
 				TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
 			})
@@ -535,7 +535,7 @@ export class TaskLifecycleHandler {
 
 		safeDispose("DiffViewProvider", () => {
 			if (t.isStreaming && t.diffViewProvider.isEditing) {
-				t.diffViewProvider.revertChanges().catch((error: UnsafeAny) => {
+				t.diffViewProvider.revertChanges().catch((error: unknown) => {
 					logger.error("TaskLifecycleHandler", "DiffViewProvider revertChanges failed:", error)
 					TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
 				})

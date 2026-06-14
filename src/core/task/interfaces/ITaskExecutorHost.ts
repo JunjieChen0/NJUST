@@ -72,16 +72,16 @@ export interface TaskExecutorDelegatesHost {
 	}
 	streamProcessor: {
 		maybeWaitForProviderRateLimit(retryAttempt: number): Promise<void>
-		backoffAndAnnounce(retryAttempt: number, error: UnsafeAny): Promise<void>
+		backoffAndAnnounce(retryAttempt: number, error: unknown): Promise<void>
 		buildCleanConversationHistory(messages: ApiMessage[]): UnsafeAny[]
 		getCurrentProfileId(state: UnsafeAny): string
 		handleContextWindowExceededError(): Promise<void>
 		getFilesReadByRooSafely(context: string): Promise<string[] | undefined>
 	}
 	errorRecovery: {
-		handleApiError(error: UnsafeAny, retryAttempt: number): Promise<{ action: string; nextAttempt: number }>
+		handleApiError(error: unknown, retryAttempt: number): Promise<{ action: string; nextAttempt: number }>
 		shouldBypassCondense(): boolean
-		recordCompactFailure(error: UnsafeAny): Promise<void>
+		recordCompactFailure(error: unknown): Promise<void>
 		resetCompactFailure(): void
 	}
 	autoApprovalHandler: {
@@ -188,7 +188,7 @@ export interface TaskExecutorControlHost {
 	updateClineMessage(message: ClineMessage): Promise<void>
 
 	abortTask(isAbandoned?: boolean): Promise<void>
-	backoffAndAnnounce(retryAttempt: number, error: UnsafeAny): Promise<void>
+	backoffAndAnnounce(retryAttempt: number, error: unknown): Promise<void>
 	maybeWaitForProviderRateLimit(retryAttempt: number): Promise<void>
 	attemptApiRequest(retryAttempt: number, options?: { skipProviderRateLimit?: boolean }): ApiStream
 	presentAssistantMessage(): Promise<void>

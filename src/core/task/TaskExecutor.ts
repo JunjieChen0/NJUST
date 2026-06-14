@@ -454,7 +454,7 @@ export class TaskExecutor {
 			}
 			yield firstValue
 			h.isWaitingForFirstChunk = false
-		} catch (error: UnsafeAny) {
+		} catch (error: unknown) {
 			yield* handleAttemptApiRequestError({
 				host: h,
 				error,

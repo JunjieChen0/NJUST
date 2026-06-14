@@ -19,7 +19,6 @@ import type { ToolCallbacks } from "../tools/BaseTool"
 import { AskIgnoredError } from "../task/AskIgnoredError"
 import { defaultModeSlug } from "../../shared/modes"
 import { isValidToolName } from "../tools/validateToolUse"
-import type { TypedBlock } from "./types"
 import {
 	applyToolResultTokenBudget,
 	buildToolDescription,
@@ -53,19 +52,13 @@ export async function handleToolUseBlock(cline: Task, block: ToolUse): Promise<B
 	const eagerHandled = await tryEagerBatch(cline)
 	if (eagerHandled) return "continue"
 
-	const toolCallId = (block as UnsafeAny as TypedBlock).id as string | undefined
+	const toolCallId = block.id
 	if (!toolCallId) {
 		const errorMessage =
 			"Invalid tool call: missing tool_use.id. XML tool calls are no longer supported. Remove any XML tool markup (e.g. <read_file>...</read_file>) and use native tool calling instead."
 		try {
-			if (
-				typeof (cline as Record<string, UnsafeAny>).recordToolError === "function" &&
-				typeof (block as Record<string, UnsafeAny>).name === "string"
-			) {
-				;(cline as Record<string, UnsafeAny>).recordToolError(
-					(block as Record<string, UnsafeAny>).name as ToolName,
-					errorMessage,
-				)
+			if (typeof cline.recordToolError === "function" && typeof block.name === "string") {
+				cline.recordToolError(block.name, errorMessage)
 			}
 		} catch (error) {
 			logger.debug("ToolUse", "recordToolError failed", error)

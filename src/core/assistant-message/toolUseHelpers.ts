@@ -239,7 +239,7 @@ export async function tryEagerBatch(cline: Task): Promise<boolean> {
 				const runOne = async (toolBlock: ToolUse, batchSignal?: AbortSignal) => {
 					if (cline.abort || cline.didRejectTool || cascadeStop) return
 					if (batchSignal?.aborted) return
-					const toolCallId = (toolBlock as UnsafeAny as TypedBlock).id as string
+					const toolCallId = toolBlock.id ?? ""
 					if (allowedToolsSet && !allowedToolsSet.has(toolBlock.name)) {
 						cline.pushToolResultToUserContent({
 							type: "tool_result",
@@ -324,7 +324,7 @@ export async function tryEagerBatch(cline: Task): Promise<boolean> {
 						for (const skipped of batch.calls) {
 							cline.pushToolResultToUserContent({
 								type: "tool_result",
-								tool_use_id: sanitizeToolUseId((skipped as UnsafeAny as TypedBlock).id as string),
+								tool_use_id: sanitizeToolUseId(skipped.id ?? ""),
 								content: formatResponse.toolError(
 									"Skipped due to prior execute_command failure in this tool batch.",
 								),

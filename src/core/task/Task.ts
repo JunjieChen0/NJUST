@@ -1244,7 +1244,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// Delegated to TaskStreamProcessor
 	// Shared exponential backoff for retries (first-chunk and mid-stream)
-	private async backoffAndAnnounce(retryAttempt: number, error: UnsafeAny): Promise<void> {
+	private async backoffAndAnnounce(retryAttempt: number, error: unknown): Promise<void> {
 		return this.streamProcessor.backoffAndAnnounce(retryAttempt, error)
 	}
 
