@@ -1,11 +1,26 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import { z } from "zod"
 
 import type { CloudAgentProfile, AuthConfig as CloudAgentAuthConfig } from "../types/profile"
 import type { DeferredToolCall } from "../types"
 import { logger } from "../../../shared/logger"
 import { getErrorMessage } from "../../../shared/error-utils"
 import type { IProtocolAdapter, UniversalTaskRequest, UniversalTaskResponse, EndpointType } from "./types"
+
+// ── Custom cloud-agent notification schemas (non-standard MCP methods) ──────
+const CloudAgentTextNotification = z.object({
+	method: z.literal("notifications/cloudagent/text"),
+	params: z.object({ content: z.string() }).optional(),
+})
+const CloudAgentReasoningNotification = z.object({
+	method: z.literal("notifications/cloudagent/reasoning"),
+	params: z.object({ content: z.string() }).optional(),
+})
+const CloudAgentDoneNotification = z.object({
+	method: z.literal("notifications/cloudagent/done"),
+	params: z.object({ summary: z.string() }).optional(),
+})
 
 export const MCP_TOOLS = {
 	SUBMIT_TASK: "submit_task",
@@ -86,47 +101,38 @@ export class McpProtocolAdapter implements IProtocolAdapter {
 
 		const client = this.client
 
-		client.setNotificationHandler(
-			{ method: "notifications/cloudagent/text" } as never,
-			async (notification: unknown) => {
-				const content = (notification as { params?: { content?: string } })?.params?.content
-				if (content && this.callbackHandler?.onText) {
-					try {
-						await this.callbackHandler.onText(content)
-					} catch (e) {
-						logger.warn("McpProtocolAdapter", `onText handler error: ${getErrorMessage(e)}`)
-					}
+		client.setNotificationHandler(CloudAgentTextNotification, async (notification) => {
+			const content = notification.params?.content
+			if (content && this.callbackHandler?.onText) {
+				try {
+					await this.callbackHandler.onText(content)
+				} catch (e) {
+					logger.warn("McpProtocolAdapter", `onText handler error: ${getErrorMessage(e)}`)
 				}
-			},
-		)
+			}
+		})
 
-		client.setNotificationHandler(
-			{ method: "notifications/cloudagent/reasoning" } as never,
-			async (notification: unknown) => {
-				const content = (notification as { params?: { content?: string } })?.params?.content
-				if (content && this.callbackHandler?.onReasoning) {
-					try {
-						await this.callbackHandler.onReasoning(content)
-					} catch (e) {
-						logger.warn("McpProtocolAdapter", `onReasoning handler error: ${getErrorMessage(e)}`)
-					}
+		client.setNotificationHandler(CloudAgentReasoningNotification, async (notification) => {
+			const content = notification.params?.content
+			if (content && this.callbackHandler?.onReasoning) {
+				try {
+					await this.callbackHandler.onReasoning(content)
+				} catch (e) {
+					logger.warn("McpProtocolAdapter", `onReasoning handler error: ${getErrorMessage(e)}`)
 				}
-			},
-		)
+			}
+		})
 
-		client.setNotificationHandler(
-			{ method: "notifications/cloudagent/done" } as never,
-			async (notification: unknown) => {
-				const summary = (notification as { params?: { summary?: string } })?.params?.summary
-				if (summary && this.callbackHandler?.onDone) {
-					try {
-						await this.callbackHandler.onDone(summary)
-					} catch (e) {
-						logger.warn("McpProtocolAdapter", `onDone handler error: ${getErrorMessage(e)}`)
-					}
+		client.setNotificationHandler(CloudAgentDoneNotification, async (notification) => {
+			const summary = notification.params?.summary
+			if (summary && this.callbackHandler?.onDone) {
+				try {
+					await this.callbackHandler.onDone(summary)
+				} catch (e) {
+					logger.warn("McpProtocolAdapter", `onDone handler error: ${getErrorMessage(e)}`)
 				}
-			},
-		)
+			}
+		})
 
 		// SECURITY: cloudagent/executeTool handler removed (P0-12).
 		// Previously allowed remote MCP servers to trigger arbitrary tool execution

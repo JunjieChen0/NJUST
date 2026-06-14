@@ -480,10 +480,7 @@ export class TaskLifecycleHandler {
 		}
 
 		try {
-			const provider = t.hostRef.deref()
-			if (provider) {
-				t.modeHandler.dispose()
-			}
+			t.modeHandler.dispose()
 		} catch (error) {
 			logger.error("TaskLifecycleHandler", "Error removing provider profile change listener:", error)
 			TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)

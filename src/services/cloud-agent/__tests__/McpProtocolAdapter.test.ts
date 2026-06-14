@@ -19,8 +19,12 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
 				content: [{ type: "text", text: JSON.stringify({ ok: true, text: "test result" }) }],
 			}),
 
-			setNotificationHandler: vi.fn(function (method: { method: string }, handler: (...args: any[]) => any) {
-				notificationHandlers[method.method] = handler
+			setNotificationHandler: vi.fn(function (
+				schema: { method?: string; shape?: { method?: { value?: string } } },
+				handler: (...args: any[]) => any,
+			) {
+				const method: string = schema?.method ?? schema?.shape?.method?.value ?? ""
+				notificationHandlers[method] = handler
 			}),
 
 			setRequestHandler: vi.fn(function (method: { method: string }, handler: (...args: any[]) => any) {
@@ -332,18 +336,13 @@ describe("McpProtocolAdapter", () => {
 		// SECURITY: cloudagent/executeTool handler removed (P0-12)
 		expect(mockClient?.setRequestHandler).toHaveBeenCalledTimes(0)
 
-		expect(mockClient?.setNotificationHandler).toHaveBeenCalledWith(
-			expect.objectContaining({ method: "notifications/cloudagent/text" }),
-			expect.any(Function),
-		)
-		expect(mockClient?.setNotificationHandler).toHaveBeenCalledWith(
-			expect.objectContaining({ method: "notifications/cloudagent/reasoning" }),
-			expect.any(Function),
-		)
-		expect(mockClient?.setNotificationHandler).toHaveBeenCalledWith(
-			expect.objectContaining({ method: "notifications/cloudagent/done" }),
-			expect.any(Function),
-		)
+		expect(mockClient?.setNotificationHandler).toHaveBeenCalledWith(expect.anything(), expect.any(Function))
+		expect(mockClient?.setNotificationHandler).toHaveBeenCalledWith(expect.anything(), expect.any(Function))
+		expect(mockClient?.setNotificationHandler).toHaveBeenCalledWith(expect.anything(), expect.any(Function))
+		// Verify handlers registered for each custom notification method
+		expect(notificationHandlers["notifications/cloudagent/text"]).toBeDefined()
+		expect(notificationHandlers["notifications/cloudagent/reasoning"]).toBeDefined()
+		expect(notificationHandlers["notifications/cloudagent/done"]).toBeDefined()
 	})
 
 	it("should not register handlers when no callback handler set", async () => {

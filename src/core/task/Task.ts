@@ -183,7 +183,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/** MemRL: set when the agent invokes attempt_completion (its own success signal). */
 	private completionAttempted = false
 
-	readonly modeHandler: TaskModeHandler
+	private readonly modeHandler: TaskModeHandler
 
 	hostRef: WeakRef<ITaskHost>
 	private readonly eventBus: TaskEventBus
@@ -194,7 +194,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	/** Narrow accessor: returns only the UI notification facet of the host. */
-	get notifier(): ITaskUINotifier | undefined {
+	private get notifier(): ITaskUINotifier | undefined {
 		return this.hostRef.deref()
 	}
 
@@ -218,7 +218,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 *  initiateTaskLoop checks this flag to stop re-prompting the model
 	 *  after a completed task. */
 	taskCompleted: boolean = false
-	persistentRetryHandler?: PersistentRetryManager
+	private persistentRetryHandler?: PersistentRetryManager
 	currentRequestAbortController?: AbortController
 	skipPrevResponseIdOnce: boolean = false
 
@@ -399,13 +399,42 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// MessageManager for high-level message operations (lazy initialized)
 	private _messageManager?: MessageManager
-	readonly stateMachine = new TaskStateMachine()
+	private readonly stateMachine = new TaskStateMachine()
 
 	// Extracted sub-modules (Task 7 decomposition)
 	private _taskMessageManager?: TaskMessageManager
 	private _taskToolHandler?: TaskToolHandler
 	private _executor?: TaskExecutor
 	private _lifecycleHandler?: TaskLifecycleHandler
+
+	// ── Host delegation (lazy init) ──────────────────────────────────────────
+	//
+	// NOTE: These use `this as unknown as Host` rather than `implements Host`
+	// because Task's actual shape differs from what the interfaces declare:
+	//
+	//   TaskMessageContext    — requires public `_taskMode` / `_taskApiConfigName` /
+	//                           `taskApiConfigReady` (Task stores them inside the
+	//                           private `modeHandler`; see TaskModeHandler).
+	//   TaskExecutorHost     — requires public `stateMachine` (Task: private readonly).
+	//                           `getTaskMode()` is sync in interface but Task's impl
+	//                           is `async → Promise<string>`.
+	//   TaskLifecycleHost    — requires public `modeHandler` (Task: private readonly)
+	//                           and public `persistentRetryHandler` (Task: private).
+	//   TaskAskSayHost       — requires public `notifier` (Task: private getter).
+	//   TaskMessageContext   — requires public `notifier` (Task: private getter).
+	//   TaskSubtaskHost      — requires public `getSavedApiConversationHistory()`
+	//                           (Task: private async).
+	//
+	// Refactoring path (tracked in architecture backlog):
+	//   1. Refactor TaskModeHandler to expose `_taskMode`, `_taskApiConfigName`,
+	//      `taskApiConfigReady` as public members.
+	//   2. Add `implements TaskMessageContext, TaskAskSayHost, TaskExecutorHost,
+	//      TaskLifecycleHost, TaskSubtaskHost` to the class declaration.
+	//   3. Remove the 6 `as unknown as Host` casts (replace with plain `this`).
+	//
+	// The `unknown` in the cast chain eliminates the `any`-poisoning that the
+	// original `as UnsafeAny as` caused. The structural mismatches are harmless
+	// at runtime via the cast — this is a type-safety debt, not a correctness bug.
 
 	/** @internal Persistence/CRUD operations on messages — delegates to TaskMessageManager. */
 	private get msgMgr(): TaskMessageManager {
@@ -713,7 +742,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// API Messages
 
-	async getSavedApiConversationHistory(): Promise<ApiMessage[]> {
+	private async getSavedApiConversationHistory(): Promise<ApiMessage[]> {
 		return this.msgMgr.getSavedApiConversationHistory()
 	}
 

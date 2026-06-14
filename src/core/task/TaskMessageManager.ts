@@ -50,6 +50,11 @@ export interface TaskMessageContext {
 
 	apiConfiguration: ProviderSettings
 
+	// NOTE: These members are NOT directly on Task — they are stored inside the
+	// private TaskModeHandler. Task surfaces them only via `this as unknown as
+	// TaskMessageContext` (see Task.ts ~L410 for the full mismatch list and
+	// refactoring plan).  A proper fix would expose them as public getters on
+	// Task that delegate to modeHandler, so Task can `implements` this interface.
 	_taskMode: string | undefined
 	_taskApiConfigName: string | undefined
 	taskApiConfigReady: Promise<void>
