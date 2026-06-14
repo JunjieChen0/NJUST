@@ -1,4 +1,3 @@
-import type { UnsafeAny } from "@njust-ai/types"
 import { Anthropic } from "@anthropic-ai/sdk"
 
 import type { ClineAsk, ToolProgressStatus, ToolGroup, ToolName, GenerateImageParams } from "@njust-ai/types"
@@ -215,7 +214,10 @@ export type NativeToolArgs = {
 	task_output: { taskId: string; offset?: number; limit?: number }
 	agent: { task: string; agentType?: string; maxTurns?: number }
 	brief: { content: string; maxLength?: number }
-	config: { action: string; key?: string; value?: UnsafeAny }
+	config: { action: string; key?: string; value?: unknown }
+	// NOTE: `custom_tool` (used by WorktreeTool) is intentionally NOT mapped here. Leaving it
+	// unmapped keeps `ToolParams<ToolName>` resolving to the `UnsafeAny` fallback for the full
+	// union, which is load-bearing for the heterogeneous RegisteredTool registry (see BaseTool.ts).
 	// Add more tools as they are migrated to native protocol
 }
 
@@ -516,5 +518,5 @@ export interface DiffStrategy {
 		endLine?: number,
 	): Promise<DiffResult>
 
-	getProgressStatus?(toolUse: ToolUse, result?: UnsafeAny): ToolProgressStatus
+	getProgressStatus?(toolUse: ToolUse, result?: unknown): ToolProgressStatus
 }

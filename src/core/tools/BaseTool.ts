@@ -47,11 +47,11 @@ export type ToolProgressData =
  * for UI display, hooks, and logging. The original input is never modified,
  * protecting the prompt cache from invalidation.
  */
-export interface ObservableInput<T = Record<string, UnsafeAny>> {
+export interface ObservableInput<T = Record<string, unknown>> {
 	/** The original, unmodified input (same reference). */
 	readonly original: T
 	/** Derived/computed fields for observers (UI, hooks, logs). */
-	readonly derived: Record<string, UnsafeAny>
+	readonly derived: Record<string, unknown>
 }
 
 /**
@@ -83,6 +83,12 @@ export interface ToolCallbacks {
  * Helper type to extract the parameter type for a tool based on its name.
  * If the tool has native args defined in NativeToolArgs, use those; otherwise fall back to any.
  */
+// NOTE: The `UnsafeAny` fallback here is load-bearing. `RegisteredTool = BaseTool<ToolName>`
+// stores a heterogeneous array of `BaseTool<"specific">` instances; that assignment is only
+// type-checkable because `ToolParams<ToolName>` (the full union) collapses to `any`, making
+// `execute(params)` bivariant. Completing NativeToolArgs or narrowing the fallback makes the
+// conditional resolve to the concrete param union and breaks the registry (contravariance).
+// Removing this `any` requires a registry-type refactor (out of scope for UnsafeAny elimination).
 type ToolParams<TName extends ToolName> = TName extends keyof NativeToolArgs ? NativeToolArgs[TName] : UnsafeAny
 
 /**
@@ -227,7 +233,7 @@ export abstract class BaseTool<TName extends ToolName> {
 	 * Whether this tool only reads data without modifying anything.
 	 * Used by permission system to auto-approve read-only tools.
 	 */
-	isReadOnly(_params?: Record<string, UnsafeAny>): boolean {
+	isReadOnly(_params?: Record<string, unknown>): boolean {
 		return false
 	}
 
@@ -235,7 +241,7 @@ export abstract class BaseTool<TName extends ToolName> {
 	 * Whether this tool performs destructive operations (delete files, drop tables, etc).
 	 * Used by permission system to require explicit user confirmation.
 	 */
-	isDestructive(_params?: Record<string, UnsafeAny>): boolean {
+	isDestructive(_params?: Record<string, unknown>): boolean {
 		return false
 	}
 
@@ -357,7 +363,7 @@ export abstract class BaseTool<TName extends ToolName> {
 	 * @returns true if the tool is allowed to proceed, false otherwise
 	 */
 	async checkPermissions(
-		params: Record<string, UnsafeAny>,
+		params: Record<string, unknown>,
 		callbacks: ToolCallbacks,
 		context?: { ruleEngine?: PermissionRuleEngine },
 	): Promise<boolean> {
@@ -511,7 +517,7 @@ export abstract class BaseTool<TName extends ToolName> {
 				try {
 					const preResult = await hookManager.runPreHooks(
 						this.name,
-						params as Record<string, UnsafeAny>,
+						params as Record<string, unknown>,
 						hookContext,
 					)
 					if (!preResult.allow) {
@@ -535,7 +541,7 @@ export abstract class BaseTool<TName extends ToolName> {
 				ruleEngine: (task as Task & { permissionRuleEngine?: PermissionRuleEngine }).permissionRuleEngine,
 			}
 			const isAllowed = await this.checkPermissions(
-				params as Record<string, UnsafeAny>,
+				params as Record<string, unknown>,
 				callbacks,
 				permissionContext,
 			)
@@ -546,7 +552,7 @@ export abstract class BaseTool<TName extends ToolName> {
 				try {
 					await hookManager.runPermissionDeniedHooks(
 						this.name,
-						params as Record<string, UnsafeAny>,
+						params as Record<string, unknown>,
 						`Permission denied for tool '${this.name}'`,
 						hookContext,
 					)
@@ -561,7 +567,7 @@ export abstract class BaseTool<TName extends ToolName> {
 				try {
 					const preResult = await hookManager.runPreHooks(
 						this.name,
-						params as Record<string, UnsafeAny>,
+						params as Record<string, unknown>,
 						hookContext,
 					)
 					if (!preResult.allow) {
@@ -586,7 +592,7 @@ export abstract class BaseTool<TName extends ToolName> {
 			const contextWindow = task.api?.getModel?.()?.info?.contextWindow || 200_000
 			const { singleMax } = getToolResultBudget(contextWindow)
 			const originalPushToolResult = callbacks.pushToolResult
-			const cacheableReadOnly = this.isReadOnly(params as Record<string, UnsafeAny>)
+			const cacheableReadOnly = this.isReadOnly(params as Record<string, unknown>)
 			const cacheKey = cacheableReadOnly ? toolResultCache.makeKey(this.name, params) : undefined
 			if (cacheKey) {
 				const cached = toolResultCache.get(cacheKey)
@@ -684,7 +690,7 @@ export abstract class BaseTool<TName extends ToolName> {
 			}
 
 			// Execute with typed parameters, wrapped in retry + hook handling
-			const retryable = this.isReadOnly(params as Record<string, UnsafeAny>)
+			const retryable = this.isReadOnly(params as Record<string, unknown>)
 			const maxAttempts = retryable ? 3 : 1
 			let attempt = 0
 			let lastError: unknown
@@ -707,7 +713,7 @@ export abstract class BaseTool<TName extends ToolName> {
 					try {
 						await hookManager.runPostHooks(
 							this.name,
-							params as Record<string, UnsafeAny>,
+							params as Record<string, unknown>,
 							capturedResult,
 							hookContext,
 						)
@@ -735,7 +741,7 @@ export abstract class BaseTool<TName extends ToolName> {
 				}
 				// Run failure hooks
 				const error = lastError instanceof Error ? lastError : new Error(String(lastError))
-				await hookManager.runFailureHooks(this.name, params as Record<string, UnsafeAny>, error, hookContext)
+				await hookManager.runFailureHooks(this.name, params as Record<string, unknown>, error, hookContext)
 			} catch (hookErr) {
 				logger.error("BaseTool", "Failure-hook error (logged but not blocking):", hookErr)
 			}
