@@ -29,6 +29,7 @@ import { ignoreAbortError } from "../../utils/errorHandling"
 import { getTaskDirectoryPath } from "../../utils/storage"
 import { normalizeDotSlashCommandForWindowsShell } from "../../utils/hostShellCommand"
 import { BaseTerminal } from "../../integrations/terminal/BaseTerminal"
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks, type ValidationResult } from "./BaseTool"
 import { recordSecurityMetric } from "../security/metrics"
 import { checkCommandSafety } from "./helpers/commandSafety"
@@ -273,7 +274,7 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 
 			return
 		} catch (error) {
-			await handleError("executing command", error as Error)
+			await handleError("executing command", wrapAsError(error))
 			return
 		}
 	}

@@ -18,6 +18,7 @@ import { allowRooIgnorePathAccess } from "../ignore/RooIgnoreController"
 import { AskIgnoredError } from "./AskIgnoredError"
 import { NJUST_AIEventName } from "@njust-ai/types"
 import { getErrorMessage } from "../../shared/error-utils"
+import { logger } from "../../shared/logger"
 import type { ICloudAgentHost } from "./interfaces/ICloudAgentHost"
 import { TaskAbortedError } from "./TaskErrors"
 import { t } from "../../i18n"
@@ -162,7 +163,17 @@ export class CloudAgentOrchestrator {
 			await this.host.ask("api_req_failed", errorMsg)
 		} finally {
 			this.host.setCurrentRequestAbortController(undefined)
-			await client.disconnect(this.host.taskId)
+			// Disconnect failures must not mask the original error from the
+			// try / catch blocks above.
+			try {
+				await client.disconnect(this.host.taskId)
+			} catch (disconnectErr) {
+				logger.error(
+					"CloudAgentOrchestrator",
+					`Error disconnecting cloud agent client for task ${this.host.taskId}:`,
+					disconnectErr,
+				)
+			}
 		}
 
 		if (this.host.abort || !runResult) return

@@ -1,4 +1,4 @@
-import { getErrorMessage } from "../../shared/error-utils"
+import { getErrorMessage, wrapAsError } from "../../shared/error-utils"
 import fs from "fs/promises"
 import path from "path"
 import { z } from "zod"
@@ -486,7 +486,7 @@ export class EditTool extends BaseTool<"edit"> {
 			// Process any queued messages after file edit completes
 			task.processQueuedMessages()
 		} catch (error) {
-			await handleError("edit", error as Error)
+			await handleError("edit", wrapAsError(error))
 			await task.diffViewProvider.reset()
 			this.resetPartialState()
 		}

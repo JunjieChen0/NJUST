@@ -2,7 +2,7 @@ import { Anthropic } from "@anthropic-ai/sdk"
 import * as vscode from "vscode"
 import OpenAI from "openai"
 
-import { type ModelInfo, TelemetryEventName } from "@njust-ai/types"
+import { type ModelInfo, TelemetryEventName, ApiProviderError } from "@njust-ai/types"
 import { openAiModelInfoSaneDefaults } from "@njust-ai/core/providers"
 
 import type { ApiHandlerOptions } from "../../shared/api"
@@ -19,6 +19,7 @@ import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from ".
 
 import { debugLog } from "../../utils/debugLog"
 import { getErrorMessage } from "../../shared/error-utils"
+import { extractHttpStatus } from "./utils/error-handler"
 /**
  * Converts OpenAI-format tools to VSCode Language Model tools.
  * Normalizes the JSON Schema to draft 2020-12 compliant format required by
@@ -402,6 +403,18 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 		// Initialize cancellation token for the request
 		this.currentRequestCancellation = new vscode.CancellationTokenSource()
 
+		// Bridge metadata.signal (AbortSignal) to the VS Code CancellationToken
+		// so the upstream abort (e.g. user clicking "Cancel") cancels the LM request.
+		if (metadata?.signal) {
+			if (metadata.signal.aborted) {
+				this.currentRequestCancellation.cancel()
+			} else {
+				metadata.signal.addEventListener("abort", () => this.currentRequestCancellation?.cancel(), {
+					once: true,
+				})
+			}
+		}
+
 		// Calculate input tokens before starting the stream
 		const totalInputTokens: number = await this.calculateTotalInputTokens(vsCodeLmMessages)
 
@@ -511,17 +524,24 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 				// Return original error if it's already an Error instance
 				throw error
 			} else if (typeof error === "object" && error !== null) {
-				// Handle error-like objects
+				// Handle error-like objects — preserve HTTP status for retry logic
 				const errorDetails = JSON.stringify(error, null, 2)
 				logger.error("VsCodeLm", "Stream error object:", errorDetails)
 				TelemetryService.reportError(error, TelemetryEventName.API_PROVIDER_ERROR)
-				throw new Error(`NJUST_AI <Language Model API>: Response stream error: ${errorDetails}`)
+				const apiError = new ApiProviderError(
+					`NJUST_AI <Language Model API>: Response stream error: ${errorDetails}`,
+				)
+				apiError.status = extractHttpStatus(error)
+				throw apiError
 			} else {
 				// Fallback for UnsafeAny error types
 				const errorMessage = String(error)
 				logger.error("VsCodeLm", "Unknown stream error:", errorMessage)
 				TelemetryService.reportError(error, TelemetryEventName.API_PROVIDER_ERROR)
-				throw new Error(`NJUST_AI <Language Model API>: Response stream error: ${errorMessage}`)
+				const apiError = new ApiProviderError(
+					`NJUST_AI <Language Model API>: Response stream error: ${errorMessage}`,
+				)
+				throw apiError
 			}
 		}
 	}

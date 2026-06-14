@@ -16,7 +16,7 @@ import { toolNamesMatch } from "../../utils/mcp-name"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import { logger } from "../../shared/logger"
 import { TelemetryService } from "@njust-ai/telemetry"
-import { getErrorMessage } from "../../shared/error-utils"
+import { getErrorMessage, wrapAsError } from "../../shared/error-utils"
 
 interface UseMcpToolParams {
 	server_name: string
@@ -98,7 +98,7 @@ export class UseMcpToolTool extends BaseTool<"use_mcp_tool"> {
 				pushToolResult,
 			)
 		} catch (error) {
-			await handleError("executing MCP tool", error as Error)
+			await handleError("executing MCP tool", wrapAsError(error))
 		}
 	}
 

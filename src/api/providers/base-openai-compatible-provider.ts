@@ -127,7 +127,12 @@ export abstract class BaseOpenAiCompatibleProvider<ModelName extends string>
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
 	): ApiStream {
-		const stream = await this.createStream(systemPrompt, messages, metadata)
+		// Forward the AbortSignal so the HTTP request is cancelled when
+		// the user aborts the task — avoids leaving dangling TCP connections.
+		const requestOptions: OpenAI.RequestOptions | undefined = metadata?.signal
+			? { signal: metadata.signal }
+			: undefined
+		const stream = await this.createStream(systemPrompt, messages, metadata, requestOptions)
 
 		const matcher = new TagMatcher(
 			"think",

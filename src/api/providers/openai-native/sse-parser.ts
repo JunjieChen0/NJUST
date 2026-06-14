@@ -29,6 +29,10 @@ export async function* parseSseStream(
 	try {
 		while (true) {
 			if (ctx.abortController?.signal.aborted) {
+				// Cancel the reader so the underlying HTTP connection
+				// is torn down immediately rather than lingering until
+				// the stream completes or times out.
+				reader.cancel().catch(() => {})
 				break
 			}
 
@@ -146,6 +150,6 @@ export async function* parseSseStream(
 		}
 		throw new ApiProviderError("Unexpected error processing response stream")
 	} finally {
-		reader.releaseLock()
+		reader.releaseLock?.()
 	}
 }

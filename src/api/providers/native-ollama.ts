@@ -257,6 +257,16 @@ export class NativeOllamaHandler extends BaseProvider implements SingleCompletio
 				tools: this.convertToolsToOllama(metadata?.tools),
 			})
 
+			// Bridge AbortSignal to Ollama client — the SDK doesn't accept
+			// signal directly, but exposes abort() on the client.
+			if (metadata?.signal) {
+				if (metadata.signal.aborted) {
+					client.abort()
+				} else {
+					metadata.signal.addEventListener("abort", () => client.abort(), { once: true })
+				}
+			}
+
 			let totalInputTokens = 0
 			let totalOutputTokens = 0
 			// Track tool calls across chunks (Ollama may send complete tool_calls in final chunk)

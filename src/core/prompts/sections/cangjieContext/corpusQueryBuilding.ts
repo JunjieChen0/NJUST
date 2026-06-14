@@ -126,7 +126,11 @@ export async function buildStdlibSignatureHintsSection(
 	if (docsBase && globalStoragePath) {
 		try {
 			await fs.promises.access(docsBase)
-			hints = mergeStdlibConstraintHintsFromCorpus({ ...STDLIB_API_SIGNATURE_HINTS }, docsBase, globalStoragePath)
+			hints = await mergeStdlibConstraintHintsFromCorpus(
+				{ ...STDLIB_API_SIGNATURE_HINTS },
+				docsBase,
+				globalStoragePath,
+			)
 		} catch (error) {
 			logger.debug("CorpusQueryBuilding", "corpus docs directory access failed", error)
 			/* docsBase doesn't exist, use default hints */

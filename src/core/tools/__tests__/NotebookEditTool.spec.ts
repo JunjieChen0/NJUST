@@ -51,6 +51,7 @@ vi.mock("vscode", () => ({
 
 vi.mock("../../../shared/error-utils", () => ({
 	getErrorMessage: getErrorMessageMock,
+	wrapAsError: (e: unknown) => (e instanceof Error ? e : new Error(String(e))),
 }))
 
 vi.mock("../../../utils/pathUtils", () => ({

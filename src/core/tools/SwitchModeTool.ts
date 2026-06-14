@@ -6,6 +6,7 @@ import { Task } from "../task/Task"
 import { ignoreAbortError } from "../../utils/errorHandling"
 import { formatResponse } from "../prompts/responses"
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import type { ToolUse } from "../../shared/tools"
 import { t } from "../../i18n"
@@ -79,7 +80,7 @@ export class SwitchModeTool extends BaseTool<"switch_mode"> {
 
 			await delay(500) // Delay to allow mode change to take effect before next tool is executed
 		} catch (error) {
-			await handleError("switching mode", error as Error)
+			await handleError("switching mode", wrapAsError(error))
 		}
 	}
 

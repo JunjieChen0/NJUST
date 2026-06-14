@@ -32,6 +32,8 @@ export interface TaskAskSayHost {
 
 	// Mutable state (required for handler operations)
 	abort: boolean
+	/** True when the task is abandoned (tab closed, user navigated away). */
+	readonly abandoned: boolean
 	lastMessageTs?: number
 	askResponse?: ClineAskResponse
 	askResponseText?: string

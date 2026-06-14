@@ -5,6 +5,7 @@ import { formatResponse } from "../prompts/responses"
 import type { ToolUse } from "../../shared/tools"
 import { ignoreAbortError } from "../../utils/errorHandling"
 
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
 interface Suggestion {
@@ -56,7 +57,7 @@ export class AskFollowupQuestionTool extends BaseTool<"ask_followup_question"> {
 			await task.say("user_feedback", text ?? "", images)
 			pushToolResult(formatResponse.toolResult(`[USER-MESSAGE]\n${text}\n[END USER-MESSAGE]`, images))
 		} catch (error) {
-			await handleError("asking question", error as Error)
+			await handleError("asking question", wrapAsError(error))
 		}
 	}
 

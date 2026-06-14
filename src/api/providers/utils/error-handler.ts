@@ -29,6 +29,23 @@ function hasNumericStatus(value: unknown): value is { status: number } {
 }
 
 /**
+ * Extract an HTTP status code from a caught error value.
+ *
+ * Works with SDK error objects that carry `.status`, `.code`, or
+ * `.$metadata.httpStatusCode` (AWS SDK / Bedrock).  Returns `undefined`
+ * when no numeric status can be found.
+ */
+export function extractHttpStatus(error: unknown): number | undefined {
+	if (typeof error !== "object" || error === null) return undefined
+	const e = error as Record<string, unknown>
+	if (typeof e.status === "number") return e.status
+	if (typeof e.code === "number") return e.code as number
+	const meta = e.$metadata as Record<string, unknown> | undefined
+	if (meta && typeof meta.httpStatusCode === "number") return meta.httpStatusCode
+	return undefined
+}
+
+/**
  * Handles API provider errors and transforms them into user-friendly messages
  * while preserving important metadata for retry logic and UI display.
  *

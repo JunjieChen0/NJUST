@@ -148,8 +148,15 @@ export function initializeCangjieLanguage(
 		fs.existsSync(path.join(f.uri.fsPath, "cjpm.toml")),
 	)?.uri.fsPath
 	if (metricsCwd) {
-		cangjieMetricsCollector = new CangjieMetricsCollector(metricsCwd, outputChannel)
-		context.subscriptions.push(cangjieMetricsCollector)
+		void CangjieMetricsCollector.create(metricsCwd, outputChannel)
+			.then((collector) => {
+				cangjieMetricsCollector = collector
+				context.subscriptions.push(collector)
+			})
+			.catch((err) => {
+				outputChannel.appendLine(`[CangjieMetricsCollector] Create failed: ${getErrorMessage(err)}`)
+				TelemetryService.reportError(err, TelemetryEventName.EXTENSION_INIT_ERROR)
+			})
 	}
 
 	// LSP client (lazy: defers until .cj file is opened)

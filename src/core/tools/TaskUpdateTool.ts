@@ -3,6 +3,7 @@ import { z } from "zod"
 import { Task } from "../task/Task"
 import { TaskBoard, type TaskBoardItem } from "../task/TaskBoard"
 
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
 interface TaskUpdateParams {
@@ -47,7 +48,7 @@ export class TaskUpdateTool extends BaseTool<"task_update"> {
 			task.consecutiveMistakeCount = 0
 			pushToolResult(`Task updated successfully:\n${JSON.stringify(updated, null, 2)}`)
 		} catch (error) {
-			await handleError("updating task", error as Error)
+			await handleError("updating task", wrapAsError(error))
 		}
 	}
 }

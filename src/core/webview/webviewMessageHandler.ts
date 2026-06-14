@@ -1,4 +1,5 @@
-import type { WebviewMessage, GlobalState } from "@njust-ai/types"
+import type { GlobalState } from "@njust-ai/types"
+import { safeParseWebviewMessage } from "@njust-ai/types"
 import { defaultModeSlug } from "../../shared/modes"
 import type { ClineProvider } from "./ClineProvider"
 import { MessageRouter, type MessageHandlerContext } from "./handlers/MessageRouter"
@@ -17,9 +18,17 @@ registerIndexingHandlers(router)
 registerChatHandlers(router)
 registerModeHandlers(router)
 
-export const webviewMessageHandler = async (provider: ClineProvider, message: WebviewMessage) => {
-	if (!message || typeof message !== "object") {
-		throw new Error("Invalid webview message: expected non-null object")
+/**
+ * Single entry point for all webview → extension messages.
+ *
+ * Validates the message against the known-type allowlist via Zod BEFORE
+ * routing to individual handlers.  Unknown / malformed types are rejected
+ * here rather than falling through to handler code.
+ */
+export const webviewMessageHandler = async (provider: ClineProvider, rawMessage: unknown) => {
+	const message = safeParseWebviewMessage(rawMessage)
+	if (!message) {
+		throw new Error("Invalid webview message: expected object with a known type")
 	}
 
 	const context: MessageHandlerContext = {

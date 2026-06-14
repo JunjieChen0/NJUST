@@ -29,6 +29,9 @@ import { AskIgnoredError } from "./AskIgnoredError"
 import { TaskAbortedError } from "./TaskErrors"
 import { checkAutoApproval } from "../auto-approval"
 
+/** Maximum time (ms) the task will wait for a user response to ask(). */
+const ASK_RESPONSE_TIMEOUT_MS = 120_000
+
 export class TaskAskSayHandler {
 	constructor(private host: TaskAskSayHost) {}
 
@@ -178,6 +181,11 @@ export class TaskAskSayHandler {
 				if (this.host.askResponse !== undefined || this.host.lastMessageTs !== askTs) {
 					return true
 				}
+				// Stop polling immediately when the task is aborted or
+				// abandoned — avoids an indefinite spin that prevents GC.
+				if (this.host.abort || this.host.abandoned) {
+					return true
+				}
 				if (shouldDrainQueuedMessageForAsk && !this.host.messageQueueService.isEmpty()) {
 					const message = this.host.messageQueueService.dequeueMessage()
 					if (message) {
@@ -190,8 +198,14 @@ export class TaskAskSayHandler {
 				}
 				return false
 			},
-			{ interval: 100 },
+			{ interval: 100, timeout: ASK_RESPONSE_TIMEOUT_MS },
 		)
+
+		// If the task was aborted while we were waiting for a user response,
+		// throw immediately so the caller can perform clean-up.
+		if (this.host.abort || this.host.abandoned) {
+			throw new TaskAbortedError(this.host.taskId, this.host.instanceId)
+		}
 
 		if (this.host.lastMessageTs !== askTs) {
 			throw new AskIgnoredError("superseded")

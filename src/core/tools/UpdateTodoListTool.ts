@@ -2,6 +2,7 @@ import { z } from "zod"
 
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import type { ToolUse } from "../../shared/tools"
 import cloneDeep from "clone-deep"
@@ -93,7 +94,7 @@ export class UpdateTodoListTool extends BaseTool<"update_todo_list"> {
 				pushToolResult(formatResponse.toolResult("Todo list updated successfully."))
 			}
 		} catch (error) {
-			await handleError("update todo list", error as Error)
+			await handleError("update todo list", wrapAsError(error))
 		}
 	}
 

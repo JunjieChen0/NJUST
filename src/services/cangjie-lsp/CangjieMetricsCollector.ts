@@ -50,12 +50,31 @@ export class CangjieMetricsCollector implements vscode.Disposable {
 	private dirty = false
 	private flushTimer: ReturnType<typeof setTimeout> | undefined
 
+	/**
+	 * Create a collector, optionally with pre-loaded metrics.
+	 *
+	 * When `metrics` is provided (e.g. from {@link create}), no I/O is
+	 * performed.  Without it, a synchronous disk read occurs — acceptable
+	 * for tests and short-lived contexts where an async factory is
+	 * impractical.
+	 */
 	constructor(
 		cwd: string,
 		private readonly outputChannel: vscode.OutputChannel,
+		metrics?: ProjectMetrics,
 	) {
 		this.metricsPath = path.join(cwd, NJUST_AI_CONFIG_DIR, METRICS_FILE)
-		this.metrics = this.loadOrCreate(cwd)
+		this.metrics = metrics ?? this.loadOrCreateSync(this.metricsPath, cwd)
+	}
+
+	/**
+	 * Async factory — loads persisted metrics via async I/O so the
+	 * event loop is not blocked.  Prefer this in activation paths.
+	 */
+	static async create(cwd: string, outputChannel: vscode.OutputChannel): Promise<CangjieMetricsCollector> {
+		const p = path.join(cwd, NJUST_AI_CONFIG_DIR, METRICS_FILE)
+		const m = await loadOrCreateAsync(p, cwd)
+		return new CangjieMetricsCollector(cwd, outputChannel, m)
 	}
 
 	/**
@@ -170,10 +189,12 @@ export class CangjieMetricsCollector implements vscode.Disposable {
 		this.metrics.avgErrorsPerFailedBuild = totalErrors / failed.length
 	}
 
-	private loadOrCreate(cwd: string): ProjectMetrics {
-		if (fs.existsSync(this.metricsPath)) {
+	private loadOrCreateSync(metricsPath: string, cwd: string): ProjectMetrics {
+		// Intentionally sync — called from constructor (JS constructors cannot be
+		// async).  For new code, use the static async factory create() instead.
+		if (fs.existsSync(metricsPath)) {
 			try {
-				const raw = fs.readFileSync(this.metricsPath, "utf-8")
+				const raw = fs.readFileSync(metricsPath, "utf-8")
 				const parsed = JSON.parse(raw) as ProjectMetrics
 				if (parsed.version === METRICS_VERSION) {
 					return parsed
@@ -239,4 +260,49 @@ export class CangjieMetricsCollector implements vscode.Disposable {
 		}
 		this.saveToDisk()
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Async helpers (module-level — cannot live on the class because JS
+// constructors cannot be async)
+// ---------------------------------------------------------------------------
+
+async function loadOrCreateAsync(metricsPath: string, cwd: string): Promise<ProjectMetrics> {
+	try {
+		await fs.promises.access(metricsPath)
+		const raw = await fs.promises.readFile(metricsPath, "utf-8")
+		const parsed = JSON.parse(raw) as ProjectMetrics
+		if (parsed.version === METRICS_VERSION) {
+			return parsed
+		}
+	} catch {
+		// intentionally ignored: start fresh on parse error
+	}
+
+	const projectName = inferProjectName(cwd)
+	return {
+		version: METRICS_VERSION,
+		projectName,
+		totalBuilds: 0,
+		successfulBuilds: 0,
+		failedBuilds: 0,
+		avgErrorsPerFailedBuild: 0,
+		recentBuilds: [],
+		errorTrend: [],
+		topErrors: [],
+	}
+}
+
+function inferProjectName(cwd: string): string {
+	const tomlPath = path.join(cwd, "cjpm.toml")
+	if (fs.existsSync(tomlPath)) {
+		try {
+			const content = fs.readFileSync(tomlPath, "utf-8")
+			const m = content.match(/name\s*=\s*"([^"]+)"/)
+			if (m) return m[1]!
+		} catch {
+			/* ignore */
+		}
+	}
+	return path.basename(cwd)
 }

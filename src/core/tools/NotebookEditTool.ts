@@ -6,7 +6,7 @@ import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
-import { getErrorMessage } from "../../shared/error-utils"
+import { getErrorMessage, wrapAsError } from "../../shared/error-utils"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 
 interface NotebookEditParams {
@@ -187,7 +187,7 @@ export class NotebookEditTool extends BaseTool<"notebook_edit"> {
 					break
 			}
 		} catch (error) {
-			await handleError("editing notebook", error as Error)
+			await handleError("editing notebook", wrapAsError(error))
 		}
 	}
 }

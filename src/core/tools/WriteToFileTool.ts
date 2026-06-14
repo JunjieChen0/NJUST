@@ -20,6 +20,7 @@ import { EXPERIMENT_IDS, experiments } from "../../shared/experiments"
 import { convertNewFileToUnifiedDiff, computeDiffStats, sanitizeUnifiedDiff } from "../diff/stats"
 import type { ToolUse } from "../../shared/tools"
 
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import {
 	cangjiePreflightCheck,
@@ -312,7 +313,7 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 
 			return
 		} catch (error) {
-			await handleError("writing file", error as Error)
+			await handleError("writing file", wrapAsError(error))
 			await task.diffViewProvider.reset()
 			this.resetPartialState()
 			return

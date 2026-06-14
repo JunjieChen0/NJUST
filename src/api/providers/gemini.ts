@@ -25,6 +25,7 @@ import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from ".
 import { BaseProvider } from "./base-provider"
 import { requireApiKey } from "../interfaces/api-key-validator"
 import { getApiRequestTimeout } from "./utils/timeout-config"
+import { extractHttpStatus } from "./utils/error-handler"
 
 type GeminiHandlerOptions = ApiHandlerOptions & {
 	isVertex?: boolean
@@ -353,14 +354,22 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 		} catch (error) {
 			if (error instanceof Error) {
 				const modelId = this.getModel().id
+				// Preserve the HTTP status code so ApiRetryWrapper can decide
+				// whether to retry (e.g. 429 / 5xx).
+				const httpStatus = extractHttpStatus(error)
 				if (TelemetryService.hasInstance()) {
 					const forTelemetry = new ApiProviderError(error.message)
 					forTelemetry.provider = this.providerName
 					forTelemetry.modelId = modelId
 					forTelemetry.operation = "createMessage"
+					forTelemetry.status = httpStatus
 					TelemetryService.instance.captureException(forTelemetry)
 				}
-				throw new ApiProviderError(t("common:errors.gemini.generate_stream", { error: error.message }))
+				const apiError = new ApiProviderError(
+					t("common:errors.gemini.generate_stream", { error: error.message }),
+				)
+				apiError.status = httpStatus
+				throw apiError
 			}
 
 			throw error

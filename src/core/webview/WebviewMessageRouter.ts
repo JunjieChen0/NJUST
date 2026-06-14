@@ -9,7 +9,6 @@
  * keeping ClineProvider free of message-wiring details.
  */
 import type * as vscode from "vscode"
-import type { WebviewMessage } from "../../shared/WebviewMessage"
 import { webviewMessageHandler } from "./webviewMessageHandler"
 
 /**
@@ -53,8 +52,11 @@ export class WebviewMessageRouter implements IWebviewMessageRouter {
 	constructor(private readonly provider: unknown) {}
 
 	setWebviewMessageListener(webview: vscode.Webview): void {
-		const onReceiveMessage = async (message: WebviewMessage) =>
-			webviewMessageHandler(this.provider as Parameters<typeof webviewMessageHandler>[0], message)
+		// VS Code's onDidReceiveMessage emits `any`.  We treat it as
+		// `unknown` so the Zod validator in webviewMessageHandler is the
+		// single point of trust establishment.
+		const onReceiveMessage = async (rawMessage: unknown) =>
+			webviewMessageHandler(this.provider as Parameters<typeof webviewMessageHandler>[0], rawMessage)
 
 		const sub = webview.onDidReceiveMessage(onReceiveMessage)
 		this.disposables.push(sub)

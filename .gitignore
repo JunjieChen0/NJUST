@@ -107,6 +107,7 @@ eslint-report*.json
 
 # Crash dumps
 *.stackdump
+*.tmp
 
 # Devflow planning and specs
 devflow/

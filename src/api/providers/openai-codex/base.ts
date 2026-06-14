@@ -686,7 +686,7 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 			}
 			throw new Error(t("common:errors.openAiCodex.unexpectedStreamError"))
 		} finally {
-			reader.releaseLock()
+			reader.releaseLock?.()
 		}
 	}
 

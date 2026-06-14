@@ -21,6 +21,7 @@ import {
 } from "../../services/cangjie-corpus/CangjieCorpusSemanticIndex"
 import type { ToolUse } from "../../shared/tools"
 
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks, type ValidationResult } from "./BaseTool"
 import { toolResultCache } from "./helpers/ToolResultCache"
 import { extractStdModulesFromQuery } from "./cangjiePreflightCheck"
@@ -194,7 +195,7 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 
 			pushToolResult(results)
 		} catch (error) {
-			await handleError("searching files", error as Error)
+			await handleError("searching files", wrapAsError(error))
 		}
 	}
 

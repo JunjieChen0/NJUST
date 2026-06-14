@@ -125,7 +125,10 @@ export class MiniMaxHandler extends BaseProvider implements SingleCompletionHand
 		}
 
 		try {
-			stream = await this.client.messages.create(requestParams)
+			stream = await this.client.messages.create(
+				requestParams,
+				...(metadata?.signal ? [{ signal: metadata.signal }] : []),
+			)
 		} catch (error) {
 			const status = (error as Record<string, UnsafeAny>)?.status
 			const msg = getErrorMessage(error)

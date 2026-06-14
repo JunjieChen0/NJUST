@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("fs/promises", () => ({
 	readFile: vi.fn(),
 	writeFile: vi.fn(),
+	mkdir: vi.fn(),
+	access: vi.fn(),
+	rename: vi.fn(),
+	unlink: vi.fn(),
 }))
 
 vi.mock("../../../security/metrics", () => ({

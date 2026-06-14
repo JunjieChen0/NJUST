@@ -498,7 +498,7 @@ export class ClineProvider
 		await this.mcpHub?.unregisterClient()
 		this.mcpHub = undefined
 		this.customModesManager?.dispose()
-		this.taskHistoryStore.dispose()
+		await this.taskHistoryStore.disposeAsync()
 		this.taskHistory.flushGlobalStateWriteThrough()
 		this.log("Disposed all disposables")
 		ClineProvider.activeInstances.delete(this)

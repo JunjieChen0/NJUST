@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, type ToolCallbacks, type ValidationResult } from "./BaseTool"
 import { Task } from "../task/Task"
 
@@ -129,7 +130,7 @@ export class WorktreeTool extends BaseTool<"custom_tool"> {
 				)
 			}
 		} catch (error) {
-			await handleError("managing git worktree", error as Error)
+			await handleError("managing git worktree", wrapAsError(error))
 		}
 	}
 }

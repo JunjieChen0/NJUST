@@ -26,7 +26,7 @@ import {
 	resolveRootPackageName,
 } from "./cangjiePreflightCheck"
 import { logger } from "../../shared/logger"
-import { getErrorMessage } from "../../shared/error-utils"
+import { getErrorMessage, wrapAsError } from "../../shared/error-utils"
 import { t } from "../../i18n"
 
 interface ApplyPatchParams {
@@ -166,7 +166,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			task.consecutiveMistakeCount = 0
 			task.recordToolUsage("apply_patch")
 		} catch (error) {
-			await handleError("apply patch", error as Error)
+			await handleError("apply patch", wrapAsError(error))
 			await task.diffViewProvider.reset()
 		}
 	}

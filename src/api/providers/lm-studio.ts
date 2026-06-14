@@ -123,7 +123,10 @@ export class LmStudioHandler extends BaseProvider implements SingleCompletionHan
 
 			let results
 			try {
-				results = await this.client.chat.completions.create(params)
+				results = await this.client.chat.completions.create(
+					params,
+					...(metadata?.signal ? [{ signal: metadata.signal }] : []),
+				)
 			} catch (error) {
 				throw handleProviderError(error, this.providerName)
 			}

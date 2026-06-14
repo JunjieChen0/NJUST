@@ -3,6 +3,7 @@ import { z } from "zod"
 import { Task } from "../task/Task"
 import { TaskBoard, type CreateTaskParams, type TaskBoardItem } from "../task/TaskBoard"
 
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
 interface TaskCreateParams {
@@ -46,7 +47,7 @@ export class TaskCreateTool extends BaseTool<"task_create"> {
 			task.consecutiveMistakeCount = 0
 			pushToolResult(`Task created successfully:\n${JSON.stringify(created, null, 2)}`)
 		} catch (error) {
-			await handleError("creating task", error as Error)
+			await handleError("creating task", wrapAsError(error))
 		}
 	}
 }

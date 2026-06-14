@@ -15,6 +15,8 @@ import { ApiStream } from "../transform/stream"
 
 import { TelemetryService } from "@njust-ai/telemetry"
 import { logger } from "../../shared/logger"
+import { getErrorMessage } from "../../shared/error-utils"
+import { redactApiSecrets } from "../../utils/redactApiSecrets"
 import { BaseProvider } from "./base-provider"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../types"
 import { getApiRequestTimeout } from "./utils/timeout-config"
@@ -129,7 +131,7 @@ export class QwenCodeHandler extends BaseProvider implements SingleCompletionHan
 				`Error reading or parsing credentials from SecretStorage or file at ${getQwenCachedCredentialPath(this.options.qwenCodeOauthPath)}`,
 			)
 			TelemetryService.reportError(error, TelemetryEventName.API_PROVIDER_ERROR)
-			throw new Error(`Failed to load Qwen OAuth credentials: ${error}`)
+			throw new Error(`Failed to load Qwen OAuth credentials: ${redactApiSecrets(getErrorMessage(error))}`)
 		}
 	}
 
@@ -173,7 +175,9 @@ export class QwenCodeHandler extends BaseProvider implements SingleCompletionHan
 
 		if (!response.ok) {
 			const errorText = await response.text()
-			throw new Error(`Token refresh failed: ${response.status} ${response.statusText}. Response: ${errorText}`)
+			throw new Error(
+				`Token refresh failed: ${response.status} ${response.statusText}. Response: ${redactApiSecrets(errorText)}`,
+			)
 		}
 
 		const tokenData = qwenTokenResponseSchema.parse(await response.json())

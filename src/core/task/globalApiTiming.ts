@@ -20,7 +20,19 @@ export function getLastGlobalApiRequestTime(): number | undefined {
 
 /**
  * Set the last global API request timestamp.
+ *
+ * Uses Math.max to avoid a data race where two concurrent tasks both read
+ * the old value, then one writes a newer timestamp that the other
+ * immediately clobbers with an older one.  Keeping the maximum is
+ * sufficient for rate-limiting purposes and is lock-free.
  */
 export function setLastGlobalApiRequestTime(time: number | undefined): void {
-	lastGlobalApiRequestTime = time
+	if (time === undefined) {
+		lastGlobalApiRequestTime = undefined
+		return
+	}
+	const prev = lastGlobalApiRequestTime
+	if (prev === undefined || time > prev) {
+		lastGlobalApiRequestTime = time
+	}
 }

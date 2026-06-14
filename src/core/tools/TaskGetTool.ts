@@ -4,6 +4,7 @@ import { Task } from "../task/Task"
 import { TaskBoard } from "../task/TaskBoard"
 import { formatResponse } from "../prompts/responses"
 
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
 interface TaskGetParams {
@@ -46,7 +47,7 @@ export class TaskGetTool extends BaseTool<"task_get"> {
 				pushToolResult(`Task details:\n${JSON.stringify(found, null, 2)}`)
 			}
 		} catch (error) {
-			await handleError("getting task", error as Error)
+			await handleError("getting task", wrapAsError(error))
 		}
 	}
 }

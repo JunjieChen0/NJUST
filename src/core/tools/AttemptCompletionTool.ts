@@ -12,6 +12,7 @@ import type { ToolUse } from "../../shared/tools"
 import { t } from "../../i18n"
 import type { TaskResult } from "../task/SubTaskOptions"
 
+import { wrapAsError, getErrorMessage } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import { logger } from "../../shared/logger"
 
@@ -135,7 +136,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 						// If we can't get the history, log error and skip delegation
 						logger.error(
 							"AttemptCompletionTool",
-							`Failed to get history for task ${task.taskId}: ${(err as Error)?.message ?? String(err)}. Skipping delegation.`,
+							`Failed to get history for task ${task.taskId}: ${getErrorMessage(err)}. Skipping delegation.`,
 						)
 						TelemetryService.reportError(
 							err instanceof Error ? err : new Error(String(err)),
@@ -163,7 +164,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 			const feedbackText = `[USER-MESSAGE]\n${text}\n[END USER-MESSAGE]`
 			pushToolResult(formatResponse.toolResult(feedbackText, images))
 		} catch (error) {
-			await handleError("completing task", error as Error)
+			await handleError("completing task", wrapAsError(error))
 		}
 	}
 

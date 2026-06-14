@@ -96,6 +96,20 @@ export class NativeToolCallParser {
 		return events
 	}
 
+	/**
+	 * Emit `tool_call_end` events for every tracked tool call when the
+	 * stream's `finish_reason` is `"tool_calls"`.
+	 *
+	 * THIS IS THE CANONICAL IMPLEMENTATION.  Providers that need
+	 * `tool_call_end` events should either:
+	 *   1. Use `NativeToolCallParser` directly (preferred), or
+	 *   2. Produce `ApiStreamToolCallEndChunk` objects with the **exact**
+	 *      same `{ type: "tool_call_end", id: string }` shape.
+	 *
+	 * @see {@link finalizeRawChunks} for the non-finish_reason path
+	 *   (e.g. native-ollama that emits tool_call_end before the stream
+	 *   completes).
+	 */
 	public processFinishReason(finishReason: string | null | undefined): ToolCallStreamEvent[] {
 		const events: ToolCallStreamEvent[] = []
 

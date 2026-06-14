@@ -2,6 +2,7 @@ import { z } from "zod"
 
 import { Task } from "../task/Task"
 
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
 interface ConfigParams {
@@ -117,7 +118,7 @@ export class ConfigTool extends BaseTool<"config"> {
 				}
 			}
 		} catch (error) {
-			await handleError("managing configuration", error as Error)
+			await handleError("managing configuration", wrapAsError(error))
 		}
 	}
 }

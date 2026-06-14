@@ -3,6 +3,7 @@ import { z } from "zod"
 import { Task } from "../task/Task"
 import { TaskBoard, type TaskFilter } from "../task/TaskBoard"
 
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
 interface TaskListParams {
@@ -55,7 +56,7 @@ export class TaskListTool extends BaseTool<"task_list"> {
 				pushToolResult(`Found ${tasks.length} task(s):\n${JSON.stringify(tasks, null, 2)}`)
 			}
 		} catch (error) {
-			await handleError("listing tasks", error as Error)
+			await handleError("listing tasks", wrapAsError(error))
 		}
 	}
 }

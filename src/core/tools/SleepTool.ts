@@ -2,6 +2,7 @@ import { z } from "zod"
 
 import { Task } from "../task/Task"
 
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
 interface SleepParams {
@@ -52,7 +53,7 @@ export class SleepTool extends BaseTool<"sleep"> {
 			task.consecutiveMistakeCount = 0
 			pushToolResult(`Waited for ${clampedSeconds} seconds.`)
 		} catch (error) {
-			await handleError("sleeping", error as Error)
+			await handleError("sleeping", wrapAsError(error))
 		}
 	}
 }

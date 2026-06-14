@@ -868,8 +868,18 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				continue
 			}
 
-			// Request approval for single file
+			// Hard-deny reads outside the workspace — this is a
+			// security boundary, not just a UI marker.  Aligns with
+			// WriteToFileTool / EditTool's ensureWithinWorkspace policy.
 			const isOutsideWorkspace = isPathOutsideWorkspace(fullPath)
+			if (isOutsideWorkspace) {
+				const errorMsg = `Access denied — path is outside the workspace.`
+				results.push(`File: ${relPath}\nError: ${errorMsg}`)
+				await task.say("error", `Error reading file ${relPath}: ${errorMsg}`)
+				continue
+			}
+
+			// Request approval for single file
 			let lineSnippet = ""
 			if (entry.lineRanges && entry.lineRanges.length > 0) {
 				const ranges = entry.lineRanges.map((range: LineRange) => `(lines ${range.start}-${range.end})`)

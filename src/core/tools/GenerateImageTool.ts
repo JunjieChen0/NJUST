@@ -20,7 +20,7 @@ import { RooHandler } from "../../api/providers/njust-ai"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import type { ToolUse } from "../../shared/tools"
 import { t } from "../../i18n"
-import { getErrorMessage } from "../../shared/error-utils"
+import { getErrorMessage, wrapAsError } from "../../shared/error-utils"
 
 export class GenerateImageTool extends BaseTool<"generate_image"> {
 	readonly name = "generate_image" as const
@@ -285,7 +285,7 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 			await task.say("image", JSON.stringify({ imageUri, imagePath: fullImagePath }))
 			pushToolResult(formatResponse.toolResult(getReadablePath(task.cwd, finalPath)))
 		} catch (error) {
-			await handleError("generating image", error as Error)
+			await handleError("generating image", wrapAsError(error))
 		}
 	}
 

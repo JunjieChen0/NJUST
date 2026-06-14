@@ -439,6 +439,12 @@ export class TaskLifecycleHandler {
 			)
 			TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
 		}
+
+		// Yield to the microtask queue so any in-flight stream processing
+		// (consumeApiStream's finally block) can observe t.abort === true and
+		// bail out before we tear down resources via dispose().
+		await Promise.resolve()
+
 		try {
 			t.dispose()
 		} catch (error) {

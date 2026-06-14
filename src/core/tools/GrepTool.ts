@@ -11,6 +11,7 @@ import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { regexSearchFiles } from "../../services/ripgrep"
 import type { ToolUse } from "../../shared/tools"
 
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks, type ValidationResult } from "./BaseTool"
 
 interface GrepParams {
@@ -117,7 +118,7 @@ export class GrepTool extends BaseTool<"grep"> {
 
 			pushToolResult(results)
 		} catch (error) {
-			await handleError("grep search", error as Error)
+			await handleError("grep search", wrapAsError(error))
 		}
 	}
 

@@ -92,7 +92,10 @@ export class XAIHandler extends BaseProvider implements SingleCompletionHandler 
 
 		let stream
 		try {
-			stream = await this.client.chat.completions.create(requestOptions)
+			stream = await this.client.chat.completions.create(
+				requestOptions,
+				...(metadata?.signal ? [{ signal: metadata.signal }] : []),
+			)
 		} catch (error) {
 			throw handleProviderError(error, this.providerName)
 		}

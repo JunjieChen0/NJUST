@@ -5,6 +5,7 @@ import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
 import { getCommand, getCommandNames } from "../../services/command/commands"
 import { EXPERIMENT_IDS, experiments } from "../../shared/experiments"
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import type { ToolUse } from "../../shared/tools"
 import { getModeBySlug } from "../../shared/modes"
@@ -142,7 +143,7 @@ export class RunSlashCommandTool extends BaseTool<"run_slash_command"> {
 			// Return the command content as the tool result
 			pushToolResult(result)
 		} catch (error) {
-			await handleError("running slash command", error as Error)
+			await handleError("running slash command", wrapAsError(error))
 		}
 	}
 

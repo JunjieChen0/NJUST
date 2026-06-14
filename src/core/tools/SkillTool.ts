@@ -2,6 +2,7 @@ import { z } from "zod"
 
 import { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import type { ToolUse } from "../../shared/tools"
 import {
@@ -77,7 +78,7 @@ export class SkillTool extends BaseTool<"skill"> {
 
 			pushToolResult(buildSkillResult(skillName, args, skillContent))
 		} catch (error) {
-			await handleError("executing skill", error as Error)
+			await handleError("executing skill", wrapAsError(error))
 		}
 	}
 

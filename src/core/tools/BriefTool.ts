@@ -2,6 +2,7 @@ import { z } from "zod"
 
 import { Task } from "../task/Task"
 
+import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
 interface BriefParams {
@@ -66,7 +67,7 @@ export class BriefTool extends BaseTool<"brief"> {
 			task.consecutiveMistakeCount = 0
 			pushToolResult(briefed)
 		} catch (error) {
-			await handleError("generating brief", error as Error)
+			await handleError("generating brief", wrapAsError(error))
 		}
 	}
 }

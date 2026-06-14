@@ -3200,13 +3200,15 @@ describe("ClineProvider - Comprehensive Edit/Delete Edge Cases", () => {
 				// Test with undefined message - should throw error
 				await expect(messageHandler(undefined)).rejects.toThrow()
 
-				// Test with message missing type
+				// Test with message missing type — now rejected by Zod runtime
+				// validation (P0-26 fix: unknown types are blocked at the webview
+				// boundary instead of falling through to handler code).
 				await expect(
 					messageHandler({
 						value: 2000,
 						editedMessageContent: "Edited message",
 					}),
-				).resolves.toBeUndefined()
+				).rejects.toThrow("Invalid webview message: expected object with a known type")
 
 				// Should handle gracefully without errors
 				expect(vscode.window.showInformationMessage).not.toHaveBeenCalled()

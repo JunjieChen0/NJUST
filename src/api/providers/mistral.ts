@@ -18,6 +18,8 @@ import { ApiStream } from "../transform/stream"
 import { BaseProvider } from "./base-provider"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../types"
 import { getErrorMessage } from "../../shared/error-utils"
+import { ApiProviderError } from "@njust-ai/types"
+import { extractHttpStatus } from "./utils/error-handler"
 
 // Type helper to handle thinking chunks from Mistral API
 // The SDK includes ThinkChunk but TypeScript has trouble with the discriminated union
@@ -108,10 +110,17 @@ export class MistralHandler extends BaseProvider implements SingleCompletionHand
 
 		let response
 		try {
-			response = await this.client.chat.stream(requestOptions)
+			if (metadata?.signal) {
+				response = await this.client.chat.stream(requestOptions, { fetchOptions: { signal: metadata.signal } })
+			} else {
+				response = await this.client.chat.stream(requestOptions)
+			}
 		} catch (error) {
 			const errorMessage = getErrorMessage(error)
-			throw new Error(redactApiSecrets(`Mistral completion error: ${errorMessage}`))
+			const httpStatus = extractHttpStatus(error)
+			const apiError = new ApiProviderError(redactApiSecrets(`Mistral completion error: ${errorMessage}`))
+			apiError.status = httpStatus
+			throw apiError
 		}
 
 		for await (const event of response) {
@@ -219,7 +228,10 @@ export class MistralHandler extends BaseProvider implements SingleCompletionHand
 			return content || ""
 		} catch (error) {
 			const errorMessage = getErrorMessage(error)
-			throw new Error(`Mistral completion error: ${errorMessage}`)
+			const httpStatus = extractHttpStatus(error)
+			const apiError = new ApiProviderError(redactApiSecrets(`Mistral completion error: ${errorMessage}`))
+			apiError.status = httpStatus
+			throw apiError
 		}
 	}
 }
