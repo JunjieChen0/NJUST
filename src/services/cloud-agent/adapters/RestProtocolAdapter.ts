@@ -1,7 +1,7 @@
 import type { CloudAgentProfile, RestFieldMapping, EndpointConfig } from "../types/profile"
 import { DEFAULT_ENDPOINTS, DEFAULT_FIELD_MAPPING, DEFAULT_AUTH } from "../types/profile"
 import type { IProtocolAdapter, UniversalTaskRequest, UniversalTaskResponse, EndpointType } from "./types"
-import type { DeferredToolCall } from "../types"
+import type { DeferredToolCall, WorkspaceOpsEnvelope } from "../types"
 import { normalizeDeferredResponse } from "../normalizeDeferredResponse"
 import { getDeviceToken } from "../deviceToken"
 
@@ -91,7 +91,7 @@ export class RestProtocolAdapter implements IProtocolAdapter {
 				text: data.text as string | undefined,
 				reasoning: data.reasoning as string | undefined,
 				pending_tools: undefined,
-				workspace_ops: data.workspace_ops as UnsafeAny,
+				workspace_ops: data.workspace_ops as WorkspaceOpsEnvelope,
 			}
 		}
 

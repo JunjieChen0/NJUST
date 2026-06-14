@@ -178,7 +178,7 @@ export class McpHub implements IMcpHubService {
 	 * @returns The validated configuration
 	 * @throws Error if the configuration is invalid
 	 */
-	private validateServerConfig(config: UnsafeAny, serverName?: string): z.infer<typeof ServerConfigSchema> {
+	private validateServerConfig(config: unknown, serverName?: string): z.infer<typeof ServerConfigSchema> {
 		return validateServerConfigStandalone(config as Record<string, unknown>, serverName)
 	}
 
@@ -187,7 +187,7 @@ export class McpHub implements IMcpHubService {
 	 * @param message The error message prefix
 	 * @param error The error object
 	 */
-	private showErrorMessage(message: string, error: UnsafeAny): void {
+	private showErrorMessage(message: string, error: unknown): void {
 		logger.error("McpHub", `${message}:`, error)
 	}
 
@@ -234,7 +234,7 @@ export class McpHub implements IMcpHubService {
 	private async handleConfigFileChange(filePath: string, source: "global" | "project"): Promise<void> {
 		try {
 			const content = await fs.readFile(filePath, "utf-8")
-			let config: UnsafeAny
+			let config: unknown
 
 			try {
 				config = JSON.parse(content)
@@ -321,7 +321,7 @@ export class McpHub implements IMcpHubService {
 			if (!projectMcpPath) return
 
 			const content = await fs.readFile(projectMcpPath, "utf-8")
-			let config: UnsafeAny
+			let config: unknown
 
 			try {
 				config = JSON.parse(content)
@@ -839,7 +839,7 @@ export class McpHub implements IMcpHubService {
 	}
 
 	async updateServerConnections(
-		newServers: Record<string, UnsafeAny>,
+		newServers: Record<string, unknown>,
 		source: "global" | "project" = "global",
 		manageConnectingState: boolean = true,
 	): Promise<void> {
@@ -1007,7 +1007,7 @@ export class McpHub implements IMcpHubService {
 
 		try {
 			const globalPath = await this.getMcpSettingsFilePath()
-			let _globalServers: Record<string, UnsafeAny> = {}
+			let _globalServers: Record<string, unknown> = {}
 			try {
 				const globalContent = await fs.readFile(globalPath, "utf-8")
 				const globalConfig = JSON.parse(globalContent)
@@ -1018,7 +1018,7 @@ export class McpHub implements IMcpHubService {
 			}
 
 			const projectPath = await this.getProjectMcpPath()
-			let _projectServers: Record<string, UnsafeAny> = {}
+			let _projectServers: Record<string, unknown> = {}
 			if (projectPath) {
 				try {
 					const projectContent = await fs.readFile(projectPath, "utf-8")
@@ -1142,7 +1142,7 @@ export class McpHub implements IMcpHubService {
 	 */
 	private async updateServerConfig(
 		serverName: string,
-		configUpdate: Record<string, UnsafeAny>,
+		configUpdate: Record<string, unknown>,
 		source: "global" | "project" = "global",
 	): Promise<void> {
 		return updateServerConfigWithHub(this as unknown as McpHubInternal, serverName, configUpdate, source)
@@ -1181,7 +1181,7 @@ export class McpHub implements IMcpHubService {
 	async callTool(
 		serverName: string,
 		toolName: string,
-		toolArguments?: Record<string, UnsafeAny>,
+		toolArguments?: Record<string, unknown>,
 		source?: "global" | "project",
 	): Promise<McpToolCallResponse> {
 		const connection = this.findConnection(serverName, source)
@@ -1208,7 +1208,7 @@ export class McpHub implements IMcpHubService {
 		// Validate arguments are JSON-serializable before passing to RPC layer.
 		// Circular references, Functions, Symbols, and BigInt values cause
 		// JSON.stringify to throw, which would crash the caller uncaught.
-		let safeArguments: Record<string, UnsafeAny> | undefined
+		let safeArguments: Record<string, unknown> | undefined
 		if (toolArguments !== undefined) {
 			try {
 				safeArguments = JSON.parse(JSON.stringify(toolArguments))

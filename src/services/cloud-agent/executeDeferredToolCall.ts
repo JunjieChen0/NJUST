@@ -10,7 +10,7 @@ import type { DeferredToolCall, DeferredToolResult } from "./types"
 import { getErrorMessage } from "../../shared/error-utils"
 import type { IPathValidator, IWriteProtector } from "./interfaces/IPathAccessController"
 
-function expectString(args: Record<string, UnsafeAny>, key: string): string {
+function expectString(args: Record<string, unknown>, key: string): string {
 	const val = args[key]
 	if (typeof val !== "string") {
 		throw new TypeError(`Expected "${key}" to be a string, got ${typeof val}`)
@@ -18,7 +18,7 @@ function expectString(args: Record<string, UnsafeAny>, key: string): string {
 	return val
 }
 
-function expectOptionalString(args: Record<string, UnsafeAny>, key: string): string | undefined {
+function expectOptionalString(args: Record<string, unknown>, key: string): string | undefined {
 	const val = args[key]
 	if (val === undefined || val === null) return undefined
 	if (typeof val !== "string") {
@@ -27,7 +27,7 @@ function expectOptionalString(args: Record<string, UnsafeAny>, key: string): str
 	return val
 }
 
-function expectOptionalNumber(args: Record<string, UnsafeAny>, key: string): number | undefined {
+function expectOptionalNumber(args: Record<string, unknown>, key: string): number | undefined {
 	const val = args[key]
 	if (val === undefined || val === null) return undefined
 	if (typeof val !== "number" || Number.isNaN(val)) {
@@ -36,7 +36,7 @@ function expectOptionalNumber(args: Record<string, UnsafeAny>, key: string): num
 	return val
 }
 
-function expectOptionalBoolean(args: Record<string, UnsafeAny>, key: string): boolean | undefined {
+function expectOptionalBoolean(args: Record<string, unknown>, key: string): boolean | undefined {
 	const val = args[key]
 	if (val === undefined || val === null) return undefined
 	if (typeof val !== "boolean") {

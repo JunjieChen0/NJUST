@@ -156,7 +156,13 @@ export type NativeToolArgs = {
 	attempt_completion: { result: string }
 	execute_command: { command: string; cwd?: string; timeout?: number | null }
 	apply_diff: { path: string; diff: string }
-	edit: { file_path: string; old_string: string; new_string: string; replace_all?: boolean; expected_replacements?: number }
+	edit: {
+		file_path: string
+		old_string: string
+		new_string: string
+		replace_all?: boolean
+		expected_replacements?: number
+	}
 	search_and_replace: { file_path: string; old_string: string; new_string: string; replace_all?: boolean }
 	search_replace: { file_path: string; old_string: string; new_string: string }
 	edit_file: { file_path: string; old_string: string; new_string: string; expected_replacements?: number }
@@ -174,7 +180,7 @@ export type NativeToolArgs = {
 	search_files: { path: string; regex: string; file_pattern?: string | null; semantic_query?: string | null }
 	switch_mode: { mode_slug: string; reason: string }
 	update_todo_list: { todos: string }
-	use_mcp_tool: { server_name: string; tool_name: string; arguments?: Record<string, UnsafeAny> }
+	use_mcp_tool: { server_name: string; tool_name: string; arguments?: Record<string, unknown> }
 	web_search: { search_query: string; count?: number }
 	web_fetch: { url: string; format?: "text" | "html" | "json" | "markdown"; maxLength?: number }
 	write_to_file: { path: string; content: string }
@@ -192,8 +198,18 @@ export type NativeToolArgs = {
 	glob: { pattern: string; path?: string }
 	lsp: { action: string; filePath: string; line?: number; character?: number; symbolName?: string }
 	task_create: { title: string; description?: string; priority?: "high" | "medium" | "low"; dependsOn?: string[] }
-	task_update: { taskId: string; status?: "completed" | "pending" | "in_progress" | "failed"; title?: string; description?: string; priority?: "high" | "medium" | "low" }
-	task_list: { status?: "completed" | "pending" | "in_progress" | "failed"; priority?: "high" | "medium" | "low"; limit?: number }
+	task_update: {
+		taskId: string
+		status?: "completed" | "pending" | "in_progress" | "failed"
+		title?: string
+		description?: string
+		priority?: "high" | "medium" | "low"
+	}
+	task_list: {
+		status?: "completed" | "pending" | "in_progress" | "failed"
+		priority?: "high" | "medium" | "low"
+		limit?: number
+	}
 	task_get: { taskId: string }
 	task_stop: { taskId: string; reason?: string }
 	task_output: { taskId: string; offset?: number; limit?: number }
@@ -249,7 +265,7 @@ export interface McpToolUse {
 	/** Extracted tool name from the tool name */
 	toolName: string
 	/** Arguments passed to the MCP tool */
-	arguments: Record<string, UnsafeAny>
+	arguments: Record<string, unknown>
 	partial: boolean
 }
 
@@ -400,7 +416,20 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 // Define available tool groups.
 export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 	read: {
-		tools: ["read_file", "search_files", "list_files", "codebase_search", "web_search", "grep", "glob", "lsp", "tool_search", "task_list", "task_get", "brief"],
+		tools: [
+			"read_file",
+			"search_files",
+			"list_files",
+			"codebase_search",
+			"web_search",
+			"grep",
+			"glob",
+			"lsp",
+			"tool_search",
+			"task_list",
+			"task_get",
+			"brief",
+		],
 	},
 	edit: {
 		tools: ["apply_patch", "write_to_file", "generate_image", "notebook_edit", "task_create", "task_update"],

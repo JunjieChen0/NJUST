@@ -87,8 +87,8 @@ export class McpProtocolAdapter implements IProtocolAdapter {
 		const client = this.client
 
 		client.setNotificationHandler(
-			{ method: "notifications/cloudagent/text" } as UnsafeAny,
-			async (notification: UnsafeAny) => {
+			{ method: "notifications/cloudagent/text" } as never,
+			async (notification: unknown) => {
 				const content = (notification as { params?: { content?: string } })?.params?.content
 				if (content && this.callbackHandler?.onText) {
 					try {
@@ -101,8 +101,8 @@ export class McpProtocolAdapter implements IProtocolAdapter {
 		)
 
 		client.setNotificationHandler(
-			{ method: "notifications/cloudagent/reasoning" } as UnsafeAny,
-			async (notification: UnsafeAny) => {
+			{ method: "notifications/cloudagent/reasoning" } as never,
+			async (notification: unknown) => {
 				const content = (notification as { params?: { content?: string } })?.params?.content
 				if (content && this.callbackHandler?.onReasoning) {
 					try {
@@ -115,8 +115,8 @@ export class McpProtocolAdapter implements IProtocolAdapter {
 		)
 
 		client.setNotificationHandler(
-			{ method: "notifications/cloudagent/done" } as UnsafeAny,
-			async (notification: UnsafeAny) => {
+			{ method: "notifications/cloudagent/done" } as never,
+			async (notification: unknown) => {
 				const summary = (notification as { params?: { summary?: string } })?.params?.summary
 				if (summary && this.callbackHandler?.onDone) {
 					try {
@@ -178,7 +178,7 @@ export class McpProtocolAdapter implements IProtocolAdapter {
 				tool: t.tool,
 				arguments: t.arguments,
 			})),
-			workspaceOps: parsed.workspace_ops as UnsafeAny,
+			workspaceOps: parsed.workspace_ops as UniversalTaskResponse["workspaceOps"],
 			text: parsed.text as string,
 			reasoning: parsed.reasoning as string,
 			logs: parsed.logs as string[],

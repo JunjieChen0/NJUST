@@ -78,7 +78,7 @@ const CLOUD_AGENT_RETRY_OPTIONS: Partial<ApiRetryOptions> = {
 	jitterRatio: 0.15,
 }
 
-function shouldRetryCloudAgent(error: UnsafeAny, _attempt: number): { retry: boolean; retryAfterSeconds?: number } {
+function shouldRetryCloudAgent(error: unknown, _attempt: number): { retry: boolean; retryAfterSeconds?: number } {
 	if (error instanceof Error && (error.name === "AbortError" || /aborted/i.test(error.message))) {
 		return { retry: false }
 	}
@@ -87,16 +87,16 @@ function shouldRetryCloudAgent(error: UnsafeAny, _attempt: number): { retry: boo
 }
 
 /** Undici/Node often surfaces low-level failures as `fetch failed` with details on `error.cause`. */
-function enrichFetchError(error: UnsafeAny): Error {
+function enrichFetchError(error: unknown): Error {
 	if (!(error instanceof Error)) {
 		return new Error(String(error))
 	}
 	const parts: string[] = [error.message]
-	const c = (error as Error & { cause?: UnsafeAny }).cause
+	const c = (error as Error & { cause?: unknown }).cause
 	if (c instanceof Error && c.message && !error.message.includes(c.message)) {
 		parts.push(c.message)
 	} else if (typeof c === "object" && c !== null && "code" in c) {
-		const code = (c as { code?: UnsafeAny }).code
+		const code = (c as { code?: unknown }).code
 		if (code !== undefined) {
 			parts.push(String(code))
 		}
@@ -557,7 +557,7 @@ export class CloudAgentClient {
 	// Deferred execution protocol
 	// -------------------------------------------------------------------
 
-	private async fetchDeferred(endpoint: string, body: Record<string, UnsafeAny>): Promise<DeferredResponse> {
+	private async fetchDeferred(endpoint: string, body: Record<string, unknown>): Promise<DeferredResponse> {
 		return this.retryExecutor.execute(
 			async () => {
 				const { signal, cleanup } = this.mergeAbortAndTimeout()
@@ -597,7 +597,7 @@ export class CloudAgentClient {
 						tool: t.tool,
 						arguments: t.arguments,
 					})),
-					workspace_ops: universal.raw?.workspace_ops as UnsafeAny,
+					workspace_ops: universal.raw?.workspace_ops as DeferredResponse["workspace_ops"],
 					text: universal.text,
 					reasoning: universal.reasoning,
 					ok: universal.ok,

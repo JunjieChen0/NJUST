@@ -32,7 +32,7 @@ export interface IMcpHubService {
 	restartConnection(serverName: string, source?: "global" | "project"): Promise<void>
 	deleteConnection(name: string, source?: "global" | "project"): Promise<void>
 	updateServerConnections(
-		newServers: Record<string, UnsafeAny>,
+		newServers: Record<string, unknown>,
 		source?: "global" | "project",
 		manageConnectingState?: boolean,
 	): Promise<void>
@@ -48,7 +48,7 @@ export interface IMcpHubService {
 	callTool(
 		serverName: string,
 		toolName: string,
-		toolArguments?: Record<string, UnsafeAny>,
+		toolArguments?: Record<string, unknown>,
 		source?: "global" | "project",
 	): Promise<McpToolCallResponse>
 	readResource(serverName: string, uri: string, source?: "global" | "project"): Promise<McpResourceResponse>
