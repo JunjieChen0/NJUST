@@ -109,7 +109,7 @@ export function handleProviderError(
 		}
 		// Preserve headers / retryAfter so ApiRetryExecutor can honour Retry-After
 		if (anyErr.headers !== undefined) {
-			;(wrapped as ApiProviderError & { headers?: UnsafeAny }).headers = anyErr.headers
+			;(wrapped as ApiProviderError & { headers?: unknown }).headers = anyErr.headers
 		}
 		if (typeof anyErr.retryAfter === "number") {
 			;(wrapped as ApiProviderError & { retryAfter?: number }).retryAfter = anyErr.retryAfter

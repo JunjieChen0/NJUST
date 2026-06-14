@@ -79,7 +79,11 @@ export interface TaskExecutorDelegatesHost {
 		getFilesReadByRooSafely(context: string): Promise<string[] | undefined>
 	}
 	errorRecovery: {
-		handleApiError(error: unknown, retryAttempt: number): Promise<{ action: string; nextAttempt: number }>
+		handleApiError(
+			error: unknown,
+			retryAttempt: number,
+			querySource?: string,
+		): Promise<{ action: string; nextAttempt?: number }>
 		shouldBypassCondense(): boolean
 		recordCompactFailure(error: unknown): Promise<void>
 		resetCompactFailure(): void
@@ -134,7 +138,7 @@ export interface TaskExecutorStreamHost {
 	consecutiveNoAssistantMessagesCount: number
 	streamingToolCallIndices: Map<string, number>
 	cachedStreamingModel?: ReturnType<ApiHandler["getModel"]>
-	notifier?: { postMessageToWebview(message: UnsafeAny): Promise<void> }
+	readonly notifier?: { postMessageToWebview(message: UnsafeAny): Promise<void> }
 	didFinishAbortingStream: boolean
 	currentStreamingDidCheckpoint: boolean
 	_savedMessagesForCurrentRequest?: boolean
@@ -193,7 +197,7 @@ export interface TaskExecutorControlHost {
 	attemptApiRequest(retryAttempt: number, options?: { skipProviderRateLimit?: boolean }): ApiStream
 	presentAssistantMessage(): Promise<void>
 
-	getTaskMode(): string | undefined
+	getTaskMode(): Promise<string>
 }
 
 // ── Combined interface ────────────────────────────────────────────────────

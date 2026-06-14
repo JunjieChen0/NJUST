@@ -183,7 +183,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/** MemRL: set when the agent invokes attempt_completion (its own success signal). */
 	private completionAttempted = false
 
-	private readonly modeHandler: TaskModeHandler
+	readonly modeHandler: TaskModeHandler
 
 	hostRef: WeakRef<ITaskHost>
 	private readonly eventBus: TaskEventBus
@@ -194,7 +194,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	/** Narrow accessor: returns only the UI notification facet of the host. */
-	private get notifier(): ITaskUINotifier | undefined {
+	get notifier(): ITaskUINotifier | undefined {
 		return this.hostRef.deref()
 	}
 
@@ -218,7 +218,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 *  initiateTaskLoop checks this flag to stop re-prompting the model
 	 *  after a completed task. */
 	taskCompleted: boolean = false
-	private persistentRetryHandler?: PersistentRetryManager
+	persistentRetryHandler?: PersistentRetryManager
 	currentRequestAbortController?: AbortController
 	skipPrevResponseIdOnce: boolean = false
 
@@ -399,7 +399,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// MessageManager for high-level message operations (lazy initialized)
 	private _messageManager?: MessageManager
-	private readonly stateMachine = new TaskStateMachine()
+	readonly stateMachine = new TaskStateMachine()
 
 	// Extracted sub-modules (Task 7 decomposition)
 	private _taskMessageManager?: TaskMessageManager
@@ -410,7 +410,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/** @internal Persistence/CRUD operations on messages — delegates to TaskMessageManager. */
 	private get msgMgr(): TaskMessageManager {
 		if (!this._taskMessageManager) {
-			this._taskMessageManager = new TaskMessageManager(this as UnsafeAny as TaskMessageContext)
+			this._taskMessageManager = new TaskMessageManager(this as unknown as TaskMessageContext)
 		}
 		return this._taskMessageManager
 	}
@@ -418,7 +418,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/** @internal Ask/say operations — delegates to TaskAskSayHandler. */
 	private get askSayHandler(): TaskAskSayHandler {
 		if (!this._askSayHandler) {
-			this._askSayHandler = new TaskAskSayHandler(this as UnsafeAny as TaskAskSayHost)
+			this._askSayHandler = new TaskAskSayHandler(this as unknown as TaskAskSayHost)
 		}
 		return this._askSayHandler
 	}
@@ -435,7 +435,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/** @internal API request loop — delegates to TaskExecutor. */
 	private get executor(): TaskExecutor {
 		if (!this._executor) {
-			this._executor = new TaskExecutor(this as UnsafeAny as TaskExecutorHost)
+			this._executor = new TaskExecutor(this as unknown as TaskExecutorHost)
 		}
 		return this._executor
 	}
@@ -443,7 +443,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/** @internal Lifecycle operations — delegates to TaskLifecycleHandler. */
 	private get lifecycleHandler(): TaskLifecycleHandler {
 		if (!this._lifecycleHandler) {
-			this._lifecycleHandler = new TaskLifecycleHandler(this as UnsafeAny as TaskLifecycleHost)
+			this._lifecycleHandler = new TaskLifecycleHandler(this as unknown as TaskLifecycleHost)
 		}
 		return this._lifecycleHandler
 	}
@@ -451,7 +451,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/** @internal Subtask operations — delegates to TaskSubtaskHandler. */
 	private get subtaskHandler(): TaskSubtaskHandler {
 		if (!this._subtaskHandler) {
-			this._subtaskHandler = new TaskSubtaskHandler(this as UnsafeAny as TaskSubtaskHost)
+			this._subtaskHandler = new TaskSubtaskHandler(this as unknown as TaskSubtaskHost)
 		}
 		return this._subtaskHandler
 	}
@@ -713,7 +713,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// API Messages
 
-	private async getSavedApiConversationHistory(): Promise<ApiMessage[]> {
+	async getSavedApiConversationHistory(): Promise<ApiMessage[]> {
 		return this.msgMgr.getSavedApiConversationHistory()
 	}
 
@@ -1132,7 +1132,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	private async initiateCloudAgentLoop(userMessage: string, images?: string[]): Promise<void> {
-		const host = createCloudAgentHost(this as UnsafeAny as Parameters<typeof createCloudAgentHost>[0])
+		const host = createCloudAgentHost(this as unknown as Parameters<typeof createCloudAgentHost>[0])
 		const { CloudAgentOrchestrator } = await import("./CloudAgentOrchestrator")
 		const orchestrator = new CloudAgentOrchestrator(host)
 
@@ -1250,8 +1250,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// Checkpoints
 
-	public async checkpointSave(force: boolean = false, suppressMessage: boolean = false) {
-		return checkpointSave(this, force, suppressMessage)
+	public async checkpointSave(allowEmpty: boolean = false, suppressChatRow: boolean = false) {
+		return checkpointSave(this, allowEmpty, suppressChatRow)
 	}
 
 	// Delegated to TaskStreamProcessor

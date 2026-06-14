@@ -32,7 +32,7 @@ export interface TaskAskSayHost {
 
 	// Mutable state (required for handler operations)
 	abort: boolean
-	lastMessageTs: number
+	lastMessageTs?: number
 	askResponse?: ClineAskResponse
 	askResponseText?: string
 	askResponseImages?: string[]
@@ -51,10 +51,10 @@ export interface TaskAskSayHost {
 	emit(event: string, ...args: unknown[]): boolean
 
 	// Notifier
-	notifier?: {
+	readonly notifier?: {
 		postStateToWebviewWithoutTaskHistory(): Promise<void>
 		postMessageToWebview(message: UnsafeAny): Promise<void>
-		updateTaskHistory(item: UnsafeAny): Promise<void>
+		updateTaskHistory(item: UnsafeAny): Promise<unknown>
 	}
 
 	// Message persistence (via msgMgr)
@@ -67,7 +67,7 @@ export interface TaskAskSayHost {
 	findMessageByTimestamp(ts: number): ClineMessage | undefined
 
 	// Checkpoint
-	checkpointSave(allowEmpty?: boolean, suppressChatRow?: boolean): Promise<void>
+	checkpointSave(allowEmpty?: boolean, suppressChatRow?: boolean): Promise<unknown>
 
 	// Provider reference (for state access)
 	hostRef: { deref(): UnsafeAny }

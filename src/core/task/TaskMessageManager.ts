@@ -44,7 +44,7 @@ export interface TaskMessageContext {
 	clineMessages: ClineMessage[]
 	userMessageContent: Anthropic.Messages.ContentBlockParam[]
 	assistantMessageSavedToHistory: boolean
-	lastMessageTs: number
+	lastMessageTs?: number
 
 	readonly api: ApiHandler
 
@@ -61,10 +61,10 @@ export interface TaskMessageContext {
 
 	emit(event: string, ...args: UnsafeAny[]): boolean
 
-	notifier?: {
+	readonly notifier?: {
 		postStateToWebviewWithoutTaskHistory(): Promise<void>
 		postMessageToWebview(message: UnsafeAny): Promise<void>
-		updateTaskHistory(item: UnsafeAny): Promise<void>
+		updateTaskHistory(item: UnsafeAny): Promise<unknown>
 	}
 }
 

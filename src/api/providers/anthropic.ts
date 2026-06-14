@@ -212,7 +212,7 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 					break
 				}
 				default: {
-					stream = (await this.client.messages.create(
+					stream = await this.client.messages.create(
 						{
 							model: modelId,
 							max_tokens: maxTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
@@ -223,7 +223,7 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 							...nativeToolParams,
 						},
 						metadata?.signal ? { signal: metadata.signal } : undefined,
-					)) as UnsafeAny
+					)
 					break
 				}
 			}

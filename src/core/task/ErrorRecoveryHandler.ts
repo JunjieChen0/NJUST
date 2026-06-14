@@ -265,9 +265,9 @@ export class ErrorRecoveryHandler {
 	}
 
 	/** Record a compaction failure and announce degradation if threshold reached. */
-	async recordCompactFailure(errorMessage: string): Promise<void> {
+	async recordCompactFailure(errorMessage: unknown): Promise<void> {
 		this.task.compactFailureCount++
-		await this.task.say("condense_context_error", errorMessage)
+		await this.task.say("condense_context_error", String(errorMessage))
 		if (this.task.compactFailureCount >= this.task.maxCompactFailures) {
 			await this.task.say(
 				"condense_context_error",
