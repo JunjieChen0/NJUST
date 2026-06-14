@@ -1,5 +1,6 @@
 import type { ToolName } from "@njust-ai/types"
 import { TelemetryEventName } from "@njust-ai/types"
+import { randomUUID } from "node:crypto"
 import { type ZodSchema } from "zod"
 
 import { AskIgnoredError } from "../task/AskIgnoredError"
@@ -620,7 +621,7 @@ export abstract class BaseTool<TName extends ToolName> {
 
 			// Capture the last tool result for post-hooks
 			let capturedResult: ToolResponse | undefined
-			const toolUseId = block.id || callbacks.toolCallId || "UnsafeAny"
+			const toolUseId = block.id || callbacks.toolCallId || randomUUID()
 			const pendingPersist: Promise<void>[] = []
 			const wrappedCallbacks: ToolCallbacks = {
 				...callbacks,
