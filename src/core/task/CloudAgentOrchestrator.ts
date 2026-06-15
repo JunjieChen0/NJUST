@@ -796,15 +796,22 @@ export class CloudAgentOrchestrator {
 				this.host.rooProtectedController,
 			)
 			const lines = applied.results.map((r) => `${r.ok ? "OK" : "FAIL"} ${r.path}: ${r.message}`)
+			const succeededCount = applied.results.filter((r) => r.ok).length
 			const header = applied.ok
 				? `workspace_ops applied (${applied.results.length} operation(s)).`
-				: `workspace_ops stopped at operation ${(applied.failedAtIndex ?? 0) + 1} of ${ops.length}.`
+				: `workspace_ops stopped at operation ${(applied.failedAtIndex ?? 0) + 1} of ${ops.length}. ` +
+					`${succeededCount} operation(s) succeeded before the failure.`
 			await this.host.say("text", [header, ...lines].join("\n"))
 			if (!applied.ok) {
-				await this.host.say(
-					"error",
-					`Workspace operation failed: ${applied.results.at(-1)?.message ?? "unknown"}`,
-				)
+				const succeededPaths = applied.results
+					.filter((r) => r.ok)
+					.map((r) => r.path)
+					.join(", ")
+				const detail = succeededPaths
+					? `Operations applied before failure: ${succeededPaths}. ` +
+						`Failed: ${applied.results.at(-1)?.message ?? "unknown"}`
+					: `Workspace operation failed: ${applied.results.at(-1)?.message ?? "unknown"}`
+				await this.host.say("error", detail)
 				return false
 			}
 		}

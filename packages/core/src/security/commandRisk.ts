@@ -1,5 +1,14 @@
+/**
+ * @deprecated Superseded by {@link import('../../../src/core/tools/permissions/BashCommandAnalyzer').BashCommandAnalyzer.analyze}.
+ * This module's static patterns are not aligned with the four-level risk model
+ * (safe/medium/dangerous/forbidden) used by `checkCommandSafety` and `BashCommandAnalyzer`.
+ * All callers should migrate to the unified pipeline in `src/core/tools/helpers/commandSafety.ts`.
+ */
 export type CommandRiskLevel = "low" | "medium" | "high"
 
+/**
+ * @deprecated Use {@link import('../../../src/core/tools/permissions/BashCommandAnalyzer').BashAnalysisResult} instead.
+ */
 export interface CommandRiskReport {
 	level: CommandRiskLevel
 	reasons: string[]
@@ -30,6 +39,12 @@ const MEDIUM_RISK_PATTERNS: RegExp[] = [
 
 const EXEC_CHAIN_PATTERNS: RegExp[] = [/\|/, /&&/, /;/, />|<</, /\$\(/, /`[^`]+`/]
 
+/**
+ * @deprecated Use `BashCommandAnalyzer.analyze()` from `src/core/tools/permissions/BashCommandAnalyzer.ts`
+ * (four-level risk model: safe/medium/dangerous/forbidden).
+ * This three-level model (low/medium/high) is no longer the single source of truth and
+ * does not align with `checkCommandSafety`. All callers should migrate.
+ */
 export function assessCommandRisk(command: string): CommandRiskReport {
 	const raw = command?.trim() ?? ""
 	if (!raw) {

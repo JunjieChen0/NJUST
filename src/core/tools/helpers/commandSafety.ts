@@ -83,7 +83,7 @@ export function checkCommandSafety(command: string): CommandSafetyResult {
 
 	const shellAnalysis = analyzeBashCommand(trimmed)
 	const firstToken = trimmed.split(/\s/)[0]!.replace(/^\.\//, "")
-	const hasChainOrPipe = /[|;&]|\$\(|`/.test(trimmed)
+	const hasChainOrPipe = /[|;&<>]|\$\(|`/.test(trimmed)
 	if (ALLOWLISTED_PREFIXES.has(firstToken) && !hasChainOrPipe && shellAnalysis.riskLevel === "safe") {
 		return {
 			safe: true,

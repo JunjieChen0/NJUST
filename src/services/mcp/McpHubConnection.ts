@@ -145,11 +145,22 @@ export async function connectToServerWithHub(
 		connection.server.resources = await hub.fetchResourcesList(name, source)
 		connection.server.resourceTemplates = await hub.fetchResourceTemplatesList(name, source)
 	} catch (error) {
-		// Update status with error
+		// Update status with error and clean up resources to prevent zombie connections.
 		const connection = hub.findConnection(name, source)
 		if (connection) {
 			connection.server.status = "disconnected"
 			appendErrorMessageToConnection(connection, error instanceof Error ? error.message : `${error}`)
+			// Close transport and remove from hub to prevent resource leaks.
+			// The error may have occurred mid-init (after push but before connect/fetch),
+			// so we must clean up whatever state we reached.
+			if (connection.type === "connected") {
+				try {
+					await connection.client.close()
+				} catch {
+					// best-effort — client may not have completed connect() yet
+				}
+			}
+			await hub.deleteConnection(name, source)
 		}
 		throw error
 	}

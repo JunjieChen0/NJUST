@@ -283,6 +283,8 @@ export async function execCommand(
 	}
 
 	const timeoutMs = Math.max(1, Math.min(300, params.timeout ?? 30)) * 1000
+	/** Hard cap on accumulated stdout/stderr to prevent memory exhaustion from runaway commands. */
+	const MAX_OUTPUT_BYTES = 100_000
 
 	return new Promise<string>((resolve, reject) => {
 		const isWindows = process.platform === "win32"
@@ -297,25 +299,54 @@ export async function execCommand(
 
 		let stdout = ""
 		let stderr = ""
+		let outputTruncated = false
+		let totalOutputBytes = 0
+		let settled = false
+
+		const appendWithLimit = (target: "stdout" | "stderr", chunk: string): void => {
+			if (outputTruncated) return
+			const byteLen = Buffer.byteLength(chunk, "utf-8")
+			totalOutputBytes += byteLen
+			if (totalOutputBytes > MAX_OUTPUT_BYTES) {
+				outputTruncated = true
+				if (target === "stdout") {
+					stdout = stdout + chunk.slice(0, MAX_OUTPUT_BYTES - (totalOutputBytes - byteLen))
+				}
+				return
+			}
+			if (target === "stdout") {
+				stdout += chunk
+			} else {
+				stderr += chunk
+			}
+		}
 
 		proc.stdout.on("data", (data: Buffer) => {
-			stdout += data.toString()
+			appendWithLimit("stdout", data.toString())
 		})
 		proc.stderr.on("data", (data: Buffer) => {
-			stderr += data.toString()
+			appendWithLimit("stderr", data.toString())
 		})
 
 		const timer = setTimeout(() => {
+			if (settled) return
+			settled = true
 			proc.kill("SIGTERM")
 			reject(new Error(`Command timed out after ${Math.round(timeoutMs / 1000)}s`))
 		}, timeoutMs)
 
 		proc.on("close", (code) => {
 			clearTimeout(timer)
+			if (settled) return
+			settled = true
+			const truncNote = outputTruncated
+				? `\n\n[Output truncated at ${MAX_OUTPUT_BYTES / 1024}KB. Use a more specific command to reduce output.]`
+				: ""
 			const output = [
 				`Exit code: ${code ?? "unknown"}`,
 				stdout ? `\nSTDOUT:\n${stdout}` : "",
 				stderr ? `\nSTDERR:\n${stderr}` : "",
+				truncNote,
 			].join("")
 
 			resolve(output)
@@ -323,6 +354,8 @@ export async function execCommand(
 
 		proc.on("error", (err) => {
 			clearTimeout(timer)
+			if (settled) return
+			settled = true
 			reject(new Error(`Failed to execute command: ${err.message}`))
 		})
 	})
