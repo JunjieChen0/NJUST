@@ -3,6 +3,12 @@ import net from "node:net"
 
 const BLOCKED_HOSTNAMES = new Set(["localhost", "localhost."])
 
+/** Maximum number of redirects to follow before giving up. */
+const MAX_REDIRECTS = 10
+
+/** Sensitive headers to strip on cross-origin redirects. */
+const SENSITIVE_HEADERS = new Set(["authorization", "cookie", "set-cookie", "proxy-authorization", "x-api-key"])
+
 function isPrivateIPv4(ip: string): boolean {
 	const parts = ip.split(".").map((p) => Number.parseInt(p, 10))
 	if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) {
@@ -95,16 +101,28 @@ export async function assertSafeOutboundUrl(url: string): Promise<URL> {
 	return parsed
 }
 
-export async function guardedFetch(url: string, init?: RequestInit): Promise<Response> {
-	const parsed = await assertSafeOutboundUrl(url)
+/**
+ * Strip sensitive headers when redirecting to a different origin.
+ */
+function stripSensitiveHeadersForCrossOrigin(headers: Headers, fromOrigin: string, toOrigin: string): Headers {
+	if (fromOrigin === toOrigin) {
+		return headers
+	}
+	const stripped = new Headers()
+	headers.forEach((value, key) => {
+		if (!SENSITIVE_HEADERS.has(key.toLowerCase())) {
+			stripped.set(key, value)
+		}
+	})
+	return stripped
+}
 
-	// IP pinning: resolve once, then connect directly to the verified IP.
-	// This prevents DNS rebinding attacks where a second resolution returns
-	// a different (potentially internal) address. We set the Host header so
-	// the server can still route correctly with the pinned IP.
+/**
+ * Perform a single fetch with IP pinning against a validated URL.
+ */
+async function pinnedFetch(parsed: URL, init?: RequestInit): Promise<Response> {
 	if (net.isIP(parsed.hostname) !== 0) {
-		// Already an IP literal — public-IP check was done in assertSafeOutboundUrl
-		return fetch(parsed.toString(), init)
+		return fetch(parsed.toString(), { ...init, redirect: "manual" })
 	}
 
 	const resolved = await dns.lookup(parsed.hostname, { all: true, verbatim: true })
@@ -115,7 +133,6 @@ export async function guardedFetch(url: string, init?: RequestInit): Promise<Res
 		assertPublicIp(entry.address)
 	}
 
-	// Pin to the first resolved public IP
 	const pinnedIp = resolved[0]!.address
 	const ipUrl = new URL(parsed.toString())
 	ipUrl.hostname = net.isIP(pinnedIp) === 6 ? `[${pinnedIp}]` : pinnedIp
@@ -125,5 +142,65 @@ export async function guardedFetch(url: string, init?: RequestInit): Promise<Res
 		headers.set("Host", parsed.hostname)
 	}
 
-	return fetch(ipUrl.toString(), { ...init, headers })
+	return fetch(ipUrl.toString(), { ...init, headers, redirect: "manual" })
+}
+
+/**
+ * Resolve a redirect Location header against the current request URL.
+ */
+function resolveRedirectLocation(location: string, currentUrl: URL): string {
+	try {
+		return new URL(location).toString()
+	} catch {
+		return new URL(location, currentUrl.toString()).toString()
+	}
+}
+
+/**
+ * A fetch wrapper that prevents SSRF via redirect chains.
+ *
+ * Unlike the standard `fetch` which follows redirects automatically without
+ * re-validating each hop, this function:
+ * 1. Sets `redirect: "manual"` to intercept every redirect.
+ * 2. Re-validates (DNS + public-IP check) each redirect target.
+ * 3. Strips sensitive headers on cross-origin redirects.
+ * 4. Caps the redirect chain at {@link MAX_REDIRECTS} hops.
+ *
+ * @param url - The initial URL to fetch
+ * @param init - Standard RequestInit (redirect is forced to "manual")
+ * @returns The final Response (non-redirect status)
+ */
+export async function guardedFetch(url: string, init?: RequestInit): Promise<Response> {
+	let parsed = await assertSafeOutboundUrl(url)
+	let currentUrl = parsed.toString()
+	let headers = new Headers(init?.headers)
+
+	const { redirect: _ignored, ...restInit } = init ?? {}
+
+	for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+		const resp = await pinnedFetch(parsed, { ...restInit, headers })
+
+		const status = resp.status
+		if (status < 300 || status >= 400 || !resp.headers.has("location")) {
+			return resp
+		}
+
+		// Consume the redirect response body to release the connection.
+		await resp.text().catch(() => {})
+
+		const location = resp.headers.get("location")!
+		const redirectUrl = resolveRedirectLocation(location, new URL(currentUrl))
+
+		// Validate the redirect target.
+		parsed = await assertSafeOutboundUrl(redirectUrl)
+		const newOrigin = parsed.origin
+
+		// Strip sensitive headers on cross-origin redirects.
+		const oldOrigin = new URL(currentUrl).origin
+		headers = stripSensitiveHeadersForCrossOrigin(headers, oldOrigin, newOrigin)
+
+		currentUrl = parsed.toString()
+	}
+
+	throw new Error(`Too many redirects (max ${MAX_REDIRECTS}): ${currentUrl}`)
 }

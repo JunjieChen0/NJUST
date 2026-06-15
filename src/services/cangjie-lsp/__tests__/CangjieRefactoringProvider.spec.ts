@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import * as path from "path"
 
 const {
 	mockShowInputBox,
 	mockShowInformationMessage,
+	mockShowErrorMessage,
 	mockApplyEdit,
 	mockGetWorkspaceFolder,
 	mockFindFiles,
@@ -13,10 +15,15 @@ const {
 	mockExistsSync,
 	mockMkdirSync,
 	mockUnlinkSync,
+	mockRealpathSync,
+	mockOpenSync,
+	mockWriteSync,
+	mockCloseSync,
 	mockParseDefinitions,
 } = vi.hoisted(() => ({
 	mockShowInputBox: vi.fn(),
 	mockShowInformationMessage: vi.fn(),
+	mockShowErrorMessage: vi.fn(),
 	mockApplyEdit: vi.fn(),
 	mockGetWorkspaceFolder: vi.fn(),
 	mockFindFiles: vi.fn(),
@@ -27,6 +34,10 @@ const {
 	mockExistsSync: vi.fn().mockReturnValue(true),
 	mockMkdirSync: vi.fn(),
 	mockUnlinkSync: vi.fn(),
+	mockRealpathSync: Object.assign(vi.fn(), { native: undefined }) as any,
+	mockOpenSync: vi.fn(),
+	mockWriteSync: vi.fn(),
+	mockCloseSync: vi.fn(),
 	mockParseDefinitions: vi.fn().mockReturnValue([]),
 }))
 
@@ -44,6 +55,7 @@ vi.mock("vscode", () => ({
 	window: {
 		showInputBox: mockShowInputBox,
 		showInformationMessage: mockShowInformationMessage,
+		showErrorMessage: mockShowErrorMessage,
 		showTextDocument: mockShowTextDocument,
 		activeTextEditor: undefined,
 	},
@@ -100,12 +112,20 @@ vi.mock("fs", async () => {
 			existsSync: mockExistsSync,
 			mkdirSync: mockMkdirSync,
 			unlinkSync: mockUnlinkSync,
+			realpathSync: mockRealpathSync,
+			openSync: mockOpenSync,
+			writeSync: mockWriteSync,
+			closeSync: mockCloseSync,
 		},
 		readFileSync: mockReadFileSync,
 		writeFileSync: mockWriteFileSync,
 		existsSync: mockExistsSync,
 		mkdirSync: mockMkdirSync,
 		unlinkSync: mockUnlinkSync,
+		realpathSync: mockRealpathSync,
+		openSync: mockOpenSync,
+		writeSync: mockWriteSync,
+		closeSync: mockCloseSync,
 	}
 })
 
@@ -127,6 +147,13 @@ describe("CangjieRefactoringProvider", () => {
 		vi.clearAllMocks()
 		mockIndex = { findDefinitions: vi.fn().mockReturnValue([]) }
 		provider = new CangjieRefactoringProvider(mockIndex)
+
+		// Default: realpathSync returns the input unchanged (no symlinks).
+		mockRealpathSync.mockImplementation((p: string) => p)
+		// Default: openSync returns a fake fd.
+		mockOpenSync.mockReturnValue(42)
+		mockWriteSync.mockReturnValue(undefined)
+		mockCloseSync.mockReturnValue(undefined)
 	})
 
 	describe("provideCodeActions", () => {
@@ -216,14 +243,11 @@ describe("CangjieRefactoringProvider", () => {
 			const edit = mockApplyEdit.mock.calls[0][0]
 			const calls = edit.replace.mock.calls
 			expect(calls.length).toBe(1)
-			// callSite: "\textracted()"
 			expect(calls[0][2]).toBe("\textracted()")
 
 			const insertCalls = edit.insert.mock.calls
 			expect(insertCalls.length).toBe(1)
-			// insertionLine = range.end.line + 2 = 3 (no enclosing), lineCount=3, min(3,3)=3
 			expect(insertCalls[0][1]).toEqual({ line: 3, character: 0 })
-			// funcDef should contain the function name and no parameters
 			expect(insertCalls[0][2]).toContain("func extracted()")
 			expect(insertCalls[0][2]).toContain("print(42)")
 		})
@@ -232,7 +256,6 @@ describe("CangjieRefactoringProvider", () => {
 			const doc = {
 				getText: (r?: any) => {
 					if (!r) return "let x: Int = 1\nlet z = x + 1\n"
-					// Context: line 0 to start of selection (line 1)
 					if (r.start && r.start.line === 0 && r.end && r.end.line === 1) {
 						return "let x: Int = 1\n"
 					}
@@ -250,9 +273,7 @@ describe("CangjieRefactoringProvider", () => {
 
 			expect(mockApplyEdit).toHaveBeenCalledTimes(1)
 			const edit = mockApplyEdit.mock.calls[0][0]
-			// callSite should include x as argument (only x is declared in context)
 			expect(edit.replace.mock.calls[0][2]).toBe("extracted(x)")
-			// funcDef should include x: Int as parameter (type capture includes trailing space from regex)
 			expect(edit.insert.mock.calls[0][2]).toContain("extracted(x: Int ")
 		})
 
@@ -274,7 +295,6 @@ describe("CangjieRefactoringProvider", () => {
 
 			expect(mockApplyEdit).toHaveBeenCalledTimes(1)
 			const edit = mockApplyEdit.mock.calls[0][0]
-			// insertionLine = enclosing[0].endLine = 4, min(4, 5) = 4
 			expect(edit.insert.mock.calls[0][1]).toEqual({ line: 4, character: 0 })
 			expect(edit.insert.mock.calls[0][2]).toContain("func helper()")
 		})
@@ -293,7 +313,6 @@ describe("CangjieRefactoringProvider", () => {
 			await provider.extractFunction(doc, range)
 
 			const edit = mockApplyEdit.mock.calls[0][0]
-			// insertionLine = range.end.line + 2 = 5, min(5, 10) = 5
 			expect(edit.insert.mock.calls[0][1]).toEqual({ line: 5, character: 0 })
 		})
 
@@ -311,7 +330,6 @@ describe("CangjieRefactoringProvider", () => {
 			await provider.extractFunction(doc, range)
 
 			const edit = mockApplyEdit.mock.calls[0][0]
-			// insertionLine = enclosing.endLine = 20, but lineCount=5, min(20,5)=5
 			expect(edit.insert.mock.calls[0][1]).toEqual({ line: 5, character: 0 })
 		})
 
@@ -336,8 +354,6 @@ describe("CangjieRefactoringProvider", () => {
 
 			expect(mockApplyEdit).toHaveBeenCalledTimes(1)
 			const edit = mockApplyEdit.mock.calls[0][0]
-			// 'if', 'true', 'return' are keywords and filtered out
-			// only 'x' from context should be a parameter
 			expect(edit.replace.mock.calls[0][2]).toBe("extracted(x)")
 			expect(edit.insert.mock.calls[0][2]).toContain("extracted(x: Int ")
 		})
@@ -363,8 +379,6 @@ describe("CangjieRefactoringProvider", () => {
 
 			expect(mockApplyEdit).toHaveBeenCalledTimes(1)
 			const edit = mockApplyEdit.mock.calls[0][0]
-			// 'unknownFunc' is not declared in context, so not a free variable
-			// only 'x' from context should be a parameter
 			expect(edit.replace.mock.calls[0][2]).toBe("extracted(x)")
 			expect(edit.insert.mock.calls[0][2]).toContain("extracted(x: Int ")
 		})
@@ -389,7 +403,6 @@ describe("CangjieRefactoringProvider", () => {
 			await provider.extractFunction(doc, range)
 
 			const edit = mockApplyEdit.mock.calls[0][0]
-			// x is declared as `let x = 42` (no type annotation), so inferredType = "/* infer */"
 			expect(edit.insert.mock.calls[0][2]).toContain("func extracted(x: /* infer */)")
 		})
 	})
@@ -400,6 +413,11 @@ describe("CangjieRefactoringProvider", () => {
 			mockShowTextDocument.mockResolvedValue(undefined)
 			mockFindFiles.mockResolvedValue([])
 			mockOpenTextDocument.mockResolvedValue({ getText: () => "" })
+			// Default: realpathSync returns the input unchanged (no symlinks).
+			mockRealpathSync.mockImplementation((p: string) => p)
+			mockOpenSync.mockReturnValue(42)
+			mockWriteSync.mockReturnValue(undefined)
+			mockCloseSync.mockReturnValue(undefined)
 		})
 
 		it("returns early when no workspace folder", async () => {
@@ -419,7 +437,7 @@ describe("CangjieRefactoringProvider", () => {
 			await provider.moveFile({ fsPath: "/project/src/A.cj" })
 
 			expect(mockShowInputBox).toHaveBeenCalled()
-			expect(mockWriteFileSync).not.toHaveBeenCalled()
+			expect(mockOpenSync).not.toHaveBeenCalled()
 			expect(mockUnlinkSync).not.toHaveBeenCalled()
 		})
 
@@ -431,7 +449,7 @@ describe("CangjieRefactoringProvider", () => {
 
 			await provider.moveFile({ fsPath: "/project/src/A.cj" })
 
-			expect(mockWriteFileSync).not.toHaveBeenCalled()
+			expect(mockOpenSync).not.toHaveBeenCalled()
 			expect(mockUnlinkSync).not.toHaveBeenCalled()
 		})
 
@@ -446,7 +464,9 @@ describe("CangjieRefactoringProvider", () => {
 			await provider.moveFile({ fsPath: "/workspace/src/oldDir/A.cj" })
 
 			expect(mockMkdirSync).toHaveBeenCalled()
-			expect(mockWriteFileSync).toHaveBeenCalled()
+			expect(mockOpenSync).toHaveBeenCalled()
+			expect(mockWriteSync).toHaveBeenCalled()
+			expect(mockCloseSync).toHaveBeenCalled()
 			expect(mockUnlinkSync).toHaveBeenCalled()
 		})
 
@@ -461,7 +481,7 @@ describe("CangjieRefactoringProvider", () => {
 			await provider.moveFile({ fsPath: "/workspace/src/oldDir/A.cj" })
 
 			expect(mockMkdirSync).not.toHaveBeenCalled()
-			expect(mockWriteFileSync).toHaveBeenCalled()
+			expect(mockOpenSync).toHaveBeenCalled()
 		})
 
 		it("moves file and updates package declaration", async () => {
@@ -476,16 +496,13 @@ describe("CangjieRefactoringProvider", () => {
 
 			await provider.moveFile({ fsPath: "/workspace/src/foo/A.cj" })
 
-			// Verify writeFileSync was called with updated package
-			expect(mockWriteFileSync).toHaveBeenCalled()
-			const writtenContent = mockWriteFileSync.mock.calls[0][1]
+			// Verify writeSync was called with updated package
+			expect(mockWriteSync).toHaveBeenCalled()
+			const writtenContent = mockWriteSync.mock.calls[0][1]
 			expect(writtenContent).toContain("package bar")
 			expect(writtenContent).not.toContain("package foo.bar")
 
-			// Verify old file was deleted
 			expect(mockUnlinkSync).toHaveBeenCalled()
-
-			// Verify new file was opened
 			expect(mockOpenTextDocument).toHaveBeenCalled()
 			expect(mockShowTextDocument).toHaveBeenCalled()
 		})
@@ -501,9 +518,8 @@ describe("CangjieRefactoringProvider", () => {
 
 			await provider.moveFile({ fsPath: "/workspace/src/pkg/A.cj" })
 
-			// Content should be unchanged since package is the same
-			expect(mockWriteFileSync).toHaveBeenCalled()
-			const writtenContent = mockWriteFileSync.mock.calls[0][1]
+			expect(mockWriteSync).toHaveBeenCalled()
+			const writtenContent = mockWriteSync.mock.calls[0][1]
 			expect(writtenContent).toBe("package pkg\n\nclass A {}")
 
 			expect(mockUnlinkSync).toHaveBeenCalled()
@@ -520,16 +536,13 @@ describe("CangjieRefactoringProvider", () => {
 			mockReadFileSync.mockReturnValue("class A {}")
 			mockOpenTextDocument.mockResolvedValue({ getText: () => "" })
 
-			// Source is at src root -> oldPackage = undefined
 			await provider.moveFile({ fsPath: "/workspace/src/A.cj" })
 
-			// Content unchanged because oldPackage is undefined (dir === ".")
-			expect(mockWriteFileSync).toHaveBeenCalled()
-			const writtenContent = mockWriteFileSync.mock.calls[0][1]
+			expect(mockWriteSync).toHaveBeenCalled()
+			const writtenContent = mockWriteSync.mock.calls[0][1]
 			expect(writtenContent).toBe("class A {}")
 
 			expect(mockUnlinkSync).toHaveBeenCalled()
-			// No import update (applyEdit not called from updateImportReferences)
 			expect(mockApplyEdit).not.toHaveBeenCalled()
 		})
 
@@ -542,16 +555,120 @@ describe("CangjieRefactoringProvider", () => {
 			mockReadFileSync.mockReturnValue("package foo\n\nclass A {}")
 			mockOpenTextDocument.mockResolvedValue({ getText: () => "" })
 
-			// Target is at src root -> newPackage = undefined
 			await provider.moveFile({ fsPath: "/workspace/src/foo/A.cj" })
 
-			// Content unchanged because newPackage is undefined
-			expect(mockWriteFileSync).toHaveBeenCalled()
-			const writtenContent = mockWriteFileSync.mock.calls[0][1]
+			expect(mockWriteSync).toHaveBeenCalled()
+			const writtenContent = mockWriteSync.mock.calls[0][1]
 			expect(writtenContent).toBe("package foo\n\nclass A {}")
 
 			expect(mockUnlinkSync).toHaveBeenCalled()
 			expect(mockApplyEdit).not.toHaveBeenCalled()
+		})
+
+		// ── Security regression tests ────────────────────────────
+
+		it("rejects path traversal via '..' segments", async () => {
+			mockGetWorkspaceFolder.mockReturnValue({
+				uri: { fsPath: "/workspace" },
+			})
+			mockShowInputBox.mockResolvedValueOnce("../outside/A.cj")
+
+			await provider.moveFile({ fsPath: "/workspace/src/A.cj" })
+
+			// realpathSync on the escaped path resolves outside the workspace.
+			expect(mockShowErrorMessage).toHaveBeenCalled()
+			expect(mockOpenSync).not.toHaveBeenCalled()
+			expect(mockUnlinkSync).not.toHaveBeenCalled()
+		})
+
+		it("rejects path where target parent is a symlink outside workspace", async () => {
+			const wsRoot = "/workspace"
+			mockGetWorkspaceFolder.mockReturnValue({
+				uri: { fsPath: wsRoot },
+			})
+			mockShowInputBox.mockResolvedValueOnce("linked_dir/A.cj")
+
+			// Simulate: workspace root is normal, but "linked_dir" is a
+			// symlink to /etc (outside workspace). On Windows path.resolve
+			// prepends the drive letter, so match by basename.
+			const resolvedWs = path.resolve(wsRoot)
+			const resolvedLinkedDir = path.resolve(wsRoot, "linked_dir")
+			mockRealpathSync.mockImplementation((p: string) => {
+				if (p === resolvedWs) return path.resolve("/real/workspace")
+				if (p === resolvedLinkedDir) return path.resolve("/etc")
+				return p
+			})
+
+			await provider.moveFile({ fsPath: path.join(wsRoot, "src", "A.cj") })
+
+			expect(mockShowErrorMessage).toHaveBeenCalled()
+			expect(mockOpenSync).not.toHaveBeenCalled()
+			expect(mockUnlinkSync).not.toHaveBeenCalled()
+		})
+
+		it("allows path where non-existent target is logically within workspace", async () => {
+			mockGetWorkspaceFolder.mockReturnValue({
+				uri: { fsPath: "/workspace" },
+			})
+			mockShowInputBox.mockResolvedValueOnce("subdir/new_target/file.cj")
+			mockExistsSync.mockReturnValue(false)
+			mockReadFileSync.mockReturnValue("content")
+
+			// Simulate: /workspace is real, /workspace/subdir is real,
+			// but /workspace/subdir/new_target doesn't exist yet.
+			mockRealpathSync.mockImplementation((p: string) => {
+				if (p === "/workspace") return "/real/workspace"
+				if (p === "/workspace/subdir") return "/real/workspace/subdir"
+				throw Object.assign(new Error("ENOENT"), { code: "ENOENT" })
+			})
+
+			await provider.moveFile({ fsPath: "/workspace/src/A.cj" })
+
+			expect(mockOpenSync).toHaveBeenCalled()
+		})
+
+		it("rejects path where symlink in existing parent chain redirects outside workspace", async () => {
+			const wsRoot = "/workspace"
+			mockGetWorkspaceFolder.mockReturnValue({
+				uri: { fsPath: wsRoot },
+			})
+			mockShowInputBox.mockResolvedValueOnce("harmless/sub/file.cj")
+			mockExistsSync.mockReturnValue(false)
+
+			// "harmless" is actually a symlink to /tmp (outside workspace).
+			const resolvedWs = path.resolve(wsRoot)
+			const resolvedHarmless = path.resolve(wsRoot, "harmless")
+			mockRealpathSync.mockImplementation((p: string) => {
+				if (p === resolvedWs) return path.resolve("/real/workspace")
+				if (p === resolvedHarmless) return path.resolve("/tmp")
+				throw Object.assign(new Error("ENOENT"), { code: "ENOENT" })
+			})
+
+			await provider.moveFile({ fsPath: path.join(wsRoot, "src", "A.cj") })
+
+			expect(mockShowErrorMessage).toHaveBeenCalled()
+			expect(mockOpenSync).not.toHaveBeenCalled()
+			expect(mockUnlinkSync).not.toHaveBeenCalled()
+		})
+
+		it("rejects write when openSync fails with EEXIST (existing file or symlink)", async () => {
+			mockGetWorkspaceFolder.mockReturnValue({
+				uri: { fsPath: "/workspace" },
+			})
+			mockShowInputBox.mockResolvedValueOnce("src/bar/B.cj")
+			mockExistsSync.mockReturnValue(true)
+			mockReadFileSync.mockReturnValue("content")
+
+			// openSync with 'wx' flag fails because target already exists / is symlink
+			mockOpenSync.mockImplementation(() => {
+				throw Object.assign(new Error("file exists"), { code: "EEXIST" })
+			})
+
+			await provider.moveFile({ fsPath: "/workspace/src/foo/A.cj" })
+
+			expect(mockShowErrorMessage).toHaveBeenCalled()
+			expect(mockWriteSync).not.toHaveBeenCalled()
+			expect(mockUnlinkSync).not.toHaveBeenCalled()
 		})
 	})
 
@@ -564,18 +681,20 @@ describe("CangjieRefactoringProvider", () => {
 			mockShowTextDocument.mockResolvedValue(undefined)
 			mockFindFiles.mockResolvedValue([])
 			mockOpenTextDocument.mockResolvedValue({ getText: () => "" })
+			mockRealpathSync.mockImplementation((p: string) => p)
+			mockOpenSync.mockReturnValue(42)
+			mockWriteSync.mockReturnValue(undefined)
+			mockCloseSync.mockReturnValue(undefined)
 		})
 
 		it("updates import references across workspace", async () => {
-			const workspaceRoot = "/workspace"
 			mockGetWorkspaceFolder.mockReturnValue({
-				uri: { fsPath: workspaceRoot },
+				uri: { fsPath: "/workspace" },
 			})
 			mockShowInputBox.mockResolvedValueOnce("src/bar/A.cj")
 			mockExistsSync.mockReturnValue(true)
 			mockReadFileSync.mockReturnValue("package foo\n\nclass A {}")
 
-			// For updateImportReferences:
 			mockFindFiles.mockResolvedValue([{ fsPath: "/workspace/src/other/B.cj" }])
 			mockOpenTextDocument.mockResolvedValue({
 				getText: () => "import foo.*\n\nclass B {}",
@@ -587,7 +706,6 @@ describe("CangjieRefactoringProvider", () => {
 
 			await provider.moveFile({ fsPath: "/workspace/src/foo/A.cj" })
 
-			// applyEdit should be called once from updateImportReferences
 			expect(editCallCount).toBe(1)
 			expect(mockFindFiles).toHaveBeenCalledWith("**/*.cj", "**/target/**", 500)
 		})
@@ -604,7 +722,6 @@ describe("CangjieRefactoringProvider", () => {
 				{ fsPath: "/workspace/src/other/B.cj" },
 				{ fsPath: "/workspace/src/other/C.cj" },
 			])
-			// First file is readable, second throws
 			mockOpenTextDocument
 				.mockResolvedValueOnce({ getText: () => "import foo.*" })
 				.mockRejectedValueOnce(new Error("Cannot read file"))
@@ -616,11 +733,8 @@ describe("CangjieRefactoringProvider", () => {
 
 			await provider.moveFile({ fsPath: "/workspace/src/foo/A.cj" })
 
-			// Should still succeed - unreadable file is skipped
-			// The readable file triggers applyEdit
 			expect(editCallCount).toBe(1)
-			// The new file is opened after updateImportReferences
-			expect(mockOpenTextDocument).toHaveBeenCalledTimes(3) // 2 in updateImportReferences + 1 for new file
+			expect(mockOpenTextDocument).toHaveBeenCalledTimes(3)
 		})
 
 		it("skips files that do not contain the old package name", async () => {
@@ -632,7 +746,6 @@ describe("CangjieRefactoringProvider", () => {
 			mockReadFileSync.mockReturnValue("package foo\n\nclass A {}")
 
 			mockFindFiles.mockResolvedValue([{ fsPath: "/workspace/src/other/B.cj" }])
-			// File content doesn't contain old package "foo"
 			mockOpenTextDocument
 				.mockResolvedValueOnce({ getText: () => "class B {}" })
 				.mockResolvedValue({ getText: () => "" })
@@ -643,7 +756,6 @@ describe("CangjieRefactoringProvider", () => {
 
 			await provider.moveFile({ fsPath: "/workspace/src/foo/A.cj" })
 
-			// applyEdit should NOT be called since no files contain old package
 			expect(editCallCount).toBe(0)
 		})
 	})

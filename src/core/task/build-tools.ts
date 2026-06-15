@@ -3,6 +3,7 @@ import { createHash } from "crypto"
 
 import type OpenAI from "openai"
 import { z } from "zod"
+import * as vscode from "vscode"
 
 import type { ProviderSettings, ModeConfig, ModelInfo } from "@njust-ai/types"
 import { customToolRegistry, formatNative } from "@njust-ai/core"
@@ -37,6 +38,12 @@ interface BuildToolsOptions {
 	 * to pass all tool definitions while restricting callable tools.
 	 */
 	includeAllToolsWithRestrictions?: boolean
+	/**
+	 * Whether the workspace has been trusted for loading custom tools
+	 * from .njust_ai/tools. When false or undefined, custom tools are
+	 * skipped to prevent execution of untrusted workspace code.
+	 */
+	customToolsWorkspaceTrusted?: boolean
 }
 
 interface BuildToolsResult {
@@ -97,6 +104,7 @@ export async function buildNativeToolsArrayWithRestrictions(options: BuildToolsO
 		enableWebSearch,
 		modelInfo,
 		includeAllToolsWithRestrictions,
+		customToolsWorkspaceTrusted,
 	} = options
 
 	const mcpHub = provider.getMcpHub()
@@ -181,10 +189,18 @@ export async function buildNativeToolsArrayWithRestrictions(options: BuildToolsO
 	// Filter MCP tools based on mode restrictions.
 	const filteredMcpTools = filterMcpToolsForMode(mcpTools, mode, customModes, experiments)
 
-	// Add custom tools if they are available and the experiment is enabled.
+	// Add custom tools if they are available, the experiment is enabled,
+	// AND the workspace has been explicitly trusted for custom tool execution.
+	// Trust is resolved in priority order:
+	//   1. Explicit customToolsWorkspaceTrusted option (caller override)
+	//   2. experiments.customToolsWorkspaceTrusted (persisted in state)
+	//   3. vscode.workspace.isTrusted (VS Code built-in workspace trust)
 	let nativeCustomTools: OpenAI.Chat.ChatCompletionFunctionTool[] = []
 
-	if (experiments?.customTools) {
+	const effectiveTrusted =
+		customToolsWorkspaceTrusted ?? experiments?.customToolsWorkspaceTrusted ?? vscode.workspace.isTrusted ?? false
+
+	if (experiments?.customTools && effectiveTrusted) {
 		const toolDirs = getRooDirectoriesForCwd(cwd).map((dir) => path.join(dir, "tools"))
 		await customToolRegistry.loadFromDirectoriesIfStale(toolDirs)
 		const customTools = customToolRegistry.getAllSerialized()

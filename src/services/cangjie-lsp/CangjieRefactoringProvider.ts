@@ -6,6 +6,55 @@ import { parseCangjieDefinitions, type CangjieDef } from "../tree-sitter/cangjie
 import { t } from "../../i18n"
 
 /**
+ * Resolve the real path of a file or directory, handling non-existent paths
+ * by walking up to the nearest existing parent and resolving its real path.
+ * This prevents symlink-based path traversal attacks where a symlink inside
+ * the workspace points to a location outside the workspace.
+ */
+function resolveRealPath(filePath: string): string {
+	try {
+		return fs.realpathSync(filePath)
+	} catch {
+		// Path doesn't exist — walk up to nearest existing parent.
+		let current = filePath
+		const missingParts: string[] = []
+
+		while (true) {
+			const parent = path.dirname(current)
+			if (parent === current) {
+				// Reached root without finding an existing parent.
+				return filePath
+			}
+
+			try {
+				const realParent = fs.realpathSync(parent)
+				// Reconstruct with real parent + the first missing segment + remaining parts.
+				return path.join(realParent, path.basename(current), ...missingParts)
+			} catch {
+				missingParts.unshift(path.basename(current))
+				current = parent
+			}
+		}
+	}
+}
+
+/**
+ * Verify that a resolved absolute path is within the real workspace root.
+ */
+function isPathWithinWorkspace(realWorkspaceRoot: string, absolutePath: string): boolean {
+	try {
+		const realPath = fs.realpathSync(absolutePath)
+		const rel = path.relative(realWorkspaceRoot, realPath)
+		return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))
+	} catch {
+		// If the path doesn't exist, check its nearest existing parent.
+		const realParent = resolveRealPath(path.dirname(absolutePath))
+		const rel = path.relative(realWorkspaceRoot, realParent)
+		return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))
+	}
+}
+
+/**
  * Provides refactoring code actions for Cangjie files:
  *  - Extract Function: extract selected code into a new function
  *  - Move File: move a .cj file and update package declarations + imports
@@ -105,14 +154,23 @@ export class CangjieRefactoringProvider implements vscode.CodeActionProvider {
 		})
 		if (!targetPath || targetPath === relSource) return
 
-		// Security: prevent path traversal by resolving and validating the target path
-		const absTarget = path.resolve(workspaceFolder.uri.fsPath, targetPath)
+		// Security: prevent symlink-based path traversal.
+		// Resolve the REAL path of the workspace root and the nearest existing
+		// parent of the target to detect symlinks that point outside the workspace.
 		const workspaceRoot = path.resolve(workspaceFolder.uri.fsPath)
-		if (!absTarget.startsWith(workspaceRoot + path.sep) && absTarget !== workspaceRoot) {
+		const realWorkspaceRoot = resolveRealPath(workspaceRoot)
+
+		const absTarget = path.resolve(workspaceFolder.uri.fsPath, targetPath)
+		const targetDir = path.dirname(absTarget)
+		const realTargetParent = resolveRealPath(targetDir)
+
+		// Use path.relative to detect escapes: if the relative path starts with
+		// ".." then the real target parent is outside the real workspace root.
+		const relFromRoot = path.relative(realWorkspaceRoot, realTargetParent)
+		if (relFromRoot.startsWith("..") && relFromRoot !== "") {
 			void vscode.window.showErrorMessage(t("errors.cangjie_lsp.invalid_target_path", { path: targetPath }))
 			return
 		}
-		const targetDir = path.dirname(absTarget)
 
 		if (!fs.existsSync(targetDir)) {
 			fs.mkdirSync(targetDir, { recursive: true })
@@ -131,7 +189,39 @@ export class CangjieRefactoringProvider implements vscode.CodeActionProvider {
 			)
 		}
 
-		fs.writeFileSync(absTarget, updatedContent, "utf-8")
+		// Write using O_EXCL to avoid following symlinks on the final path
+		// component. O_EXCL fails if the file already exists (including symlinks).
+		try {
+			const fd = fs.openSync(absTarget, "wx")
+			try {
+				fs.writeSync(fd, updatedContent, 0, "utf-8")
+			} finally {
+				fs.closeSync(fd)
+			}
+		} catch (writeErr: unknown) {
+			const code = (writeErr as NodeJS.ErrnoException).code
+			if (code === "EEXIST") {
+				void vscode.window.showErrorMessage(t("errors.cangjie_lsp.target_file_exists", { path: targetPath }))
+			} else {
+				void vscode.window.showErrorMessage(
+					t("errors.cangjie_lsp.write_failed", { path: targetPath, error: String(writeErr) }),
+				)
+			}
+			return
+		}
+
+		// Re-verify the written target is still within workspace before deleting source.
+		if (!isPathWithinWorkspace(realWorkspaceRoot, absTarget)) {
+			// Target escaped the workspace after write — clean up and abort.
+			try {
+				fs.unlinkSync(absTarget)
+			} catch {
+				// Best-effort cleanup.
+			}
+			void vscode.window.showErrorMessage(t("errors.cangjie_lsp.invalid_target_path", { path: targetPath }))
+			return
+		}
+
 		fs.unlinkSync(sourceUri.fsPath)
 
 		if (oldPackage && newPackage && oldPackage !== newPackage) {

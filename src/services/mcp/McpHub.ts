@@ -256,6 +256,13 @@ export class McpHub implements IMcpHubService {
 				return
 			}
 
+			// For project MCP config, require workspace trust before starting servers.
+			// This prevents malicious workspace configs from spawning subprocesses
+			// via file watcher events without user consent.
+			if (source === "project" && !(await this.ensureProjectMcpTrusted())) {
+				return
+			}
+
 			await this.updateServerConnections(result.data.mcpServers || {}, source)
 		} catch (error) {
 			// Check if the error is because the file doesn't exist
@@ -336,6 +343,11 @@ export class McpHub implements IMcpHubService {
 			// Validate configuration structure
 			const result = McpSettingsSchema.safeParse(config)
 			if (result.success) {
+				// Require workspace trust before auto-starting project MCP servers
+				// on workspace folder changes.
+				if (!(await this.ensureProjectMcpTrusted())) {
+					return
+				}
 				await this.updateServerConnections(result.data.mcpServers || {}, "project")
 			} else {
 				// Format validation errors for better user feedback
@@ -466,16 +478,8 @@ export class McpHub implements IMcpHubService {
 			// For project-level MCP config, require user confirmation before auto-starting
 			// any subprocesses — prevents malicious .njust_ai/mcp.json from spawning processes
 			// when a workspace is first opened.
-			if (source === "project") {
-				const workspacePath = this.providerRef.deref()?.cwd ?? getWorkspacePath()
-				if (!(await this.isWorkspaceTrustedForMcp(workspacePath))) {
-					const trusted = await this.promptUserToTrustMcpServers()
-					if (!trusted) {
-						logger.info("McpHub", "User declined to start project MCP servers — skipping auto-start")
-						return
-					}
-					await this.trustWorkspaceForMcp(workspacePath)
-				}
+			if (source === "project" && !(await this.ensureProjectMcpTrusted())) {
+				return
 			}
 
 			const content = await fs.readFile(configPath, "utf-8")
@@ -554,6 +558,25 @@ export class McpHub implements IMcpHubService {
 		}
 		const dir = await provider.ensureMcpServersDirectoryExists()
 		return path.join(dir, "trusted_workspaces.json")
+	}
+
+	/**
+	 * Ensure the current workspace is trusted for project-level MCP auto-start.
+	 * Returns true if already trusted or the user just accepted the prompt;
+	 * returns false if the user declined (caller should skip server startup).
+	 */
+	private async ensureProjectMcpTrusted(): Promise<boolean> {
+		const workspacePath = this.providerRef.deref()?.cwd ?? getWorkspacePath()
+		if (await this.isWorkspaceTrustedForMcp(workspacePath)) {
+			return true
+		}
+		const trusted = await this.promptUserToTrustMcpServers()
+		if (!trusted) {
+			logger.info("McpHub", "User declined to start project MCP servers")
+			return false
+		}
+		await this.trustWorkspaceForMcp(workspacePath)
+		return true
 	}
 
 	/**

@@ -259,9 +259,23 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 				finalPath = `${finalPath}.${imageFormat === "jpeg" ? "jpg" : imageFormat}`
 			}
 
+			// Re-validate after extension appending — the final path may differ
+			// from the initially validated relPath and could escape the workspace
+			// via symlinks or extension-induced path changes.
+			const absolutePath = path.resolve(task.cwd, finalPath)
+			if (isPathOutsideWorkspace(absolutePath)) {
+				task.consecutiveMistakeCount++
+				task.recordToolError("generate_image")
+				pushToolResult(
+					formatResponse.toolError(
+						`Safety: cannot write to path outside workspace: ${getReadablePath(task.cwd, finalPath)}`,
+					),
+				)
+				return
+			}
+
 			const imageBuffer = Buffer.from(base64Data!, "base64")
 
-			const absolutePath = path.resolve(task.cwd, finalPath)
 			const directory = path.dirname(absolutePath)
 			await fs.mkdir(directory, { recursive: true })
 

@@ -15,6 +15,8 @@ const { getTestConfigDir } = vi.hoisted(() => {
 
 vi.mock("../config-dir.js", () => ({
 	getConfigDir: getTestConfigDir,
+	getSecureDir: getTestConfigDir,
+	ensureSecureDir: vi.fn().mockResolvedValue(undefined),
 }))
 
 // Import after mocking

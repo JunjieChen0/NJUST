@@ -225,7 +225,7 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 			commandExecutionTimeout: 300,
 			enableCheckpoints: false,
 			experiments: {
-				customTools: true,
+				customTools: false,
 			},
 			...getProviderSettings(this.options.provider, this.options.apiKey, this.options.model),
 		}

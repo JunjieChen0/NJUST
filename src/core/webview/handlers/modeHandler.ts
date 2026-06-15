@@ -87,8 +87,20 @@ async function handleOpenKeyboardShortcuts(_context: MessageHandlerContext, mess
 }
 
 async function handleRefreshCustomTools(context: MessageHandlerContext, _message: WebviewMessage): Promise<void> {
-	const { provider, getCurrentCwd } = context
+	const { provider, getCurrentCwd, getGlobalState } = context
 	try {
+		// Require workspace trust before loading project-local custom tools.
+		const experiments = getGlobalState("experiments")
+		const isTrusted = experiments?.customToolsWorkspaceTrusted ?? vscode.workspace.isTrusted ?? false
+		if (experiments?.customTools && !isTrusted) {
+			await provider.postMessageToWebview({
+				type: "customToolsResult",
+				tools: [],
+				error: "Workspace not trusted for custom tools. Trust this workspace first.",
+			})
+			return
+		}
+
 		const toolDirs = provider.getRooDirectoriesForCwd(getCurrentCwd()).map((dir) => path.join(dir, "tools"))
 		await customToolRegistry.loadFromDirectories(toolDirs)
 		await provider.postMessageToWebview({

@@ -20,7 +20,7 @@ import type { IProtocolAdapterFactory } from "./adapters/IProtocolAdapterFactory
 import type { IProtocolAdapter, McpCallbackHandler, UniversalTaskResponse } from "./adapters/types"
 import { MCP_TOOLS } from "./adapters/McpProtocolAdapter"
 import { normalizeServerUrl } from "./urlUtils"
-import { assertSafeOutboundUrl } from "../../core/security/networkGuard"
+import { assertSafeOutboundUrl, guardedFetch } from "../../core/security/networkGuard"
 import { t } from "../../i18n"
 
 /** Maximum response body size (50 MB) before rejecting to avoid loading pathological payloads into memory. */
@@ -275,29 +275,29 @@ export class CloudAgentClient {
 	}
 
 	/**
-	 * DNS-rebinding-safe fetch. Validates the target URL resolves to a public IP
-	 * before and after the request to detect DNS rebinding attacks.
-	 * Skips the DNS check for localhost/loopback connections since they cannot
-	 * be affected by DNS rebinding.
+	 * SSRF-safe fetch that delegates to {@link guardedFetch} for non-local URLs.
+	 *
+	 * guardedFetch provides comprehensive SSRF protection:
+	 * - DNS resolution is validated to a public IP and the connection is pinned
+	 *   to that IP (prevents DNS-rebinding attacks).
+	 * - Every redirect hop is re-validated before being followed.
+	 * - Sensitive headers (authorization, cookie, x-api-key, …) are stripped on
+	 *   cross-origin redirects.
+	 * - The redirect chain is capped at 10 hops.
+	 *
+	 * Localhost/loopback URLs bypass these checks and use the native fetch,
+	 * since they cannot be exploited for SSRF.
 	 */
 	private async safeFetch(url: string, init?: RequestInit): Promise<Response> {
 		const parsed = new URL(url)
 		const isLocal =
 			parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]"
-		if (!isLocal) {
-			await assertSafeOutboundUrl(url)
+		if (isLocal) {
+			return fetch(url, init)
 		}
-		let resp: Response
-		try {
-			resp = await fetch(url, init)
-		} catch (e) {
-			throw enrichFetchError(e)
-		}
-		if (!isLocal) {
-			// Post-request DNS check to detect rebinding
-			await assertSafeOutboundUrl(url)
-		}
-		return resp
+		// guardedFetch validates each redirect hop, pins IPs, and strips
+		// sensitive headers on cross-origin redirects.
+		return guardedFetch(url, init)
 	}
 
 	private async parseUniversalResponse(resp: Response): Promise<UniversalTaskResponse> {
