@@ -7,7 +7,6 @@ import { getConfigDir, getSecureDir, ensureSecureDir } from "./index.js"
 
 const CREDENTIALS_FILE = path.join(getConfigDir(), "cli-credentials.json")
 const CREDENTIALS_ENC_FILE = path.join(getConfigDir(), "cli-credentials.enc")
-const MASTER_KEY_FILE = path.join(getSecureDir(), ".masterkey")
 
 // Encryption constants
 const ALGORITHM = "aes-256-gcm"
@@ -38,11 +37,12 @@ function generateMasterKey(): Buffer {
  * Load the master key from disk, or generate and persist a new one.
  */
 async function getOrCreateMasterKey(): Promise<Buffer> {
+	const masterKeyFile = path.join(getSecureDir(), ".masterkey")
 	try {
-		const data = await fs.readFile(MASTER_KEY_FILE)
+		const data = await fs.readFile(masterKeyFile)
 		if (data.length !== KEY_LENGTH) {
 			const key = generateMasterKey()
-			await fs.writeFile(MASTER_KEY_FILE, key, { mode: 0o600 })
+			await fs.writeFile(masterKeyFile, key, { mode: 0o600 })
 			return key
 		}
 		return Buffer.from(data)
@@ -52,7 +52,7 @@ async function getOrCreateMasterKey(): Promise<Buffer> {
 		}
 		const key = generateMasterKey()
 		await ensureSecureDir()
-		await fs.writeFile(MASTER_KEY_FILE, key, { mode: 0o600 })
+		await fs.writeFile(masterKeyFile, key, { mode: 0o600 })
 		return key
 	}
 }
