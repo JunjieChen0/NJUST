@@ -62,6 +62,19 @@ suite("NJUST_AI use_mcp_tool Tool", function () {
 		}
 		await fs.writeFile(testFiles.mcpConfig, JSON.stringify(mcpConfig, null, 2))
 
+		// Pre-trust this workspace for project-level MCP so McpHub's trust
+		// check passes without prompting (VS Code's DialogService refuses to
+		// show dialogs in test mode). Path mirrors ensureMcpServersDirectoryExists.
+		const mcpServersDir =
+			process.platform === "win32"
+				? path.join(os.homedir(), "AppData", "Roaming", "NJUST_AI", "MCP")
+				: process.platform === "darwin"
+					? path.join(os.homedir(), "Documents", "Cline", "MCP")
+					: path.join(os.homedir(), ".local", "share", "NJUST_AI", "MCP")
+		await fs.mkdir(mcpServersDir, { recursive: true })
+		const trustedPath = path.join(mcpServersDir, "trusted_workspaces.json")
+		await fs.writeFile(trustedPath, JSON.stringify({ trustedWorkspaces: [workspaceDir] }, null, 2))
+
 		console.log("MCP test files created in:", workspaceDir)
 		console.log("Test files:", testFiles)
 	})
@@ -837,7 +850,10 @@ suite("NJUST_AI use_mcp_tool Tool", function () {
 
 			assert.ok(mcpToolRequested, "The missing server use_mcp_tool request should have been shown")
 			assert.ok(unknownServerError, "Should have reported the missing MCP server")
-			assert.ok(attemptCompletionCalled, "Task should have completed with attempt_completion after missing server error")
+			assert.ok(
+				attemptCompletionCalled,
+				"Task should have completed with attempt_completion after missing server error",
+			)
 
 			console.log("Test passed! Missing MCP server handling verified and task completed")
 		} finally {
