@@ -34,6 +34,10 @@ async function main() {
 		// Pass test filters as environment variables to the test runner
 		const extensionTestsEnv = {
 			...process.env,
+			// Mark the environment as test so runtime guards that rely on
+			// NODE_ENV (e.g. McpHub project-MCP trust prompt) skip prompts
+			// that VS Code's DialogService refuses to show in tests.
+			NODE_ENV: "test",
 			MOCK_API_URL: mockHandle.url,
 			NODE_EXEC_PATH: process.execPath,
 			E2E_PACKAGE_ROOT: process.cwd(),
@@ -49,7 +53,6 @@ async function main() {
 			extensionTestsEnv,
 			version: process.env.VSCODE_VERSION || "1.101.2",
 		})
-
 	} catch (error) {
 		console.error("Failed to run tests", error)
 		exitCode = 1

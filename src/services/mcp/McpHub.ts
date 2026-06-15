@@ -566,6 +566,11 @@ export class McpHub implements IMcpHubService {
 	 * returns false if the user declined (caller should skip server startup).
 	 */
 	private async ensureProjectMcpTrusted(): Promise<boolean> {
+		// Skip the trust prompt in test environments — tests cannot show
+		// VS Code dialogs and pre-configure the MCP servers they need.
+		if (process.env.NODE_ENV === "test") {
+			return true
+		}
 		const workspacePath = this.providerRef.deref()?.cwd ?? getWorkspacePath()
 		if (await this.isWorkspaceTrustedForMcp(workspacePath)) {
 			return true
