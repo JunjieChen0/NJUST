@@ -9,13 +9,15 @@ import type {
 	TuiMessage,
 	TuiPart,
 	TuiAction,
-	TuiTaskStatus,
 } from "./types.ts"
 import { TUI_RUNTIME_ADAPTER_VERSION } from "./types.ts"
 
 import type { ClineMessage, ClineSay, ClineAsk, ExtensionMessage, WebviewMessage } from "@njust-ai/types"
-import { readWorkspaceTaskSessions } from "@/lib/task-history/index.js"
+import { logger } from "@njust-ai/core/shared"
+import { readWorkspaceTaskSessions, getDefaultCliTaskStoragePath } from "@/lib/task-history/index.js"
 import { exportSessionToMarkdown } from "../lib/export-markdown.js"
+import fs from "fs"
+import path from "path"
 
 // =============================================================================
 // TuiRuntimeAdapter
@@ -24,6 +26,7 @@ import { exportSessionToMarkdown } from "../lib/export-markdown.js"
 export interface TuiRuntimeAdapterOptions {
 	extensionHost: ExtensionHost
 	recentSessions?: Array<{ id: string; title: string; createdAt: number; updatedAt: number; messageCount: number }>
+	storagePath?: string
 }
 
 /**
@@ -61,11 +64,14 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 	}>
 	private autoApprovalEnabled = false
 
+	private storagePath: string
+
 	constructor(options: TuiRuntimeAdapterOptions) {
 		super()
 		this.extensionHost = options.extensionHost
 		this.state = createInitialTuiState()
 		this.recentSessions = options.recentSessions || []
+		this.storagePath = options.storagePath || getDefaultCliTaskStoragePath()
 	}
 
 	private activated = false
@@ -152,7 +158,7 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 		})
 	}
 
-	async approve(requestId: string): Promise<void> {
+	async approve(requestId: string, always?: boolean): Promise<void> {
 		const messageId = this.pendingApprovals.get(requestId)
 		if (!messageId) {
 			throw new Error(`Unknown approval request: ${requestId}`)
@@ -170,7 +176,16 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 			sessionId: this.sessionId!,
 			requestId,
 			approved: true,
+			always,
 		})
+
+		if (always) {
+			this.autoApprovalEnabled = true
+			this.extensionHost.sendToExtension({
+				type: "autoApprovalEnabled",
+				bool: true,
+			} as WebviewMessage)
+		}
 	}
 
 	async reject(requestId: string): Promise<void> {
@@ -265,6 +280,144 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 		} as WebviewMessage)
 	}
 
+	async pausePlan(planId: string): Promise<void> {
+		this.extensionHost.sendToExtension({
+			type: "planAction",
+			planId,
+			action: "pause",
+		} as WebviewMessage)
+	}
+
+	async cancelPlan(planId: string): Promise<void> {
+		this.extensionHost.sendToExtension({
+			type: "planAction",
+			planId,
+			action: "cancel",
+		} as WebviewMessage)
+	}
+
+	async skipPlanStep(planId: string, stepId: string): Promise<void> {
+		this.extensionHost.sendToExtension({
+			type: "planAction",
+			planId,
+			action: "updateStep",
+			stepId,
+			status: "skipped",
+		} as WebviewMessage)
+	}
+
+	async regeneratePlanStep(planId: string, stepId: string): Promise<void> {
+		this.extensionHost.sendToExtension({
+			type: "planAction",
+			planId,
+			action: "updateStep",
+			stepId,
+			status: "ready",
+		} as WebviewMessage)
+	}
+
+	async editPlanStep(planId: string, stepId: string, description: string): Promise<void> {
+		this.extensionHost.sendToExtension({
+			type: "planAction",
+			planId,
+			action: "updateStep",
+			stepId,
+			description,
+		} as WebviewMessage)
+	}
+
+	async renameSession(sessionId: string, title: string): Promise<void> {
+		try {
+			const indexPath = path.join(this.storagePath, "tasks", "_index.json")
+			if (fs.existsSync(indexPath)) {
+				const raw = fs.readFileSync(indexPath, "utf-8")
+				const parsed = JSON.parse(raw) as { entries?: Array<{ id: string; task: string }> }
+				if (Array.isArray(parsed.entries)) {
+					const entry = parsed.entries.find((e) => e.id === sessionId)
+					if (entry) {
+						entry.task = title
+						fs.writeFileSync(indexPath, JSON.stringify(parsed, null, 2), "utf-8")
+					}
+				}
+			}
+			const historyPath = path.join(this.storagePath, "tasks", sessionId, "history_item.json")
+			if (fs.existsSync(historyPath)) {
+				const raw = fs.readFileSync(historyPath, "utf-8")
+				const parsed = JSON.parse(raw) as { task?: string }
+				parsed.task = title
+				fs.writeFileSync(historyPath, JSON.stringify(parsed, null, 2), "utf-8")
+			}
+		} catch (err) {
+			logger.warn("TuiRuntimeAdapter", "Failed to rename session", err as Error)
+		}
+		await this.refreshRecentSessions()
+	}
+
+	async deleteSession(sessionId: string): Promise<void> {
+		try {
+			const indexPath = path.join(this.storagePath, "tasks", "_index.json")
+			if (fs.existsSync(indexPath)) {
+				const raw = fs.readFileSync(indexPath, "utf-8")
+				const parsed = JSON.parse(raw) as { entries?: Array<{ id: string }> }
+				if (Array.isArray(parsed.entries)) {
+					parsed.entries = parsed.entries.filter((e) => e.id !== sessionId)
+					fs.writeFileSync(indexPath, JSON.stringify(parsed, null, 2), "utf-8")
+				}
+			}
+			const taskDir = path.join(this.storagePath, "tasks", sessionId)
+			if (fs.existsSync(taskDir)) {
+				fs.rmSync(taskDir, { recursive: true, force: true })
+			}
+		} catch (err) {
+			logger.warn("TuiRuntimeAdapter", "Failed to delete session", err as Error)
+		}
+		await this.refreshRecentSessions()
+	}
+
+	async forkSession(sessionId: string): Promise<string> {
+		const newId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+		try {
+			const sourceDir = path.join(this.storagePath, "tasks", sessionId)
+			const targetDir = path.join(this.storagePath, "tasks", newId)
+			if (fs.existsSync(sourceDir)) {
+				fs.mkdirSync(targetDir, { recursive: true })
+				for (const file of fs.readdirSync(sourceDir)) {
+					const src = path.join(sourceDir, file)
+					const dst = path.join(targetDir, file)
+					if (fs.statSync(src).isFile()) {
+						fs.copyFileSync(src, dst)
+					}
+				}
+				const historyPath = path.join(targetDir, "history_item.json")
+				if (fs.existsSync(historyPath)) {
+					const raw = fs.readFileSync(historyPath, "utf-8")
+					const parsed = JSON.parse(raw) as { id?: string; task?: string }
+					parsed.id = newId
+					parsed.task = `${parsed.task || "Session"} (fork)`
+					fs.writeFileSync(historyPath, JSON.stringify(parsed, null, 2), "utf-8")
+				}
+			}
+			const indexPath = path.join(this.storagePath, "tasks", "_index.json")
+			if (fs.existsSync(indexPath)) {
+				const raw = fs.readFileSync(indexPath, "utf-8")
+				const parsed = JSON.parse(raw) as { entries?: Array<{ id: string; task: string; ts: number }> }
+				if (Array.isArray(parsed.entries)) {
+					const sourceEntry = parsed.entries.find((e) => e.id === sessionId)
+					parsed.entries.unshift({
+						id: newId,
+						task: `${sourceEntry?.task || "Session"} (fork)`,
+						ts: Date.now(),
+					})
+					fs.writeFileSync(indexPath, JSON.stringify(parsed, null, 2), "utf-8")
+				}
+			}
+		} catch (err) {
+			logger.warn("TuiRuntimeAdapter", "Failed to fork session", err as Error)
+		}
+		await this.refreshRecentSessions()
+		return newId
+	}
+
 	async undo(): Promise<void> {
 		if (!this.sessionId) {
 			return
@@ -317,6 +470,21 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 			if (message.type === "planUpdate") {
 				const plan = this.normalizePlan(message.plan)
 				this.dispatch({ type: "plan/set", payload: { plan } })
+				if (plan) {
+					for (const step of plan.steps) {
+						this.dispatch({
+							type: "plan/updateStep",
+							payload: {
+								stepId: step.id,
+								status: step.status,
+								result: step.result,
+								error: step.error,
+								startedAt: step.startedAt,
+								completedAt: step.completedAt,
+							},
+						})
+					}
+				}
 				this.emitEvent({
 					type: "plan.updated",
 					timestamp: Date.now(),
@@ -421,6 +589,8 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 						requestId,
 						messageId: msg.id,
 						ask: "tool",
+						toolName,
+						path: typeof toolInfo?.path === "string" ? toolInfo.path : undefined,
 					})
 					break
 				}
@@ -451,6 +621,7 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 						requestId,
 						messageId: msg.id,
 						ask: "command",
+						command,
 					})
 					break
 				}
@@ -482,11 +653,14 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 						requestId,
 						messageId: msg.id,
 						ask: "use_mcp_server",
+						serverName: mcpInfo?.serverName,
+						toolName: mcpInfo?.toolName,
 					})
 					break
 				}
 				case "followup": {
 					const question = msg.text || ""
+					const options = parseQuestionOptions(question)
 					const requestId = this.generateRequestId()
 					this.pendingQuestions.set(requestId, msg.id)
 					this.emitEvent({
@@ -496,6 +670,7 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 						requestId,
 						messageId: msg.id,
 						question,
+						options,
 					})
 					break
 				}
@@ -549,6 +724,18 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 				case "reasoning": {
 					const partId = this.assignPartId(msg.id)
 					this.createReasoningPart(msg.id, partId, msg.ts, content, msg.partial ? "streaming" : "completed")
+					this.dispatch({
+						type: "message/create",
+						payload: {
+							id: msg.id,
+							sessionId: this.sessionId,
+							role: "reasoning",
+							createdAt: msg.ts,
+							updatedAt: msg.ts,
+							content,
+							partIds: [partId],
+						},
+					})
 					this.emitEvent({
 						type: msg.partial ? "reasoning.started" : "reasoning.completed",
 						timestamp: msg.ts,
@@ -740,17 +927,22 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 		const steps = Array.isArray(p.steps)
 			? p.steps.map((s: unknown, index: number) => {
 					const step = s as Record<string, unknown>
+					const dependencies = Array.isArray(step.dependencies)
+						? step.dependencies.filter((d): d is string => typeof d === "string")
+						: []
 					return {
 						id: typeof step.id === "string" ? step.id : `step-${index}`,
 						index: typeof step.index === "number" ? step.index : index,
 						description: typeof step.description === "string" ? step.description : "",
 						mode: typeof step.mode === "string" ? step.mode : "code",
-						dependencies: Array.isArray(step.dependencies)
-							? step.dependencies.filter((d): d is string => typeof d === "string")
-							: [],
+						dependencies,
 						status: this.normalizeStepStatus(step.status),
 						result: typeof step.result === "string" ? step.result : undefined,
 						error: typeof step.error === "string" ? step.error : undefined,
+						startedAt: typeof step.startedAt === "number" ? step.startedAt : undefined,
+						completedAt: typeof step.completedAt === "number" ? step.completedAt : undefined,
+						taskId: typeof step.taskId === "string" ? step.taskId : undefined,
+						subPlan: step.subPlan ? this.normalizePlan(step.subPlan) : undefined,
 					}
 				})
 			: []
@@ -783,6 +975,9 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 	private inferRole(msg: ClineMessage): TuiMessage["role"] {
 		if (msg.type === "say" && String(msg.say) === "user") {
 			return "user"
+		}
+		if (msg.type === "say" && msg.say === "reasoning") {
+			return "reasoning"
 		}
 		if (msg.type === "ask") {
 			return "assistant"
@@ -824,7 +1019,7 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 			})
 			this.recentSessions = updated
 			this.dispatch({ type: "session/refresh" })
-		} catch {
+		} catch (_err) {
 			// ignore refresh errors
 		}
 	}
@@ -886,6 +1081,23 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 	private generateRequestId(): string {
 		return `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
 	}
+}
+
+function parseQuestionOptions(question: string): string[] | undefined {
+	const lines = question.split("\n")
+	const options: string[] = []
+	let inOptions = false
+	for (const line of lines) {
+		const trimmed = line.trim()
+		if (!trimmed) continue
+		if (/^\d+[.):]\s+/.test(trimmed) || /^[-*]\s+/.test(trimmed)) {
+			options.push(trimmed.replace(/^\d+[.):]\s+/, "").replace(/^[-*]\s+/, ""))
+			inOptions = true
+		} else if (inOptions) {
+			break
+		}
+	}
+	return options.length > 0 ? options : undefined
 }
 
 // =============================================================================
@@ -1099,6 +1311,8 @@ export function tuiReducer(state: TuiState, action: TuiAction): TuiState {
 					status: action.payload.status,
 					result: action.payload.result,
 					error: action.payload.error,
+					startedAt: action.payload.startedAt ?? step.startedAt,
+					completedAt: action.payload.completedAt ?? step.completedAt,
 				}
 			})
 			const completedSteps = steps.filter((s) => s.status === "completed" || s.status === "skipped").length

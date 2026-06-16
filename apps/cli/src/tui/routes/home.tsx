@@ -10,11 +10,12 @@
  * Designed to be the entry point before any session starts.
  */
 
-import { Show, For, type JSX } from "solid-js"
+import { Show, For, createSignal } from "solid-js"
 import { Text } from "../components/index.tsx"
 import { Prompt } from "../components/prompt/index.tsx"
 import { createDefaultTriggers } from "../components/prompt/autocomplete.tsx"
 import { useTheme } from "../context/theme.tsx"
+import { Dialog } from "../dialogs/index.tsx"
 
 const defaultTriggers = createDefaultTriggers()
 
@@ -23,6 +24,9 @@ export interface HomeProps {
 	onNewSession: () => void
 	onStartTask?: (text: string) => void
 	onResumeSession?: (sessionId: string) => void
+	onRenameSession?: (sessionId: string, title: string) => void
+	onDeleteSession?: (sessionId: string) => void
+	onForkSession?: (sessionId: string) => void
 	onOpenCommandPalette?: () => void
 	onOpenAgentPicker?: () => void
 	currentProvider?: string
@@ -44,6 +48,18 @@ const LOGO_LINES = [
 export function Home(props: HomeProps) {
 	const { theme } = useTheme()
 	const sessions = () => props.sessions || []
+
+	function confirmDelete(sessionId: string, title: string) {
+		Dialog.confirm("Delete Session", `Delete "${title}"? This cannot be undone.`, (ok) => {
+			if (ok) props.onDeleteSession?.(sessionId)
+		})
+	}
+
+	function promptRename(sessionId: string, currentTitle: string) {
+		Dialog.prompt("Rename Session", currentTitle, (value) => {
+			if (value?.trim()) props.onRenameSession?.(sessionId, value.trim())
+		})
+	}
 
 	return (
 		<box
@@ -107,22 +123,13 @@ export function Home(props: HomeProps) {
 					<box flexDirection="column" paddingTop={1}>
 						<For each={sessions().slice(0, 5)}>
 							{(session) => (
-								<box
-									flexDirection="row"
-									gap={1}
-									paddingY={1}
-									onClick={() => props.onResumeSession?.(session.id)}>
-									<Text color={theme.colors.primary}>›</Text>
-									<box flexDirection="column" flexGrow={1}>
-										<Text color={theme.colors.text} bold>
-											{session.title}
-										</Text>
-										<Text color={theme.colors.textMuted}>
-											{new Date(session.updatedAt).toLocaleString()} · {session.messageCount}{" "}
-											messages
-										</Text>
-									</box>
-								</box>
+								<SessionRow
+									session={session}
+									onResume={props.onResumeSession}
+									onRename={props.onRenameSession ? promptRename : undefined}
+									onDelete={props.onDeleteSession ? confirmDelete : undefined}
+									onFork={props.onForkSession}
+								/>
 							)}
 						</For>
 					</box>
@@ -135,6 +142,73 @@ export function Home(props: HomeProps) {
 				<Text color={theme.colors.warning}>● Tip</Text>
 				<Text color={theme.colors.textMuted}>Set "share": "auto" to automatically share all sessions</Text>
 			</box>
+		</box>
+	)
+}
+
+function SessionRow(props: {
+	session: { id: string; title: string; createdAt: number; updatedAt: number; messageCount: number }
+	onResume?: (sessionId: string) => void
+	onRename?: (sessionId: string, title: string) => void
+	onDelete?: (sessionId: string, title: string) => void
+	onFork?: (sessionId: string) => void
+}) {
+	const { theme } = useTheme()
+	const [hovered, setHovered] = createSignal(false)
+	return (
+		<box
+			flexDirection="row"
+			gap={1}
+			paddingY={1}
+			onMouseEnter={() => setHovered(true)}
+			onMouseLeave={() => setHovered(false)}
+			onClick={() => props.onResume?.(props.session.id)}>
+			<Text color={theme.colors.primary}>›</Text>
+			<box flexDirection="column" flexGrow={1}>
+				<Text color={theme.colors.text} bold>
+					{props.session.title}
+				</Text>
+				<Text color={theme.colors.textMuted}>
+					{new Date(props.session.updatedAt).toLocaleString()} · {props.session.messageCount} messages
+				</Text>
+			</box>
+			<Show when={hovered()}>
+				<box flexDirection="row" gap={2}>
+					<Show when={props.onRename}>
+						<Text
+							color={theme.colors.primary}
+							onClick={(e) => {
+								e.stopPropagation?.()
+								props.onRename?.(props.session.id, props.session.title)
+							}}
+							dim>
+							[Rename]
+						</Text>
+					</Show>
+					<Show when={props.onFork}>
+						<Text
+							color={theme.colors.secondary}
+							onClick={(e) => {
+								e.stopPropagation?.()
+								props.onFork?.(props.session.id)
+							}}
+							dim>
+							[Fork]
+						</Text>
+					</Show>
+					<Show when={props.onDelete}>
+						<Text
+							color={theme.colors.error}
+							onClick={(e) => {
+								e.stopPropagation?.()
+								props.onDelete?.(props.session.id, props.session.title)
+							}}
+							dim>
+							[Delete]
+						</Text>
+					</Show>
+				</box>
+			</Show>
 		</box>
 	)
 }

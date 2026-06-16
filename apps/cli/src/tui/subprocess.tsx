@@ -32,6 +32,7 @@ import { useToast } from "./context/toast.tsx"
 import { Splash, LoadingOverlay } from "./components/splash.tsx"
 import { Home } from "./routes/home.tsx"
 import { Session } from "./routes/session/index.tsx"
+import { loadTuiConfig, saveTuiConfig, matchesKeybinding, type TuiConfig } from "./lib/tui-config.ts"
 
 // =============================================================================
 // State (mutable, fed by IPC events)
@@ -61,11 +62,24 @@ interface SubprocessState {
 	workspacePath: string
 	todos: Array<{ id: string; content: string; status: "pending" | "in_progress" | "completed" }>
 	tokenUsage: { total: number; context: number; cost?: number }
-	pendingApproval: { requestId: string; ask: string } | null
-	pendingQuestion: { requestId: string; question: string } | null
+	pendingApproval: {
+		requestId: string
+		ask: string
+		toolName?: string
+		path?: string
+		command?: string
+		serverName?: string
+	} | null
+	pendingQuestion: {
+		requestId: string
+		question: string
+		options?: string[]
+	} | null
 	autoApprovalEnabled: boolean
 	currentPlan: import("./runtime/types.ts").TuiPlan | null
 	compact: boolean
+	showReasoning: boolean
+	config: TuiConfig
 }
 
 const state: SubprocessState = {
@@ -85,6 +99,8 @@ const state: SubprocessState = {
 	autoApprovalEnabled: false,
 	currentPlan: null,
 	compact: false,
+	showReasoning: true,
+	config: loadTuiConfig(),
 }
 
 // =============================================================================
@@ -173,7 +189,24 @@ commandRegistry.register({
 	hidden: true,
 	run: () => {
 		state.compact = !state.compact
+		state.config.compact = state.compact
+		saveTuiConfig(state.config)
 		toast.show(`Compact mode ${state.compact ? "enabled" : "disabled"}`, "info")
+	},
+})
+
+commandRegistry.register({
+	id: "app.thinking",
+	label: "Toggle Reasoning Visibility",
+	description: "Show or hide reasoning blocks",
+	slashName: "thinking",
+	category: "App",
+	hidden: true,
+	run: () => {
+		state.showReasoning = !state.showReasoning
+		state.config.showReasoning = state.showReasoning
+		saveTuiConfig(state.config)
+		toast.show(`Reasoning ${state.showReasoning ? "visible" : "hidden"}`, "info")
 	},
 })
 
@@ -228,9 +261,9 @@ async function handleRequest(message: IpcMessage): Promise<IpcMessage> {
 				return IpcProtocol.createResponse(id, { ok: true })
 
 			case "approve": {
-				const p = params as { requestId: string } | undefined
+				const p = params as { requestId: string; always?: boolean } | undefined
 				if (p?.requestId) {
-					sendEvent({ type: "ui.approve", requestId: p.requestId })
+					sendEvent({ type: "ui.approve", requestId: p.requestId, always: p.always })
 				}
 				return IpcProtocol.createResponse(id, { ok: true })
 			}
@@ -316,6 +349,7 @@ function handleTuiEvent(event: TuiRuntimeEvent): void {
 			"autoApprovalEnabled",
 			"currentPlan",
 			"compact",
+			"showReasoning",
 		]
 		const snapshot: Partial<SubprocessState> = {}
 		for (const key of allowed) {
@@ -344,15 +378,27 @@ function handleTuiEvent(event: TuiRuntimeEvent): void {
 		return
 	}
 	if (event.type === "approval.requested") {
-		state.pendingApproval = { requestId: event.requestId, ask: event.ask }
+		state.pendingApproval = {
+			requestId: event.requestId,
+			ask: event.ask,
+			toolName: event.toolName,
+			path: event.path,
+			command: event.command,
+			serverName: event.serverName,
+		}
 		return
 	}
 	if (event.type === "approval.resolved") {
 		state.pendingApproval = null
+		state.autoApprovalEnabled = event.always ? true : state.autoApprovalEnabled
 		return
 	}
 	if (event.type === "question.requested") {
-		state.pendingQuestion = { requestId: event.requestId, question: event.question }
+		state.pendingQuestion = {
+			requestId: event.requestId,
+			question: event.question,
+			options: event.options,
+		}
 		return
 	}
 	if (event.type === "question.resolved") {
@@ -372,7 +418,7 @@ async function main() {
 
 	await render(
 		() => (
-			<ThemeProvider>
+			<ThemeProvider initialMode={state.config.theme}>
 				<CommandProvider>
 					<ToastProvider>
 						<DialogProvider>
@@ -506,12 +552,27 @@ function App() {
 	// Wire command handlers to current context
 	commandRegistry.get("theme.toggle")!.run = () => {
 		toggleMode()
-		sendEvent({ type: "ui.setTheme", theme: theme.isDark ? "light" : "dark" })
-		toast.show(`Theme switched to ${theme.isDark ? "light" : "dark"}`, "info")
+		const nextTheme = theme.isDark ? "light" : "dark"
+		state.config.theme = nextTheme
+		saveTuiConfig(state.config)
+		sendEvent({ type: "ui.setTheme", theme: nextTheme })
+		toast.show(`Theme switched to ${nextTheme}`, "info")
 	}
 	commandRegistry.get("mode.cycle")!.run = () => {
 		cycleMode()
 		toast.show(`Mode switched to ${state.mode}`, "info")
+	}
+	commandRegistry.get("app.compact")!.run = () => {
+		state.compact = !state.compact
+		state.config.compact = state.compact
+		saveTuiConfig(state.config)
+		toast.show(`Compact mode ${state.compact ? "enabled" : "disabled"}`, "info")
+	}
+	commandRegistry.get("app.thinking")!.run = () => {
+		state.showReasoning = !state.showReasoning
+		state.config.showReasoning = state.showReasoning
+		saveTuiConfig(state.config)
+		toast.show(`Reasoning ${state.showReasoning ? "visible" : "hidden"}`, "info")
 	}
 	commandRegistry.get("help.show")!.run = showHelp
 	commandRegistry.get("session.resume")!.run = showSessionList
@@ -522,6 +583,114 @@ function App() {
 	}
 	commandRegistry.get("command.palette.show")!.run = openCommandPalette
 	commandRegistry.get("agent.showPicker")!.run = openAgentPicker
+
+	const models = ["default", "claude-4-opus", "claude-4-sonnet", "gpt-4o", "o3-mini"]
+	function openModelPicker() {
+		Dialog.select(
+			"Select Model",
+			models.map((m) => ({ label: m, value: m, category: "Models" })),
+			(item) => {
+				if (typeof item.value === "string") {
+					state.model = item.value
+					sendEvent({ type: "ui.setModel", model: item.value })
+					toast.show(`Switched to model ${item.value}`, "info")
+				}
+			},
+		)
+	}
+	commandRegistry.register({
+		id: "model.showPicker",
+		label: "Select Model",
+		description: "Open the model picker",
+		keybinding: "Ctrl+T",
+		category: "Model",
+		run: openModelPicker,
+	})
+
+	function openSettings() {
+		const settings = [
+			{ label: `Theme: ${state.config.theme}`, value: "theme", category: "Settings" },
+			{ label: `Compact: ${state.config.compact ? "on" : "off"}`, value: "compact", category: "Settings" },
+			{
+				label: `Reasoning: ${state.config.showReasoning ? "on" : "off"}`,
+				value: "reasoning",
+				category: "Settings",
+			},
+			{ label: `Diff style: ${state.config.diffStyle}`, value: "diffStyle", category: "Settings" },
+		]
+		Dialog.select("Settings", settings, (item) => {
+			const value = item.value as string
+			if (value === "theme") {
+				Dialog.select(
+					"Theme",
+					[
+						{ label: "System", value: "system", category: "Theme" },
+						{ label: "Light", value: "light", category: "Theme" },
+						{ label: "Dark", value: "dark", category: "Theme" },
+					],
+					(themeItem) => {
+						const mode = themeItem.value as "light" | "dark" | "system"
+						state.config.theme = mode
+						saveTuiConfig(state.config)
+						if (mode !== "system") {
+							setMode(mode)
+							sendEvent({ type: "ui.setTheme", theme: mode })
+						}
+						toast.show(`Theme set to ${mode}`, "info")
+					},
+				)
+			} else if (value === "compact") {
+				state.config.compact = !state.config.compact
+				state.compact = state.config.compact
+				saveTuiConfig(state.config)
+				toast.show(`Compact mode ${state.compact ? "enabled" : "disabled"}`, "info")
+			} else if (value === "reasoning") {
+				state.config.showReasoning = !state.config.showReasoning
+				state.showReasoning = state.config.showReasoning
+				saveTuiConfig(state.config)
+				toast.show(`Reasoning ${state.showReasoning ? "visible" : "hidden"}`, "info")
+			} else if (value === "diffStyle") {
+				Dialog.select(
+					"Diff Style",
+					[
+						{ label: "Unified", value: "unified", category: "Diff" },
+						{ label: "Split", value: "split", category: "Diff" },
+					],
+					(styleItem) => {
+						const style = styleItem.value as "unified" | "split"
+						state.config.diffStyle = style
+						saveTuiConfig(state.config)
+						toast.show(`Diff style set to ${style}`, "info")
+					},
+				)
+			}
+		})
+	}
+
+	commandRegistry.register({
+		id: "app.settings",
+		label: "Settings",
+		description: "Open TUI settings",
+		slashName: "settings",
+		category: "App",
+		run: openSettings,
+	})
+
+	function handleShortcut(
+		key: string,
+		modifiers: { ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean },
+	): boolean {
+		for (const binding of state.config.keybindings ?? []) {
+			if (matchesKeybinding(binding, key, modifiers)) {
+				const cmd = commandRegistry.get(binding.command)
+				if (cmd) {
+					void cmd.run()
+					return true
+				}
+			}
+		}
+		return false
+	}
 
 	function openAgentPicker() {
 		Dialog.select(
@@ -553,6 +722,9 @@ function App() {
 					onNewSession={() => sendEvent({ type: "ui.newSession" })}
 					onStartTask={(text) => sendEvent({ type: "ui.startTask", text })}
 					onResumeSession={(sessionId: string) => sendEvent({ type: "ui.resumeSession", sessionId })}
+					onRenameSession={(sessionId, title) => sendEvent({ type: "ui.renameSession", sessionId, title })}
+					onDeleteSession={(sessionId) => sendEvent({ type: "ui.deleteSession", sessionId })}
+					onForkSession={(sessionId) => sendEvent({ type: "ui.forkSession", sessionId })}
 					onOpenCommandPalette={openCommandPalette}
 					onOpenAgentPicker={openAgentPicker}
 					currentProvider={state.provider}
@@ -585,7 +757,7 @@ function App() {
 				messages={state.messages}
 				onSendMessage={(text) => sendEvent({ type: "ui.sendMessage", text })}
 				onCancel={() => sendEvent({ type: "ui.cancel" })}
-				onApprove={(requestId) => sendEvent({ type: "ui.approve", requestId })}
+				onApprove={(requestId, always) => sendEvent({ type: "ui.approve", requestId, always })}
 				onReject={(requestId) => sendEvent({ type: "ui.reject", requestId })}
 				onAnswer={(requestId, answer) => sendEvent({ type: "ui.answer", requestId, answer })}
 				pendingApproval={state.pendingApproval}
@@ -600,7 +772,16 @@ function App() {
 				currentPlan={state.currentPlan}
 				onApprovePlan={(planId) => sendEvent({ type: "ui.approvePlan", planId })}
 				onExecutePlan={(planId) => sendEvent({ type: "ui.executePlan", planId })}
+				onPausePlan={(planId) => sendEvent({ type: "ui.pausePlan", planId })}
+				onCancelPlan={(planId) => sendEvent({ type: "ui.cancelPlan", planId })}
+				onSkipPlanStep={(planId, stepId) => sendEvent({ type: "ui.skipPlanStep", planId, stepId })}
+				onRegeneratePlanStep={(planId, stepId) => sendEvent({ type: "ui.regeneratePlanStep", planId, stepId })}
+				onEditPlanStep={(planId, stepId, description) =>
+					sendEvent({ type: "ui.editPlanStep", planId, stepId, description })
+				}
+				onShortcut={handleShortcut}
 				compact={state.compact}
+				showReasoning={state.showReasoning}
 			/>
 		</>
 	)

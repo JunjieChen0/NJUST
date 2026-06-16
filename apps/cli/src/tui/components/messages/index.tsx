@@ -27,7 +27,12 @@ import { ToolRenderer } from "../tools/index.jsx"
 // Message
 // =============================================================================
 
-export function MessageRenderer(props: { message: TuiMessage; streaming?: boolean; compact?: boolean }) {
+export function MessageRenderer(props: {
+	message: TuiMessage
+	streaming?: boolean
+	compact?: boolean
+	showReasoning?: boolean
+}) {
 	const { theme } = useTheme()
 	const msg = props.message
 
@@ -64,17 +69,19 @@ export function MessageRenderer(props: { message: TuiMessage; streaming?: boolea
 	return (
 		<Box flexDirection="column" paddingLeft={1} paddingRight={1} paddingTop={0} paddingBottom={0}>
 			{/* Role header */}
-			<Box flexDirection="row" gap={1}>
-				<Text color={config.color} bold>
-					{config.icon} {config.label}
-				</Text>
-				<Show when={msg.createdAt}>
-					<Text color={theme.colors.textMuted}>{formatTimestamp(msg.createdAt!)}</Text>
-				</Show>
-				<Show when={props.streaming}>
-					<Spinner color={theme.colors.primary} />
-				</Show>
-			</Box>
+			<Show when={msg.role !== "reasoning"}>
+				<Box flexDirection="row" gap={1}>
+					<Text color={config.color} bold>
+						{config.icon} {config.label}
+					</Text>
+					<Show when={msg.createdAt}>
+						<Text color={theme.colors.textMuted}>{formatTimestamp(msg.createdAt!)}</Text>
+					</Show>
+					<Show when={props.streaming}>
+						<Spinner color={theme.colors.primary} />
+					</Show>
+				</Box>
+			</Show>
 
 			{/* Content - per role */}
 			<Show when={msg.role === "tool"}>
@@ -102,11 +109,52 @@ export function MessageRenderer(props: { message: TuiMessage; streaming?: boolea
 				</Box>
 			</Show>
 
+			<Show when={msg.role === "reasoning"}>
+				<Show when={props.showReasoning !== false}>
+					<ReasoningRenderer content={msg.content || ""} streaming={props.streaming} />
+				</Show>
+			</Show>
+
 			<Show when={msg.role === "system"}>
 				<Box paddingLeft={2}>
 					<Text color={theme.colors.textMuted} dim>
 						{msg.content || ""}
 					</Text>
+				</Box>
+			</Show>
+		</Box>
+	)
+}
+
+// =============================================================================
+// Reasoning Renderer
+// =============================================================================
+
+function ReasoningRenderer(props: { content: string; streaming?: boolean }) {
+	const { theme } = useTheme()
+	const [expanded, setExpanded] = createSignal(true)
+	return (
+		<Box
+			flexDirection="column"
+			marginLeft={2}
+			marginRight={1}
+			marginTop={1}
+			marginBottom={1}
+			padding={1}
+			border={true}
+			borderColor={theme.colors.warning}
+			backgroundColor={theme.colors.backgroundElement}>
+			<Box flexDirection="row" gap={1} onClick={() => setExpanded(!expanded())}>
+				<Text color={theme.colors.warning} bold>
+					{expanded() ? "▼" : "▶"} Reasoning
+				</Text>
+				<Show when={props.streaming}>
+					<Spinner color={theme.colors.warning} />
+				</Show>
+			</Box>
+			<Show when={expanded()}>
+				<Box paddingLeft={1} paddingTop={1}>
+					<MarkdownRenderer content={props.content} streaming={props.streaming} />
 				</Box>
 			</Show>
 		</Box>

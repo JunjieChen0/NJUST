@@ -24,7 +24,10 @@ export interface TuiRuntime {
 	startTask(input: StartTaskInput): Promise<void>
 	resumeTask(sessionId: string): Promise<void>
 	sendMessage(content: string): Promise<void>
-	approve(requestId: string): Promise<void>
+	renameSession(sessionId: string, title: string): Promise<void>
+	deleteSession(sessionId: string): Promise<void>
+	forkSession(sessionId: string): Promise<string>
+	approve(requestId: string, always?: boolean): Promise<void>
 	reject(requestId: string): Promise<void>
 	answer(requestId: string, answer: string): Promise<void>
 	cancel(): Promise<void>
@@ -33,6 +36,11 @@ export interface TuiRuntime {
 	exportCurrentTask(): Promise<string>
 	approvePlan(planId: string): Promise<void>
 	executePlan(planId: string): Promise<void>
+	pausePlan(planId: string): Promise<void>
+	cancelPlan(planId: string): Promise<void>
+	skipPlanStep(planId: string, stepId: string): Promise<void>
+	regeneratePlanStep(planId: string, stepId: string): Promise<void>
+	editPlanStep(planId: string, stepId: string, description: string): Promise<void>
 	undo(): Promise<void>
 	subscribe(listener: (event: TuiRuntimeEvent) => void): () => void
 }
@@ -69,6 +77,11 @@ export interface TuiPlanStep {
 	status: "pending" | "ready" | "running" | "completed" | "failed" | "skipped" | "cancelled"
 	result?: string
 	error?: string
+	startedAt?: number
+	completedAt?: number
+	taskId?: string
+	/** Optional nested sub-plan for hierarchical plans */
+	subPlan?: TuiPlan | null
 }
 
 export type TuiRuntimeEvent =
@@ -207,12 +220,18 @@ export interface ApprovalRequestedEvent extends BaseEvent {
 	requestId: string
 	messageId: string
 	ask: string
+	/** Optional tool metadata for richer approval cards */
+	toolName?: string
+	path?: string
+	command?: string
+	serverName?: string
 }
 
 export interface ApprovalResolvedEvent extends BaseEvent {
 	type: "approval.resolved"
 	requestId: string
 	approved: boolean
+	always?: boolean
 }
 
 export type ApprovalEvent = ApprovalRequestedEvent | ApprovalResolvedEvent
@@ -222,6 +241,8 @@ export interface QuestionRequestedEvent extends BaseEvent {
 	requestId: string
 	messageId: string
 	question: string
+	/** Optional question options for single-select answers */
+	options?: string[]
 }
 
 export interface QuestionResolvedEvent extends BaseEvent {
@@ -319,7 +340,7 @@ export interface TuiSession {
 export interface TuiMessage {
 	id: string
 	sessionId: string
-	role: "user" | "assistant" | "system" | "tool"
+	role: "user" | "assistant" | "system" | "tool" | "reasoning"
 	createdAt: number
 	updatedAt: number
 	content?: string
@@ -358,9 +379,22 @@ export type TuiAction =
 	| { type: "part/update"; payload: { id: string; delta?: string; content?: string; status?: TuiPart["status"] } }
 	| { type: "part/complete"; payload: { id: string; content: string } }
 	| { type: "part/fail"; payload: { id: string; error: string } }
-	| { type: "approval/request"; payload: { requestId: string; messageId: string } }
-	| { type: "approval/resolve"; payload: { requestId: string; approved: boolean } }
-	| { type: "question/request"; payload: { requestId: string; messageId: string; question: string } }
+	| {
+			type: "approval/request"
+			payload: {
+				requestId: string
+				messageId: string
+				toolName?: string
+				path?: string
+				command?: string
+				serverName?: string
+			}
+	  }
+	| { type: "approval/resolve"; payload: { requestId: string; approved: boolean; always?: boolean } }
+	| {
+			type: "question/request"
+			payload: { requestId: string; messageId: string; question: string; options?: string[] }
+	  }
 	| { type: "question/resolve"; payload: { requestId: string; answer: string } }
 	| { type: "task/complete"; payload: { success: boolean; message?: string } }
 	| { type: "task/cancel"; payload: { reason: "user" | "error" | "system" } }
@@ -368,7 +402,14 @@ export type TuiAction =
 	| { type: "plan/set"; payload: { plan: TuiPlan | null } }
 	| {
 			type: "plan/updateStep"
-			payload: { stepId: string; status: TuiPlanStep["status"]; result?: string; error?: string }
+			payload: {
+				stepId: string
+				status: TuiPlanStep["status"]
+				result?: string
+				error?: string
+				startedAt?: number
+				completedAt?: number
+			}
 	  }
 
 // =============================================================================
@@ -380,15 +421,24 @@ export type TuiUiEvent =
 	| { type: "ui.startTask"; text: string }
 	| { type: "ui.resumeSession"; sessionId: string }
 	| { type: "ui.sendMessage"; text: string }
-	| { type: "ui.approve"; requestId: string }
+	| { type: "ui.approve"; requestId: string; always?: boolean }
 	| { type: "ui.reject"; requestId: string }
 	| { type: "ui.answer"; requestId: string; answer: string }
 	| { type: "ui.cancel" }
 	| { type: "ui.exit" }
 	| { type: "ui.setTheme"; theme: "light" | "dark" }
 	| { type: "ui.setMode"; mode: string }
+	| { type: "ui.setModel"; model: string }
+	| { type: "ui.renameSession"; sessionId: string; title: string }
+	| { type: "ui.deleteSession"; sessionId: string }
+	| { type: "ui.forkSession"; sessionId: string }
 	| { type: "ui.undo" }
 	| { type: "ui.setAutoApproval"; enabled: boolean }
 	| { type: "ui.export" }
 	| { type: "ui.approvePlan"; planId: string }
 	| { type: "ui.executePlan"; planId: string }
+	| { type: "ui.pausePlan"; planId: string }
+	| { type: "ui.cancelPlan"; planId: string }
+	| { type: "ui.skipPlanStep"; planId: string; stepId: string }
+	| { type: "ui.regeneratePlanStep"; planId: string; stepId: string }
+	| { type: "ui.editPlanStep"; planId: string; stepId: string; description: string }

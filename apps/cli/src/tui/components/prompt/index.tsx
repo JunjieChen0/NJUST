@@ -38,6 +38,7 @@ export interface PromptMetadata {
 export interface PromptProps {
 	onSubmit: (text: string) => void
 	onCancel?: () => void
+	onShortcut?: (key: string, modifiers: { ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean }) => boolean
 	placeholder?: string
 	disabled?: boolean
 	metadata?: PromptMetadata
@@ -283,6 +284,15 @@ export function Prompt(props: PromptProps) {
 			return
 		}
 
+		// Let the parent handle global shortcuts first
+		const handled = props.onShortcut?.(_input || keyToName(key), {
+			ctrl: key.ctrl,
+			shift: key.shift,
+			alt: key.alt,
+			meta: key.meta,
+		})
+		if (handled) return
+
 		// Enter: submit
 		if (key.return && !key.shift) {
 			submit()
@@ -313,6 +323,18 @@ export function Prompt(props: PromptProps) {
 			}
 			props.onCancel?.()
 		}
+	}
+
+	function keyToName(key: OpenTuiKeyEvent): string {
+		if (key.upArrow) return "up"
+		if (key.downArrow) return "down"
+		if (key.leftArrow) return "left"
+		if (key.rightArrow) return "right"
+		if (key.return) return "return"
+		if (key.escape) return "escape"
+		if (key.tab) return "tab"
+		if (key.backspace) return "backspace"
+		return ""
 	}
 
 	// === API ref ===

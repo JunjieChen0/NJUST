@@ -12,7 +12,7 @@ import type { TuiRuntimeEvent } from "./runtime/types.ts"
 import type { ExtensionHost } from "@/agent/extension-host.js"
 import { TuiRuntimeAdapter } from "./runtime/extension-host-adapter.ts"
 import { setKV } from "@/lib/storage/kv.ts"
-import { readWorkspaceTaskSessions } from "@/lib/task-history/index.js"
+import { readWorkspaceTaskSessions, getDefaultCliTaskStoragePath } from "@/lib/task-history/index.js"
 import path from "path"
 import fs from "fs"
 
@@ -126,7 +126,11 @@ export async function createOpenTuiApp(options: OpenTuiAppOptions): Promise<Open
 		const recentSessions = await loadRecentSessions(options.workspacePath)
 
 		// Step 5: Wire up TuiRuntimeAdapter to IPC
-		const adapter = new TuiRuntimeAdapter({ extensionHost: options.extensionHost, recentSessions })
+		const adapter = new TuiRuntimeAdapter({
+			extensionHost: options.extensionHost,
+			recentSessions,
+			storagePath: getDefaultCliTaskStoragePath(),
+		})
 		await adapter.activate()
 
 		adapter.subscribe((event: TuiRuntimeEvent) => {
@@ -223,7 +227,7 @@ type UiEvent =
 	| { type: "ui.startTask"; text: string }
 	| { type: "ui.resumeSession"; sessionId: string }
 	| { type: "ui.sendMessage"; text: string }
-	| { type: "ui.approve"; requestId: string }
+	| { type: "ui.approve"; requestId: string; always?: boolean }
 	| { type: "ui.reject"; requestId: string }
 	| { type: "ui.answer"; requestId: string; answer: string }
 	| { type: "ui.cancel" }
@@ -232,6 +236,14 @@ type UiEvent =
 	| { type: "ui.export" }
 	| { type: "ui.approvePlan"; planId: string }
 	| { type: "ui.executePlan"; planId: string }
+	| { type: "ui.pausePlan"; planId: string }
+	| { type: "ui.cancelPlan"; planId: string }
+	| { type: "ui.skipPlanStep"; planId: string; stepId: string }
+	| { type: "ui.regeneratePlanStep"; planId: string; stepId: string }
+	| { type: "ui.editPlanStep"; planId: string; stepId: string; description: string }
+	| { type: "ui.renameSession"; sessionId: string; title: string }
+	| { type: "ui.deleteSession"; sessionId: string }
+	| { type: "ui.forkSession"; sessionId: string }
 	| { type: "ui.exit" }
 	| { type: "ui.setTheme"; theme: "light" | "dark" }
 	| { type: "ui.setMode"; mode: string }
@@ -249,11 +261,22 @@ function handleUiEvent(event: UiEvent, adapter: TuiRuntimeAdapter): void {
 		case "ui.resumeSession":
 			void adapter.resumeTask(event.sessionId)
 			break
+		case "ui.renameSession":
+			void adapter.renameSession(event.sessionId, event.title)
+			break
+		case "ui.deleteSession":
+			void adapter.deleteSession(event.sessionId)
+			break
+		case "ui.forkSession":
+			void adapter.forkSession(event.sessionId).then((newId) => {
+				console.log(`[CLI] Forked session: ${newId}`)
+			})
+			break
 		case "ui.sendMessage":
 			void adapter.sendMessage(event.text)
 			break
 		case "ui.approve":
-			void adapter.approve(event.requestId)
+			void adapter.approve(event.requestId, event.always)
 			break
 		case "ui.reject":
 			void adapter.reject(event.requestId)
@@ -286,6 +309,21 @@ function handleUiEvent(event: UiEvent, adapter: TuiRuntimeAdapter): void {
 			break
 		case "ui.executePlan":
 			void adapter.executePlan(event.planId)
+			break
+		case "ui.pausePlan":
+			void adapter.pausePlan(event.planId)
+			break
+		case "ui.cancelPlan":
+			void adapter.cancelPlan(event.planId)
+			break
+		case "ui.skipPlanStep":
+			void adapter.skipPlanStep(event.planId, event.stepId)
+			break
+		case "ui.regeneratePlanStep":
+			void adapter.regeneratePlanStep(event.planId, event.stepId)
+			break
+		case "ui.editPlanStep":
+			void adapter.editPlanStep(event.planId, event.stepId, event.description)
 			break
 		case "ui.setTheme":
 			setKV("theme", event.theme)
