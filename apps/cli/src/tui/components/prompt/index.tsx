@@ -20,8 +20,11 @@ import { createSignal, createMemo, createEffect, onMount, onCleanup, Show, type 
 import { Dynamic } from "solid-js/web"
 import { Text, Box } from "../index.tsx"
 import { useTheme } from "../../context/theme.tsx"
+import { commandRegistry } from "../../context/command.tsx"
 import { usePromptHistory } from "./history.tsx"
 import { AutocompletePicker, type AutocompleteItem, type AutocompleteTrigger } from "./autocomplete.tsx"
+import { usePromptClearSignal } from "../../lib/prompt-bus.ts"
+import { useTheme } from "../../context/theme.tsx"
 
 export interface PromptMetadata {
 	provider?: string
@@ -175,6 +178,26 @@ export function Prompt(props: PromptProps) {
 		const text = value().trim()
 		if (!text) return
 
+		// Handle slash commands
+		if (text.startsWith("/")) {
+			const match = text.match(/^\/(\w+)(?:\s|$)/)
+			if (match?.[1]) {
+				const cmd = commandRegistry.resolveSlashName(match[1])
+				if (cmd) {
+					promptHistory.add(text)
+					setHistoryIndex(-1)
+					setDraftBuffer("")
+					if (textareaEl) {
+						textareaEl.clear()
+					}
+					setValue("")
+					setShowAutocomplete(false)
+					void cmd.run()
+					return
+				}
+			}
+		}
+
 		// Record to history (deduplicated, capped)
 		promptHistory.add(text)
 		setHistoryIndex(-1)
@@ -317,6 +340,17 @@ export function Prompt(props: PromptProps) {
 	})
 	onCleanup(() => {
 		props.ref?.(undefined)
+	})
+
+	// Listen for global clear requests
+	const clearSignal = usePromptClearSignal()
+	let lastClearSignal = 0
+	createEffect(() => {
+		const current = clearSignal()
+		if (current !== lastClearSignal) {
+			lastClearSignal = current
+			api.clear()
+		}
 	})
 
 	// === Sync textareaEl plainText back to value signal whenever content changes ===

@@ -28,6 +28,9 @@ import type { TuiSession, TuiMessage } from "../../runtime/types.ts"
 import { MessageRenderer } from "../../components/messages/index.tsx"
 import { Sidebar } from "./sidebar.tsx"
 import { Prompt } from "../../components/prompt/index.tsx"
+import { createDefaultTriggers } from "../../components/prompt/autocomplete.tsx"
+
+const defaultTriggers = createDefaultTriggers()
 
 const NARROW_TERMINAL_WIDTH = 90
 const SIDEBAR_WIDTH = 32
@@ -48,6 +51,7 @@ export interface SessionProps {
 	currentMode?: string
 	tokenUsage?: { total: number; context: number; cost?: number }
 	todos?: Array<{ id: string; content: string; status: "pending" | "in_progress" | "completed" }>
+	autoApprovalEnabled?: boolean
 }
 
 export function Session(props: SessionProps) {
@@ -113,6 +117,7 @@ export function Session(props: SessionProps) {
 						onCancel={props.onCancel}
 						placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
 						disabled={props.isRunning}
+						triggers={defaultTriggers}
 						metadata={{
 							provider: props.currentProvider,
 							model: props.currentModel,
@@ -134,6 +139,7 @@ export function Session(props: SessionProps) {
 					tokenUsage={props.tokenUsage}
 					todos={props.todos}
 					isRunning={props.isRunning || false}
+					autoApprovalEnabled={props.autoApprovalEnabled}
 					width={SIDEBAR_WIDTH}
 				/>
 			</Show>

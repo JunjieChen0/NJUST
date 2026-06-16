@@ -10,7 +10,9 @@
 import { IpcClient } from "./runtime/ipc-protocol.ts"
 import type { TuiRuntimeEvent } from "./runtime/types.ts"
 import type { ExtensionHost } from "@/agent/extension-host.js"
-import type { ClineMessage } from "@njust-ai/types"
+import { TuiRuntimeAdapter } from "./runtime/extension-host-adapter.ts"
+import { setKV } from "@/lib/storage/kv.ts"
+import { readWorkspaceTaskSessions } from "@/lib/task-history/index.js"
 import path from "path"
 import fs from "fs"
 
@@ -120,18 +122,41 @@ export async function createOpenTuiApp(options: OpenTuiAppOptions): Promise<Open
 	try {
 		await ipcClient.start()
 
-		// Step 5: Wire up ExtensionHost events to IPC
-		wireExtensionHost(ipcClient, options.extensionHost, {
-			provider: options.provider || "njust-ai",
-			model: options.model || "default",
-			mode: options.mode || "code",
-			workspacePath: options.workspacePath,
-			sessionId: options.sessionId,
+		// Load recent workspace sessions for the Home screen resume list
+		const recentSessions = await loadRecentSessions(options.workspacePath)
+
+		// Step 5: Wire up TuiRuntimeAdapter to IPC
+		const adapter = new TuiRuntimeAdapter({ extensionHost: options.extensionHost, recentSessions })
+		await adapter.activate()
+
+		adapter.subscribe((event: TuiRuntimeEvent) => {
+			ipcClient.sendEvent("message", event)
 		})
 
-		// Step 6: Wire up IPC events to ExtensionHost
+		// Send initial state snapshot to TUI (ensure Home screen shows first)
+		ipcClient.sendEvent("message", {
+			type: "state.snapshot",
+			timestamp: Date.now(),
+			sessionId: options.sessionId ?? "",
+			data: {
+				currentSessionId: options.sessionId || null,
+				messages: [],
+				isRunning: false,
+				provider: options.provider || "njust-ai",
+				model: options.model || "default",
+				mode: options.mode || "code",
+				workspacePath: options.workspacePath,
+				sessions: [],
+				recentSessions,
+				todos: [],
+				tokenUsage: { total: 0, context: 0 },
+				autoApprovalEnabled: false,
+			},
+		})
+
+		// Step 6: Wire up IPC events to adapter
 		ipcClient.on("message", (event: UiEvent) => {
-			handleUiEvent(event, options.extensionHost)
+			handleUiEvent(event, adapter)
 		})
 
 		ipcClient.on("exit", (data: { code?: number; signal?: string | number }) => {
@@ -193,136 +218,63 @@ export async function startTuiWithFallback(
 // Helpers
 // =============================================================================
 
-function wireExtensionHost(
-	ipcClient: IpcClient,
-	host: ExtensionHost,
-	snapshot: { provider: string; model: string; mode: string; workspacePath: string; sessionId?: string },
-): void {
-	const sessionId = snapshot.sessionId ?? ""
-	// Forward ExtensionHost events to Bun subprocess
-	host.on("extensionWebviewMessage", (message) => {
-		if (message.type === "state" && message.state?.clineMessages) {
-			for (const msg of message.state.clineMessages) {
-				ipcClient.sendEvent("message", mapClineMessageToTuiEvent(msg, sessionId))
-			}
-		}
-	})
-
-	host.client?.on("message", (msg: ClineMessage) => {
-		ipcClient.sendEvent("message", mapClineMessageToTuiEvent(msg, sessionId))
-	})
-
-	host.client?.on("messageUpdated", (msg: ClineMessage) => {
-		ipcClient.sendEvent("message", mapClineMessageToTuiEvent(msg, sessionId))
-	})
-
-	host.client?.on("taskCompleted", (event: import("@/agent/events.js").TaskCompletedEvent) => {
-		ipcClient.sendEvent("message", {
-			type: "task.completed",
-			timestamp: event.stateInfo?.lastMessageTs || Date.now(),
-			sessionId,
-			success: event.success,
-			message: event.message?.text,
-		})
-	})
-
-	// Send initial state snapshot to TUI (ensure Home screen shows first)
-	ipcClient.sendEvent("message", {
-		type: "state.snapshot",
-		data: {
-			currentSessionId: sessionId || null,
-			messages: [],
-			isRunning: false,
-			provider: snapshot.provider,
-			model: snapshot.model,
-			mode: snapshot.mode,
-			workspacePath: snapshot.workspacePath,
-			sessions: [],
-			todos: [],
-			tokenUsage: { total: 0, context: 0 },
-		},
-	})
-}
-
 type UiEvent =
 	| { type: "ui.newSession" }
+	| { type: "ui.startTask"; text: string }
 	| { type: "ui.resumeSession"; sessionId: string }
 	| { type: "ui.sendMessage"; text: string }
+	| { type: "ui.approve"; requestId: string }
+	| { type: "ui.reject"; requestId: string }
+	| { type: "ui.answer"; requestId: string; answer: string }
 	| { type: "ui.cancel" }
+	| { type: "ui.undo" }
+	| { type: "ui.setAutoApproval"; enabled: boolean }
+	| { type: "ui.exit" }
+	| { type: "ui.setTheme"; theme: "light" | "dark" }
+	| { type: "ui.setMode"; mode: string }
 
-function handleUiEvent(event: UiEvent, host: ExtensionHost): void {
+function handleUiEvent(event: UiEvent, adapter: TuiRuntimeAdapter): void {
 	switch (event.type) {
 		case "ui.newSession":
-			// Start a new task/session
-			host.runTask("")
+			// Clear current task/session
+			void adapter.newSession()
+			break
+		case "ui.startTask":
+			// Start a task with the user's initial prompt
+			void adapter.startTask({ prompt: event.text })
 			break
 		case "ui.resumeSession":
-			host.resumeTask(event.sessionId)
+			void adapter.resumeTask(event.sessionId)
 			break
 		case "ui.sendMessage":
-			host.sendToExtension({
-				type: "askResponse",
-				text: event.text,
-			})
+			void adapter.sendMessage(event.text)
+			break
+		case "ui.approve":
+			void adapter.approve(event.requestId)
+			break
+		case "ui.reject":
+			void adapter.reject(event.requestId)
+			break
+		case "ui.answer":
+			void adapter.answer(event.requestId, event.answer)
 			break
 		case "ui.cancel":
-			host.sendToExtension({ type: "cancelTask" })
+			void adapter.cancel()
+			break
+		case "ui.undo":
+			void adapter.undo()
+			break
+		case "ui.setAutoApproval":
+			void adapter.setAutoApprovalEnabled(event.enabled)
+			break
+		case "ui.setTheme":
+			setKV("theme", event.theme)
+			break
+		case "ui.setMode":
+			setKV("mode", event.mode)
+			void adapter.setMode(event.mode)
 			break
 	}
-}
-
-function mapClineMessageToTuiEvent(msg: ClineMessage, sessionId: string): TuiRuntimeEvent {
-	const timestamp = msg.ts || Date.now()
-
-	if (msg.type === "say") {
-		switch (msg.say) {
-			case "text":
-				return {
-					type: msg.partial ? "text.delta" : "message.created",
-					timestamp,
-					sessionId,
-					messageId: msg.id,
-					role: "assistant",
-					content: msg.text,
-				} as TuiRuntimeEvent
-			case "reasoning":
-				return {
-					type: msg.partial ? "reasoning.delta" : "message.created",
-					timestamp,
-					sessionId,
-					messageId: msg.id,
-					role: "assistant",
-					content: msg.text,
-				} as TuiRuntimeEvent
-			case "completion_result":
-				return {
-					type: "task.completed",
-					timestamp,
-					sessionId,
-					success: true,
-					message: msg.text,
-				}
-			case "error":
-				return {
-					type: "task.failed",
-					timestamp,
-					sessionId,
-					error: msg.text || "Unknown error",
-				}
-			default:
-				// User messages are sent as say without a specific say subtype.
-				return {
-					type: "message.created",
-					timestamp,
-					sessionId,
-					messageId: msg.id,
-					role: "user",
-					content: msg.text,
-				}
-		}
-	}
-
-	return { type: "message.created", timestamp, sessionId, messageId: msg.id, role: "system" }
 }
 
 function findBunBinary(): string | null {
@@ -342,6 +294,23 @@ function findBunBinary(): string | null {
 	}
 
 	return null
+}
+
+async function loadRecentSessions(
+	workspacePath: string,
+): Promise<Array<{ id: string; title: string; createdAt: number; updatedAt: number; messageCount: number }>> {
+	try {
+		const entries = await readWorkspaceTaskSessions(workspacePath)
+		return entries.slice(0, 10).map((entry) => ({
+			id: entry.id,
+			title: entry.task || entry.id,
+			createdAt: entry.ts,
+			updatedAt: entry.ts,
+			messageCount: 0,
+		}))
+	} catch {
+		return []
+	}
 }
 
 function getPlatformOpenTuiPackage(): string | null {

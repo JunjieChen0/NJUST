@@ -25,6 +25,7 @@ export interface SidebarProps {
 	tokenUsage?: { total: number; context: number; cost?: number }
 	todos?: Array<{ id: string; content: string; status: "pending" | "in_progress" | "completed" }>
 	isRunning: boolean
+	autoApprovalEnabled?: boolean
 	width: number
 }
 
@@ -96,6 +97,14 @@ export function Sidebar(props: SidebarProps) {
 					</Text>
 					<Text color={props.isRunning ? theme.colors.warning : theme.colors.textMuted}>
 						{props.isRunning ? "Running" : "Idle"}
+					</Text>
+				</box>
+				<box flexDirection="row" gap={1} paddingTop={1}>
+					<Text color={props.autoApprovalEnabled ? theme.colors.success : theme.colors.textMuted}>
+						{props.autoApprovalEnabled ? "●" : "○"}
+					</Text>
+					<Text color={props.autoApprovalEnabled ? theme.colors.success : theme.colors.textMuted}>
+						Auto-approve {props.autoApprovalEnabled ? "on" : "off"}
 					</Text>
 				</box>
 			</Section>

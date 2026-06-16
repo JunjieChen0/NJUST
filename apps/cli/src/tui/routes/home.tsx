@@ -10,13 +10,18 @@
  * Designed to be the entry point before any session starts.
  */
 
-import { Show, type JSX } from "solid-js"
+import { Show, For, type JSX } from "solid-js"
 import { Text } from "../components/index.tsx"
+import { Prompt } from "../components/prompt/index.tsx"
+import { createDefaultTriggers } from "../components/prompt/autocomplete.tsx"
 import { useTheme } from "../context/theme.tsx"
+
+const defaultTriggers = createDefaultTriggers()
 
 export interface HomeProps {
 	sessions?: Array<{ id: string; title: string; createdAt: number; updatedAt: number; messageCount: number }>
 	onNewSession: () => void
+	onStartTask?: (text: string) => void
 	onResumeSession?: (sessionId: string) => void
 	onOpenCommandPalette?: () => void
 	currentProvider?: string
@@ -26,7 +31,6 @@ export interface HomeProps {
 	version?: string
 }
 
-// Pixel-style ASCII art for "roo" (similar to OpenCode's pixel logo)
 const LOGO_LINES = [
 	"██████╗  ██████╗  ██████╗ ",
 	"██╔══██╗██╔═══██╗██╔═══██╗",
@@ -38,6 +42,7 @@ const LOGO_LINES = [
 
 export function Home(props: HomeProps) {
 	const { theme } = useTheme()
+	const sessions = () => props.sessions || []
 
 	return (
 		<box
@@ -46,11 +51,9 @@ export function Home(props: HomeProps) {
 			alignItems="center"
 			justifyContent="center"
 			backgroundColor={theme.colors.background}>
-			{/* Spacer to push content to visual center */}
 			<box flexGrow={1} />
 
-			{/* Logo */}
-			<box flexDirection="column" alignItems="center" paddingBottom={2}>
+			<box flexDirection="column" alignItems="center" paddingBottom={1}>
 				<For each={LOGO_LINES}>
 					{(line) => (
 						<Text color={theme.colors.textMuted} dim>
@@ -60,14 +63,12 @@ export function Home(props: HomeProps) {
 				</For>
 			</box>
 
-			{/* Input card */}
 			<box
 				flexDirection="column"
 				width={60}
 				borderStyle="single"
 				borderColor={theme.colors.border}
 				backgroundColor={theme.colors.backgroundElement}>
-				{/* Blue accent left border simulation */}
 				<box flexDirection="row">
 					<box width={1} backgroundColor={theme.colors.primary} />
 					<box
@@ -77,52 +78,64 @@ export function Home(props: HomeProps) {
 						paddingTop={1}
 						paddingBottom={1}
 						flexGrow={1}>
-						{/* Placeholder text */}
-						<Text color={theme.colors.textMuted} dim>
-							Ask anything... "What is the tech stack of this project?"
-						</Text>
-
-						{/* Provider / model hint */}
-						<Show when={props.currentProvider || props.currentModel}>
-							<box flexDirection="row" gap={1} paddingTop={1}>
-								<Text color={theme.colors.primary} bold>
-									{props.currentMode || "Build"}
-								</Text>
-								<Text color={theme.colors.textMuted}>·</Text>
-								<Text color={theme.colors.textMuted}>
-									{props.currentProvider}
-									{props.currentModel ? ` ${props.currentModel}` : ""}
-								</Text>
-							</box>
-						</Show>
+						<Prompt
+							onSubmit={(text) => props.onStartTask?.(text)}
+							placeholder='Ask anything... "What is the tech stack of this project?"'
+							triggers={defaultTriggers}
+							metadata={{
+								provider: props.currentProvider,
+								model: props.currentModel,
+								mode: props.currentMode,
+							}}
+						/>
 					</box>
 				</box>
 			</box>
 
-			{/* Shortcuts hint */}
 			<box flexDirection="row" gap={3} paddingTop={1}>
 				<ShortcutHint keys="tab" label="agents" />
 				<ShortcutHint keys="ctrl+p" label="commands" />
+				<ShortcutHint keys="ctrl+r" label="resume" />
 			</box>
 
-			{/* Spacer */}
+			<Show when={sessions().length > 0}>
+				<box flexDirection="column" width={60} paddingTop={2}>
+					<Text color={theme.colors.textMuted} bold>
+						Recent sessions
+					</Text>
+					<box flexDirection="column" paddingTop={1}>
+						<For each={sessions().slice(0, 5)}>
+							{(session) => (
+								<box
+									flexDirection="row"
+									gap={1}
+									paddingY={1}
+									onClick={() => props.onResumeSession?.(session.id)}>
+									<Text color={theme.colors.primary}>›</Text>
+									<box flexDirection="column" flexGrow={1}>
+										<Text color={theme.colors.text} bold>
+											{session.title}
+										</Text>
+										<Text color={theme.colors.textMuted}>
+											{new Date(session.updatedAt).toLocaleString()} · {session.messageCount}{" "}
+											messages
+										</Text>
+									</box>
+								</box>
+							)}
+						</For>
+					</box>
+				</box>
+			</Show>
+
 			<box flexGrow={2} />
 
-			{/* Footer tip */}
 			<box flexDirection="row" gap={1} paddingBottom={1}>
 				<Text color={theme.colors.warning}>● Tip</Text>
 				<Text color={theme.colors.textMuted}>Set "share": "auto" to automatically share all sessions</Text>
 			</box>
 		</box>
 	)
-}
-
-// =============================================================================
-// Sub-components
-// =============================================================================
-
-function For(props: { each: string[]; children: (item: string) => JSX.Element }) {
-	return <>{props.each.map(props.children)}</>
 }
 
 function ShortcutHint(props: { keys: string; label: string }) {

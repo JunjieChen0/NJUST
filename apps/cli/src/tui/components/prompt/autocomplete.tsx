@@ -13,6 +13,8 @@
 
 import { createMemo, For, Show } from "solid-js"
 import fuzzysort from "fuzzysort"
+import fs from "fs"
+import path from "path"
 import { Text, Box } from "../index.tsx"
 import { useTheme } from "../../context/theme.tsx"
 
@@ -35,6 +37,69 @@ export interface AutocompleteTrigger {
 	detect(textBeforeCursor: string): AutocompleteMatch | null
 	/** Get items for the current query */
 	getItems(match: AutocompleteMatch): AutocompleteItem[]
+}
+
+// =============================================================================
+// Default trigger set for the prompt
+// =============================================================================
+
+export function createDefaultTriggers(): AutocompleteTrigger[] {
+	return [
+		new SlashCommandTrigger([
+			{ name: "help", description: "Show keyboard shortcuts" },
+			{ name: "clear", description: "Clear the prompt" },
+			{ name: "exit", description: "Exit the application" },
+			{ name: "new", description: "Start a new session" },
+			{ name: "code", description: "Switch to code mode" },
+			{ name: "architect", description: "Switch to architect mode" },
+			{ name: "ask", description: "Switch to ask mode" },
+			{ name: "debug", description: "Switch to debug mode" },
+			{ name: "cloud-agent", description: "Switch to cloud agent mode" },
+		]),
+		new FileTrigger(defaultFileProvider),
+		new ModeTrigger([
+			{ name: "code", description: "Code mode" },
+			{ name: "architect", description: "Architect mode" },
+			{ name: "ask", description: "Ask mode" },
+			{ name: "debug", description: "Debug mode" },
+			{ name: "cloud-agent", description: "Cloud agent mode" },
+		]),
+	]
+}
+
+// Simple file provider for @-mentions: recursive search capped for responsiveness.
+function defaultFileProvider(query: string): string[] {
+	const cwd = process.cwd()
+	const ignored = new Set(["node_modules", ".git", ".vscode", "dist", "build", ".next", "coverage"])
+	const results: string[] = []
+
+	function walk(dir: string, prefix: string) {
+		if (results.length >= 50) return
+		let entries: string[] = []
+		try {
+			entries = fs.readdirSync(dir)
+		} catch {
+			return
+		}
+		for (const name of entries) {
+			if (results.length >= 50) return
+			if (ignored.has(name)) continue
+			const full = path.join(dir, name)
+			const rel = prefix ? `${prefix}/${name}` : name
+			const stat = fs.statSync(full, { throwIfNoEntry: false })
+			if (!stat) continue
+			if (stat.isDirectory()) {
+				walk(full, rel)
+			} else {
+				results.push(rel)
+			}
+		}
+	}
+
+	walk(cwd, "")
+
+	const q = query.toLowerCase()
+	return q ? results.filter((f) => f.toLowerCase().includes(q)).slice(0, 20) : results.slice(0, 20)
 }
 
 // =============================================================================

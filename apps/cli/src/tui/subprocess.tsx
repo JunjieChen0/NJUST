@@ -21,11 +21,14 @@ import { createCliRenderer } from "@opentui/core"
 import { render } from "@opentui/solid"
 
 import { IpcProtocol, type IpcMessage } from "./runtime/ipc-protocol.ts"
-import type { TuiRuntimeEvent, TuiMessage } from "./runtime/types.ts"
+import type { TuiRuntimeEvent, TuiUiEvent } from "./runtime/types.ts"
 import { ThemeProvider } from "./context/theme.tsx"
+import { useTheme } from "./context/theme.tsx"
+import { ToastProvider } from "./context/toast.tsx"
 import { CommandProvider, commandRegistry } from "./context/command.tsx"
-import { DialogProvider, DialogContainer, useDialog } from "./dialogs/index.tsx"
-import { CommandPalette } from "./dialogs/command-palette.tsx"
+import { DialogProvider, DialogContainer, useDialog, Dialog } from "./dialogs/index.tsx"
+import { requestPromptClear } from "./lib/prompt-bus.ts"
+import { useToast } from "./context/toast.tsx"
 import { Home } from "./routes/home.tsx"
 import { Session } from "./routes/session/index.tsx"
 
@@ -44,12 +47,22 @@ interface SubprocessState {
 		updatedAt: number
 		messageCount: number
 	}>
+	recentSessions: Array<{
+		id: string
+		title: string
+		createdAt: number
+		updatedAt: number
+		messageCount: number
+	}>
 	provider: string
 	model: string
 	mode: string
 	workspacePath: string
 	todos: Array<{ id: string; content: string; status: "pending" | "in_progress" | "completed" }>
 	tokenUsage: { total: number; context: number; cost?: number }
+	pendingApproval: { requestId: string; ask: string } | null
+	pendingQuestion: { requestId: string; question: string } | null
+	autoApprovalEnabled: boolean
 }
 
 const state: SubprocessState = {
@@ -57,12 +70,16 @@ const state: SubprocessState = {
 	messages: [],
 	isRunning: false,
 	sessions: [],
+	recentSessions: [],
 	provider: "njust-ai",
 	model: "default",
 	mode: "code",
 	workspacePath: "",
 	todos: [],
 	tokenUsage: { total: 0, context: 0 },
+	pendingApproval: null,
+	pendingQuestion: null,
+	autoApprovalEnabled: false,
 }
 
 // =============================================================================
@@ -78,18 +95,59 @@ commandRegistry.get("session.interrupt")!.run = () => {
 }
 
 commandRegistry.get("app.exit")!.run = () => {
-	sendEvent({ type: "ui.exit" })
-	process.exit(0)
+	Dialog.confirm("Exit", "Are you sure you want to exit?", (ok) => {
+		if (ok) {
+			sendEvent({ type: "ui.exit" })
+			process.exit(0)
+		}
+	})
 }
 
-type UiEvent =
-	| { type: "ui.newSession" }
-	| { type: "ui.resumeSession"; sessionId: string }
-	| { type: "ui.sendMessage"; text: string }
-	| { type: "ui.cancel" }
-	| { type: "ui.exit" }
+commandRegistry.register({
+	id: "message.undo",
+	label: "Undo Last Message",
+	description: "Delete the last user message",
+	slashName: "undo",
+	category: "Message",
+	hidden: true,
+	run: () => {
+		sendEvent({ type: "ui.undo" })
+	},
+})
 
-function sendEvent(payload: TuiRuntimeEvent | UiEvent) {
+// Register slash commands for mode switching
+for (const mode of ["code", "architect", "ask", "debug", "cloud-agent"]) {
+	commandRegistry.register({
+		id: `mode.switch.${mode}`,
+		label: `Switch to ${mode}`,
+		description: `Set current mode to ${mode}`,
+		slashName: mode,
+		category: "Mode",
+		hidden: true,
+		run: () => {
+			state.mode = mode
+			sendEvent({ type: "ui.setMode", mode })
+			toast.show(`Mode switched to ${mode}`, "info")
+		},
+	})
+}
+
+commandRegistry.register({
+	id: "permissions.toggleAutoApprove",
+	label: "Toggle Auto-Approve",
+	description: "Enable or disable automatic tool approval",
+	slashName: "autoapprove",
+	category: "Permissions",
+	hidden: true,
+	run: () => {
+		const next = !state.autoApprovalEnabled
+		state.autoApprovalEnabled = next
+		sendEvent({ type: "ui.setAutoApproval", enabled: next })
+		toast.show(`Auto-approve ${next ? "enabled" : "disabled"}`, next ? "success" : "warning")
+	},
+})
+
+function sendEvent(payload: TuiRuntimeEvent | TuiUiEvent) {
 	process.stdout.write(IpcProtocol.serialize(IpcProtocol.createEvent("message", payload)))
 }
 
@@ -137,10 +195,36 @@ async function handleRequest(message: IpcMessage): Promise<IpcMessage> {
 			}
 
 			case "sendMessage":
-			case "approve":
-			case "reject":
-			case "answer":
+				return IpcProtocol.createResponse(id, { ok: true })
+
+			case "approve": {
+				const p = params as { requestId: string } | undefined
+				if (p?.requestId) {
+					sendEvent({ type: "ui.approve", requestId: p.requestId })
+				}
+				return IpcProtocol.createResponse(id, { ok: true })
+			}
+
+			case "reject": {
+				const p = params as { requestId: string } | undefined
+				if (p?.requestId) {
+					sendEvent({ type: "ui.reject", requestId: p.requestId })
+				}
+				return IpcProtocol.createResponse(id, { ok: true })
+			}
+
+			case "answer": {
+				const p = params as { requestId: string; answer: string } | undefined
+				if (p?.requestId) {
+					sendEvent({ type: "ui.answer", requestId: p.requestId, answer: p.answer })
+				}
+				return IpcProtocol.createResponse(id, { ok: true })
+			}
+
 			case "cancel":
+				sendEvent({ type: "ui.cancel" })
+				return IpcProtocol.createResponse(id, { ok: true })
+
 			case "dispose":
 				return IpcProtocol.createResponse(id, { ok: true })
 
@@ -190,12 +274,16 @@ function handleTuiEvent(event: TuiRuntimeEvent): void {
 			"messages",
 			"isRunning",
 			"sessions",
+			"recentSessions",
 			"provider",
 			"model",
 			"mode",
 			"workspacePath",
 			"todos",
 			"tokenUsage",
+			"pendingApproval",
+			"pendingQuestion",
+			"autoApprovalEnabled",
 		]
 		const snapshot: Partial<SubprocessState> = {}
 		for (const key of allowed) {
@@ -221,6 +309,22 @@ function handleTuiEvent(event: TuiRuntimeEvent): void {
 	}
 	if (event.type === "usage.updated") {
 		state.tokenUsage = event.usage
+		return
+	}
+	if (event.type === "approval.requested") {
+		state.pendingApproval = { requestId: event.requestId, ask: event.ask }
+		return
+	}
+	if (event.type === "approval.resolved") {
+		state.pendingApproval = null
+		return
+	}
+	if (event.type === "question.requested") {
+		state.pendingQuestion = { requestId: event.requestId, question: event.question }
+		return
+	}
+	if (event.type === "question.resolved") {
+		state.pendingQuestion = null
 	}
 }
 
@@ -238,10 +342,12 @@ async function main() {
 		() => (
 			<ThemeProvider>
 				<CommandProvider>
-					<DialogProvider>
-						<App />
-						<DialogContainer />
-					</DialogProvider>
+					<ToastProvider>
+						<DialogProvider>
+							<App />
+							<DialogContainer />
+						</DialogProvider>
+					</ToastProvider>
 				</CommandProvider>
 			</ThemeProvider>
 		),
@@ -287,6 +393,8 @@ async function main() {
 
 function App() {
 	const dialog = useDialog()
+	const { theme, toggleMode } = useTheme()
+	const toast = useToast()
 
 	function openCommandPalette() {
 		dialog.push({
@@ -305,11 +413,79 @@ function App() {
 		})
 	}
 
+	const modes = ["code", "architect", "ask", "debug", "cloud-agent"]
+	function cycleMode() {
+		const currentIndex = modes.indexOf(state.mode)
+		const nextMode = modes[(currentIndex + 1) % modes.length]
+		if (nextMode) {
+			state.mode = nextMode
+			sendEvent({ type: "ui.setMode", mode: nextMode })
+		}
+	}
+
+	function showHelp() {
+		Dialog.alert(
+			"Keyboard Shortcuts",
+			[
+				"Ctrl+K  Command palette",
+				"Ctrl+B  Toggle sidebar",
+				"Ctrl+M  Cycle mode",
+				"Ctrl+L  Toggle theme",
+				"Ctrl+N  New session",
+				"Ctrl+R  Resume session",
+				"Esc     Cancel / interrupt",
+				"/help   Show this help",
+				"/exit   Exit application",
+			].join("\n"),
+		)
+	}
+
+	function showSessionList() {
+		const list = state.recentSessions.length > 0 ? state.recentSessions : state.sessions
+		if (list.length === 0) {
+			Dialog.alert("Resume Session", "No recent sessions found.")
+			return
+		}
+		Dialog.select(
+			"Resume Session",
+			list.map((s) => ({
+				label: s.title,
+				description: `${new Date(s.updatedAt).toLocaleString()} · ${s.messageCount} messages`,
+				value: s.id,
+			})),
+			(item) => {
+				if (typeof item.value === "string") {
+					sendEvent({ type: "ui.resumeSession", sessionId: item.value })
+				}
+			},
+		)
+	}
+
+	// Wire command handlers to current context
+	commandRegistry.get("theme.toggle")!.run = () => {
+		toggleMode()
+		sendEvent({ type: "ui.setTheme", theme: theme.isDark ? "light" : "dark" })
+		toast.show(`Theme switched to ${theme.isDark ? "light" : "dark"}`, "info")
+	}
+	commandRegistry.get("mode.cycle")!.run = () => {
+		cycleMode()
+		toast.show(`Mode switched to ${state.mode}`, "info")
+	}
+	commandRegistry.get("help.show")!.run = showHelp
+	commandRegistry.get("session.resume")!.run = showSessionList
+	commandRegistry.get("session.interrupt")!.run = () => sendEvent({ type: "ui.cancel" })
+	commandRegistry.get("prompt.clear")!.run = () => {
+		requestPromptClear()
+		toast.show("Prompt cleared", "info")
+	}
+	commandRegistry.get("command.palette.show")!.run = openCommandPalette
+
 	if (!state.currentSessionId) {
 		return (
 			<Home
-				sessions={state.sessions}
+				sessions={state.recentSessions}
 				onNewSession={() => sendEvent({ type: "ui.newSession" })}
+				onStartTask={(text) => sendEvent({ type: "ui.startTask", text })}
 				onResumeSession={(sessionId: string) => sendEvent({ type: "ui.resumeSession", sessionId })}
 				onOpenCommandPalette={openCommandPalette}
 				currentProvider={state.provider}
@@ -334,12 +510,18 @@ function App() {
 			messages={state.messages}
 			onSendMessage={(text) => sendEvent({ type: "ui.sendMessage", text })}
 			onCancel={() => sendEvent({ type: "ui.cancel" })}
+			onApprove={(requestId) => sendEvent({ type: "ui.approve", requestId })}
+			onReject={(requestId) => sendEvent({ type: "ui.reject", requestId })}
+			onAnswer={(requestId, answer) => sendEvent({ type: "ui.answer", requestId, answer })}
+			pendingApproval={state.pendingApproval}
+			pendingQuestion={state.pendingQuestion}
 			isRunning={state.isRunning}
 			currentProvider={state.provider}
 			currentModel={state.model}
 			currentMode={state.mode}
 			tokenUsage={state.tokenUsage}
 			todos={state.todos}
+			autoApprovalEnabled={state.autoApprovalEnabled}
 		/>
 	)
 }

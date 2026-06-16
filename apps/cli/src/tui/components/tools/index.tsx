@@ -73,8 +73,18 @@ export interface ToolData {
 	mode_to?: string
 	result?: string
 	lineCount?: number
+	diff?: string
+	originalContent?: string
+	content?: string
 	diffStats?: { additions?: number; deletions?: number }
 	todos?: Array<{ content: string; status: string }>
+	batchDiffs?: Array<{
+		path: string
+		content: string
+		changeCount: number
+		diffStats?: { added: number; removed: number }
+		diffs?: Array<{ content: string; startLine?: number }>
+	}>
 }
 
 export interface ToolRendererProps {
@@ -85,7 +95,7 @@ export interface ToolRendererProps {
 export function ToolRenderer(props: ToolRendererProps) {
 	const part = props.part
 	if (!part) return null
-	const toolName = part.toolName || ""
+	const toolName = normalizeToolName(part.toolName || "")
 	switch (toolName) {
 		case "read_file":
 			return <FileReadTool {...props} />
@@ -113,6 +123,174 @@ export function ToolRenderer(props: ToolRendererProps) {
 		default:
 			return <GenericTool {...props} />
 	}
+}
+
+function normalizeToolName(toolName: string): string {
+	const mapping: Record<string, string> = {
+		readFile: "read_file",
+		newFileCreated: "write_to_file",
+		appliedDiff: "apply_diff",
+		editedExistingFile: "apply_diff",
+		searchFiles: "search_files",
+		listFilesTopLevel: "list_files",
+		listFilesRecursive: "list_files",
+		switchMode: "switch_mode",
+		updateTodoList: "update_todos",
+		web_search: "web_search",
+		web_fetch: "web_fetch",
+	}
+	return mapping[toolName] || toolName
+}
+
+function CollapsibleContent(props: { content: string; maxLines?: number }) {
+	const { theme } = useTheme()
+	const maxLines = props.maxLines ?? 10
+	const lines = props.content.split("\n")
+	const [expanded, setExpanded] = createSignal(lines.length <= maxLines)
+
+	if (lines.length <= maxLines) {
+		return (
+			<Box flexDirection="column">
+				<Text color={theme.colors.text}>{props.content}</Text>
+			</Box>
+		)
+	}
+
+	const visibleLines = expanded() ? lines : lines.slice(0, maxLines)
+	const hiddenCount = lines.length - maxLines
+
+	return (
+		<Box flexDirection="column">
+			<Text color={theme.colors.text}>{visibleLines.join("\n")}</Text>
+			<Text color={theme.colors.primary} onClick={() => setExpanded(!expanded())}>
+				{expanded() ? "Show less" : `Show ${hiddenCount} more line${hiddenCount === 1 ? "" : "s"}`}
+			</Text>
+		</Box>
+	)
+}
+
+interface DiffLine {
+	type: "header" | "context" | "add" | "remove"
+	text: string
+}
+
+function parseDiffLines(diff: string): DiffLine[] {
+	return diff.split("\n").map((line) => {
+		if (line.startsWith("@@")) {
+			return { type: "header", text: line }
+		}
+		if (line.startsWith("+")) {
+			return { type: "add", text: line.slice(1) }
+		}
+		if (line.startsWith("-")) {
+			return { type: "remove", text: line.slice(1) }
+		}
+		return { type: "context", text: line.startsWith(" ") ? line.slice(1) : line }
+	})
+}
+
+function DiffViewer(props: { diff: string; originalContent?: string; newContent?: string }) {
+	const { theme } = useTheme()
+	const [mode, setMode] = createSignal<"unified" | "split">("unified")
+	const lines = () => parseDiffLines(props.diff)
+	const colorFor = (type: DiffLine["type"]) => {
+		switch (type) {
+			case "add":
+				return theme.colors.success
+			case "remove":
+				return theme.colors.error
+			case "header":
+				return theme.colors.secondary
+			default:
+				return theme.colors.textMuted
+		}
+	}
+	const prefixFor = (type: DiffLine["type"]) => {
+		switch (type) {
+			case "add":
+				return "+"
+			case "remove":
+				return "-"
+			case "header":
+				return "@"
+			default:
+				return " "
+		}
+	}
+
+	return (
+		<Box flexDirection="column" border={true} borderColor={theme.colors.borderSubtle}>
+			<Box flexDirection="row" paddingLeft={1} paddingRight={1} backgroundColor={theme.colors.backgroundElement}>
+				<Text
+					color={theme.colors.primary}
+					bold
+					onClick={() => setMode(mode() === "unified" ? "split" : "unified")}>
+					[{mode() === "unified" ? "Unified" : "Split"}] Click to toggle
+				</Text>
+			</Box>
+			<Show when={mode() === "unified"} fallback={<SplitDiffView lines={lines()} colorFor={colorFor} />}>
+				<UnifiedDiffView lines={lines()} colorFor={colorFor} prefixFor={prefixFor} />
+			</Show>
+		</Box>
+	)
+}
+
+function UnifiedDiffView(props: {
+	lines: DiffLine[]
+	colorFor: (type: DiffLine["type"]) => string
+	prefixFor: (type: DiffLine["type"]) => string
+}) {
+	const { theme } = useTheme()
+	return (
+		<Box flexDirection="column" paddingLeft={1} paddingRight={1}>
+			<For each={props.lines}>
+				{(line) => (
+					<Text color={props.colorFor(line.type)}>
+						{props.prefixFor(line.type)}
+						{line.text}
+					</Text>
+				)}
+			</For>
+		</Box>
+	)
+}
+
+function SplitDiffView(props: { lines: DiffLine[]; colorFor: (type: DiffLine["type"]) => string }) {
+	const { theme } = useTheme()
+	const rows = props.lines.map((line) => {
+		if (line.type === "add") {
+			return { left: null, right: line }
+		}
+		if (line.type === "remove") {
+			return { left: line, right: null }
+		}
+		return { left: line, right: line }
+	})
+
+	return (
+		<Box flexDirection="column" paddingLeft={1} paddingRight={1}>
+			<For each={rows}>
+				{(row) => (
+					<Box flexDirection="row">
+						<Box flexGrow={1} width="50%" border={["right"]} borderColor={theme.colors.borderSubtle}>
+							{row.left ? (
+								<Text color={props.colorFor(row.left.type)}>{row.left.text}</Text>
+							) : (
+								<Text color={theme.colors.backgroundElement}> </Text>
+							)}
+						</Box>
+						<Box flexGrow={1} width="50%" paddingLeft={1}>
+							{row.right ? (
+								<Text color={props.colorFor(row.right.type)}>{row.right.text}</Text>
+							) : (
+								<Text color={theme.colors.backgroundElement}> </Text>
+							)}
+						</Box>
+					</Box>
+				)}
+			</For>
+		</Box>
+	)
 }
 
 function StatusBadge(props: { status: string }) {
@@ -162,7 +340,7 @@ export function FileReadTool(props: ToolRendererProps) {
 			<Show when={part.content}>
 				<Box flexDirection="column" paddingTop={1}>
 					<Text color={theme.colors.textMuted}>Content:</Text>
-					<Text color={theme.colors.text}>{part.content}</Text>
+					<CollapsibleContent content={part.content || ""} />
 				</Box>
 			</Show>
 		</Box>
@@ -173,7 +351,6 @@ export function FileWriteTool(props: ToolRendererProps) {
 	const { theme } = useTheme()
 	const data = toolData(props)
 	const part = props.part!
-	const [showContent, setShowContent] = createSignal(false)
 	return (
 		<Box flexDirection="column" padding={1} margin={1} border={true} borderColor={theme.colors.borderSubtle}>
 			<Box flexDirection="row">
@@ -190,12 +367,7 @@ export function FileWriteTool(props: ToolRendererProps) {
 				<Text color={theme.colors.textMuted}> Lines: {data.lineCount}</Text>
 			</Show>
 			<Show when={part.content}>
-				<Text color={theme.colors.primary} onClick={() => setShowContent(!showContent())}>
-					{showContent() ? "Hide content" : "Show content"}
-				</Text>
-				<Show when={showContent()}>
-					<Text color={theme.colors.text}>{part.content}</Text>
-				</Show>
+				<CollapsibleContent content={part.content || ""} />
 			</Show>
 		</Box>
 	)
@@ -205,6 +377,7 @@ export function ApplyDiffTool(props: ToolRendererProps) {
 	const { theme } = useTheme()
 	const data = toolData(props)
 	const part = props.part!
+	const diffText = data.diff || (part.toolResult as ToolData)?.diff || part.content || ""
 	return (
 		<Box flexDirection="column" padding={1} margin={1} border={true} borderColor={theme.colors.borderSubtle}>
 			<Box flexDirection="row">
@@ -221,6 +394,11 @@ export function ApplyDiffTool(props: ToolRendererProps) {
 				<Text color={theme.colors.textMuted}>
 					{"  "}+{data.diffStats?.additions ?? 0} -{data.diffStats?.deletions ?? 0}
 				</Text>
+			</Show>
+			<Show when={diffText}>
+				<Box flexDirection="column" paddingTop={1}>
+					<DiffViewer diff={diffText} originalContent={data.originalContent} newContent={data.content} />
+				</Box>
 			</Show>
 			<Show when={part.toolError}>
 				<Text color={theme.colors.error}> Error: {part.toolError}</Text>
@@ -251,7 +429,7 @@ export function SearchTool(props: ToolRendererProps) {
 				<Text color={theme.colors.textMuted}> Path: {path(data, part)}</Text>
 			</Show>
 			<Show when={part.content}>
-				<Text color={theme.colors.text}>{part.content}</Text>
+				<CollapsibleContent content={part.content || ""} />
 			</Show>
 		</Box>
 	)
@@ -261,7 +439,6 @@ export function ExecuteCommandTool(props: ToolRendererProps) {
 	const { theme } = useTheme()
 	const data = toolData(props)
 	const part = props.part!
-	const [showOutput, setShowOutput] = createSignal(false)
 	return (
 		<Box flexDirection="column" padding={1} margin={1} border={true} borderColor={theme.colors.borderSubtle}>
 			<Box flexDirection="row">
@@ -280,12 +457,7 @@ export function ExecuteCommandTool(props: ToolRendererProps) {
 				</Box>
 			</Show>
 			<Show when={part.content}>
-				<Text color={theme.colors.primary} onClick={() => setShowOutput(!showOutput())}>
-					{showOutput() ? "Hide output" : "Show output"}
-				</Text>
-				<Show when={showOutput()}>
-					<Text color={theme.colors.textMuted}>{part.content}</Text>
-				</Show>
+				<CollapsibleContent content={part.content || ""} />
 			</Show>
 			<Show when={part.toolError}>
 				<Text color={theme.colors.error}> Error: {part.toolError}</Text>
@@ -314,7 +486,7 @@ export function McpTool(props: ToolRendererProps) {
 				<Text color={theme.colors.textMuted}> Tool: {data.toolName || part.toolName}</Text>
 			</Show>
 			<Show when={part.content}>
-				<Text color={theme.colors.text}>{part.content}</Text>
+				<CollapsibleContent content={part.content || ""} />
 			</Show>
 		</Box>
 	)
@@ -427,9 +599,7 @@ export function CompletionTool(props: ToolRendererProps) {
 				Task Completed
 			</Text>
 			<Show when={part.content || data.result}>
-				<Text color={theme.colors.text} paddingTop={1}>
-					{part.content || data.result}
-				</Text>
+				<CollapsibleContent content={part.content || data.result || ""} />
 			</Show>
 		</Box>
 	)
@@ -448,7 +618,7 @@ export function GenericTool(props: ToolRendererProps) {
 				</Text>
 			</Box>
 			<Show when={part.content}>
-				<Text color={theme.colors.text}>{part.content}</Text>
+				<CollapsibleContent content={part.content || ""} />
 			</Show>
 			<Show when={part.toolError}>
 				<Text color={theme.colors.error}>Error: {part.toolError}</Text>

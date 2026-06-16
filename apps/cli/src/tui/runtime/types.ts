@@ -20,6 +20,7 @@ export const TUI_RUNTIME_ADAPTER_VERSION = "TuiRuntimeAdapterV1" as const
 export interface TuiRuntime {
 	activate(): Promise<void>
 	dispose(): Promise<void>
+	newSession(): Promise<void>
 	startTask(input: StartTaskInput): Promise<void>
 	resumeTask(sessionId: string): Promise<void>
 	sendMessage(content: string): Promise<void>
@@ -27,6 +28,9 @@ export interface TuiRuntime {
 	reject(requestId: string): Promise<void>
 	answer(requestId: string, answer: string): Promise<void>
 	cancel(): Promise<void>
+	setMode(mode: string): Promise<void>
+	setAutoApprovalEnabled(enabled: boolean): Promise<void>
+	undo(): Promise<void>
 	subscribe(listener: (event: TuiRuntimeEvent) => void): () => void
 }
 
@@ -316,6 +320,7 @@ export interface TuiPart {
 export type TuiAction =
 	| { type: "session/create"; payload: { id: string; workspacePath: string } }
 	| { type: "session/update"; payload: { id: string; status: TuiTaskStatus; title?: string } }
+	| { type: "session/refresh" }
 	| { type: "message/create"; payload: TuiMessage }
 	| { type: "part/create"; payload: TuiPart }
 	| { type: "part/update"; payload: { id: string; delta?: string; content?: string; status?: TuiPart["status"] } }
@@ -328,3 +333,22 @@ export type TuiAction =
 	| { type: "task/complete"; payload: { success: boolean; message?: string } }
 	| { type: "task/cancel"; payload: { reason: "user" | "error" | "system" } }
 	| { type: "task/fail"; payload: { error: string } }
+
+// =============================================================================
+// UI Events (Bun subprocess -> Node main process)
+// =============================================================================
+
+export type TuiUiEvent =
+	| { type: "ui.newSession" }
+	| { type: "ui.startTask"; text: string }
+	| { type: "ui.resumeSession"; sessionId: string }
+	| { type: "ui.sendMessage"; text: string }
+	| { type: "ui.approve"; requestId: string }
+	| { type: "ui.reject"; requestId: string }
+	| { type: "ui.answer"; requestId: string; answer: string }
+	| { type: "ui.cancel" }
+	| { type: "ui.exit" }
+	| { type: "ui.setTheme"; theme: "light" | "dark" }
+	| { type: "ui.setMode"; mode: string }
+	| { type: "ui.undo" }
+	| { type: "ui.setAutoApproval"; enabled: boolean }
