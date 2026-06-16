@@ -1,6 +1,6 @@
 import { useEffect } from "react"
-import { useUIStateStore } from "../stores/uiStateStore.js"
-import type { PendingAsk } from "../types.js"
+import { useUIStateStore } from "../stores/uiStateStore.ts"
+import type { PendingAsk } from "../types.ts"
 
 export interface UseFocusManagementOptions {
 	showApprovalPrompt: boolean

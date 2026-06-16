@@ -4,7 +4,7 @@ import {
 	GLOBAL_COMMANDS,
 	getGlobalCommand,
 	getGlobalCommandsForAutocomplete,
-} from "../commands.js"
+} from "../commands.ts"
 
 describe("globalCommands", () => {
 	describe("GLOBAL_COMMANDS", () => {

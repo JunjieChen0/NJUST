@@ -2,10 +2,10 @@ import { useCallback } from "react"
 import { randomUUID } from "crypto"
 import type { WebviewMessage } from "@njust-ai/types"
 
-import { getGlobalCommand } from "../../lib/utils/commands.js"
+import { getGlobalCommand } from "../../lib/utils/commands.ts"
 
-import { useCLIStore } from "../store.js"
-import { useUIStateStore } from "../stores/uiStateStore.js"
+import { useCLIStore } from "../store.ts"
+import { useUIStateStore } from "../stores/uiStateStore.ts"
 
 export interface UseTaskSubmitOptions {
 	sendToExtension: ((msg: WebviewMessage) => void) | null

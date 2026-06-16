@@ -3,14 +3,15 @@ import { Select } from "@inkjs/ui"
 import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from "react"
 
 import { ExtensionHostInterface, ExtensionHostOptions } from "@/agent/index.js"
+import type { SupportedProvider } from "@/types/index.js"
 
 import { getGlobalCommandsForAutocomplete } from "@/lib/utils/commands.js"
 import { arePathsEqual } from "@/lib/utils/path.js"
 import { getContextWindow } from "@/lib/utils/context-window.js"
 
-import * as theme from "./theme.js"
-import { useCLIStore } from "./store.js"
-import { useUIStateStore } from "./stores/uiStateStore.js"
+import * as theme from "./theme.ts"
+import { useCLIStore } from "./store.ts"
+import { useUIStateStore } from "./stores/uiStateStore.ts"
 
 // Import extracted hooks.
 import {
@@ -24,18 +25,21 @@ import {
 	useFollowupCountdown,
 	useFocusManagement,
 	usePickerHandlers,
-} from "./hooks/index.js"
+} from "./hooks/index.ts"
 
 // Import extracted utilities.
-import { getView } from "./utils/index.js"
+import { getView } from "./utils/index.ts"
 
 // Import components.
-import Header from "./components/Header.js"
-import ChatHistoryItem from "./components/ChatHistoryItem.js"
-import LoadingText from "./components/LoadingText.js"
-import ToastDisplay from "./components/ToastDisplay.js"
-import TodoDisplay from "./components/TodoDisplay.js"
-import { HorizontalLine } from "./components/HorizontalLine.js"
+import Footer from "./components/Footer.tsx"
+import Sidebar from "./components/Sidebar.tsx"
+import { CommandPalette, type Command } from "./components/CommandPalette.tsx"
+import { WelcomeScreen } from "./components/WelcomeScreen.tsx"
+import ChatHistoryItem from "./components/ChatHistoryItem.tsx"
+import LoadingText from "./components/LoadingText.tsx"
+import ToastDisplay from "./components/ToastDisplay.tsx"
+import TodoDisplay from "./components/TodoDisplay.tsx"
+import { HorizontalLine } from "./components/HorizontalLine.tsx"
 import {
 	type AutocompleteInputHandle,
 	type AutocompleteTrigger,
@@ -51,9 +55,9 @@ import {
 	toSlashCommandResult,
 	toModeResult,
 	toHistoryResult,
-} from "./components/autocomplete/index.js"
-import { ScrollArea, useScrollToBottom } from "./components/ScrollArea.js"
-import ScrollIndicator from "./components/ScrollIndicator.js"
+} from "./components/autocomplete/index.ts"
+import { ScrollArea, useScrollToBottom } from "./components/ScrollArea.tsx"
+import ScrollIndicator from "./components/ScrollIndicator.tsx"
 
 const PICKER_HEIGHT = 10
 
@@ -68,9 +72,13 @@ export interface TUIAppProps extends ExtensionHostOptions {
 }
 
 /**
- * Inner App component that uses the terminal size context
+ * AppContent - Main TUI content with all hooks and rendering
  */
-function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps) {
+function AppContent({
+	createExtensionHost,
+	onBackToSetup,
+	...extensionHostOptions
+}: TUIAppProps & { onBackToSetup: () => void }) {
 	const {
 		initialPrompt,
 		initialTaskId,
@@ -118,6 +126,11 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		showCustomInput,
 		isTransitioningToCustomInput,
 		showTodoViewer,
+		setShowTodoViewer,
+		showSidebar,
+		setShowSidebar,
+		showCommandPalette,
+		setShowCommandPalette,
 		pickerState,
 		setIsTransitioningToCustomInput,
 	} = useUIStateStore()
@@ -153,9 +166,13 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 	}, [taskHistory])
 
 	// Scroll area state
-	const { rows } = useTerminalSize()
+	const { rows, columns } = useTerminalSize()
 	const [scrollState, setScrollState] = useState({ scrollTop: 0, maxScroll: 0, isAtBottom: true })
 	const { scrollToBottomTrigger, scrollToBottom } = useScrollToBottom()
+
+	// Sidebar visibility: auto-show on wide terminals, manual toggle otherwise
+	const wide = columns > 120
+	const sidebarVisible = showSidebar || wide
 
 	// RAF-style throttle refs for scroll updates (prevents multiple state updates per event loop tick).
 	const rafIdRef = useRef<NodeJS.Immediate | null>(null)
@@ -239,7 +256,60 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		cleanup,
 		toggleFocus,
 		closePicker: handlePickerClose,
+		showSidebar,
+		setShowSidebar,
+		showCommandPalette,
+		setShowCommandPalette,
 	})
+
+	// Command palette commands
+	const commands: Command[] = useMemo(
+		() => [
+			{
+				name: "mode.switch",
+				title: "Switch mode",
+				category: "Agent",
+				shortcut: "Ctrl+M",
+				suggested: true,
+				run: () => showInfo("Press Ctrl+M to cycle modes", 2000),
+			},
+			{
+				name: "sidebar.toggle",
+				title: "Toggle sidebar",
+				category: "View",
+				shortcut: "Ctrl+B",
+				suggested: true,
+				run: () => setShowSidebar(!showSidebar),
+			},
+			{
+				name: "todo.toggle",
+				title: "Toggle TODO viewer",
+				category: "View",
+				shortcut: "Ctrl+T",
+				run: () => setShowTodoViewer(!showTodoViewer),
+			},
+			{
+				name: "task.new",
+				title: "Start new task",
+				category: "Session",
+				run: () => sendToExtension?.({ type: "clearTask" }),
+			},
+			{
+				name: "help",
+				title: "Help",
+				category: "System",
+				run: () => showInfo("? for shortcuts • Ctrl+K commands • Ctrl+B sidebar", 3000),
+			},
+			{
+				name: "exit",
+				title: "Exit",
+				category: "System",
+				shortcut: "Ctrl+C",
+				run: () => exit(),
+			},
+		],
+		[showSidebar, setShowSidebar, setShowTodoViewer, sendToExtension, showInfo, exit],
+	)
 
 	// Determine current view
 	const view = getView(messages, pendingAsk, isLoading)
@@ -372,7 +442,7 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		}
 	}, [fileSearchResults]) // Only depend on fileSearchResults - read pickerState from ref
 
-	// Handle Y/N input for approval prompts
+	// Handle Y/N input for approval prompts, and back-to-setup for extension errors
 	useInput((input) => {
 		if (pendingAsk && pendingAsk.type !== "followup") {
 			const lower = input.toLowerCase()
@@ -382,6 +452,13 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 			} else if (lower === "n") {
 				handleReject()
 			}
+		}
+	})
+
+	// Handle back-to-setup key for extension load errors
+	useInput((input, _key) => {
+		if (error && input === "b") {
+			onBackToSetup()
 		}
 	})
 
@@ -413,6 +490,9 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 				<Text color="gray" dimColor>
 					Press Ctrl+C to exit
 				</Text>
+				<Text color="gray" dimColor>
+					Press B to go back to setup
+				</Text>
 			</Box>
 		)
 	}
@@ -443,7 +523,7 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 	) : isScrollAreaActive ? (
 		<ScrollIndicator scrollTop={scrollState.scrollTop} maxScroll={scrollState.maxScroll} isScrollFocused={true} />
 	) : isInputAreaActive ? (
-		<Text color={theme.dimText}>? for shortcuts</Text>
+		<Text color={theme.dimText}>? for shortcuts • Ctrl+K commands • Ctrl+B sidebar • Tab focus</Text>
 	) : null
 
 	const getPickerRenderItem = (): ((item: AutocompleteItem, isSelected: boolean) => ReactNode) => {
@@ -460,157 +540,214 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 
 	return (
 		<Box flexDirection="column" height={rows - 1}>
-			{/* Header - fixed size */}
+			{showCommandPalette ? (
+				<Box flexGrow={1} justifyContent="center" alignItems="center" paddingLeft={4}>
+					<CommandPalette
+						commands={commands}
+						onSelect={(cmd) => {
+							setShowCommandPalette(false)
+							cmd.run()
+						}}
+						onClose={() => setShowCommandPalette(false)}
+					/>
+				</Box>
+			) : (
+				<Box flexDirection="row" flexGrow={1} minHeight={0}>
+					{/* Main content area */}
+					<Box flexDirection="column" flexGrow={1} minWidth={0}>
+						{/* Scrollable message history */}
+						<ScrollArea
+							isActive={isScrollAreaActive}
+							onScroll={handleScroll}
+							scrollToBottomTrigger={scrollToBottomTrigger}>
+							{displayMessages.map((message) => (
+								<ChatHistoryItem key={message.id} message={message} />
+							))}
+						</ScrollArea>
+
+						{/* Input area */}
+						<Box flexDirection="column" flexShrink={0}>
+							{pendingAsk?.type === "followup" ? (
+								<Box flexDirection="column">
+									<Text color={theme.rooHeader}>{pendingAsk.content}</Text>
+									{pendingAsk.suggestions && pendingAsk.suggestions.length > 0 && !showCustomInput ? (
+										<Box flexDirection="column" marginTop={1}>
+											<HorizontalLine active={true} />
+											<Select
+												options={[
+													...pendingAsk.suggestions.map((s) => ({
+														label: s.answer,
+														value: s.answer,
+													})),
+													{ label: "Type something...", value: "__CUSTOM__" },
+												]}
+												onChange={(value) => {
+													if (!value || typeof value !== "string") return
+													if (showCustomInput || isTransitioningToCustomInput) return
+
+													if (value === "__CUSTOM__") {
+														cancelCountdown()
+														setIsTransitioningToCustomInput(true)
+														useUIStateStore.getState().setShowCustomInput(true)
+													} else if (value.trim()) {
+														handleSubmit(value)
+													}
+												}}
+											/>
+											<HorizontalLine active={true} />
+											<Text color={theme.dimText}>
+												↑↓ navigate • Enter select
+												{countdownSeconds !== null && (
+													<Text color="yellow"> • Auto-select in {countdownSeconds}s</Text>
+												)}
+											</Text>
+										</Box>
+									) : (
+										<Box flexDirection="column" marginTop={1}>
+											<HorizontalLine active={isInputAreaActive} />
+											<AutocompleteInput
+												ref={followupAutocompleteRef}
+												placeholder="Type your response..."
+												onSubmit={(text: string) => {
+													if (text && text.trim()) {
+														handleSubmit(text)
+														useUIStateStore.getState().setShowCustomInput(false)
+														setIsTransitioningToCustomInput(false)
+													}
+												}}
+												isActive={true}
+												triggers={autocompleteTriggers}
+												onPickerStateChange={handlePickerStateChange}
+												prompt="> "
+											/>
+											<HorizontalLine active={isInputAreaActive} />
+											{pickerState.isOpen ? (
+												<Box flexDirection="column" height={PICKER_HEIGHT}>
+													<PickerSelect
+														results={pickerState.results}
+														selectedIndex={pickerState.selectedIndex}
+														maxVisible={PICKER_HEIGHT - 1}
+														onSelect={handlePickerSelect}
+														onEscape={handlePickerClose}
+														onIndexChange={handlePickerIndexChange}
+														renderItem={getPickerRenderItem()}
+														emptyMessage={pickerState.activeTrigger?.emptyMessage}
+														isActive={isInputAreaActive && pickerState.isOpen}
+														isLoading={pickerState.isLoading}
+													/>
+												</Box>
+											) : (
+												<Box height={1}>{statusBarMessage}</Box>
+											)}
+										</Box>
+									)}
+								</Box>
+							) : showApprovalPrompt ? (
+								<Box flexDirection="column">
+									<Text color={theme.rooHeader}>{pendingAsk?.content}</Text>
+									<Text color={theme.dimText}>
+										Press <Text color={theme.successColor}>Y</Text> to approve,{" "}
+										<Text color={theme.errorColor}>N</Text> to reject
+									</Text>
+									<Box height={1}>{statusBarMessage}</Box>
+								</Box>
+							) : (
+								<Box flexDirection="column">
+									<HorizontalLine active={isInputAreaActive} />
+									<AutocompleteInput
+										ref={autocompleteRef}
+										placeholder={isComplete ? "Type to continue..." : ""}
+										onSubmit={handleSubmit}
+										isActive={isInputAreaActive}
+										triggers={autocompleteTriggers}
+										onPickerStateChange={handlePickerStateChange}
+										prompt="› "
+									/>
+									<HorizontalLine active={isInputAreaActive} />
+									{showTodoViewer ? (
+										<Box flexDirection="column" height={PICKER_HEIGHT}>
+											<TodoDisplay todos={currentTodos} showProgress={true} title="TODO List" />
+											<Box height={1}>
+												<Text color={theme.dimText}>Ctrl+T to close</Text>
+											</Box>
+										</Box>
+									) : pickerState.isOpen ? (
+										<Box flexDirection="column" height={PICKER_HEIGHT}>
+											<PickerSelect
+												results={pickerState.results}
+												selectedIndex={pickerState.selectedIndex}
+												maxVisible={PICKER_HEIGHT - 1}
+												onSelect={handlePickerSelect}
+												onEscape={handlePickerClose}
+												onIndexChange={handlePickerIndexChange}
+												renderItem={getPickerRenderItem()}
+												emptyMessage={pickerState.activeTrigger?.emptyMessage}
+												isActive={isInputAreaActive && pickerState.isOpen}
+												isLoading={pickerState.isLoading}
+											/>
+										</Box>
+									) : (
+										<Box height={1}>{statusBarMessage}</Box>
+									)}
+								</Box>
+							)}
+						</Box>
+					</Box>
+
+					{/* Optional sidebar */}
+					{sidebarVisible && (
+						<Sidebar
+							workspacePath={workspacePath}
+							model={model}
+							provider={provider}
+							mode={currentMode || mode}
+							reasoningEffort={reasoningEffort}
+							nonInteractive={nonInteractive}
+							version={version}
+							user={user}
+						/>
+					)}
+				</Box>
+			)}
+
+			{/* Bottom footer */}
 			<Box flexShrink={0}>
-				<Header
-					{...extensionHostOptions}
-					mode={currentMode || mode}
-					version={version}
+				<Footer
+					workspacePath={workspacePath}
 					tokenUsage={tokenUsage}
 					contextWindow={contextWindow}
+					mode={currentMode || mode}
+					nonInteractive={nonInteractive}
 				/>
-			</Box>
-
-			{/* Scrollable message history area - fills remaining space via flexGrow */}
-			<ScrollArea
-				isActive={isScrollAreaActive}
-				onScroll={handleScroll}
-				scrollToBottomTrigger={scrollToBottomTrigger}>
-				{displayMessages.map((message) => (
-					<ChatHistoryItem key={message.id} message={message} />
-				))}
-			</ScrollArea>
-
-			{/* Input area - with borders like Claude Code - fixed size */}
-			<Box flexDirection="column" flexShrink={0}>
-				{pendingAsk?.type === "followup" ? (
-					<Box flexDirection="column">
-						<Text color={theme.rooHeader}>{pendingAsk.content}</Text>
-						{pendingAsk.suggestions && pendingAsk.suggestions.length > 0 && !showCustomInput ? (
-							<Box flexDirection="column" marginTop={1}>
-								<HorizontalLine active={true} />
-								<Select
-									options={[
-										...pendingAsk.suggestions.map((s) => ({
-											label: s.answer,
-											value: s.answer,
-										})),
-										{ label: "Type something...", value: "__CUSTOM__" },
-									]}
-									onChange={(value) => {
-										if (!value || typeof value !== "string") return
-										if (showCustomInput || isTransitioningToCustomInput) return
-
-										if (value === "__CUSTOM__") {
-											// Clear countdown timer and switch to custom input
-											cancelCountdown()
-											setIsTransitioningToCustomInput(true)
-											useUIStateStore.getState().setShowCustomInput(true)
-										} else if (value.trim()) {
-											handleSubmit(value)
-										}
-									}}
-								/>
-								<HorizontalLine active={true} />
-								<Text color={theme.dimText}>
-									↑↓ navigate • Enter select
-									{countdownSeconds !== null && (
-										<Text color="yellow"> • Auto-select in {countdownSeconds}s</Text>
-									)}
-								</Text>
-							</Box>
-						) : (
-							<Box flexDirection="column" marginTop={1}>
-								<HorizontalLine active={isInputAreaActive} />
-								<AutocompleteInput
-									ref={followupAutocompleteRef}
-									placeholder="Type your response..."
-									onSubmit={(text: string) => {
-										if (text && text.trim()) {
-											handleSubmit(text)
-											useUIStateStore.getState().setShowCustomInput(false)
-											setIsTransitioningToCustomInput(false)
-										}
-									}}
-									isActive={true}
-									triggers={autocompleteTriggers}
-									onPickerStateChange={handlePickerStateChange}
-									prompt="> "
-								/>
-								<HorizontalLine active={isInputAreaActive} />
-								{pickerState.isOpen ? (
-									<Box flexDirection="column" height={PICKER_HEIGHT}>
-										<PickerSelect
-											results={pickerState.results}
-											selectedIndex={pickerState.selectedIndex}
-											maxVisible={PICKER_HEIGHT - 1}
-											onSelect={handlePickerSelect}
-											onEscape={handlePickerClose}
-											onIndexChange={handlePickerIndexChange}
-											renderItem={getPickerRenderItem()}
-											emptyMessage={pickerState.activeTrigger?.emptyMessage}
-											isActive={isInputAreaActive && pickerState.isOpen}
-											isLoading={pickerState.isLoading}
-										/>
-									</Box>
-								) : (
-									<Box height={1}>{statusBarMessage}</Box>
-								)}
-							</Box>
-						)}
-					</Box>
-				) : showApprovalPrompt ? (
-					<Box flexDirection="column">
-						<Text color={theme.rooHeader}>{pendingAsk?.content}</Text>
-						<Text color={theme.dimText}>
-							Press <Text color={theme.successColor}>Y</Text> to approve,{" "}
-							<Text color={theme.errorColor}>N</Text> to reject
-						</Text>
-						<Box height={1}>{statusBarMessage}</Box>
-					</Box>
-				) : (
-					<Box flexDirection="column">
-						<HorizontalLine active={isInputAreaActive} />
-						<AutocompleteInput
-							ref={autocompleteRef}
-							placeholder={isComplete ? "Type to continue..." : ""}
-							onSubmit={handleSubmit}
-							isActive={isInputAreaActive}
-							triggers={autocompleteTriggers}
-							onPickerStateChange={handlePickerStateChange}
-							prompt="› "
-						/>
-						<HorizontalLine active={isInputAreaActive} />
-						{showTodoViewer ? (
-							<Box flexDirection="column" height={PICKER_HEIGHT}>
-								<TodoDisplay todos={currentTodos} showProgress={true} title="TODO List" />
-								<Box height={1}>
-									<Text color={theme.dimText}>Ctrl+T to close</Text>
-								</Box>
-							</Box>
-						) : pickerState.isOpen ? (
-							<Box flexDirection="column" height={PICKER_HEIGHT}>
-								<PickerSelect
-									results={pickerState.results}
-									selectedIndex={pickerState.selectedIndex}
-									maxVisible={PICKER_HEIGHT - 1}
-									onSelect={handlePickerSelect}
-									onEscape={handlePickerClose}
-									onIndexChange={handlePickerIndexChange}
-									renderItem={getPickerRenderItem()}
-									emptyMessage={pickerState.activeTrigger?.emptyMessage}
-									isActive={isInputAreaActive && pickerState.isOpen}
-									isLoading={pickerState.isLoading}
-								/>
-							</Box>
-						) : (
-							<Box height={1}>{statusBarMessage}</Box>
-						)}
-					</Box>
-				)}
 			</Box>
 		</Box>
 	)
+}
+
+/**
+ * AppInner - Manages apiKey state and conditionally renders ApiKeyPrompt or AppContent
+ */
+function AppInner(props: TUIAppProps) {
+	const [apiKey, setApiKey] = useState<string | undefined>(props.apiKey)
+	const [provider, setProvider] = useState<SupportedProvider | undefined>(props.provider)
+	const [ready, setReady] = useState(Boolean(props.apiKey && props.provider))
+
+	if (!ready) {
+		return (
+			<WelcomeScreen
+				onReady={(selectedProvider, key) => {
+					setProvider(selectedProvider)
+					setApiKey(key)
+					setReady(true)
+				}}
+				onExit={() => {
+					process.exit(0)
+				}}
+			/>
+		)
+	}
+
+	return <AppContent {...props} apiKey={apiKey} provider={provider!} onBackToSetup={() => setReady(false)} />
 }
 
 /**

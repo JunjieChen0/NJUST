@@ -1,7 +1,7 @@
 import { Text } from "ink"
 
-import * as theme from "../theme.js"
-import { useTerminalSize } from "../hooks/TerminalSizeContext.js"
+import * as theme from "../theme.ts"
+import { useTerminalSize } from "../hooks/TerminalSizeContext.tsx"
 
 interface HorizontalLineProps {
 	active?: boolean

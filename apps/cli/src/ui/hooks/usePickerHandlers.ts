@@ -6,9 +6,9 @@ import type {
 	AutocompleteInputHandle,
 	ModeResult,
 	HistoryResult,
-} from "../components/autocomplete/index.js"
-import { useCLIStore } from "../store.js"
-import { useUIStateStore } from "../stores/uiStateStore.js"
+} from "../components/autocomplete/index.ts"
+import { useCLIStore } from "../store.ts"
+import { useUIStateStore } from "../stores/uiStateStore.ts"
 
 export interface UsePickerHandlersOptions {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any

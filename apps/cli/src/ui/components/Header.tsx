@@ -3,13 +3,13 @@ import { Text, Box } from "ink"
 
 import type { TokenUsage } from "@njust-ai/types"
 
-import { ASCII_ROO } from "@/types/constants.js"
+import { ASCII_NJUST_AI } from "@/types/constants.js"
 
 import { ExtensionHostOptions } from "@/agent/index.js"
-import { useTerminalSize } from "../hooks/TerminalSizeContext.js"
-import * as theme from "../theme.js"
+import { useTerminalSize } from "../hooks/TerminalSizeContext.tsx"
+import * as theme from "../theme.ts"
 
-import MetricsDisplay from "./MetricsDisplay.js"
+import MetricsDisplay from "./MetricsDisplay.tsx"
 
 interface HeaderProps extends ExtensionHostOptions {
 	version: string
@@ -43,7 +43,7 @@ function Header({
 			<Box width={columns}>
 				<Box flexDirection="row">
 					<Box marginY={1}>
-						<Text color="magenta">{ASCII_ROO}</Text>
+						<Text color="magenta">{ASCII_NJUST_AI}</Text>
 					</Box>
 					<Box flexDirection="column" marginLeft={1} marginTop={1}>
 						{user && <Text color={theme.dimText}>Welcome back, {user.name}</Text>}

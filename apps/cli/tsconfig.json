@@ -5,11 +5,14 @@
 		"outDir": "dist",
 		"jsx": "react-jsx",
 		"jsxImportSource": "react",
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"noUncheckedIndexedAccess": false,
 		"baseUrl": ".",
 		"paths": {
 			"@/*": ["src/*"]
 		}
 	},
 	"include": ["src", "*.config.ts"],
-	"exclude": ["node_modules"]
+	"exclude": ["node_modules", "src/tui"]
 }

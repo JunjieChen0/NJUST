@@ -2,8 +2,8 @@ import { create } from "zustand"
 
 import type { TokenUsage, ProviderSettings, TodoItem } from "@njust-ai/types"
 
-import type { TUIMessage, PendingAsk, TaskHistoryItem } from "./types.js"
-import type { FileResult, SlashCommandResult, ModeResult } from "./components/autocomplete/index.js"
+import type { TUIMessage, PendingAsk, TaskHistoryItem } from "./types.ts"
+import type { FileResult, SlashCommandResult, ModeResult } from "./components/autocomplete/index.ts"
 
 /**
  * Shallow array equality check - compares array length and element references.

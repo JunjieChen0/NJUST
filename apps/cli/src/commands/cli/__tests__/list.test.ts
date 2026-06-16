@@ -1,6 +1,6 @@
 import { readWorkspaceTaskSessions } from "@/lib/task-history/index.js"
 
-import { listSessions, parseFormat } from "../list.js"
+import { listSessions, parseFormat } from "../list.ts"
 
 vi.mock("@/lib/task-history/index.js", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@/lib/task-history/index.js")>()

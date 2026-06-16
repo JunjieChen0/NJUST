@@ -1,4 +1,4 @@
-import type { ToolData } from "../../types.js"
+import type { ToolData } from "../../types.ts"
 
 export interface ToolRendererProps {
 	toolData: ToolData

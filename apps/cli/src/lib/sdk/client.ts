@@ -1,7 +1,7 @@
 import { createTRPCProxyClient, httpBatchLink } from "@trpc/client"
 import superjson from "superjson"
 
-import type { User, Org } from "./types.js"
+import type { User, Org } from "./types.ts"
 
 export interface ClientConfig {
 	url: string

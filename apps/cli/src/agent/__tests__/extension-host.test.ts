@@ -7,9 +7,9 @@ import type { ExtensionMessage, WebviewMessage } from "@njust-ai/types"
 
 import { DEFAULT_FLAGS } from "@/types/index.js"
 
-import { type ExtensionHostOptions, ExtensionHost } from "../extension-host.js"
-import { ExtensionClient } from "../extension-client.js"
-import { AgentLoopState } from "../agent-state.js"
+import { type ExtensionHostOptions, ExtensionHost } from "../extension-host.ts"
+import { ExtensionClient } from "../extension-client.ts"
+import { AgentLoopState } from "../agent-state.ts"
 
 vi.mock("@njust-ai/vscode-shim", () => ({
 	createVSCodeAPI: vi.fn(() => ({

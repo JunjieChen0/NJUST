@@ -1,4 +1,4 @@
-import { parseStdinStreamCommand, shouldSendMessageAsAskResponse } from "../stdin-stream.js"
+import { parseStdinStreamCommand, shouldSendMessageAsAskResponse } from "../stdin-stream.ts"
 
 describe("parseStdinStreamCommand", () => {
 	describe("valid commands", () => {

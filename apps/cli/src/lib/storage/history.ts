@@ -1,7 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 
-import { ensureConfigDir, getConfigDir } from "./config-dir.js"
+import { ensureConfigDir, getConfigDir } from "./config-dir.ts"
 
 /** Maximum number of history entries to keep */
 export const MAX_HISTORY_ENTRIES = 500

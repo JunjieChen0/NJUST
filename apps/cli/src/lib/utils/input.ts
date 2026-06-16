@@ -68,6 +68,26 @@ export const GLOBAL_INPUT_SEQUENCES: GlobalInputSequence[] = [
 			return false
 		},
 	},
+	{
+		id: "ctrl-k",
+		description: "Toggle command palette",
+		matches: (input, key) => {
+			if (key.ctrl && input === "k") return true
+			if (input === "\x1b[107;5u") return true
+			if (input.endsWith("[107;5u")) return true
+			return false
+		},
+	},
+	{
+		id: "ctrl-b",
+		description: "Toggle sidebar",
+		matches: (input, key) => {
+			if (key.ctrl && input === "b") return true
+			if (input === "\x1b[98;5u") return true
+			if (input.endsWith("[98;5u")) return true
+			return false
+		},
+	},
 	// Add more global sequences here as needed:
 	// {
 	//   id: "ctrl-n",

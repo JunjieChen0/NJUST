@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 
-import { loadHistory, addToHistory } from "../../lib/storage/history.js"
+import { loadHistory, addToHistory } from "../../lib/storage/history.ts"
 
 export interface UseInputHistoryOptions {
 	isActive?: boolean

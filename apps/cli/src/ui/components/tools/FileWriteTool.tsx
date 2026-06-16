@@ -1,10 +1,10 @@
 import { Box, Text } from "ink"
 
-import * as theme from "../../theme.js"
-import { Icon } from "../Icon.js"
+import * as theme from "../../theme.ts"
+import { Icon } from "../Icon.tsx"
 
-import type { ToolRendererProps } from "./types.js"
-import { truncateText, sanitizeContent, getToolDisplayName, getToolIconName, parseDiff } from "./utils.js"
+import type { ToolRendererProps } from "./types.ts"
+import { truncateText, sanitizeContent, getToolDisplayName, getToolIconName, parseDiff } from "./utils.ts"
 
 const MAX_DIFF_LINES = 15
 

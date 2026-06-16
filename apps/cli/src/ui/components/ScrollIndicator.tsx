@@ -1,7 +1,7 @@
 import { Box, Text } from "ink"
 import { memo } from "react"
 
-import * as theme from "../theme.js"
+import * as theme from "../theme.ts"
 
 interface ScrollIndicatorProps {
 	scrollTop: number

@@ -1,7 +1,7 @@
 import { render } from "ink-testing-library"
 
-import type { Toast } from "../../hooks/useToast.js"
-import ToastDisplay from "../ToastDisplay.js"
+import type { Toast } from "../../hooks/useToast.ts"
+import ToastDisplay from "../ToastDisplay.tsx"
 
 describe("ToastDisplay", () => {
 	it("should render nothing when toast is null", () => {

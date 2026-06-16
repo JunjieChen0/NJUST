@@ -1,0 +1,18 @@
+{
+	"extends": "@njust-ai/config-typescript/base.json",
+	"compilerOptions": {
+		"types": ["vitest/globals", "node"],
+		"outDir": "dist",
+		"jsx": "preserve",
+		"jsxImportSource": "@opentui/solid",
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"noUncheckedIndexedAccess": false,
+		"baseUrl": "../..",
+		"paths": {
+			"@/*": ["src/*"]
+		}
+	},
+	"include": ["./**/*.ts", "./**/*.tsx"],
+	"exclude": ["node_modules", "dist", "__tests__"]
+}

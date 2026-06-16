@@ -1,4 +1,4 @@
-import { type SlashCommandResult, createSlashCommandTrigger, toSlashCommandResult } from "../SlashCommandTrigger.js"
+import { type SlashCommandResult, createSlashCommandTrigger, toSlashCommandResult } from "../SlashCommandTrigger.tsx"
 
 describe("SlashCommandTrigger", () => {
 	describe("toSlashCommandResult", () => {

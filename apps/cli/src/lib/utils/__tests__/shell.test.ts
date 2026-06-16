@@ -1,6 +1,6 @@
 import fs from "fs/promises"
 
-import { validateTerminalShellPath } from "../shell.js"
+import { validateTerminalShellPath } from "../shell.ts"
 
 vi.mock("fs/promises", () => ({
 	default: {

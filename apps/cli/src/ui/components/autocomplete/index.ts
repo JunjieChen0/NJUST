@@ -28,14 +28,14 @@
  */
 
 // Main components
-export { type AutocompleteInputProps, type AutocompleteInputHandle, AutocompleteInput } from "./AutocompleteInput.js"
-export { type PickerSelectProps, PickerSelect } from "./PickerSelect.js"
+export { type AutocompleteInputProps, type AutocompleteInputHandle, AutocompleteInput } from "./AutocompleteInput.tsx"
+export { type PickerSelectProps, PickerSelect } from "./PickerSelect.tsx"
 
 // Hook
-export { useAutocompletePicker } from "./useAutocompletePicker.js"
+export { useAutocompletePicker } from "./useAutocompletePicker.ts"
 
 // Types
-export * from "./types.js"
+export * from "./types.ts"
 
 // Triggers
-export * from "./triggers/index.js"
+export * from "./triggers/index.ts"

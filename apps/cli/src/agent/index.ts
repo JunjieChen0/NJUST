@@ -1,2 +1,2 @@
-export * from "./extension-host.js"
-export * from "./json-event-emitter.js"
+export * from "./extension-host.ts"
+export * from "./json-event-emitter.ts"

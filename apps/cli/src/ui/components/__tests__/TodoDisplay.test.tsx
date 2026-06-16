@@ -2,8 +2,8 @@ import { render } from "ink-testing-library"
 
 import type { TodoItem } from "@njust-ai/types"
 
-import TodoDisplay from "../TodoDisplay.js"
-import { resetNerdFontCache } from "../Icon.js"
+import TodoDisplay from "../TodoDisplay.tsx"
+import { resetNerdFontCache } from "../Icon.tsx"
 
 describe("TodoDisplay", () => {
 	beforeEach(() => {

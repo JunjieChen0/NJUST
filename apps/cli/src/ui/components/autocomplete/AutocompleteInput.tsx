@@ -1,12 +1,12 @@
 import { useInput } from "ink"
 import { useState, useCallback, useEffect, useImperativeHandle, forwardRef, useRef, type Ref } from "react"
 
-import { useInputHistory } from "../../hooks/useInputHistory.js"
-import { useTerminalSize } from "../../hooks/TerminalSizeContext.js"
-import { MultilineTextInput } from "../MultilineTextInput.js"
+import { useInputHistory } from "../../hooks/useInputHistory.ts"
+import { useTerminalSize } from "../../hooks/TerminalSizeContext.tsx"
+import { MultilineTextInput } from "../MultilineTextInput.tsx"
 
-import type { AutocompleteItem, AutocompleteTrigger, AutocompletePickerState } from "./types.js"
-import { useAutocompletePicker } from "./useAutocompletePicker.js"
+import type { AutocompleteItem, AutocompleteTrigger, AutocompletePickerState } from "./types.ts"
+import { useAutocompletePicker } from "./useAutocompletePicker.ts"
 
 export interface AutocompleteInputProps<T extends AutocompleteItem = AutocompleteItem> {
 	/** Placeholder text when input is empty */
@@ -311,11 +311,11 @@ export const AutocompleteInput = forwardRef(AutocompleteInputInner) as <T extend
 /**
  * Re-export types and hook for convenience
  */
-export { useAutocompletePicker } from "./useAutocompletePicker.js"
+export { useAutocompletePicker } from "./useAutocompletePicker.ts"
 export type {
 	AutocompleteItem,
 	AutocompleteTrigger,
 	AutocompletePickerState,
 	AutocompletePickerActions,
 	TriggerDetectionResult,
-} from "./types.js"
+} from "./types.ts"

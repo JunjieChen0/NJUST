@@ -29,16 +29,16 @@
 
 import type { ExtensionMessage, WebviewMessage, ClineAskResponse, ClineMessage, ClineAsk } from "@njust-ai/types"
 
-import { StateStore } from "./state-store.js"
-import { MessageProcessor, parseExtensionMessage } from "./message-processor.js"
+import { StateStore } from "./state-store.ts"
+import { MessageProcessor, parseExtensionMessage } from "./message-processor.ts"
 import {
 	TypedEventEmitter,
 	type ClientEventMap,
 	type AgentStateChangeEvent,
 	type WaitingForInputEvent,
 	type ModeChangedEvent,
-} from "./events.js"
-import { AgentLoopState, type AgentStateInfo } from "./agent-state.js"
+} from "./events.ts"
+import { AgentLoopState, type AgentStateInfo } from "./agent-state.ts"
 
 // =============================================================================
 // Extension Client Configuration
@@ -307,6 +307,13 @@ export class ExtensionClient {
 	 */
 	off<K extends keyof ClientEventMap>(event: K, listener: (payload: ClientEventMap[K]) => void): void {
 		this.emitter.off(event, listener)
+	}
+
+	/**
+	 * Emit an event. Used by direct API fallback and external orchestrators.
+	 */
+	emit<K extends keyof ClientEventMap>(event: K, payload: ClientEventMap[K]): void {
+		this.emitter.emit(event, payload)
 	}
 
 	/**

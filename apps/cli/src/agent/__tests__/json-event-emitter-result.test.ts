@@ -1,9 +1,9 @@
 import type { ClineMessage } from "@njust-ai/types"
 import { Writable } from "stream"
 
-import type { TaskCompletedEvent } from "../events.js"
-import { JsonEventEmitter } from "../json-event-emitter.js"
-import { AgentLoopState, type AgentStateInfo } from "../agent-state.js"
+import type { TaskCompletedEvent } from "../events.ts"
+import { JsonEventEmitter } from "../json-event-emitter.ts"
+import { AgentLoopState, type AgentStateInfo } from "../agent-state.ts"
 
 function createMockStdout(): { stdout: NodeJS.WriteStream; lines: () => Record<string, unknown>[] } {
 	const chunks: string[] = []

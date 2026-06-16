@@ -105,6 +105,12 @@ log.txt
 temp-lint-*.txt
 eslint-report*.json
 
+# OpenTUI TUI migration artifacts
+apps/cli/src/tui/dist/
+apps/cli/*-test-results.json
+apps/cli/test-dist-load.mjs
+tui-experiment/
+
 # Crash dumps
 *.stackdump
 *.tmp

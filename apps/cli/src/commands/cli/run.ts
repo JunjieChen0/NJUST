@@ -2,7 +2,6 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 
-import { createElement } from "react"
 import pWaitFor from "p-wait-for"
 
 import { setLogger } from "@njust-ai/vscode-shim"
@@ -21,7 +20,7 @@ import { isValidOutputFormat } from "@/types/json-events.js"
 import { JsonEventEmitter } from "@/agent/json-event-emitter.js"
 
 import { createClient } from "@/lib/sdk/index.js"
-import { loadToken, loadSettings } from "@/lib/storage/index.js"
+import { loadToken, loadSettings, loadKV, getKV } from "@/lib/storage/index.js"
 import { readWorkspaceTaskSessions, resolveWorkspaceResumeSessionId } from "@/lib/task-history/index.js"
 import { isRecord } from "@/lib/utils/guards.js"
 import { getEnvVarName, getApiKeyFromEnv } from "@/lib/utils/provider.js"
@@ -32,8 +31,11 @@ import { isValidSessionId } from "@/lib/utils/session-id.js"
 import { VERSION } from "@/lib/utils/version.js"
 
 import { ExtensionHost, ExtensionHostOptions } from "@/agent/index.js"
-import { isExpectedControlFlowError } from "./cancellation.js"
-import { runStdinStreamMode } from "./stdin-stream.js"
+import { isExpectedControlFlowError } from "./cancellation.ts"
+import { runStdinStreamMode } from "./stdin-stream.ts"
+
+// React is only needed for Ink TUI mode. Import dynamically to avoid loading in OpenTUI mode.
+let createElement: typeof import("react").createElement
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const NJUST_AI_MODEL_WARMUP_TIMEOUT_MS = 10_000
@@ -99,7 +101,9 @@ async function warmRooModels(host: ExtensionHost): Promise<void> {
 		}
 
 		const timeoutId = setTimeout(() => {
-			finish(() => reject(new Error(`timed out waiting for Njust-AI models after ${NJUST_AI_MODEL_WARMUP_TIMEOUT_MS}ms`)))
+			finish(() =>
+				reject(new Error(`timed out waiting for Njust-AI models after ${NJUST_AI_MODEL_WARMUP_TIMEOUT_MS}ms`)),
+			)
 		}, NJUST_AI_MODEL_WARMUP_TIMEOUT_MS)
 
 		host.on("extensionWebviewMessage", onMessage)
@@ -171,17 +175,27 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 	let rooToken = await loadToken()
 	const settings = await loadSettings()
+	await loadKV()
 
 	const isTuiSupported = process.stdin.isTTY && process.stdout.isTTY
 	const isTuiEnabled = !flagOptions.print && isTuiSupported
 	const isOnboardingEnabled = isTuiEnabled && !rooToken && !flagOptions.provider && !settings.provider
 
-	// Determine effective values: CLI flags > settings file > DEFAULT_FLAGS.
-	const effectiveMode = flagOptions.mode || settings.mode || DEFAULT_FLAGS.mode
-	const effectiveModel = flagOptions.model || settings.model || DEFAULT_FLAGS.model
+	// Determine effective values: CLI flags > KV > settings file > DEFAULT_FLAGS.
+	const effectiveMode = flagOptions.mode || getKV<string>("mode") || settings.mode || DEFAULT_FLAGS.mode
+	const effectiveModel = flagOptions.model || getKV<string>("model") || settings.model || DEFAULT_FLAGS.model
+	const kvReasoningEffort = getKV<string>("reasoningEffort")
 	const effectiveReasoningEffort =
-		flagOptions.reasoningEffort || settings.reasoningEffort || DEFAULT_FLAGS.reasoningEffort
-	const effectiveProvider = flagOptions.provider ?? settings.provider ?? (rooToken ? "njust-ai" : "openrouter")
+		flagOptions.reasoningEffort ||
+		(kvReasoningEffort as typeof DEFAULT_FLAGS.reasoningEffort) ||
+		settings.reasoningEffort ||
+		DEFAULT_FLAGS.reasoningEffort
+	const kvProvider = getKV<string>("provider")
+	const effectiveProvider =
+		flagOptions.provider ??
+		(kvProvider as ExtensionHostOptions["provider"]) ??
+		settings.provider ??
+		(rooToken ? "njust-ai" : undefined)
 	const effectiveWorkspacePath = flagOptions.workspace ? path.resolve(flagOptions.workspace) : process.cwd()
 	const legacyRequireApprovalFromSettings =
 		settings.requireApproval ??
@@ -276,7 +290,10 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	// TODO: Validate the API key for the chosen provider.
 	// TODO: Validate the model for the chosen provider.
 
-	if (!isSupportedProvider(extensionHostOptions.provider)) {
+	const hasProvider = Boolean(extensionHostOptions.provider)
+	const missingProvider = !hasProvider
+
+	if (hasProvider && !isSupportedProvider(extensionHostOptions.provider)) {
 		console.error(
 			`[CLI] Error: Invalid provider: ${extensionHostOptions.provider}; must be one of: ${supportedProviders.join(", ")}`,
 		)
@@ -284,10 +301,18 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	}
 
 	extensionHostOptions.apiKey =
-		extensionHostOptions.apiKey || flagOptions.apiKey || getApiKeyFromEnv(extensionHostOptions.provider)
+		extensionHostOptions.apiKey ||
+		flagOptions.apiKey ||
+		getKV<string>("apiKey") ||
+		getApiKeyFromEnv(extensionHostOptions.provider || "") ||
+		""
 
-	if (!extensionHostOptions.apiKey) {
-		if (extensionHostOptions.provider === "njust-ai") {
+	const missingApiKey = !extensionHostOptions.apiKey
+
+	if ((missingProvider || missingApiKey) && !isTuiEnabled) {
+		if (missingProvider) {
+			console.error("[CLI] Error: No provider selected. Use --provider or run in interactive mode.")
+		} else if (extensionHostOptions.provider === "njust-ai") {
 			console.error("[CLI] Error: Authentication with NJUST_AI Cloud failed or was cancelled.")
 			console.error("[CLI] Please run: njust-ai auth login")
 			console.error("[CLI] Or use --api-key to provide your own API key.")
@@ -340,7 +365,9 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 	if (flagOptions.signalOnlyExit && !flagOptions.stdinPromptStream) {
 		console.error("[CLI] Error: --signal-only-exit requires --stdin-prompt-stream")
-		console.error("[CLI] Usage: njust-ai --print --output-format stream-json --stdin-prompt-stream --signal-only-exit")
+		console.error(
+			"[CLI] Usage: njust-ai --print --output-format stream-json --stdin-prompt-stream --signal-only-exit",
+		)
 		process.exit(1)
 	}
 
@@ -409,9 +436,15 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	// Run!
 
 	if (isTuiEnabled) {
-		try {
+		const tuiEngine = flagOptions.tuiEngine || process.env.NJUST_AI_TUI_ENGINE || "opentui"
+
+		// Helper: start Ink TUI
+		const startInk = async () => {
 			const { render } = await import("ink")
 			const { App } = await import("../../ui/App.js")
+			// Dynamically import React only when Ink TUI is used
+			const react = await import("react")
+			createElement = react.createElement
 
 			render(
 				createElement(App, {
@@ -426,6 +459,40 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 				// Handle Ctrl+C in App component for double-press exit.
 				{ exitOnCtrlC: false },
 			)
+		}
+
+		try {
+			if (tuiEngine === "opentui") {
+				// OpenTUI mode with auto-fallback to Ink
+				const { startTuiWithFallback } = await import("../../tui/entry.js")
+
+				const host = new ExtensionHost(extensionHostOptions)
+				await host.activate()
+
+				await startTuiWithFallback({
+					extensionHost: host,
+					workspacePath: effectiveWorkspacePath,
+					provider: effectiveProvider,
+					model: effectiveModel,
+					mode: effectiveMode,
+					sessionId: requestedCreateSessionId || resolvedResumeSessionId,
+					onExit: (code) => process.exit(code),
+					onFallback: (reason) => {
+						console.warn(`[CLI] Fell back to Ink: ${reason}`)
+					},
+					startInk: async () => {
+						// Dispose host before starting Ink (Ink creates its own)
+						await host.dispose()
+						await startInk()
+					},
+				})
+
+				// Wait for app to exit
+				await new Promise<void>(() => {})
+			} else {
+				// Ink mode (default)
+				await startInk()
+			}
 		} catch (error) {
 			console.error("[CLI] Failed to start TUI:", error instanceof Error ? error.message : String(error))
 

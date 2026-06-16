@@ -1,4 +1,4 @@
-import { compareVersions, getLatestCliVersion, upgrade } from "../upgrade.js"
+import { compareVersions, getLatestCliVersion, upgrade } from "../upgrade.ts"
 
 function createFetchResponse(body: unknown, init: { ok?: boolean; status?: number } = {}): Response {
 	const { ok = true, status = 200 } = init

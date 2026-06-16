@@ -1,11 +1,11 @@
 import { memo } from "react"
 import { Box, Newline, Text } from "ink"
 
-import type { TUIMessage } from "../types.js"
-import * as theme from "../theme.js"
+import type { TUIMessage } from "../types.ts"
+import * as theme from "../theme.ts"
 
-import TodoDisplay from "./TodoDisplay.js"
-import { getToolRenderer } from "./tools/index.js"
+import TodoDisplay from "./TodoDisplay.tsx"
+import { getToolRenderer } from "./tools/index.ts"
 
 /**
  * Tool categories for styling
@@ -177,26 +177,32 @@ function ChatHistoryItem({ message }: ChatHistoryItemProps) {
 	switch (message.role) {
 		case "user":
 			return (
-				<Box flexDirection="column" paddingX={1}>
-					<Text bold color="magenta">
-						You said:
-					</Text>
-					<Text color={theme.userText}>
-						{content}
-						<Newline />
-					</Text>
+				<Box flexDirection="row" marginTop={1}>
+					<Text color={theme.userHeader}>▎</Text>
+					<Box flexDirection="column" paddingLeft={1} flexGrow={1}>
+						<Text bold color={theme.userHeader}>
+							You
+						</Text>
+						<Text color={theme.userText}>
+							{content}
+							<Newline />
+						</Text>
+					</Box>
 				</Box>
 			)
 		case "assistant":
 			return (
-				<Box flexDirection="column" paddingX={1}>
-					<Text bold color="yellow">
-						Njust-AI said:
-					</Text>
-					<Text color={theme.rooText}>
-						{content}
-						<Newline />
-					</Text>
+				<Box flexDirection="row" marginTop={1}>
+					<Text color={theme.rooHeader}>▎</Text>
+					<Box flexDirection="column" paddingLeft={1} flexGrow={1}>
+						<Text bold color={theme.rooHeader}>
+							Njust-AI
+						</Text>
+						<Text color={theme.rooText}>
+							{content}
+							<Newline />
+						</Text>
+					</Box>
 				</Box>
 			)
 		case "thinking":

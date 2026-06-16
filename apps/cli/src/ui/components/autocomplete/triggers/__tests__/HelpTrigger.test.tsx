@@ -1,6 +1,6 @@
 import { render } from "ink-testing-library"
 
-import { createHelpTrigger, type HelpShortcutResult } from "../HelpTrigger.js"
+import { createHelpTrigger, type HelpShortcutResult } from "../HelpTrigger.tsx"
 
 describe("HelpTrigger", () => {
 	describe("createHelpTrigger", () => {

@@ -1,6 +1,6 @@
 import { Box, Text } from "ink"
 
-import type { AutocompleteTrigger, AutocompleteItem, TriggerDetectionResult } from "../types.js"
+import type { AutocompleteTrigger, AutocompleteItem, TriggerDetectionResult } from "../types.ts"
 
 /**
  * Help shortcut result type.

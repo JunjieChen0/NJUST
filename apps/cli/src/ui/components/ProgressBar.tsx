@@ -1,7 +1,7 @@
 import { memo } from "react"
 import { Text } from "ink"
 
-import * as theme from "../theme.js"
+import * as theme from "../theme.ts"
 
 interface ProgressBarProps {
 	/** Current value (e.g., contextTokens) */

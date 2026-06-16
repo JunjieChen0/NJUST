@@ -2,10 +2,10 @@ import { useCallback, useRef } from "react"
 import type { ExtensionMessage, ClineMessage, ClineAsk, ClineSay, TodoItem } from "@njust-ai/types"
 import { consolidateTokenUsage, consolidateApiRequests, consolidateCommands } from "@njust-ai/core/cli"
 
-import type { TUIMessage, ToolData } from "../types.js"
-import type { FileResult, SlashCommandResult, ModeResult } from "../components/autocomplete/index.js"
-import { useCLIStore } from "../store.js"
-import { extractToolData, formatToolOutput, formatToolAskMessage, parseTodosFromToolInfo } from "../utils/tools.js"
+import type { TUIMessage, ToolData } from "../types.ts"
+import type { FileResult, SlashCommandResult, ModeResult } from "../components/autocomplete/index.ts"
+import { useCLIStore } from "../store.ts"
+import { extractToolData, formatToolOutput, formatToolAskMessage, parseTodosFromToolInfo } from "../utils/tools.ts"
 
 export interface UseMessageHandlersOptions {
 	nonInteractive: boolean

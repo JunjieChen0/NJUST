@@ -10,7 +10,7 @@ import {
 
 import { isRecord } from "@/lib/utils/guards.js"
 import { isValidSessionId } from "@/lib/utils/session-id.js"
-import { isCancellationLikeError, isExpectedControlFlowError, isNoActiveTaskLikeError } from "./cancellation.js"
+import { isCancellationLikeError, isExpectedControlFlowError, isNoActiveTaskLikeError } from "./cancellation.ts"
 
 import type { ExtensionHost } from "@/agent/index.js"
 import type { JsonEventEmitter } from "@/agent/json-event-emitter.js"

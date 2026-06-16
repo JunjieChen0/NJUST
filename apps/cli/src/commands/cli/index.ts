@@ -1,3 +1,3 @@
-export * from "./run.js"
-export * from "./list.js"
-export * from "./upgrade.js"
+export * from "./run.ts"
+export * from "./list.ts"
+export * from "./upgrade.ts"

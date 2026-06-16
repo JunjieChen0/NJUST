@@ -18,9 +18,9 @@ import type { ClineMessage } from "@njust-ai/types"
 
 import type { JsonEvent, JsonEventCost, JsonEventQueueItem, JsonFinalOutput } from "@/types/json-events.js"
 
-import type { ExtensionClient } from "./extension-client.js"
-import type { AgentStateChangeEvent, TaskCompletedEvent } from "./events.js"
-import { AgentLoopState } from "./agent-state.js"
+import type { ExtensionClient } from "./extension-client.ts"
+import type { AgentStateChangeEvent, TaskCompletedEvent } from "./events.ts"
+import { AgentLoopState } from "./agent-state.ts"
 
 /**
  * Options for JsonEventEmitter.

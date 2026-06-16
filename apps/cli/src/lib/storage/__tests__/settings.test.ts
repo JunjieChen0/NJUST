@@ -15,10 +15,11 @@ const { getTestConfigDir } = vi.hoisted(() => {
 
 vi.mock("../config-dir.js", () => ({
 	getConfigDir: getTestConfigDir,
+	getSecureDir: getTestConfigDir,
 }))
 
 // Import after mocking
-import { loadSettings, saveSettings, resetOnboarding, getSettingsPath } from "../settings.js"
+import { loadSettings, saveSettings, resetOnboarding, getSettingsPath } from "../settings.ts"
 import { OnboardingProviderChoice } from "@/types/index.js"
 
 // Re-derive the test config dir for use in tests (must match the hoisted one)

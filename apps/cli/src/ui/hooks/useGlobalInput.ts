@@ -4,9 +4,9 @@ import type { WebviewMessage } from "@njust-ai/types"
 
 import { matchesGlobalSequence } from "@/lib/utils/input.js"
 
-import type { ModeResult } from "../components/autocomplete/index.js"
-import { useUIStateStore } from "../stores/uiStateStore.js"
-import { useCLIStore } from "../store.js"
+import type { ModeResult } from "../components/autocomplete/index.ts"
+import { useUIStateStore } from "../stores/uiStateStore.ts"
+import { useCLIStore } from "../store.ts"
 
 export interface UseGlobalInputOptions {
 	canToggleFocus: boolean
@@ -21,6 +21,11 @@ export interface UseGlobalInputOptions {
 	cleanup: () => Promise<void>
 	toggleFocus: () => void
 	closePicker: () => void
+	// Sidebar and command palette visibility
+	showSidebar: boolean
+	setShowSidebar: (show: boolean) => void
+	showCommandPalette: boolean
+	setShowCommandPalette: (show: boolean) => void
 }
 
 /**
@@ -46,6 +51,10 @@ export function useGlobalInput({
 	cleanup,
 	toggleFocus,
 	closePicker,
+	showSidebar,
+	setShowSidebar,
+	showCommandPalette,
+	setShowCommandPalette,
 }: UseGlobalInputOptions): void {
 	const { isLoading, currentTodos } = useCLIStore()
 	const {
@@ -117,6 +126,21 @@ export function useGlobalInput({
 				showInfo("No TODO list available", 2000)
 				setShowTodoViewer(false)
 			}
+			return
+		}
+
+		// Ctrl+K to toggle command palette
+		if (matchesGlobalSequence(input, key, "ctrl-k")) {
+			if (pickerIsOpen) {
+				closePicker()
+			}
+			setShowCommandPalette(!showCommandPalette)
+			return
+		}
+
+		// Ctrl+B to toggle sidebar
+		if (matchesGlobalSequence(input, key, "ctrl-b")) {
+			setShowSidebar(!showSidebar)
 			return
 		}
 

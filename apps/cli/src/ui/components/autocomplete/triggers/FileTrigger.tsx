@@ -1,8 +1,8 @@
 import { Box, Text } from "ink"
 import Fuzzysort from "fuzzysort"
 
-import { Icon } from "../../Icon.js"
-import type { AutocompleteTrigger, AutocompleteItem, TriggerDetectionResult } from "../types.js"
+import { Icon } from "../../Icon.tsx"
+import type { AutocompleteTrigger, AutocompleteItem, TriggerDetectionResult } from "../types.ts"
 
 export interface FileResult extends AutocompleteItem {
 	path: string

@@ -3,9 +3,9 @@ import { Box, Text } from "ink"
 
 import type { TodoItem } from "@njust-ai/types"
 
-import * as theme from "../theme.js"
-import ProgressBar from "./ProgressBar.js"
-import { Icon, type IconName } from "./Icon.js"
+import * as theme from "../theme.ts"
+import ProgressBar from "./ProgressBar.tsx"
+import { Icon, type IconName } from "./Icon.tsx"
 
 /**
  * Map TODO status to Icon names

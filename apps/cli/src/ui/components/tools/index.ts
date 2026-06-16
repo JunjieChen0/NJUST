@@ -7,33 +7,33 @@
 
 import type React from "react"
 
-import type { ToolRendererProps } from "./types.js"
-import { getToolCategory } from "./types.js"
+import type { ToolRendererProps } from "./types.ts"
+import { getToolCategory } from "./types.ts"
 
 // Import all renderers
-import { FileReadTool } from "./FileReadTool.js"
-import { FileWriteTool } from "./FileWriteTool.js"
-import { SearchTool } from "./SearchTool.js"
-import { CommandTool } from "./CommandTool.js"
-import { ModeTool } from "./ModeTool.js"
-import { CompletionTool } from "./CompletionTool.js"
-import { GenericTool } from "./GenericTool.js"
+import { FileReadTool } from "./FileReadTool.tsx"
+import { FileWriteTool } from "./FileWriteTool.tsx"
+import { SearchTool } from "./SearchTool.tsx"
+import { CommandTool } from "./CommandTool.tsx"
+import { ModeTool } from "./ModeTool.tsx"
+import { CompletionTool } from "./CompletionTool.tsx"
+import { GenericTool } from "./GenericTool.tsx"
 
 // Re-export types
-export type { ToolRendererProps } from "./types.js"
-export { getToolCategory } from "./types.js"
+export type { ToolRendererProps } from "./types.ts"
+export { getToolCategory } from "./types.ts"
 
 // Re-export utilities
-export * from "./utils.js"
+export * from "./utils.ts"
 
 // Re-export individual components for direct usage
-export { FileReadTool } from "./FileReadTool.js"
-export { FileWriteTool } from "./FileWriteTool.js"
-export { SearchTool } from "./SearchTool.js"
-export { CommandTool } from "./CommandTool.js"
-export { ModeTool } from "./ModeTool.js"
-export { CompletionTool } from "./CompletionTool.js"
-export { GenericTool } from "./GenericTool.js"
+export { FileReadTool } from "./FileReadTool.tsx"
+export { FileWriteTool } from "./FileWriteTool.tsx"
+export { SearchTool } from "./SearchTool.tsx"
+export { CommandTool } from "./CommandTool.tsx"
+export { ModeTool } from "./ModeTool.tsx"
+export { CompletionTool } from "./CompletionTool.tsx"
+export { GenericTool } from "./GenericTool.tsx"
 
 /**
  * Map of tool categories to their renderer components

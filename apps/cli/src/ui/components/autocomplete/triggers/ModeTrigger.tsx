@@ -1,7 +1,7 @@
 import { Box, Text } from "ink"
 import fuzzysort from "fuzzysort"
 
-import type { AutocompleteTrigger, AutocompleteItem, TriggerDetectionResult } from "../types.js"
+import type { AutocompleteTrigger, AutocompleteItem, TriggerDetectionResult } from "../types.ts"
 
 export interface ModeResult extends AutocompleteItem {
 	slug: string

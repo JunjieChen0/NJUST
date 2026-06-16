@@ -1,8 +1,8 @@
 import { render } from "ink-testing-library"
 
-import type { TUIMessage } from "../../types.js"
-import ChatHistoryItem from "../ChatHistoryItem.js"
-import { resetNerdFontCache } from "../Icon.js"
+import type { TUIMessage } from "../../types.ts"
+import ChatHistoryItem from "../ChatHistoryItem.tsx"
+import { resetNerdFontCache } from "../Icon.tsx"
 
 describe("ChatHistoryItem", () => {
 	beforeEach(() => {
@@ -176,7 +176,7 @@ describe("ChatHistoryItem", () => {
 			const { lastFrame } = render(<ChatHistoryItem message={message} />)
 			const output = lastFrame()
 
-			expect(output).toContain("You said:")
+			expect(output).toContain("You")
 			expect(output).toContain("Hello")
 		})
 
@@ -190,7 +190,7 @@ describe("ChatHistoryItem", () => {
 			const { lastFrame } = render(<ChatHistoryItem message={message} />)
 			const output = lastFrame()
 
-			expect(output).toContain("Njust-AI said:")
+			expect(output).toContain("Njust-AI")
 			expect(output).toContain("Hi there")
 		})
 

@@ -7,11 +7,16 @@ import {
 	isNonBlockingAsk,
 } from "@njust-ai/types"
 
-import { AgentLoopState, detectAgentState } from "../agent-state.js"
-import { createMockClient } from "../extension-client.js"
+import { AgentLoopState, detectAgentState } from "../agent-state.ts"
+import { createMockClient } from "../extension-client.ts"
 
 function createMessage(overrides: Partial<ClineMessage>): ClineMessage {
-	return { id: `msg-${Date.now()}-${Math.random()}`, ts: Date.now() + Math.random() * 1000, type: "say", ...overrides }
+	return {
+		id: `msg-${Date.now()}-${Math.random()}`,
+		ts: Date.now() + Math.random() * 1000,
+		type: "say",
+		...overrides,
+	}
 }
 
 function createStateMessage(messages: ClineMessage[], mode?: string): ExtensionMessage {

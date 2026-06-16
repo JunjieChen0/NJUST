@@ -3,8 +3,8 @@ import { Text, Box } from "ink"
 
 import type { TokenUsage } from "@njust-ai/types"
 
-import * as theme from "../theme.js"
-import ProgressBar from "./ProgressBar.js"
+import * as theme from "../theme.ts"
+import ProgressBar from "./ProgressBar.tsx"
 
 interface MetricsDisplayProps {
 	tokenUsage: TokenUsage

@@ -14,8 +14,8 @@
 
 import { ClineMessage, ExtensionState } from "@njust-ai/types"
 
-import { detectAgentState, AgentStateInfo, AgentLoopState } from "./agent-state.js"
-import { Observable } from "./events.js"
+import { detectAgentState, AgentStateInfo, AgentLoopState } from "./agent-state.ts"
+import { Observable } from "./events.ts"
 
 // =============================================================================
 // Store State Interface

@@ -1,10 +1,10 @@
 import { Box, Text } from "ink"
 
-import * as theme from "../../theme.js"
-import { Icon } from "../Icon.js"
+import * as theme from "../../theme.ts"
+import { Icon } from "../Icon.tsx"
 
-import type { ToolRendererProps } from "./types.js"
-import { getToolIconName } from "./utils.js"
+import type { ToolRendererProps } from "./types.ts"
+import { getToolIconName } from "./utils.ts"
 
 export function ModeTool({ toolData }: ToolRendererProps) {
 	const iconName = getToolIconName(toolData.tool)

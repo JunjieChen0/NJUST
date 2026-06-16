@@ -1,13 +1,38 @@
 import type { ProviderName, ReasoningEffortExtended } from "@njust-ai/types"
-import type { OutputFormat } from "./json-events.js"
+import type { OutputFormat } from "./json-events.ts"
 
 export const supportedProviders = [
 	"anthropic",
-	"openai-native",
+	"bedrock",
+	"baseten",
+	"deepseek",
+	"fireworks",
 	"gemini",
+	"gemini-cli",
+	"mistral",
+	"moonshot",
+	"minimax",
+	"qwen",
+	"doubao",
+	"glm",
+	"openai-codex",
+	"openai-native",
+	"qwen-code",
+	"sambanova",
+	"vertex",
+	"xai",
+	"zai",
+	"mimo",
+	"mimo-token-plan",
 	"openrouter",
 	"vercel-ai-gateway",
+	"litellm",
+	"requesty",
 	"njust-ai",
+	"unbound",
+	"ollama",
+	"lmstudio",
+	"openai",
 ] as const satisfies ProviderName[]
 
 export type SupportedProvider = (typeof supportedProviders)[number]
@@ -41,6 +66,8 @@ export type FlagOptions = {
 	ephemeral: boolean
 	oneshot: boolean
 	outputFormat?: OutputFormat
+	/** TUI engine selection: "ink" or "opentui" */
+	tuiEngine?: "ink" | "opentui"
 }
 
 export enum OnboardingProviderChoice {
@@ -72,4 +99,6 @@ export interface CliSettings {
 	dangerouslySkipPermissions?: boolean
 	/** Exit upon task completion */
 	oneshot?: boolean
+	/** Per-provider API keys (encrypted at rest) */
+	providerApiKeys?: Record<SupportedProvider, string>
 }

@@ -1,8 +1,8 @@
 import { memo } from "react"
 import { Text, Box } from "ink"
 
-import * as theme from "../theme.js"
-import type { Toast, ToastType } from "../hooks/useToast.js"
+import * as theme from "../theme.ts"
+import type { Toast, ToastType } from "../hooks/useToast.ts"
 
 interface ToastDisplayProps {
 	toast: Toast | null

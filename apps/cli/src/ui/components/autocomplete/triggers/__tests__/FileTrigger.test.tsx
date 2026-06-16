@@ -1,6 +1,6 @@
 import { render } from "ink-testing-library"
 
-import { createFileTrigger, toFileResult, type FileResult } from "../FileTrigger.js"
+import { createFileTrigger, toFileResult, type FileResult } from "../FileTrigger.tsx"
 
 describe("FileTrigger", () => {
 	describe("toFileResult", () => {

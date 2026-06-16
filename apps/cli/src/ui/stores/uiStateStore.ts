@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { AutocompletePickerState } from "../components/autocomplete/types.js"
+import type { AutocompletePickerState } from "../components/autocomplete/types.ts"
 
 /**
  * UI-specific state that doesn't need to persist across task switches.
@@ -23,6 +23,12 @@ interface UIState {
 	// TODO viewer overlay
 	showTodoViewer: boolean
 
+	// Sidebar visibility
+	showSidebar: boolean
+
+	// Command palette visibility
+	showCommandPalette: boolean
+
 	// Autocomplete picker state
 	pickerState: AutocompletePickerState
 }
@@ -45,6 +51,12 @@ interface UIActions {
 	// TODO viewer actions
 	setShowTodoViewer: (show: boolean) => void
 
+	// Sidebar actions
+	setShowSidebar: (show: boolean) => void
+
+	// Command palette actions
+	setShowCommandPalette: (show: boolean) => void
+
 	// Picker state actions
 	setPickerState: (state: AutocompletePickerState) => void
 
@@ -60,6 +72,8 @@ const initialState: UIState = {
 	isTransitioningToCustomInput: false,
 	manualFocus: null,
 	showTodoViewer: false,
+	showSidebar: false,
+	showCommandPalette: false,
 	pickerState: {
 		activeTrigger: null,
 		results: [],
@@ -80,6 +94,8 @@ export const useUIStateStore = create<UIState & UIActions>((set) => ({
 	setIsTransitioningToCustomInput: (transitioning) => set({ isTransitioningToCustomInput: transitioning }),
 	setManualFocus: (focus) => set({ manualFocus: focus }),
 	setShowTodoViewer: (show) => set({ showTodoViewer: show }),
+	setShowSidebar: (show) => set({ showSidebar: show }),
+	setShowCommandPalette: (show) => set({ showCommandPalette: show }),
 	setPickerState: (state) => set({ pickerState: state }),
 	resetUIState: () => set(initialState),
 }))
