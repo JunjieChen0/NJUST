@@ -30,6 +30,9 @@ export interface TuiRuntime {
 	cancel(): Promise<void>
 	setMode(mode: string): Promise<void>
 	setAutoApprovalEnabled(enabled: boolean): Promise<void>
+	exportCurrentTask(): Promise<string>
+	approvePlan(planId: string): Promise<void>
+	executePlan(planId: string): Promise<void>
 	undo(): Promise<void>
 	subscribe(listener: (event: TuiRuntimeEvent) => void): () => void
 }
@@ -44,6 +47,29 @@ export interface StartTaskInput {
 // =============================================================================
 // Events
 // =============================================================================
+
+export interface TuiPlan {
+	id: string
+	title: string
+	description: string
+	status: "draft" | "approved" | "executing" | "paused" | "completed" | "failed" | "cancelled"
+	steps: TuiPlanStep[]
+	totalSteps: number
+	completedSteps: number
+	createdAt: number
+	updatedAt: number
+}
+
+export interface TuiPlanStep {
+	id: string
+	index: number
+	description: string
+	mode: string
+	dependencies: string[]
+	status: "pending" | "ready" | "running" | "completed" | "failed" | "skipped" | "cancelled"
+	result?: string
+	error?: string
+}
 
 export type TuiRuntimeEvent =
 	| SessionEvent
@@ -60,6 +86,12 @@ export type TuiRuntimeEvent =
 	| ModeChangedEvent
 	| TodosUpdatedEvent
 	| UsageUpdatedEvent
+	| PlanUpdatedEvent
+
+export interface PlanUpdatedEvent extends BaseEvent {
+	type: "plan.updated"
+	plan: TuiPlan | null
+}
 
 export interface BaseEvent {
 	type: string
@@ -333,6 +365,11 @@ export type TuiAction =
 	| { type: "task/complete"; payload: { success: boolean; message?: string } }
 	| { type: "task/cancel"; payload: { reason: "user" | "error" | "system" } }
 	| { type: "task/fail"; payload: { error: string } }
+	| { type: "plan/set"; payload: { plan: TuiPlan | null } }
+	| {
+			type: "plan/updateStep"
+			payload: { stepId: string; status: TuiPlanStep["status"]; result?: string; error?: string }
+	  }
 
 // =============================================================================
 // UI Events (Bun subprocess -> Node main process)
@@ -352,3 +389,6 @@ export type TuiUiEvent =
 	| { type: "ui.setMode"; mode: string }
 	| { type: "ui.undo" }
 	| { type: "ui.setAutoApproval"; enabled: boolean }
+	| { type: "ui.export" }
+	| { type: "ui.approvePlan"; planId: string }
+	| { type: "ui.executePlan"; planId: string }

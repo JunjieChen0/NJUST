@@ -14,6 +14,8 @@ import type {
 import { TUI_RUNTIME_ADAPTER_VERSION } from "./types.ts"
 
 import type { ClineMessage, ClineSay, ClineAsk, ExtensionMessage, WebviewMessage } from "@njust-ai/types"
+import { readWorkspaceTaskSessions } from "@/lib/task-history/index.js"
+import { exportSessionToMarkdown } from "../lib/export-markdown.js"
 
 // =============================================================================
 // TuiRuntimeAdapter
@@ -117,6 +119,7 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 		})
 
 		await this.extensionHost.runTask(input.prompt, input.sessionId, input.configuration, input.images)
+		void this.refreshRecentSessions()
 	}
 
 	async resumeTask(sessionId: string): Promise<void> {
@@ -131,6 +134,7 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 			sessionId,
 		})
 		await this.extensionHost.resumeTask(sessionId)
+		void this.refreshRecentSessions()
 	}
 
 	setRecentSessions(
@@ -224,6 +228,43 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 		this.extensionHost.sendToExtension({ type: "autoApprovalEnabled", bool: enabled } as WebviewMessage)
 	}
 
+	async exportCurrentTask(): Promise<string> {
+		if (!this.sessionId) {
+			throw new Error("No active session to export")
+		}
+		const session = this.state.sessions.get(this.sessionId)
+		if (!session) {
+			throw new Error("Session not found")
+		}
+		return exportSessionToMarkdown({
+			sessionId: this.sessionId,
+			title: session.title || this.sessionId,
+			provider: session.provider || "njust-ai",
+			model: session.model || "default",
+			mode: session.mode || "code",
+			workspacePath: session.workspacePath || process.cwd(),
+			messages: session.messages,
+			parts: this.state.parts,
+			tokenUsage: { total: 0, context: 0 },
+		})
+	}
+
+	async approvePlan(planId: string): Promise<void> {
+		this.extensionHost.sendToExtension({
+			type: "planAction",
+			planId,
+			action: "approve",
+		} as WebviewMessage)
+	}
+
+	async executePlan(planId: string): Promise<void> {
+		this.extensionHost.sendToExtension({
+			type: "planAction",
+			planId,
+			action: "execute",
+		} as WebviewMessage)
+	}
+
 	async undo(): Promise<void> {
 		if (!this.sessionId) {
 			return
@@ -273,6 +314,16 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 				this.autoApprovalEnabled = message.state.autoApprovalEnabled
 				this.dispatch({ type: "session/refresh" })
 			}
+			if (message.type === "planUpdate") {
+				const plan = this.normalizePlan(message.plan)
+				this.dispatch({ type: "plan/set", payload: { plan } })
+				this.emitEvent({
+					type: "plan.updated",
+					timestamp: Date.now(),
+					sessionId: this.sessionId ?? "",
+					plan,
+				})
+			}
 		})
 
 		// Subscribe to ClientEventMap for lifecycle events only.
@@ -290,6 +341,7 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 				success: event.success,
 				message: event.message?.text,
 			})
+			void this.refreshRecentSessions()
 		})
 	}
 
@@ -682,6 +734,52 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 		return null
 	}
 
+	private normalizePlan(raw: unknown): import("./types.ts").TuiPlan | null {
+		if (!raw || typeof raw !== "object") return null
+		const p = raw as Record<string, unknown>
+		const steps = Array.isArray(p.steps)
+			? p.steps.map((s: unknown, index: number) => {
+					const step = s as Record<string, unknown>
+					return {
+						id: typeof step.id === "string" ? step.id : `step-${index}`,
+						index: typeof step.index === "number" ? step.index : index,
+						description: typeof step.description === "string" ? step.description : "",
+						mode: typeof step.mode === "string" ? step.mode : "code",
+						dependencies: Array.isArray(step.dependencies)
+							? step.dependencies.filter((d): d is string => typeof d === "string")
+							: [],
+						status: this.normalizeStepStatus(step.status),
+						result: typeof step.result === "string" ? step.result : undefined,
+						error: typeof step.error === "string" ? step.error : undefined,
+					}
+				})
+			: []
+		return {
+			id: typeof p.id === "string" ? p.id : "plan-unknown",
+			title: typeof p.title === "string" ? p.title : "Execution Plan",
+			description: typeof p.description === "string" ? p.description : "",
+			status: this.normalizePlanStatus(p.status),
+			steps,
+			totalSteps: typeof p.totalSteps === "number" ? p.totalSteps : steps.length,
+			completedSteps:
+				typeof p.completedSteps === "number"
+					? p.completedSteps
+					: steps.filter((s) => s.status === "completed" || s.status === "skipped").length,
+			createdAt: typeof p.createdAt === "number" ? p.createdAt : Date.now(),
+			updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : Date.now(),
+		}
+	}
+
+	private normalizePlanStatus(status: unknown): import("./types.ts").TuiPlan["status"] {
+		const valid = ["draft", "approved", "executing", "paused", "completed", "failed", "cancelled"] as const
+		return valid.find((s) => s === status) ?? "draft"
+	}
+
+	private normalizeStepStatus(status: unknown): import("./types.ts").TuiPlanStep["status"] {
+		const valid = ["pending", "ready", "running", "completed", "failed", "skipped", "cancelled"] as const
+		return valid.find((s) => s === status) ?? "pending"
+	}
+
 	private inferRole(msg: ClineMessage): TuiMessage["role"] {
 		if (msg.type === "say" && String(msg.say) === "user") {
 			return "user"
@@ -709,6 +807,28 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 		})
 	}
 
+	private async refreshRecentSessions(): Promise<void> {
+		try {
+			const entries = await readWorkspaceTaskSessions(process.cwd())
+			const currentSession = this.sessionId ? this.state.sessions.get(this.sessionId) : undefined
+			const updated = entries.slice(0, 10).map((entry) => {
+				const isCurrent = entry.id === this.sessionId
+				const messageCount = isCurrent && currentSession ? currentSession.messages.length : 0
+				return {
+					id: entry.id,
+					title: entry.task || entry.id,
+					createdAt: entry.ts,
+					updatedAt: entry.ts,
+					messageCount,
+				}
+			})
+			this.recentSessions = updated
+			this.dispatch({ type: "session/refresh" })
+		} catch {
+			// ignore refresh errors
+		}
+	}
+
 	private serializeState(): Record<string, unknown> {
 		const currentSession = this.sessionId ? this.state.sessions.get(this.sessionId) : undefined
 		return {
@@ -730,6 +850,7 @@ export class TuiRuntimeAdapter extends EventEmitter implements TuiRuntime {
 			todos: [],
 			tokenUsage: { total: 0, context: 0 },
 			autoApprovalEnabled: this.autoApprovalEnabled,
+			currentPlan: this.state.currentPlan,
 		}
 	}
 
@@ -776,6 +897,7 @@ export interface TuiState {
 	messages: Map<string, TuiMessage>
 	parts: Map<string, TuiPart>
 	currentSessionId: string | null
+	currentPlan: import("./types.ts").TuiPlan | null
 }
 
 export const initialTuiState: TuiState = {
@@ -783,6 +905,7 @@ export const initialTuiState: TuiState = {
 	messages: new Map(),
 	parts: new Map(),
 	currentSessionId: null,
+	currentPlan: null,
 }
 
 export function createInitialTuiState(): TuiState {
@@ -791,6 +914,7 @@ export function createInitialTuiState(): TuiState {
 		messages: new Map(),
 		parts: new Map(),
 		currentSessionId: null,
+		currentPlan: null,
 	}
 }
 
@@ -959,6 +1083,34 @@ export function tuiReducer(state: TuiState, action: TuiAction): TuiState {
 
 		case "session/refresh": {
 			return { ...state }
+		}
+
+		case "plan/set": {
+			return { ...state, currentPlan: action.payload.plan }
+		}
+
+		case "plan/updateStep": {
+			if (!state.currentPlan) return state
+			const plan = { ...state.currentPlan }
+			const steps = plan.steps.map((step) => {
+				if (step.id !== action.payload.stepId) return step
+				return {
+					...step,
+					status: action.payload.status,
+					result: action.payload.result,
+					error: action.payload.error,
+				}
+			})
+			const completedSteps = steps.filter((s) => s.status === "completed" || s.status === "skipped").length
+			return {
+				...state,
+				currentPlan: {
+					...plan,
+					steps,
+					completedSteps,
+					updatedAt: Date.now(),
+				},
+			}
 		}
 
 		default:

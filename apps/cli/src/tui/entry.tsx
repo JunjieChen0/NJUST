@@ -229,6 +229,9 @@ type UiEvent =
 	| { type: "ui.cancel" }
 	| { type: "ui.undo" }
 	| { type: "ui.setAutoApproval"; enabled: boolean }
+	| { type: "ui.export" }
+	| { type: "ui.approvePlan"; planId: string }
+	| { type: "ui.executePlan"; planId: string }
 	| { type: "ui.exit" }
 	| { type: "ui.setTheme"; theme: "light" | "dark" }
 	| { type: "ui.setMode"; mode: string }
@@ -266,6 +269,23 @@ function handleUiEvent(event: UiEvent, adapter: TuiRuntimeAdapter): void {
 			break
 		case "ui.setAutoApproval":
 			void adapter.setAutoApprovalEnabled(event.enabled)
+			break
+		case "ui.export": {
+			adapter
+				.exportCurrentTask()
+				.then((filePath) => {
+					console.log(`[CLI] Session exported to: ${filePath}`)
+				})
+				.catch((err) => {
+					console.error("[CLI] Failed to export session:", err instanceof Error ? err.message : String(err))
+				})
+			break
+		}
+		case "ui.approvePlan":
+			void adapter.approvePlan(event.planId)
+			break
+		case "ui.executePlan":
+			void adapter.executePlan(event.planId)
 			break
 		case "ui.setTheme":
 			setKV("theme", event.theme)

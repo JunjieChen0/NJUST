@@ -131,11 +131,20 @@ commandRegistry.register({
 })
 
 commandRegistry.register({
-	id: "theme.toggle",
-	label: "Toggle Theme",
-	description: "Switch between light and dark theme",
-	keybinding: "Ctrl+L",
+	id: "command.palette.show",
+	label: "Command Palette",
+	description: "Open the command palette",
+	keybinding: "Ctrl+K",
 	category: "App",
+	run: () => {},
+})
+
+commandRegistry.register({
+	id: "agent.showPicker",
+	label: "Select Agent",
+	description: "Open the agent/mode picker",
+	keybinding: "Tab",
+	category: "Agent",
 	run: () => {},
 })
 
@@ -169,11 +178,11 @@ commandRegistry.register({
 })
 
 commandRegistry.register({
-	id: "command.palette.show",
-	label: "Command Palette",
-	description: "Open the command palette",
-	keybinding: "Ctrl+K",
-	category: "App",
+	id: "agent.showPicker",
+	label: "Select Agent",
+	description: "Open the agent/mode picker",
+	keybinding: "Tab",
+	category: "Agent",
 	run: () => {},
 })
 

@@ -29,6 +29,7 @@ import { CommandProvider, commandRegistry } from "./context/command.tsx"
 import { DialogProvider, DialogContainer, useDialog, Dialog } from "./dialogs/index.tsx"
 import { requestPromptClear } from "./lib/prompt-bus.ts"
 import { useToast } from "./context/toast.tsx"
+import { Splash, LoadingOverlay } from "./components/splash.tsx"
 import { Home } from "./routes/home.tsx"
 import { Session } from "./routes/session/index.tsx"
 
@@ -63,6 +64,8 @@ interface SubprocessState {
 	pendingApproval: { requestId: string; ask: string } | null
 	pendingQuestion: { requestId: string; question: string } | null
 	autoApprovalEnabled: boolean
+	currentPlan: import("./runtime/types.ts").TuiPlan | null
+	compact: boolean
 }
 
 const state: SubprocessState = {
@@ -80,6 +83,8 @@ const state: SubprocessState = {
 	pendingApproval: null,
 	pendingQuestion: null,
 	autoApprovalEnabled: false,
+	currentPlan: null,
+	compact: false,
 }
 
 // =============================================================================
@@ -144,6 +149,31 @@ commandRegistry.register({
 		state.autoApprovalEnabled = next
 		sendEvent({ type: "ui.setAutoApproval", enabled: next })
 		toast.show(`Auto-approve ${next ? "enabled" : "disabled"}`, next ? "success" : "warning")
+	},
+})
+
+commandRegistry.register({
+	id: "session.export",
+	label: "Export Session",
+	description: "Export the current session to Markdown",
+	slashName: "export",
+	category: "Session",
+	hidden: true,
+	run: () => {
+		sendEvent({ type: "ui.export" })
+	},
+})
+
+commandRegistry.register({
+	id: "app.compact",
+	label: "Toggle Compact Mode",
+	description: "Toggle compact output rendering",
+	slashName: "compact",
+	category: "App",
+	hidden: true,
+	run: () => {
+		state.compact = !state.compact
+		toast.show(`Compact mode ${state.compact ? "enabled" : "disabled"}`, "info")
 	},
 })
 
@@ -284,6 +314,8 @@ function handleTuiEvent(event: TuiRuntimeEvent): void {
 			"pendingApproval",
 			"pendingQuestion",
 			"autoApprovalEnabled",
+			"currentPlan",
+			"compact",
 		]
 		const snapshot: Partial<SubprocessState> = {}
 		for (const key of allowed) {
@@ -395,6 +427,16 @@ function App() {
 	const dialog = useDialog()
 	const { theme, toggleMode } = useTheme()
 	const toast = useToast()
+	const [ready, setReady] = createSignal(false)
+
+	// Listen for IPC ready signal
+	const originalHandleIpcMessage = handleIpcMessage
+	handleIpcMessage = async (message: IpcMessage) => {
+		if (message.type === "event" && message.event === "ready") {
+			setReady(true)
+		}
+		return originalHandleIpcMessage(message)
+	}
 
 	function openCommandPalette() {
 		dialog.push({
@@ -479,50 +521,88 @@ function App() {
 		toast.show("Prompt cleared", "info")
 	}
 	commandRegistry.get("command.palette.show")!.run = openCommandPalette
+	commandRegistry.get("agent.showPicker")!.run = openAgentPicker
+
+	function openAgentPicker() {
+		Dialog.select(
+			"Select Agent",
+			[
+				{ label: "Code", description: "Write and edit code", value: "code", category: "Agents" },
+				{ label: "Architect", description: "Plan and design", value: "architect", category: "Agents" },
+				{ label: "Ask", description: "Answer questions", value: "ask", category: "Agents" },
+				{ label: "Debug", description: "Diagnose issues", value: "debug", category: "Agents" },
+			],
+			(item) => {
+				if (typeof item.value === "string") {
+					state.mode = item.value
+					sendEvent({ type: "ui.setMode", mode: item.value })
+					toast.show(`Switched to ${item.value} mode`, "info")
+				}
+			},
+		)
+	}
 
 	if (!state.currentSessionId) {
 		return (
-			<Home
-				sessions={state.recentSessions}
-				onNewSession={() => sendEvent({ type: "ui.newSession" })}
-				onStartTask={(text) => sendEvent({ type: "ui.startTask", text })}
-				onResumeSession={(sessionId: string) => sendEvent({ type: "ui.resumeSession", sessionId })}
-				onOpenCommandPalette={openCommandPalette}
-				currentProvider={state.provider}
-				currentModel={state.model}
-				currentMode={state.mode}
-				workspacePath={state.workspacePath}
-				version="0.1.17"
-			/>
+			<>
+				<Show when={!ready()}>
+					<Splash />
+				</Show>
+				<Home
+					sessions={state.recentSessions}
+					onNewSession={() => sendEvent({ type: "ui.newSession" })}
+					onStartTask={(text) => sendEvent({ type: "ui.startTask", text })}
+					onResumeSession={(sessionId: string) => sendEvent({ type: "ui.resumeSession", sessionId })}
+					onOpenCommandPalette={openCommandPalette}
+					onOpenAgentPicker={openAgentPicker}
+					currentProvider={state.provider}
+					currentModel={state.model}
+					currentMode={state.mode}
+					workspacePath={state.workspacePath}
+					version="0.1.17"
+				/>
+			</>
 		)
 	}
 
 	return (
-		<Session
-			session={{
-				id: state.currentSessionId,
-				title: "Session",
-				status: state.isRunning ? "running" : "idle",
-				createdAt: Date.now(),
-				updatedAt: Date.now(),
-				messages: state.messages,
-			}}
-			messages={state.messages}
-			onSendMessage={(text) => sendEvent({ type: "ui.sendMessage", text })}
-			onCancel={() => sendEvent({ type: "ui.cancel" })}
-			onApprove={(requestId) => sendEvent({ type: "ui.approve", requestId })}
-			onReject={(requestId) => sendEvent({ type: "ui.reject", requestId })}
-			onAnswer={(requestId, answer) => sendEvent({ type: "ui.answer", requestId, answer })}
-			pendingApproval={state.pendingApproval}
-			pendingQuestion={state.pendingQuestion}
-			isRunning={state.isRunning}
-			currentProvider={state.provider}
-			currentModel={state.model}
-			currentMode={state.mode}
-			tokenUsage={state.tokenUsage}
-			todos={state.todos}
-			autoApprovalEnabled={state.autoApprovalEnabled}
-		/>
+		<>
+			<Show when={!ready()}>
+				<Splash />
+			</Show>
+			<Show when={state.isRunning}>
+				<LoadingOverlay />
+			</Show>
+			<Session
+				session={{
+					id: state.currentSessionId,
+					title: "Session",
+					status: state.isRunning ? "running" : "idle",
+					createdAt: Date.now(),
+					updatedAt: Date.now(),
+					messages: state.messages,
+				}}
+				messages={state.messages}
+				onSendMessage={(text) => sendEvent({ type: "ui.sendMessage", text })}
+				onCancel={() => sendEvent({ type: "ui.cancel" })}
+				onApprove={(requestId) => sendEvent({ type: "ui.approve", requestId })}
+				onReject={(requestId) => sendEvent({ type: "ui.reject", requestId })}
+				onAnswer={(requestId, answer) => sendEvent({ type: "ui.answer", requestId, answer })}
+				pendingApproval={state.pendingApproval}
+				pendingQuestion={state.pendingQuestion}
+				isRunning={state.isRunning}
+				currentProvider={state.provider}
+				currentModel={state.model}
+				currentMode={state.mode}
+				tokenUsage={state.tokenUsage}
+				todos={state.todos}
+				autoApprovalEnabled={state.autoApprovalEnabled}
+				currentPlan={state.currentPlan}
+				onApprovePlan={(planId) => sendEvent({ type: "ui.approvePlan", planId })}
+				onExecutePlan={(planId) => sendEvent({ type: "ui.executePlan", planId })}
+				compact={state.compact}
+			/>
+		</>
 	)
 }
 

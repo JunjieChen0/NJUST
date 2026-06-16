@@ -26,6 +26,7 @@ export interface SidebarProps {
 	todos?: Array<{ id: string; content: string; status: "pending" | "in_progress" | "completed" }>
 	isRunning: boolean
 	autoApprovalEnabled?: boolean
+	currentPlan?: import("../../runtime/types.ts").TuiPlan | null
 	width: number
 }
 
@@ -105,6 +106,19 @@ export function Sidebar(props: SidebarProps) {
 					</Text>
 					<Text color={props.autoApprovalEnabled ? theme.colors.success : theme.colors.textMuted}>
 						Auto-approve {props.autoApprovalEnabled ? "on" : "off"}
+					</Text>
+				</box>
+				<box flexDirection="row" gap={1} paddingTop={1}>
+					<Text
+						color={
+							props.currentPlan?.status === "executing" ? theme.colors.warning : theme.colors.textMuted
+						}>
+						{props.currentPlan?.status === "completed" ? "✓" : props.currentPlan ? "◎" : "○"}
+					</Text>
+					<Text color={props.currentPlan ? theme.colors.text : theme.colors.textMuted}>
+						{props.currentPlan
+							? `Plan: ${props.currentPlan.completedSteps}/${props.currentPlan.totalSteps}`
+							: "No plan"}
 					</Text>
 				</box>
 			</Section>

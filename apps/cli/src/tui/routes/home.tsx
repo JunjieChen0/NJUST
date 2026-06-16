@@ -24,6 +24,7 @@ export interface HomeProps {
 	onStartTask?: (text: string) => void
 	onResumeSession?: (sessionId: string) => void
 	onOpenCommandPalette?: () => void
+	onOpenAgentPicker?: () => void
 	currentProvider?: string
 	currentModel?: string
 	currentMode?: string
@@ -93,8 +94,8 @@ export function Home(props: HomeProps) {
 			</box>
 
 			<box flexDirection="row" gap={3} paddingTop={1}>
-				<ShortcutHint keys="tab" label="agents" />
-				<ShortcutHint keys="ctrl+p" label="commands" />
+				<ShortcutHint keys="tab" label="agents" onClick={props.onOpenAgentPicker} />
+				<ShortcutHint keys="ctrl+p" label="commands" onClick={props.onOpenCommandPalette} />
 				<ShortcutHint keys="ctrl+r" label="resume" />
 			</box>
 
@@ -138,10 +139,10 @@ export function Home(props: HomeProps) {
 	)
 }
 
-function ShortcutHint(props: { keys: string; label: string }) {
+function ShortcutHint(props: { keys: string; label: string; onClick?: () => void }) {
 	const { theme } = useTheme()
 	return (
-		<box flexDirection="row" gap={1}>
+		<box flexDirection="row" gap={1} onClick={props.onClick}>
 			<Text color={theme.colors.text} bold>
 				{props.keys}
 			</Text>

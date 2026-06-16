@@ -27,7 +27,7 @@ import { ToolRenderer } from "../tools/index.jsx"
 // Message
 // =============================================================================
 
-export function MessageRenderer(props: { message: TuiMessage; streaming?: boolean }) {
+export function MessageRenderer(props: { message: TuiMessage; streaming?: boolean; compact?: boolean }) {
 	const { theme } = useTheme()
 	const msg = props.message
 
@@ -81,6 +81,7 @@ export function MessageRenderer(props: { message: TuiMessage; streaming?: boolea
 				<ToolRenderer
 					part={msg.part}
 					toolData={msg.toolData as import("../tools/index.tsx").ToolData | undefined}
+					compact={props.compact}
 				/>
 			</Show>
 

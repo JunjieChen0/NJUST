@@ -24,8 +24,9 @@
 import { createSignal, createMemo, For, Show, createEffect } from "solid-js"
 import { Text, ScrollBox } from "../../components/index.tsx"
 import { useTheme } from "../../context/theme.tsx"
-import type { TuiSession, TuiMessage } from "../../runtime/types.ts"
+import type { TuiSession, TuiMessage, TuiPlan } from "../../runtime/types.ts"
 import { MessageRenderer } from "../../components/messages/index.tsx"
+import { PlanCard } from "../../components/plan-card.tsx"
 import { Sidebar } from "./sidebar.tsx"
 import { Prompt } from "../../components/prompt/index.tsx"
 import { createDefaultTriggers } from "../../components/prompt/autocomplete.tsx"
@@ -52,6 +53,10 @@ export interface SessionProps {
 	tokenUsage?: { total: number; context: number; cost?: number }
 	todos?: Array<{ id: string; content: string; status: "pending" | "in_progress" | "completed" }>
 	autoApprovalEnabled?: boolean
+	currentPlan?: TuiPlan | null
+	onApprovePlan?: (planId: string) => void
+	onExecutePlan?: (planId: string) => void
+	compact?: boolean
 }
 
 export function Session(props: SessionProps) {
@@ -85,11 +90,20 @@ export function Session(props: SessionProps) {
 
 				{/* Message area (sticky bottom) */}
 				<ScrollBox flexGrow={1} stickyScroll={true}>
+					<Show when={props.currentPlan}>
+						<PlanCard
+							plan={props.currentPlan!}
+							onApprove={props.onApprovePlan}
+							onExecute={props.onExecutePlan}
+						/>
+					</Show>
+
 					<For each={props.messages} fallback={<EmptyState />}>
 						{(message) => (
 							<MessageRenderer
 								message={message}
 								streaming={message.role === "assistant" && props.isRunning === true}
+								compact={props.compact}
 							/>
 						)}
 					</For>
@@ -141,6 +155,7 @@ export function Session(props: SessionProps) {
 					isRunning={props.isRunning || false}
 					autoApprovalEnabled={props.autoApprovalEnabled}
 					width={SIDEBAR_WIDTH}
+					currentPlan={props.currentPlan}
 				/>
 			</Show>
 		</box>

@@ -90,6 +90,7 @@ export interface ToolData {
 export interface ToolRendererProps {
 	part?: TuiPart
 	toolData?: ToolData
+	compact?: boolean
 }
 
 export function ToolRenderer(props: ToolRendererProps) {
@@ -167,6 +168,10 @@ function CollapsibleContent(props: { content: string; maxLines?: number }) {
 			</Text>
 		</Box>
 	)
+}
+
+function CompactCollapsibleContent(props: { content: string; compact?: boolean }) {
+	return <CollapsibleContent content={props.content} maxLines={props.compact ? 3 : 10} />
 }
 
 interface DiffLine {
@@ -340,7 +345,7 @@ export function FileReadTool(props: ToolRendererProps) {
 			<Show when={part.content}>
 				<Box flexDirection="column" paddingTop={1}>
 					<Text color={theme.colors.textMuted}>Content:</Text>
-					<CollapsibleContent content={part.content || ""} />
+					<CompactCollapsibleContent content={part.content || ""} compact={props.compact} />
 				</Box>
 			</Show>
 		</Box>
@@ -367,7 +372,7 @@ export function FileWriteTool(props: ToolRendererProps) {
 				<Text color={theme.colors.textMuted}> Lines: {data.lineCount}</Text>
 			</Show>
 			<Show when={part.content}>
-				<CollapsibleContent content={part.content || ""} />
+				<CompactCollapsibleContent content={part.content || ""} compact={props.compact} />
 			</Show>
 		</Box>
 	)
@@ -429,7 +434,7 @@ export function SearchTool(props: ToolRendererProps) {
 				<Text color={theme.colors.textMuted}> Path: {path(data, part)}</Text>
 			</Show>
 			<Show when={part.content}>
-				<CollapsibleContent content={part.content || ""} />
+				<CompactCollapsibleContent content={part.content || ""} compact={props.compact} />
 			</Show>
 		</Box>
 	)
@@ -457,7 +462,7 @@ export function ExecuteCommandTool(props: ToolRendererProps) {
 				</Box>
 			</Show>
 			<Show when={part.content}>
-				<CollapsibleContent content={part.content || ""} />
+				<CompactCollapsibleContent content={part.content || ""} compact={props.compact} />
 			</Show>
 			<Show when={part.toolError}>
 				<Text color={theme.colors.error}> Error: {part.toolError}</Text>
@@ -486,7 +491,7 @@ export function McpTool(props: ToolRendererProps) {
 				<Text color={theme.colors.textMuted}> Tool: {data.toolName || part.toolName}</Text>
 			</Show>
 			<Show when={part.content}>
-				<CollapsibleContent content={part.content || ""} />
+				<CompactCollapsibleContent content={part.content || ""} compact={props.compact} />
 			</Show>
 		</Box>
 	)
@@ -599,7 +604,7 @@ export function CompletionTool(props: ToolRendererProps) {
 				Task Completed
 			</Text>
 			<Show when={part.content || data.result}>
-				<CollapsibleContent content={part.content || data.result || ""} />
+				<CompactCollapsibleContent content={part.content || data.result || ""} compact={props.compact} />
 			</Show>
 		</Box>
 	)
@@ -618,7 +623,7 @@ export function GenericTool(props: ToolRendererProps) {
 				</Text>
 			</Box>
 			<Show when={part.content}>
-				<CollapsibleContent content={part.content || ""} />
+				<CompactCollapsibleContent content={part.content || ""} compact={props.compact} />
 			</Show>
 			<Show when={part.toolError}>
 				<Text color={theme.colors.error}>Error: {part.toolError}</Text>
