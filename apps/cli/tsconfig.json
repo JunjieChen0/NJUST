@@ -1,6 +1,7 @@
 {
 	"extends": "@njust-ai/config-typescript/base.json",
 	"compilerOptions": {
+		"ignoreDeprecations": "5.0",
 		"types": ["vitest/globals", "node"],
 		"outDir": "dist",
 		"jsx": "react-jsx",
