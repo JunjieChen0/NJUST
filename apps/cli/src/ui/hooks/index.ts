@@ -11,6 +11,8 @@ export { useExtensionHost } from "./useExtensionHost.js"
 export { useTaskSubmit } from "./useTaskSubmit.js"
 export { useGlobalInput } from "./useGlobalInput.js"
 export { usePickerHandlers } from "./usePickerHandlers.js"
+export { useCondenseTask } from "./useCondenseTask.js"
+export { useCheckpoints } from "./useCheckpoints.js"
 
 // Export types
 export type { UseFollowupCountdownOptions } from "./useFollowupCountdown.js"

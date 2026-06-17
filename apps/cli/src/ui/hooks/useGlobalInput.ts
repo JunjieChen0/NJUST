@@ -21,6 +21,8 @@ export interface UseGlobalInputOptions {
 	cleanup: () => Promise<void>
 	toggleFocus: () => void
 	closePicker: () => void
+	requestCondense?: () => void
+	condenseInProgress?: boolean
 }
 
 /**
@@ -46,11 +48,21 @@ export function useGlobalInput({
 	cleanup,
 	toggleFocus,
 	closePicker,
+	requestCondense,
+	condenseInProgress,
 }: UseGlobalInputOptions): void {
 	const { isLoading, currentTodos } = useCLIStore()
 	const {
 		showTodoViewer,
 		setShowTodoViewer,
+		showModelPicker,
+		setShowModelPicker,
+		showSettings,
+		setShowSettings,
+		showFileChanges,
+		setShowFileChanges,
+		showHistory,
+		setShowHistory,
 		showExitHint: _showExitHint,
 		setShowExitHint,
 		pendingExit,
@@ -120,9 +132,36 @@ export function useGlobalInput({
 			return
 		}
 
-		// Escape key to close TODO viewer
-		if (key.escape && showTodoViewer) {
+		// Ctrl+P to open API profile picker
+		if (matchesGlobalSequence(input, key, "ctrl-p")) {
+			if (pickerIsOpen) {
+				closePicker()
+			}
+			setShowModelPicker(!showModelPicker)
+			return
+		}
+
+		// Ctrl+R to request context condensation
+		if (matchesGlobalSequence(input, key, "ctrl-r")) {
+			if (!requestCondense) {
+				return
+			}
+			if (condenseInProgress) {
+				showInfo("Context condensation already in progress", 2000)
+				return
+			}
+			requestCondense()
+			showInfo("Condensing context...", 2000)
+			return
+		}
+
+		// Escape key to close overlays
+		if (key.escape && (showTodoViewer || showModelPicker || showSettings || showFileChanges || showHistory)) {
 			setShowTodoViewer(false)
+			setShowModelPicker(false)
+			setShowSettings(false)
+			setShowFileChanges(false)
+			setShowHistory(false)
 			return
 		}
 

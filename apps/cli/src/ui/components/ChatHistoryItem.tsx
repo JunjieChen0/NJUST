@@ -2,10 +2,12 @@ import { memo } from "react"
 import { Box, Newline, Text } from "ink"
 
 import type { TUIMessage } from "../types.js"
+import type { WebviewMessage } from "@njust-ai/types"
 import * as theme from "../theme.js"
 
 import TodoDisplay from "./TodoDisplay.js"
 import { getToolRenderer } from "./tools/index.js"
+import { CheckpointActions } from "./CheckpointActions.js"
 
 /**
  * Tool categories for styling
@@ -169,9 +171,11 @@ function ToolDisplay({ message }: { message: TUIMessage }) {
 
 interface ChatHistoryItemProps {
 	message: TUIMessage
+	sendToExtension?: ((msg: WebviewMessage) => void) | null
+	workspacePath?: string
 }
 
-function ChatHistoryItem({ message }: ChatHistoryItemProps) {
+function ChatHistoryItem({ message, sendToExtension, workspacePath }: ChatHistoryItemProps) {
 	const content = sanitizeContent(message.content || "...")
 
 	switch (message.role) {
@@ -219,6 +223,27 @@ function ChatHistoryItem({ message }: ChatHistoryItemProps) {
 				message.todos.length > 0
 			) {
 				return <TodoDisplay todos={message.todos} previousTodos={message.previousTodos} showProgress={true} />
+			}
+
+			// Render checkpoint actions for checkpoint tool messages
+			if (message.toolName === "checkpoint" && message.toolData?.commitHash && sendToExtension && workspacePath) {
+				return (
+					<Box flexDirection="column" paddingX={1}>
+						<Text bold color={theme.toolHeader}>
+							Checkpoint
+						</Text>
+						<Text color={theme.text}>{content}</Text>
+						<CheckpointActions
+							commitHash={message.toolData.commitHash}
+							ts={message.toolData.ts ?? Date.now()}
+							sendToExtension={sendToExtension}
+							workspacePath={workspacePath}
+						/>
+						<Text>
+							<Newline />
+						</Text>
+					</Box>
+				)
 			}
 
 			// Use the new structured tool renderers when toolData is available

@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect, useImperativeHandle, forwardRef, useR
 
 import { useInputHistory } from "../../hooks/useInputHistory.js"
 import { useTerminalSize } from "../../hooks/TerminalSizeContext.js"
+import { useUIStateStore } from "../../stores/uiStateStore.js"
 import { MultilineTextInput } from "../MultilineTextInput.js"
 
 import type { AutocompleteItem, AutocompleteTrigger, AutocompletePickerState } from "./types.js"
@@ -121,6 +122,16 @@ function AutocompleteInputInner<T extends AutocompleteItem>(
 
 		setWasBrowsing(isBrowsing)
 	}, [isBrowsing, wasBrowsing, historyValue, draft, inputValue])
+
+	// Handle pending prompt replacement from /enhance response
+	const pendingPromptReplacement = useUIStateStore((state) => state.pendingPromptReplacement)
+	useEffect(() => {
+		if (pendingPromptReplacement !== null) {
+			setInputValue(pendingPromptReplacement)
+			setInputKeyCounter((prev) => prev + 1)
+			useUIStateStore.getState().setPendingPromptReplacement(null)
+		}
+	}, [pendingPromptReplacement])
 
 	/**
 	 * Get the last line from input value

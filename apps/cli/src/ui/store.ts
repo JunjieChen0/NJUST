@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-import type { TokenUsage, ProviderSettings, TodoItem } from "@njust-ai/types"
+import type { TokenUsage, ProviderSettings, TodoItem, ProviderSettingsEntry, QueuedMessage } from "@njust-ai/types"
 
 import type { TUIMessage, PendingAsk, TaskHistoryItem } from "./types.js"
 import type { FileResult, SlashCommandResult, ModeResult } from "./components/autocomplete/index.js"
@@ -86,9 +86,47 @@ interface CLIState {
 	routerModels: RouterModels | null
 	apiConfiguration: ProviderSettings | null
 
+	// API configuration profile management
+	currentApiConfigName: string | null
+	listApiConfigMeta: ProviderSettingsEntry[]
+
+	// Auto-approve settings mirror
+	autoApprovalEnabled: boolean
+	alwaysAllowReadOnly: boolean
+	alwaysAllowWrite: boolean
+	alwaysAllowExecute: boolean
+	alwaysAllowMcp: boolean
+	alwaysAllowModeSwitch: boolean
+	alwaysAllowSubtasks: boolean
+	alwaysAllowFollowupQuestions: boolean
+
+	// Web search toggle
+	enableWebSearch: boolean
+
+	// Allowed commands for auto-approval
+	allowedCommands: string[]
+
+	// Available models per provider
+	availableModels: Record<string, string[]>
+
 	// Todo list tracking
 	currentTodos: TodoItem[]
 	previousTodos: TodoItem[]
+
+	// MCP server state
+	mcpServers: import("@njust-ai/types").McpServer[]
+
+	// Context condensation state
+	condenseTaskContextInProgress: boolean
+
+	// Queued messages while task is running
+	queuedMessages: QueuedMessage[]
+
+	// Commit search results for @git mentions
+	commitSearchResults: import("@njust-ai/types").GitCommit[]
+
+	// Current checkpoint for diff/restore
+	currentCheckpoint: { ts: number; commitHash: string } | null
 }
 
 interface CLIActions {
@@ -127,8 +165,56 @@ interface CLIActions {
 	setRouterModels: (models: RouterModels | null) => void
 	setApiConfiguration: (config: ProviderSettings | null) => void
 
+	// API configuration profile actions
+	setCurrentApiConfigName: (name: string | null) => void
+	setListApiConfigMeta: (meta: ProviderSettingsEntry[]) => void
+
+	// Auto-approve settings actions
+	setAutoApprovalSettings: (
+		settings: Partial<
+			Pick<
+				CLIState,
+				| "autoApprovalEnabled"
+				| "alwaysAllowReadOnly"
+				| "alwaysAllowWrite"
+				| "alwaysAllowExecute"
+				| "alwaysAllowMcp"
+				| "alwaysAllowModeSwitch"
+				| "alwaysAllowSubtasks"
+				| "alwaysAllowFollowupQuestions"
+			>
+		>,
+	) => void
+
+	// Web search toggle action
+	setEnableWebSearch: (enabled: boolean) => void
+
+	// Allowed commands action
+	setAllowedCommands: (commands: string[]) => void
+
+	// Available models action
+	setAvailableModels: (provider: string, models: string[]) => void
+
 	// Todo actions
 	setTodos: (todos: TodoItem[]) => void
+
+	// Context condensation actions
+	setCondenseTaskContextInProgress: (inProgress: boolean) => void
+
+	// MCP server actions
+	setMcpServers: (servers: import("@njust-ai/types").McpServer[]) => void
+
+	// Queued message actions
+	setQueuedMessages: (messages: QueuedMessage[]) => void
+	addQueuedMessage: (text: string) => void
+	removeQueuedMessage: (id: string) => void
+	editQueuedMessage: (id: string, text: string) => void
+
+	// Commit search actions
+	setCommitSearchResults: (commits: import("@njust-ai/types").GitCommit[]) => void
+
+	// Checkpoint actions
+	setCurrentCheckpoint: (checkpoint: { ts: number; commitHash: string } | null) => void
 }
 
 const initialState: CLIState = {
@@ -148,8 +234,26 @@ const initialState: CLIState = {
 	tokenUsage: null,
 	routerModels: null,
 	apiConfiguration: null,
+	currentApiConfigName: null,
+	listApiConfigMeta: [],
+	autoApprovalEnabled: false,
+	alwaysAllowReadOnly: false,
+	alwaysAllowWrite: false,
+	alwaysAllowExecute: false,
+	alwaysAllowMcp: false,
+	alwaysAllowModeSwitch: false,
+	alwaysAllowSubtasks: false,
+	alwaysAllowFollowupQuestions: false,
+	enableWebSearch: false,
+	allowedCommands: [],
+	availableModels: {},
 	currentTodos: [],
 	previousTodos: [],
+	mcpServers: [],
+	condenseTaskContextInProgress: false,
+	queuedMessages: [],
+	commitSearchResults: [],
+	currentCheckpoint: null,
 }
 
 export const useCLIStore = create<CLIState & CLIActions>((set, get) => ({
@@ -275,6 +379,20 @@ export const useCLIStore = create<CLIState & CLIActions>((set, get) => ({
 			currentMode: state.currentMode,
 			routerModels: state.routerModels,
 			apiConfiguration: state.apiConfiguration,
+			currentApiConfigName: state.currentApiConfigName,
+			listApiConfigMeta: state.listApiConfigMeta,
+			autoApprovalEnabled: state.autoApprovalEnabled,
+			alwaysAllowReadOnly: state.alwaysAllowReadOnly,
+			alwaysAllowWrite: state.alwaysAllowWrite,
+			alwaysAllowExecute: state.alwaysAllowExecute,
+			alwaysAllowMcp: state.alwaysAllowMcp,
+			alwaysAllowModeSwitch: state.alwaysAllowModeSwitch,
+			alwaysAllowSubtasks: state.alwaysAllowSubtasks,
+			alwaysAllowFollowupQuestions: state.alwaysAllowFollowupQuestions,
+			mcpServers: state.mcpServers,
+			queuedMessages: state.queuedMessages,
+			commitSearchResults: state.commitSearchResults,
+			currentCheckpoint: state.currentCheckpoint,
 		})),
 	setIsResumingTask: (isResuming) => set({ isResumingTask: isResuming }),
 	// Use shallow equality to prevent unnecessary re-renders when array content is the same
@@ -291,5 +409,37 @@ export const useCLIStore = create<CLIState & CLIActions>((set, get) => ({
 	setTokenUsage: (usage) => set({ tokenUsage: usage }),
 	setRouterModels: (models) => set({ routerModels: models }),
 	setApiConfiguration: (config) => set({ apiConfiguration: config }),
+	setCurrentApiConfigName: (name) => set({ currentApiConfigName: name }),
+	setListApiConfigMeta: (meta) =>
+		set((state) => (shallowArrayEqual(state.listApiConfigMeta, meta) ? state : { listApiConfigMeta: meta })),
+	setAutoApprovalSettings: (settings) => set((state) => ({ ...state, ...settings })),
+	setEnableWebSearch: (enabled) => set({ enableWebSearch: enabled }),
+	setAllowedCommands: (commands) =>
+		set((state) => (shallowArrayEqual(state.allowedCommands, commands) ? state : { allowedCommands: commands })),
+	setAvailableModels: (provider, models) =>
+		set((state) => ({
+			availableModels: { ...state.availableModels, [provider]: models },
+		})),
 	setTodos: (todos) => set((state) => ({ previousTodos: state.currentTodos, currentTodos: todos })),
+	setCondenseTaskContextInProgress: (inProgress) => set({ condenseTaskContextInProgress: inProgress }),
+	setMcpServers: (servers) =>
+		set((state) => (shallowArrayEqual(state.mcpServers, servers) ? state : { mcpServers: servers })),
+	setQueuedMessages: (messages) => set({ queuedMessages: messages }),
+	addQueuedMessage: (text) =>
+		set((state) => ({
+			queuedMessages: [...state.queuedMessages, { id: crypto.randomUUID(), text, timestamp: Date.now() }],
+		})),
+	removeQueuedMessage: (id) =>
+		set((state) => ({
+			queuedMessages: state.queuedMessages.filter((m) => m.id !== id),
+		})),
+	editQueuedMessage: (id, text) =>
+		set((state) => ({
+			queuedMessages: state.queuedMessages.map((m) => (m.id === id ? { ...m, text } : m)),
+		})),
+	setCommitSearchResults: (commits) =>
+		set((state) =>
+			shallowArrayEqual(state.commitSearchResults, commits) ? state : { commitSearchResults: commits },
+		),
+	setCurrentCheckpoint: (checkpoint) => set({ currentCheckpoint: checkpoint }),
 }))

@@ -24,6 +24,7 @@ import {
 	useFollowupCountdown,
 	useFocusManagement,
 	usePickerHandlers,
+	useCondenseTask,
 } from "./hooks/index.js"
 
 // Import extracted utilities.
@@ -35,6 +36,11 @@ import ChatHistoryItem from "./components/ChatHistoryItem.js"
 import LoadingText from "./components/LoadingText.js"
 import ToastDisplay from "./components/ToastDisplay.js"
 import TodoDisplay from "./components/TodoDisplay.js"
+import ModelPicker from "./components/ModelPicker.js"
+import MessageQueue from "./components/MessageQueue.js"
+import FileChangesPanel from "./components/FileChangesPanel.js"
+import HistoryView from "./components/HistoryView.js"
+import { SettingsOverlay } from "./components/settings/SettingsOverlay.js"
 import { HorizontalLine } from "./components/HorizontalLine.js"
 import {
 	type AutocompleteInputHandle,
@@ -43,6 +49,10 @@ import {
 	AutocompleteInput,
 	PickerSelect,
 	createFileTrigger,
+	createGitTrigger,
+	createProblemsTrigger,
+	createTerminalTrigger,
+	createCommandTrigger,
 	createSlashCommandTrigger,
 	createModeTrigger,
 	createHelpTrigger,
@@ -109,6 +119,10 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		routerModels,
 		apiConfiguration,
 		currentTodos,
+		condenseTaskContextInProgress,
+		currentApiConfigName,
+		listApiConfigMeta,
+		queuedMessages: _queuedMessages,
 	} = useCLIStore()
 
 	// Access UI state from the UI store
@@ -118,8 +132,16 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		showCustomInput,
 		isTransitioningToCustomInput,
 		showTodoViewer,
+		showModelPicker,
+		showSettings,
+		showFileChanges,
+		showHistory,
 		pickerState,
 		setIsTransitioningToCustomInput,
+		setShowModelPicker,
+		setShowSettings,
+		setShowFileChanges,
+		setShowHistory,
 	} = useUIStateStore()
 
 	// Compute context window from router models and API configuration
@@ -132,11 +154,98 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const followupAutocompleteRef = useRef<AutocompleteInputHandle<any>>(null)
 
+	const [commitSearchResults, _setCommitSearchResults] = useState<
+		import("./components/autocomplete/index.js").GitResult[]
+	>([])
+
+	// Derive problems from recent tool outputs (best effort)
+	const problemResults = useMemo(() => {
+		const problems: import("./components/autocomplete/index.js").ProblemResult[] = []
+		const errorPatterns = /error|fail|exception|warning/gi
+
+		for (let i = messages.length - 1; i >= Math.max(0, messages.length - 50); i--) {
+			const msg = messages[i]
+			if (!msg || msg.role !== "tool") continue
+
+			const content = msg.content || msg.toolDisplayOutput || ""
+			const matches = content.match(errorPatterns)
+			if (matches && matches.length > 0) {
+				const preview = content.substring(0, 80).replace(/\n/g, " ")
+				problems.push({
+					key: `problem-${msg.id}`,
+					summary: preview,
+					source: msg.toolDisplayName || msg.toolName || "tool",
+				})
+			}
+		}
+
+		return problems.slice(0, 20)
+	}, [messages])
+
+	// Derive terminal outputs from recent command_output messages (best effort)
+	const terminalResults = useMemo(() => {
+		const terminals: import("./components/autocomplete/index.js").TerminalResult[] = []
+		let index = 0
+
+		for (let i = messages.length - 1; i >= Math.max(0, messages.length - 50); i--) {
+			const msg = messages[i]
+			if (!msg || msg.role !== "tool" || msg.toolName !== "execute_command") continue
+
+			const command = msg.toolData?.command || "unknown"
+			const output = msg.toolDisplayOutput || msg.content || ""
+			const preview = output.substring(0, 60).replace(/\n/g, " ")
+
+			terminals.push({
+				key: `terminal-${msg.id}`,
+				command,
+				outputPreview: preview,
+				index: index++,
+			})
+		}
+
+		return terminals.slice(0, 20)
+	}, [messages])
+
+	// Derive commands from allowedCommands + history (best effort)
+	const commandResults = useMemo(() => {
+		const commands: import("./components/autocomplete/index.js").CommandResult[] = []
+		const seen = new Set<string>()
+
+		// Add allowed commands from state
+		const { allowedCommands } = useCLIStore.getState()
+		if (allowedCommands) {
+			for (const cmd of allowedCommands) {
+				if (!seen.has(cmd)) {
+					seen.add(cmd)
+					commands.push({ key: `cmd-${cmd}`, command: cmd, source: "allowed" })
+				}
+			}
+		}
+
+		// Add commands from history
+		for (let i = messages.length - 1; i >= Math.max(0, messages.length - 50); i--) {
+			const msg = messages[i]
+			if (!msg || msg.role !== "tool" || msg.toolName !== "execute_command") continue
+
+			const command = msg.toolData?.command
+			if (command && !seen.has(command)) {
+				seen.add(command)
+				commands.push({ key: `cmd-${command}`, command, source: "history" })
+			}
+		}
+
+		return commands.slice(0, 30)
+	}, [messages])
+
 	// Stable refs for autocomplete data - prevents useMemo from recreating triggers on every data change
 	const fileSearchResultsRef = useRef(fileSearchResults)
 	const allSlashCommandsRef = useRef(allSlashCommands)
 	const availableModesRef = useRef(availableModes)
 	const taskHistoryRef = useRef(taskHistory)
+	const commitSearchResultsRef = useRef(commitSearchResults)
+	const problemResultsRef = useRef(problemResults)
+	const terminalResultsRef = useRef(terminalResults)
+	const commandResultsRef = useRef(commandResults)
 
 	// Keep refs in sync with current state
 	useEffect(() => {
@@ -151,6 +260,18 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 	useEffect(() => {
 		taskHistoryRef.current = taskHistory
 	}, [taskHistory])
+	useEffect(() => {
+		commitSearchResultsRef.current = commitSearchResults
+	}, [commitSearchResults])
+	useEffect(() => {
+		problemResultsRef.current = problemResults
+	}, [problemResults])
+	useEffect(() => {
+		terminalResultsRef.current = terminalResults
+	}, [terminalResults])
+	useEffect(() => {
+		commandResultsRef.current = commandResults
+	}, [commandResults])
 
 	// Scroll area state
 	const { rows } = useTerminalSize()
@@ -200,7 +321,14 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		runTask,
 		seenMessageIds,
 		firstTextMessageSkipped,
+		openSettings: () => useUIStateStore.getState().setShowSettings(true),
+		openFileChanges: () => useUIStateStore.getState().setShowFileChanges(true),
+		openHistory: () => useUIStateStore.getState().setShowHistory(true),
+		showInfo,
 	})
+
+	// Initialize context condensation hook
+	const { requestCondense } = useCondenseTask(sendToExtension)
 
 	// Initialize focus management hook
 	const { canToggleFocus, isScrollAreaActive, isInputAreaActive, toggleFocus } = useFocusManagement({
@@ -239,6 +367,8 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		cleanup,
 		toggleFocus,
 		closePicker: handlePickerClose,
+		requestCondense,
+		condenseInProgress: condenseTaskContextInProgress,
 	})
 
 	// Determine current view
@@ -299,6 +429,16 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		[sendToExtension],
 	)
 
+	const handleCommitSearch = useCallback(
+		(query: string) => {
+			if (!sendToExtension) {
+				return
+			}
+			sendToExtension({ type: "searchCommits", query })
+		},
+		[sendToExtension],
+	)
+
 	// Create autocomplete triggers
 	// Using 'any' to allow mixing different trigger types (FileResult, SlashCommandResult, ModeResult, HelpShortcutResult, HistoryResult)
 	// IMPORTANT: We use refs here to avoid recreating triggers every time data changes.
@@ -312,6 +452,23 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 				const results = fileSearchResultsRef.current
 				return results.map(toFileResult)
 			},
+		})
+
+		const gitTrigger = createGitTrigger({
+			onSearch: handleCommitSearch,
+			getResults: () => commitSearchResultsRef.current,
+		})
+
+		const problemsTrigger = createProblemsTrigger({
+			getResults: () => problemResultsRef.current,
+		})
+
+		const terminalTrigger = createTerminalTrigger({
+			getResults: () => terminalResultsRef.current,
+		})
+
+		const commandTrigger = createCommandTrigger({
+			getResults: () => commandResultsRef.current,
 		})
 
 		const slashCommandTrigger = createSlashCommandTrigger({
@@ -342,14 +499,25 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 			},
 		})
 
-		return [fileTrigger, slashCommandTrigger, modeTrigger, helpTrigger, historyTrigger]
-	}, [handleFileSearch, workspacePath]) // Only depend on handleFileSearch and workspacePath - data accessed via refs
+		return [
+			fileTrigger,
+			gitTrigger,
+			problemsTrigger,
+			terminalTrigger,
+			commandTrigger,
+			slashCommandTrigger,
+			modeTrigger,
+			helpTrigger,
+			historyTrigger,
+		]
+	}, [handleFileSearch, handleCommitSearch, workspacePath]) // Only depend on stable handlers and workspacePath - data accessed via refs
 
 	// Refresh search results when fileSearchResults changes while file picker is open
 	// This handles the async timing where API results arrive after initial search
 	// IMPORTANT: Only run when fileSearchResults array identity changes (new API response)
 	// We use a ref to track this and avoid depending on pickerState in the effect
 	const prevFileSearchResultsRef = useRef(fileSearchResults)
+	const prevCommitSearchResultsRef = useRef(commitSearchResults)
 	const pickerStateRef = useRef(pickerState)
 	pickerStateRef.current = pickerState
 
@@ -371,6 +539,26 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 			followupAutocompleteRef.current?.refreshSearch()
 		}
 	}, [fileSearchResults]) // Only depend on fileSearchResults - read pickerState from ref
+
+	// Refresh git results when commitSearchResults changes while git picker is open
+	useEffect(() => {
+		if (commitSearchResults === prevCommitSearchResultsRef.current) {
+			return
+		}
+
+		const currentPickerState = pickerStateRef.current
+		const willRefresh =
+			currentPickerState.isOpen &&
+			currentPickerState.activeTrigger?.id === "git" &&
+			commitSearchResults.length > 0
+
+		prevCommitSearchResultsRef.current = commitSearchResults
+
+		if (willRefresh) {
+			autocompleteRef.current?.refreshSearch()
+			followupAutocompleteRef.current?.refreshSearch()
+		}
+	}, [commitSearchResults])
 
 	// Handle Y/N input for approval prompts
 	useInput((input) => {
@@ -468,77 +656,182 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 					version={version}
 					tokenUsage={tokenUsage}
 					contextWindow={contextWindow}
+					condenseInProgress={condenseTaskContextInProgress}
+					onCondense={requestCondense}
+					currentApiConfigName={currentApiConfigName}
 				/>
 			</Box>
 
-			{/* Scrollable message history area - fills remaining space via flexGrow */}
-			<ScrollArea
-				isActive={isScrollAreaActive}
-				onScroll={handleScroll}
-				scrollToBottomTrigger={scrollToBottomTrigger}>
-				{displayMessages.map((message) => (
-					<ChatHistoryItem key={message.id} message={message} />
-				))}
-			</ScrollArea>
+			{/* Model picker overlay */}
+			{showModelPicker && (
+				<Box flexShrink={0}>
+					<ModelPicker
+						currentApiConfigName={currentApiConfigName}
+						listApiConfigMeta={listApiConfigMeta}
+						sendToExtension={sendToExtension}
+						onClose={() => setShowModelPicker(false)}
+					/>
+				</Box>
+			)}
 
-			{/* Input area - with borders like Claude Code - fixed size */}
-			<Box flexDirection="column" flexShrink={0}>
-				{pendingAsk?.type === "followup" ? (
-					<Box flexDirection="column">
-						<Text color={theme.rooHeader}>{pendingAsk.content}</Text>
-						{pendingAsk.suggestions && pendingAsk.suggestions.length > 0 && !showCustomInput ? (
-							<Box flexDirection="column" marginTop={1}>
-								<HorizontalLine active={true} />
-								<Select
-									options={[
-										...pendingAsk.suggestions.map((s) => ({
-											label: s.answer,
-											value: s.answer,
-										})),
-										{ label: "Type something...", value: "__CUSTOM__" },
-									]}
-									onChange={(value) => {
-										if (!value || typeof value !== "string") return
-										if (showCustomInput || isTransitioningToCustomInput) return
+			{/* Settings overlay */}
+			{showSettings && (
+				<Box flexShrink={0}>
+					<SettingsOverlay sendToExtension={sendToExtension} onClose={() => setShowSettings(false)} />
+				</Box>
+			)}
 
-										if (value === "__CUSTOM__") {
-											// Clear countdown timer and switch to custom input
-											cancelCountdown()
-											setIsTransitioningToCustomInput(true)
-											useUIStateStore.getState().setShowCustomInput(true)
-										} else if (value.trim()) {
-											handleSubmit(value)
-										}
-									}}
-								/>
-								<HorizontalLine active={true} />
+			{/* File changes panel */}
+			{showFileChanges && (
+				<Box flexShrink={0}>
+					<FileChangesPanel messages={messages} onClose={() => setShowFileChanges(false)} />
+				</Box>
+			)}
+
+			{/* History view - replaces main session view when active */}
+			{showHistory ? (
+				<Box flexDirection="column" flexGrow={1}>
+					<HistoryView
+						taskHistory={taskHistory}
+						workspacePath={workspacePath}
+						sendToExtension={sendToExtension}
+						onClose={() => setShowHistory(false)}
+						onResumeTask={(taskId) => {
+							if (sendToExtension) {
+								sendToExtension({ type: "showTaskWithId", text: taskId })
+							}
+							setShowHistory(false)
+						}}
+					/>
+				</Box>
+			) : (
+				<>
+					{/* Scrollable message history area - fills remaining space via flexGrow */}
+					<ScrollArea
+						isActive={isScrollAreaActive}
+						onScroll={handleScroll}
+						scrollToBottomTrigger={scrollToBottomTrigger}>
+						{displayMessages.map((message) => (
+							<ChatHistoryItem
+								key={message.id}
+								message={message}
+								sendToExtension={sendToExtension}
+								workspacePath={workspacePath}
+							/>
+						))}
+					</ScrollArea>
+
+					{/* Inline queued messages */}
+					{isLoading && <MessageQueue sendToExtension={sendToExtension} />}
+
+					{/* Input area - with borders like Claude Code - fixed size */}
+					<Box flexDirection="column" flexShrink={0}>
+						{pendingAsk?.type === "followup" ? (
+							<Box flexDirection="column">
+								<Text color={theme.rooHeader}>{pendingAsk.content}</Text>
+								{pendingAsk.suggestions && pendingAsk.suggestions.length > 0 && !showCustomInput ? (
+									<Box flexDirection="column" marginTop={1}>
+										<HorizontalLine active={true} />
+										<Select
+											options={[
+												...pendingAsk.suggestions.map((s) => ({
+													label: s.answer,
+													value: s.answer,
+												})),
+												{ label: "Type something...", value: "__CUSTOM__" },
+											]}
+											onChange={(value) => {
+												if (!value || typeof value !== "string") return
+												if (showCustomInput || isTransitioningToCustomInput) return
+
+												if (value === "__CUSTOM__") {
+													// Clear countdown timer and switch to custom input
+													cancelCountdown()
+													setIsTransitioningToCustomInput(true)
+													useUIStateStore.getState().setShowCustomInput(true)
+												} else if (value.trim()) {
+													handleSubmit(value)
+												}
+											}}
+										/>
+										<HorizontalLine active={true} />
+										<Text color={theme.dimText}>
+											↑↓ navigate • Enter select
+											{countdownSeconds !== null && (
+												<Text color="yellow"> • Auto-select in {countdownSeconds}s</Text>
+											)}
+										</Text>
+									</Box>
+								) : (
+									<Box flexDirection="column" marginTop={1}>
+										<HorizontalLine active={isInputAreaActive} />
+										<AutocompleteInput
+											ref={followupAutocompleteRef}
+											placeholder="Type your response..."
+											onSubmit={(text: string) => {
+												if (text && text.trim()) {
+													handleSubmit(text)
+													useUIStateStore.getState().setShowCustomInput(false)
+													setIsTransitioningToCustomInput(false)
+												}
+											}}
+											isActive={true}
+											triggers={autocompleteTriggers}
+											onPickerStateChange={handlePickerStateChange}
+											prompt="> "
+										/>
+										<HorizontalLine active={isInputAreaActive} />
+										{pickerState.isOpen ? (
+											<Box flexDirection="column" height={PICKER_HEIGHT}>
+												<PickerSelect
+													results={pickerState.results}
+													selectedIndex={pickerState.selectedIndex}
+													maxVisible={PICKER_HEIGHT - 1}
+													onSelect={handlePickerSelect}
+													onEscape={handlePickerClose}
+													onIndexChange={handlePickerIndexChange}
+													renderItem={getPickerRenderItem()}
+													emptyMessage={pickerState.activeTrigger?.emptyMessage}
+													isActive={isInputAreaActive && pickerState.isOpen}
+													isLoading={pickerState.isLoading}
+												/>
+											</Box>
+										) : (
+											<Box height={1}>{statusBarMessage}</Box>
+										)}
+									</Box>
+								)}
+							</Box>
+						) : showApprovalPrompt ? (
+							<Box flexDirection="column">
+								<Text color={theme.rooHeader}>{pendingAsk?.content}</Text>
 								<Text color={theme.dimText}>
-									↑↓ navigate • Enter select
-									{countdownSeconds !== null && (
-										<Text color="yellow"> • Auto-select in {countdownSeconds}s</Text>
-									)}
+									Press <Text color={theme.successColor}>Y</Text> to approve,{" "}
+									<Text color={theme.errorColor}>N</Text> to reject
 								</Text>
+								<Box height={1}>{statusBarMessage}</Box>
 							</Box>
 						) : (
-							<Box flexDirection="column" marginTop={1}>
+							<Box flexDirection="column">
 								<HorizontalLine active={isInputAreaActive} />
 								<AutocompleteInput
-									ref={followupAutocompleteRef}
-									placeholder="Type your response..."
-									onSubmit={(text: string) => {
-										if (text && text.trim()) {
-											handleSubmit(text)
-											useUIStateStore.getState().setShowCustomInput(false)
-											setIsTransitioningToCustomInput(false)
-										}
-									}}
-									isActive={true}
+									ref={autocompleteRef}
+									placeholder={isComplete ? "Type to continue..." : ""}
+									onSubmit={handleSubmit}
+									isActive={isInputAreaActive}
 									triggers={autocompleteTriggers}
 									onPickerStateChange={handlePickerStateChange}
-									prompt="> "
+									prompt="› "
 								/>
 								<HorizontalLine active={isInputAreaActive} />
-								{pickerState.isOpen ? (
+								{showTodoViewer ? (
+									<Box flexDirection="column" height={PICKER_HEIGHT}>
+										<TodoDisplay todos={currentTodos} showProgress={true} title="TODO List" />
+										<Box height={1}>
+											<Text color={theme.dimText}>Ctrl+T to close</Text>
+										</Box>
+									</Box>
+								) : pickerState.isOpen ? (
 									<Box flexDirection="column" height={PICKER_HEIGHT}>
 										<PickerSelect
 											results={pickerState.results}
@@ -559,56 +852,8 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 							</Box>
 						)}
 					</Box>
-				) : showApprovalPrompt ? (
-					<Box flexDirection="column">
-						<Text color={theme.rooHeader}>{pendingAsk?.content}</Text>
-						<Text color={theme.dimText}>
-							Press <Text color={theme.successColor}>Y</Text> to approve,{" "}
-							<Text color={theme.errorColor}>N</Text> to reject
-						</Text>
-						<Box height={1}>{statusBarMessage}</Box>
-					</Box>
-				) : (
-					<Box flexDirection="column">
-						<HorizontalLine active={isInputAreaActive} />
-						<AutocompleteInput
-							ref={autocompleteRef}
-							placeholder={isComplete ? "Type to continue..." : ""}
-							onSubmit={handleSubmit}
-							isActive={isInputAreaActive}
-							triggers={autocompleteTriggers}
-							onPickerStateChange={handlePickerStateChange}
-							prompt="› "
-						/>
-						<HorizontalLine active={isInputAreaActive} />
-						{showTodoViewer ? (
-							<Box flexDirection="column" height={PICKER_HEIGHT}>
-								<TodoDisplay todos={currentTodos} showProgress={true} title="TODO List" />
-								<Box height={1}>
-									<Text color={theme.dimText}>Ctrl+T to close</Text>
-								</Box>
-							</Box>
-						) : pickerState.isOpen ? (
-							<Box flexDirection="column" height={PICKER_HEIGHT}>
-								<PickerSelect
-									results={pickerState.results}
-									selectedIndex={pickerState.selectedIndex}
-									maxVisible={PICKER_HEIGHT - 1}
-									onSelect={handlePickerSelect}
-									onEscape={handlePickerClose}
-									onIndexChange={handlePickerIndexChange}
-									renderItem={getPickerRenderItem()}
-									emptyMessage={pickerState.activeTrigger?.emptyMessage}
-									isActive={isInputAreaActive && pickerState.isOpen}
-									isLoading={pickerState.isLoading}
-								/>
-							</Box>
-						) : (
-							<Box height={1}>{statusBarMessage}</Box>
-						)}
-					</Box>
-				)}
-			</Box>
+				</>
+			)}
 		</Box>
 	)
 }

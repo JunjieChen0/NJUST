@@ -9,6 +9,8 @@ import ProgressBar from "./ProgressBar.js"
 interface MetricsDisplayProps {
 	tokenUsage: TokenUsage
 	contextWindow: number
+	condenseInProgress?: boolean
+	contextWarningThreshold?: number
 }
 
 /**
@@ -44,22 +46,33 @@ function formatCost(cost: number): string {
  * Displays task metrics in a compact format:
  * $0.12 │ ↓45.2K │ ↑8.7K │ [████████░░░░] 62%
  */
-function MetricsDisplay({ tokenUsage, contextWindow }: MetricsDisplayProps) {
+function MetricsDisplay({
+	tokenUsage,
+	contextWindow,
+	condenseInProgress = false,
+	contextWarningThreshold = 0.8,
+}: MetricsDisplayProps) {
 	const { totalCost, totalTokensIn, totalTokensOut, contextTokens } = tokenUsage
+	const contextPercent = contextWindow > 0 ? contextTokens / contextWindow : 0
+	const isWarning = contextPercent >= contextWarningThreshold
 
 	return (
-		<Box>
-			<Text color={theme.text}>{formatCost(totalCost)}</Text>
-			<Text color={theme.dimText}> • </Text>
-			<Text color={theme.dimText}>
-				↓ <Text color={theme.text}>{formatNumber(totalTokensIn)}</Text>
-			</Text>
-			<Text color={theme.dimText}> • </Text>
-			<Text color={theme.dimText}>
-				↑ <Text color={theme.text}>{formatNumber(totalTokensOut)}</Text>
-			</Text>
-			<Text color={theme.dimText}> • </Text>
-			<ProgressBar value={contextTokens} max={contextWindow} width={12} />
+		<Box flexDirection="column" alignItems="flex-end">
+			<Box>
+				<Text color={theme.text}>{formatCost(totalCost)}</Text>
+				<Text color={theme.dimText}> • </Text>
+				<Text color={theme.dimText}>
+					↓ <Text color={theme.text}>{formatNumber(totalTokensIn)}</Text>
+				</Text>
+				<Text color={theme.dimText}> • </Text>
+				<Text color={theme.dimText}>
+					↑ <Text color={theme.text}>{formatNumber(totalTokensOut)}</Text>
+				</Text>
+				<Text color={theme.dimText}> • </Text>
+				<ProgressBar value={contextTokens} max={contextWindow} width={12} />
+				<Text color={isWarning ? theme.warningColor : theme.dimText}> {Math.round(contextPercent * 100)}%</Text>
+			</Box>
+			{condenseInProgress && <Text color={theme.warningColor}>Condensing context...</Text>}
 		</Box>
 	)
 }

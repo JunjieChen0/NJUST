@@ -15,6 +15,13 @@ describe("globalCommands", () => {
 			expect(newCommand?.description).toBe("Start a new task")
 		})
 
+		it("should contain the /settings command", () => {
+			const settingsCommand = GLOBAL_COMMANDS.find((cmd) => cmd.name === "settings")
+			expect(settingsCommand).toBeDefined()
+			expect(settingsCommand?.action).toBe("openSettings")
+			expect(settingsCommand?.description).toBe("Open settings panel")
+		})
+
 		it("should have valid structure for all commands", () => {
 			for (const cmd of GLOBAL_COMMANDS) {
 				expect(cmd.name).toBeTruthy()
@@ -80,7 +87,14 @@ describe("globalCommands", () => {
 	describe("type safety", () => {
 		it("should have valid GlobalCommandAction types", () => {
 			// This test ensures the type is properly constrained
-			const validActions: GlobalCommandAction[] = ["clearTask"]
+			const validActions: GlobalCommandAction[] = [
+				"clearTask",
+				"openSettings",
+				"enhancePrompt",
+				"toggleWebSearch",
+				"openFileChanges",
+				"openHistory",
+			]
 
 			for (const cmd of GLOBAL_COMMANDS) {
 				expect(validActions).toContain(cmd.action)

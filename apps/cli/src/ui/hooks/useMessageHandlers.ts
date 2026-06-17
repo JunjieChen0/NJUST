@@ -1,10 +1,21 @@
 import { useCallback, useRef } from "react"
-import type { ExtensionMessage, ClineMessage, ClineAsk, ClineSay, TodoItem } from "@njust-ai/types"
+import type {
+	ExtensionMessage,
+	ClineMessage,
+	ClineAsk,
+	ClineSay,
+	TodoItem,
+	ProviderSettingsEntry,
+	McpServer,
+	QueuedMessage,
+	GitCommit,
+} from "@njust-ai/types"
 import { consolidateTokenUsage, consolidateApiRequests, consolidateCommands } from "@njust-ai/core/cli"
 
 import type { TUIMessage, ToolData } from "../types.js"
 import type { FileResult, SlashCommandResult, ModeResult } from "../components/autocomplete/index.js"
 import { useCLIStore } from "../store.js"
+import { useUIStateStore } from "../stores/uiStateStore.js"
 import { extractToolData, formatToolOutput, formatToolAskMessage, parseTodosFromToolInfo } from "../utils/tools.js"
 
 export interface UseMessageHandlersOptions {
@@ -42,6 +53,18 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 		setTokenUsage,
 		setRouterModels,
 		setTaskHistory,
+		setCondenseTaskContextInProgress,
+		setCurrentApiConfigName,
+		setListApiConfigMeta,
+		setApiConfiguration,
+		setMcpServers,
+		setAutoApprovalSettings,
+		setEnableWebSearch,
+		setAllowedCommands,
+		setAvailableModels,
+		setQueuedMessages,
+		setCommitSearchResults,
+		setCurrentCheckpoint,
 		currentTodos,
 		setTodos,
 	} = useCLIStore()
@@ -62,6 +85,24 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 			const isResuming = useCLIStore.getState().isResumingTask
 
 			if (say === "checkpoint_saved") {
+				const checkpoint = useCLIStore.getState().currentCheckpoint
+				if (checkpoint) {
+					seenMessageIds.current.add(messageId)
+					addMessage({
+						id: messageId,
+						role: "assistant",
+						content: `Checkpoint saved: ${checkpoint.commitHash.slice(0, 7)}`,
+						toolName: "checkpoint",
+						toolDisplayName: "Checkpoint",
+						toolDisplayOutput: `Checkpoint saved: ${checkpoint.commitHash.slice(0, 7)}`,
+						originalType: say,
+						toolData: {
+							tool: "checkpoint",
+							commitHash: checkpoint.commitHash,
+							ts: checkpoint.ts,
+						},
+					})
+				}
 				return
 			}
 
@@ -315,6 +356,46 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 					setCurrentMode(newMode)
 				}
 
+				// Extract and update API configuration profile metadata
+				if (state.currentApiConfigName !== undefined) {
+					setCurrentApiConfigName(state.currentApiConfigName)
+				}
+
+				if (state.listApiConfigMeta !== undefined) {
+					setListApiConfigMeta((state.listApiConfigMeta as ProviderSettingsEntry[]) || [])
+				}
+
+				if (state.apiConfiguration !== undefined) {
+					setApiConfiguration(state.apiConfiguration)
+				}
+
+				// Extract auto-approve settings
+				setAutoApprovalSettings({
+					autoApprovalEnabled: state.autoApprovalEnabled ?? false,
+					alwaysAllowReadOnly: state.alwaysAllowReadOnly ?? false,
+					alwaysAllowWrite: state.alwaysAllowWrite ?? false,
+					alwaysAllowExecute: state.alwaysAllowExecute ?? false,
+					alwaysAllowMcp: state.alwaysAllowMcp ?? false,
+					alwaysAllowModeSwitch: state.alwaysAllowModeSwitch ?? false,
+					alwaysAllowSubtasks: state.alwaysAllowSubtasks ?? false,
+					alwaysAllowFollowupQuestions: state.alwaysAllowFollowupQuestions ?? false,
+				})
+
+				// Extract web search toggle
+				if (state.enableWebSearch !== undefined) {
+					setEnableWebSearch(state.enableWebSearch)
+				}
+
+				// Extract allowed commands
+				if (state.allowedCommands !== undefined) {
+					setAllowedCommands(state.allowedCommands || [])
+				}
+
+				// Extract queued messages
+				if (state.messageQueue !== undefined) {
+					setQueuedMessages((state.messageQueue as QueuedMessage[]) || [])
+				}
+
 				// Extract and update task history from state
 				const newTaskHistory = state.taskHistory
 
@@ -378,13 +459,65 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 				}
 			} else if (msg.type === "fileSearchResults") {
 				setFileSearchResults((msg.results as FileResult[]) || [])
+			} else if (msg.type === "commitSearchResults") {
+				setCommitSearchResults((msg.commits || []).map((c) => ({ ...c, key: c.hash })) as GitCommit[])
 			} else if (msg.type === "commands") {
 				setAllSlashCommands((msg.commands as SlashCommandResult[]) || [])
 			} else if (msg.type === "modes") {
 				setAvailableModes((msg.modes as ModeResult[]) || [])
+			} else if (msg.type === "listApiConfig") {
+				if (msg.listApiConfig) {
+					setListApiConfigMeta(msg.listApiConfig)
+				}
+			} else if (msg.type === "mcpServers") {
+				if (msg.mcpServers) {
+					setMcpServers(msg.mcpServers as McpServer[])
+				}
+			} else if (msg.type === "currentCheckpointUpdated") {
+				if (msg.checkpointWarning) {
+					console.warn(`Checkpoint warning: ${msg.checkpointWarning.type}`)
+				}
+				if (msg.values?.ts && msg.values?.commitHash) {
+					setCurrentCheckpoint({
+						ts: msg.values.ts as number,
+						commitHash: msg.values.commitHash as string,
+					})
+				}
 			} else if (msg.type === "routerModels") {
 				if (msg.routerModels) {
 					setRouterModels(msg.routerModels)
+				}
+			} else if (msg.type === "condenseTaskContextStarted") {
+				setCondenseTaskContextInProgress(true)
+			} else if (msg.type === "condenseTaskContextResponse") {
+				setCondenseTaskContextInProgress(false)
+			} else if (msg.type === "enhancedPrompt") {
+				if (msg.text) {
+					useUIStateStore.getState().setPendingPromptReplacement(msg.text)
+				}
+			} else if (msg.type === "openAiModels") {
+				if (msg.openAiModels) {
+					setAvailableModels("openai", msg.openAiModels)
+				}
+			} else if (msg.type === "ollamaModels") {
+				if (msg.ollamaModels) {
+					setAvailableModels("ollama", Object.keys(msg.ollamaModels))
+				}
+			} else if (msg.type === "lmStudioModels") {
+				if (msg.lmStudioModels) {
+					setAvailableModels("lmstudio", Object.keys(msg.lmStudioModels))
+				}
+			} else if (msg.type === "vsCodeLmModels") {
+				if (msg.vsCodeLmModels) {
+					setAvailableModels(
+						"vscode-lm",
+						msg.vsCodeLmModels.map((m) => m.id || m.family || "unknown"),
+					)
+				}
+			} else if (msg.type === "singleRouterModelFetchResponse") {
+				// Single model fetch response - extract provider and models
+				if (msg.values?.provider && msg.values?.models) {
+					setAvailableModels(msg.values.provider as string, msg.values.models as string[])
 				}
 			}
 		},
@@ -398,6 +531,18 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 			setTokenUsage,
 			setRouterModels,
 			setTaskHistory,
+			setCondenseTaskContextInProgress,
+			setCurrentApiConfigName,
+			setListApiConfigMeta,
+			setApiConfiguration,
+			setMcpServers,
+			setAutoApprovalSettings,
+			setEnableWebSearch,
+			setAllowedCommands,
+			setAvailableModels,
+			setQueuedMessages,
+			setCommitSearchResults,
+			setCurrentCheckpoint,
 		],
 	)
 

@@ -15,6 +15,9 @@ interface HeaderProps extends ExtensionHostOptions {
 	version: string
 	tokenUsage?: TokenUsage | null
 	contextWindow?: number
+	condenseInProgress?: boolean
+	onCondense?: () => void
+	currentApiConfigName?: string | null
 }
 
 function Header({
@@ -28,12 +31,19 @@ function Header({
 	version,
 	tokenUsage,
 	contextWindow,
+	condenseInProgress,
+	onCondense,
+	currentApiConfigName: _currentApiConfigName,
 }: HeaderProps) {
 	const { columns } = useTerminalSize()
 
 	const homeDir = process.env.HOME || process.env.USERPROFILE || ""
 	const title = `NJUST_AI CLI v${version}`
 	const remainingDashes = Math.max(0, columns - `── ${title} `.length)
+
+	const contextPercent =
+		tokenUsage && contextWindow && contextWindow > 0 ? tokenUsage.contextTokens / contextWindow : 0
+	const showCondenseHint = contextPercent >= 0.8 && !condenseInProgress && onCondense
 
 	return (
 		<Box flexDirection="column" width={columns}>
@@ -53,17 +63,25 @@ function Header({
 						</Text>
 						<Text color={theme.dimText}>
 							{provider}: {model} [{reasoningEffort}]
+							<Text color={theme.dimText}> (Ctrl+P for profiles)</Text>
 						</Text>
 						<Text color={theme.dimText}>
 							mode: {mode}
 							{nonInteractive && " (YOLO)"}
 						</Text>
+						{showCondenseHint && (
+							<Text color={theme.warningColor}>Context high • press Ctrl+R to condense</Text>
+						)}
 					</Box>
 				</Box>
 			</Box>
 			{tokenUsage && contextWindow && contextWindow > 0 && (
 				<Box alignSelf="flex-end" marginTop={-1}>
-					<MetricsDisplay tokenUsage={tokenUsage} contextWindow={contextWindow} />
+					<MetricsDisplay
+						tokenUsage={tokenUsage}
+						contextWindow={contextWindow}
+						condenseInProgress={condenseInProgress}
+					/>
 				</Box>
 			)}
 			<Text color={theme.borderColor}>{"─".repeat(columns)}</Text>

@@ -73,6 +73,10 @@ export interface ToolData {
 	lineNumber?: number
 	/** Additional file count for batch operations */
 	additionalFileCount?: number
+
+	/** Checkpoint metadata */
+	commitHash?: string
+	ts?: number
 }
 
 export interface TUIMessage {

@@ -158,6 +158,9 @@ export function useExtensionHost({
 				// postStateToWebview which includes taskHistory).
 				host.sendToExtension({ type: "requestCommands" })
 				host.sendToExtension({ type: "requestModes" })
+				host.sendToExtension({ type: "getListApiConfiguration" })
+				host.sendToExtension({ type: "requestRouterModels" })
+				host.sendToExtension({ type: "openMcpSettings" })
 
 				if (requestedSessionId || continueSession) {
 					await pWaitFor(() => hasReceivedTaskHistory, {

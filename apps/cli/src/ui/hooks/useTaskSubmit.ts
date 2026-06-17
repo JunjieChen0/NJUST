@@ -12,6 +12,10 @@ export interface UseTaskSubmitOptions {
 	runTask: ((prompt: string) => Promise<void>) | null
 	seenMessageIds: React.MutableRefObject<Set<string>>
 	firstTextMessageSkipped: React.MutableRefObject<boolean>
+	openSettings?: () => void
+	openFileChanges?: () => void
+	openHistory?: () => void
+	showInfo?: (msg: string, duration?: number) => void
 }
 
 export interface UseTaskSubmitReturn {
@@ -35,12 +39,18 @@ export function useTaskSubmit({
 	runTask,
 	seenMessageIds,
 	firstTextMessageSkipped,
+	openSettings,
+	openFileChanges,
+	openHistory,
+	showInfo,
 }: UseTaskSubmitOptions): UseTaskSubmitReturn {
 	const {
 		pendingAsk,
 		hasStartedTask,
 		isComplete,
+		isLoading,
 		addMessage,
+		addQueuedMessage,
 		setPendingAsk,
 		setHasStartedTask,
 		setLoading,
@@ -86,6 +96,54 @@ export function useTaskSubmit({
 						sendToExtension({ type: "requestModes" })
 						return
 					}
+
+					if (globalCommand?.action === "openSettings") {
+						openSettings?.()
+						return
+					}
+
+					if (globalCommand?.action === "enhancePrompt") {
+						// Extract the text after /enhance
+						const enhanceText = trimmedText.replace(/^\/enhance\s*/, "").trim()
+						if (enhanceText && sendToExtension) {
+							sendToExtension({ type: "enhancePrompt", text: enhanceText })
+							showInfo?.("Enhancing prompt...", 2000)
+						} else {
+							showInfo?.("Usage: /enhance <text>", 2000)
+						}
+						return
+					}
+
+					if (globalCommand?.action === "toggleWebSearch") {
+						if (sendToExtension) {
+							const currentState = useCLIStore.getState().enableWebSearch
+							sendToExtension({
+								type: "updateSettings",
+								updatedSettings: { enableWebSearch: !currentState },
+							})
+							showInfo?.(`Web search ${!currentState ? "enabled" : "disabled"}`, 2000)
+						}
+						return
+					}
+
+					if (globalCommand?.action === "openFileChanges") {
+						openFileChanges?.()
+						return
+					}
+
+					if (globalCommand?.action === "openHistory") {
+						openHistory?.()
+						return
+					}
+				}
+
+				// When a task is already running, queue the message instead of sending immediately
+				if (isLoading && hasStartedTask) {
+					if (sendToExtension) {
+						sendToExtension({ type: "queueMessage", text: trimmedText })
+						addQueuedMessage(trimmedText)
+					}
+					return
 				}
 			}
 
@@ -136,7 +194,9 @@ export function useTaskSubmit({
 			pendingAsk,
 			hasStartedTask,
 			isComplete,
+			isLoading,
 			addMessage,
+			addQueuedMessage,
 			setPendingAsk,
 			setHasStartedTask,
 			setLoading,
@@ -146,6 +206,10 @@ export function useTaskSubmit({
 			setIsTransitioningToCustomInput,
 			seenMessageIds,
 			firstTextMessageSkipped,
+			openSettings,
+			openFileChanges,
+			openHistory,
+			showInfo,
 		],
 	)
 

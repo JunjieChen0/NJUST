@@ -23,6 +23,21 @@ interface UIState {
 	// TODO viewer overlay
 	showTodoViewer: boolean
 
+	// API profile picker overlay
+	showModelPicker: boolean
+
+	// Settings overlay
+	showSettings: boolean
+
+	// File changes panel
+	showFileChanges: boolean
+
+	// History view
+	showHistory: boolean
+
+	// Pending prompt replacement (from /enhance response)
+	pendingPromptReplacement: string | null
+
 	// Autocomplete picker state
 	pickerState: AutocompletePickerState
 }
@@ -45,6 +60,21 @@ interface UIActions {
 	// TODO viewer actions
 	setShowTodoViewer: (show: boolean) => void
 
+	// API profile picker actions
+	setShowModelPicker: (show: boolean) => void
+
+	// Settings overlay actions
+	setShowSettings: (show: boolean) => void
+
+	// File changes panel actions
+	setShowFileChanges: (show: boolean) => void
+
+	// History view actions
+	setShowHistory: (show: boolean) => void
+
+	// Pending prompt replacement actions
+	setPendingPromptReplacement: (text: string | null) => void
+
 	// Picker state actions
 	setPickerState: (state: AutocompletePickerState) => void
 
@@ -60,6 +90,11 @@ const initialState: UIState = {
 	isTransitioningToCustomInput: false,
 	manualFocus: null,
 	showTodoViewer: false,
+	showModelPicker: false,
+	showSettings: false,
+	showFileChanges: false,
+	showHistory: false,
+	pendingPromptReplacement: null,
 	pickerState: {
 		activeTrigger: null,
 		results: [],
@@ -80,6 +115,11 @@ export const useUIStateStore = create<UIState & UIActions>((set) => ({
 	setIsTransitioningToCustomInput: (transitioning) => set({ isTransitioningToCustomInput: transitioning }),
 	setManualFocus: (focus) => set({ manualFocus: focus }),
 	setShowTodoViewer: (show) => set({ showTodoViewer: show }),
+	setShowModelPicker: (show) => set({ showModelPicker: show }),
+	setShowSettings: (show) => set({ showSettings: show }),
+	setShowFileChanges: (show) => set({ showFileChanges: show }),
+	setShowHistory: (show) => set({ showHistory: show }),
+	setPendingPromptReplacement: (text) => set({ pendingPromptReplacement: text }),
 	setPickerState: (state) => set({ pickerState: state }),
 	resetUIState: () => set(initialState),
 }))

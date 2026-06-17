@@ -10,7 +10,13 @@
  * Action types that can be triggered by global commands.
  * Each action corresponds to a message type sent to the extension host.
  */
-export type GlobalCommandAction = "clearTask"
+export type GlobalCommandAction =
+	| "clearTask"
+	| "openSettings"
+	| "enhancePrompt"
+	| "toggleWebSearch"
+	| "openFileChanges"
+	| "openHistory"
 
 /**
  * Definition of a CLI global command
@@ -33,6 +39,31 @@ export const GLOBAL_COMMANDS: GlobalCommand[] = [
 		name: "new",
 		description: "Start a new task",
 		action: "clearTask",
+	},
+	{
+		name: "settings",
+		description: "Open settings panel",
+		action: "openSettings",
+	},
+	{
+		name: "enhance",
+		description: "Enhance the current prompt using AI",
+		action: "enhancePrompt",
+	},
+	{
+		name: "websearch",
+		description: "Toggle web search on/off",
+		action: "toggleWebSearch",
+	},
+	{
+		name: "changes",
+		description: "Show file changes summary",
+		action: "openFileChanges",
+	},
+	{
+		name: "history",
+		description: "Show full task history",
+		action: "openHistory",
 	},
 ]
 
