@@ -1,5 +1,8 @@
-import { Spinner } from "@inkjs/ui"
 import { memo, useMemo } from "react"
+import { Text } from "ink"
+
+import { Spinner } from "../chrome/Spinner.js"
+import { useTheme } from "../theme.js"
 
 const THINKING_PHRASES = [
 	"Thinking",
@@ -26,6 +29,8 @@ interface LoadingTextProps {
 }
 
 function LoadingText({ children }: LoadingTextProps) {
+	const theme = useTheme()
+
 	const randomPhrase = useMemo(() => {
 		const randomIndex = Math.floor(Math.random() * THINKING_PHRASES.length)
 		return THINKING_PHRASES[randomIndex]
@@ -35,7 +40,11 @@ function LoadingText({ children }: LoadingTextProps) {
 	const useRandomPhrase = !children || childrenStr === "Thinking"
 	const label = useRandomPhrase ? `${randomPhrase}...` : `${childrenStr}...`
 
-	return <Spinner label={label} />
+	return (
+		<Text>
+			<Spinner /> <Text color={theme.textMuted}>{label}</Text>
+		</Text>
+	)
 }
 
 export default memo(LoadingText)

@@ -3,11 +3,11 @@ import { Text, Box } from "ink"
 
 import type { TokenUsage } from "@njust-ai/types"
 
-import { ASCII_ROO } from "@/types/constants.js"
+import { NJUST_AI_LOGO } from "@/types/constants.js"
 
 import { ExtensionHostOptions } from "@/agent/index.js"
 import { useTerminalSize } from "../hooks/TerminalSizeContext.js"
-import * as theme from "../theme.js"
+import { useTheme } from "../theme.js"
 
 import MetricsDisplay from "./MetricsDisplay.js"
 
@@ -22,24 +22,24 @@ interface HeaderProps extends ExtensionHostOptions {
 
 function Header({
 	workspacePath,
-	user,
+	user: _user,
 	provider,
 	model,
 	mode,
-	reasoningEffort,
-	nonInteractive,
-	version,
+	reasoningEffort: _reasoningEffort,
+	nonInteractive: _nonInteractive,
+	version: _version,
 	tokenUsage,
 	contextWindow,
 	condenseInProgress,
 	onCondense,
 	currentApiConfigName: _currentApiConfigName,
 }: HeaderProps) {
+	const theme = useTheme()
 	const { columns } = useTerminalSize()
 
 	const homeDir = process.env.HOME || process.env.USERPROFILE || ""
-	const title = `NJUST_AI CLI v${version}`
-	const remainingDashes = Math.max(0, columns - `── ${title} `.length)
+	const displayPath = workspacePath.startsWith(homeDir) ? workspacePath.replace(homeDir, "~") : workspacePath
 
 	const contextPercent =
 		tokenUsage && contextWindow && contextWindow > 0 ? tokenUsage.contextTokens / contextWindow : 0
@@ -47,44 +47,33 @@ function Header({
 
 	return (
 		<Box flexDirection="column" width={columns}>
-			<Text color={theme.borderColor}>
-				── <Text color={theme.titleColor}>{title}</Text> {"─".repeat(remainingDashes)}
-			</Text>
-			<Box width={columns}>
-				<Box flexDirection="row">
-					<Box marginY={1}>
-						<Text color="magenta">{ASCII_ROO}</Text>
-					</Box>
-					<Box flexDirection="column" marginLeft={1} marginTop={1}>
-						{user && <Text color={theme.dimText}>Welcome back, {user.name}</Text>}
-						<Text color={theme.dimText}>
-							cwd:{" "}
-							{workspacePath.startsWith(homeDir) ? workspacePath.replace(homeDir, "~") : workspacePath}
+			<Box flexDirection="row">
+				<Text color={theme.borderColor}>┃ </Text>
+				<Box flexDirection="column" flexGrow={1}>
+					{NJUST_AI_LOGO.map((line, i) => (
+						<Text key={i} color={i === 0 ? theme.primary : theme.text} bold={i === 1}>
+							{line}
 						</Text>
-						<Text color={theme.dimText}>
-							{provider}: {model} [{reasoningEffort}]
-							<Text color={theme.dimText}> (Ctrl+P for profiles)</Text>
-						</Text>
-						<Text color={theme.dimText}>
-							mode: {mode}
-							{nonInteractive && " (YOLO)"}
-						</Text>
-						{showCondenseHint && (
-							<Text color={theme.warningColor}>Context high • press Ctrl+R to condense</Text>
-						)}
-					</Box>
+					))}
+					<Text color={theme.dimText}> {displayPath}</Text>
 				</Box>
+				{tokenUsage && contextWindow && contextWindow > 0 && (
+					<Box flexDirection="column" alignItems="flex-end">
+						<MetricsDisplay
+							tokenUsage={tokenUsage}
+							contextWindow={contextWindow}
+							condenseInProgress={condenseInProgress}
+						/>
+					</Box>
+				)}
 			</Box>
-			{tokenUsage && contextWindow && contextWindow > 0 && (
-				<Box alignSelf="flex-end" marginTop={-1}>
-					<MetricsDisplay
-						tokenUsage={tokenUsage}
-						contextWindow={contextWindow}
-						condenseInProgress={condenseInProgress}
-					/>
-				</Box>
+			{showCondenseHint && (
+				<Text color={theme.warningColor}>
+					{" "}
+					┃ Context high • press Ctrl+R to condense
+				</Text>
 			)}
-			<Text color={theme.borderColor}>{"─".repeat(columns)}</Text>
+			<Text color={theme.backgroundElement}>{"▀".repeat(columns)}</Text>
 		</Box>
 	)
 }

@@ -3,7 +3,7 @@ import { Box, Text } from "ink"
 
 import type { TodoItem } from "@njust-ai/types"
 
-import * as theme from "../theme.js"
+import { useTheme, getTheme } from "../theme.js"
 
 /**
  * Status icons for TODO items using Unicode characters
@@ -18,14 +18,15 @@ const STATUS_ICONS = {
  * Get the color for a TODO status
  */
 function getStatusColor(status: TodoItem["status"]): string {
+	const t = getTheme()
 	switch (status) {
 		case "completed":
-			return theme.successColor
+			return t.successColor
 		case "in_progress":
-			return theme.warningColor
+			return t.warningColor
 		case "pending":
 		default:
-			return theme.dimText
+			return t.dimText
 	}
 }
 
@@ -50,6 +51,7 @@ interface TodoChangeDisplayProps {
  * ```
  */
 function TodoChangeDisplay({ previousTodos, newTodos }: TodoChangeDisplayProps) {
+	const theme = useTheme()
 	if (!newTodos || newTodos.length === 0) {
 		return null
 	}

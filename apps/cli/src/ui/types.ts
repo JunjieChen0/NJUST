@@ -89,12 +89,35 @@ export interface TUIMessage {
 	hasPendingToolCalls?: boolean
 	partial?: boolean
 	originalType?: ClineAsk | ClineSay
+	/** 1-based index among user messages, for /edit and /delete commands. */
+	messageNumber?: number
 	/** TODO items for update_todo_list tool messages */
 	todos?: TodoItem[]
 	/** Previous TODO items for diff display */
 	previousTodos?: TodoItem[]
 	/** Structured tool data for rich rendering */
 	toolData?: ToolData
+	/**
+	 * Lifecycle status of a tool message, mirroring OpenCode's
+	 * `InlineTool`/`BlockTool` status states.
+	 * - `pending`: awaiting user approval
+	 * - `running`: approved / executing
+	 * - `done`: completed successfully
+	 * - `error`: failed or rejected
+	 */
+	toolStatus?: "pending" | "running" | "done" | "error"
+	/**
+	 * For `thinking` messages: the wall-clock start time (ms) of the
+	 * reasoning block. Captured when the first partial chunk arrives.
+	 * Used to render the OpenCode-style `Thought: Xs` duration label.
+	 */
+	thinkingStartTs?: number
+	/**
+	 * For `thinking` messages: the wall-clock end time (ms), set when the
+	 * final (non-partial) reasoning chunk arrives. While undefined, the
+	 * reasoning is still streaming.
+	 */
+	thinkingEndTs?: number
 }
 
 export interface PendingAsk {

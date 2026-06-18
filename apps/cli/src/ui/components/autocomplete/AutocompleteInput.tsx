@@ -24,6 +24,13 @@ export interface AutocompleteInputProps<T extends AutocompleteItem = Autocomplet
 	onPickerStateChange?: (state: AutocompletePickerState<T>) => void
 	/** Prompt character for the first line (default: "> ") */
 	prompt?: string
+	/**
+	 * Override the columns value passed to `MultilineTextInput` for line-wrapping.
+	 * Defaults to terminal width. Use this when the input is rendered inside a
+	 * narrower container (e.g. the centered prompt panel) so wrapping respects
+	 * the panel width instead of overflowing.
+	 */
+	columnOverride?: number
 }
 
 /**
@@ -54,6 +61,7 @@ function AutocompleteInputInner<T extends AutocompleteItem>(
 		onSelect,
 		onPickerStateChange,
 		prompt = "> ",
+		columnOverride,
 	}: AutocompleteInputProps<T>,
 	ref: Ref<AutocompleteInputHandle<T>>,
 ) {
@@ -64,6 +72,7 @@ function AutocompleteInputInner<T extends AutocompleteItem>(
 
 	// Get terminal size for proper line wrapping
 	const { columns } = useTerminalSize()
+	const effectiveColumns = columnOverride ?? columns
 
 	// Autocomplete picker state
 	const [pickerState, pickerActions] = useAutocompletePicker(triggers)
@@ -278,7 +287,7 @@ function AutocompleteInputInner<T extends AutocompleteItem>(
 			isActive={isActive}
 			showCursor={true}
 			prompt={prompt}
-			columns={columns}
+			columns={effectiveColumns}
 		/>
 	)
 }

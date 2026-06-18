@@ -35,6 +35,9 @@ interface UIState {
 	// History view
 	showHistory: boolean
 
+	// Command palette overlay
+	showCommandPalette: boolean
+
 	// Pending prompt replacement (from /enhance response)
 	pendingPromptReplacement: string | null
 
@@ -72,6 +75,9 @@ interface UIActions {
 	// History view actions
 	setShowHistory: (show: boolean) => void
 
+	// Command palette actions
+	setShowCommandPalette: (show: boolean) => void
+
 	// Pending prompt replacement actions
 	setPendingPromptReplacement: (text: string | null) => void
 
@@ -94,6 +100,7 @@ const initialState: UIState = {
 	showSettings: false,
 	showFileChanges: false,
 	showHistory: false,
+	showCommandPalette: false,
 	pendingPromptReplacement: null,
 	pickerState: {
 		activeTrigger: null,
@@ -119,6 +126,7 @@ export const useUIStateStore = create<UIState & UIActions>((set) => ({
 	setShowSettings: (show) => set({ showSettings: show }),
 	setShowFileChanges: (show) => set({ showFileChanges: show }),
 	setShowHistory: (show) => set({ showHistory: show }),
+	setShowCommandPalette: (show) => set({ showCommandPalette: show }),
 	setPendingPromptReplacement: (text) => set({ pendingPromptReplacement: text }),
 	setPickerState: (state) => set({ pickerState: state }),
 	resetUIState: () => set(initialState),

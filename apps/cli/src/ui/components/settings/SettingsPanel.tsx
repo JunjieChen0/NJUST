@@ -1,6 +1,6 @@
 import { Box, Text } from "ink"
 
-import * as theme from "../../theme.js"
+import { useTheme } from "../../theme.js"
 
 export interface ToggleSettingProps {
 	label: string
@@ -12,6 +12,7 @@ export interface ToggleSettingProps {
  * Simple toggle row for settings panels.
  */
 export function ToggleSetting({ label, enabled, onToggle: _onToggle }: ToggleSettingProps) {
+	const theme = useTheme()
 	return (
 		<Box>
 			<Text color={enabled ? theme.successColor : theme.dimText}>
@@ -27,6 +28,7 @@ export interface SettingsSectionProps {
 }
 
 export function SettingsSection({ title, children }: SettingsSectionProps) {
+	const theme = useTheme()
 	return (
 		<Box flexDirection="column" marginBottom={1}>
 			<Text color={theme.rooHeader} bold>
@@ -52,6 +54,7 @@ export function SettingsPanel({
 	children,
 	onClose: _onClose,
 }: SettingsPanelProps) {
+	const theme = useTheme()
 	return (
 		<Box flexDirection="column" padding={1}>
 			<Box flexDirection="row">

@@ -223,11 +223,26 @@ export function formatToolAskMessage(toolInfo: Record<string, unknown>): string 
 
 		case "write_to_file": {
 			const writePath = toolInfo.path as string
+			const batchDiffs = toolInfo.batchDiffs as Array<{ path: string }> | undefined
+			if (batchDiffs && batchDiffs.length > 0) {
+				return `Write ${batchDiffs.length} file(s)?\n${batchDiffs.map((d) => `  ${d.path}`).join("\n")}`
+			}
 			return `Write to file: ${writePath || "(no path)"}`
 		}
 
 		case "apply_diff": {
 			const diffPath = toolInfo.path as string
+			const batchDiffs = toolInfo.batchDiffs as
+				| Array<{ path: string; changeCount?: number; diffStats?: { added: number; removed: number } }>
+				| undefined
+			if (batchDiffs && batchDiffs.length > 0) {
+				const lines = batchDiffs.map((d) => {
+					const stats = d.diffStats ? ` (+${d.diffStats.added}/-${d.diffStats.removed})` : ""
+					const count = d.changeCount ? ` (${d.changeCount} changes)` : ""
+					return `  ${d.path}${count}${stats}`
+				})
+				return `Apply changes to ${batchDiffs.length} file(s)?\n${lines.join("\n")}`
+			}
 			return `Apply changes to: ${diffPath || "(no path)"}`
 		}
 

@@ -1,13 +1,16 @@
 import { memo } from "react"
 import { Box, Newline, Text } from "ink"
 
+import type { ClineSay } from "@njust-ai/types"
 import type { TUIMessage } from "../types.js"
 import type { WebviewMessage } from "@njust-ai/types"
-import * as theme from "../theme.js"
+import { useTheme, getTheme } from "../theme.js"
 
 import TodoDisplay from "./TodoDisplay.js"
 import { getToolRenderer } from "./tools/index.js"
 import { CheckpointActions } from "./CheckpointActions.js"
+import { ToolStatusIndicator } from "./ToolStatusIndicator.js"
+import { StreamingText } from "./StreamingText.js"
 
 /**
  * Tool categories for styling
@@ -32,16 +35,20 @@ function getToolCategory(toolName: string): ToolCategory {
 }
 
 /**
- * Category colors for tool types
+ * Category colors for tool types — resolved at call time from active theme.
  */
-const CATEGORY_COLORS: Record<ToolCategory, string> = {
-	file: theme.toolHeader,
-	directory: theme.toolHeader,
-	search: theme.warningColor,
-	command: theme.successColor,
-	mode: theme.userHeader,
-	completion: theme.successColor,
-	other: theme.toolHeader,
+function getCategoryColor(category: ToolCategory): string {
+	const t = getTheme()
+	const map: Record<ToolCategory, string> = {
+		file: t.toolHeader,
+		directory: t.toolHeader,
+		search: t.warningColor,
+		command: t.successColor,
+		mode: t.userHeader,
+		completion: t.successColor,
+		other: t.toolHeader,
+	}
+	return map[category]
 }
 
 /**
@@ -86,9 +93,10 @@ function parseToolInfo(content: string): Record<string, unknown> | null {
  * Render tool display component
  */
 function ToolDisplay({ message }: { message: TUIMessage }) {
+	const theme = useTheme()
 	const toolName = message.toolName || "unknown"
 	const category = getToolCategory(toolName)
-	const categoryColor = CATEGORY_COLORS[category]
+	const categoryColor = getCategoryColor(category)
 
 	// Try to parse the raw content for additional tool info
 	const toolInfo = parseToolInfo(message.content || "")
@@ -110,10 +118,13 @@ function ToolDisplay({ message }: { message: TUIMessage }) {
 
 	return (
 		<Box flexDirection="column" paddingX={1}>
-			{/* Tool Header */}
-			<Text bold color={categoryColor}>
-				{headerText}
-			</Text>
+			{/* Tool Header — includes lifecycle status indicator */}
+			<Box flexDirection="row" gap={1}>
+				<ToolStatusIndicator status={message.toolStatus} />
+				<Text bold color={categoryColor}>
+					{headerText}
+				</Text>
+			</Box>
 
 			{/* Path indicator for file/directory operations */}
 			{path && (
@@ -173,50 +184,114 @@ interface ChatHistoryItemProps {
 	message: TUIMessage
 	sendToExtension?: ((msg: WebviewMessage) => void) | null
 	workspacePath?: string
+	/**
+	 * When `true`, this is the most recent assistant message currently
+	 * streaming. Used to enable the typewriter reveal in
+	 * `<StreamingText>` for the live message only — historical messages
+	 * render fully without stepping to avoid re-animating on every store
+	 * update.
+	 */
+	isStreamingTarget?: boolean
 }
 
-function ChatHistoryItem({ message, sendToExtension, workspacePath }: ChatHistoryItemProps) {
+/**
+ * System event category for color-coded rendering.
+ */
+type SystemEventCategory = "error" | "warning" | "context" | "info"
+
+function getSystemEventCategory(originalType: TUIMessage["originalType"]): SystemEventCategory {
+	if (!originalType) return "info"
+	const errorTypes: ClineSay[] = ["error", "diff_error", "rooignore_error", "condense_context_error"]
+	const warningTypes: ClineSay[] = ["shell_integration_warning", "too_many_tools_warning"]
+	const contextTypes: ClineSay[] = ["condense_context", "sliding_window_truncation"]
+	if (errorTypes.includes(originalType as ClineSay)) return "error"
+	if (warningTypes.includes(originalType as ClineSay)) return "warning"
+	if (contextTypes.includes(originalType as ClineSay)) return "context"
+	return "info"
+}
+
+function getSystemEventMeta(category: SystemEventCategory): { color: string; label: string } {
+	const t = getTheme()
+	const map: Record<SystemEventCategory, { color: string; label: string }> = {
+		error: { color: t.errorColor, label: "✗ Error" },
+		warning: { color: t.warningColor, label: "⚠ Warning" },
+		context: { color: t.toolHeader, label: "⬇ Context" },
+		info: { color: t.dimText, label: "• System" },
+	}
+	return map[category]
+}
+
+function ChatHistoryItem({ message, sendToExtension, workspacePath, isStreamingTarget }: ChatHistoryItemProps) {
+	const theme = useTheme()
 	const content = sanitizeContent(message.content || "...")
 
 	switch (message.role) {
-		case "user":
+		case "user": {
+			const badge = message.messageNumber ? <Text color={theme.dimText}>[{message.messageNumber}] </Text> : null
 			return (
-				<Box flexDirection="column" paddingX={1}>
-					<Text bold color="magenta">
-						You said:
-					</Text>
-					<Text color={theme.userText}>
-						{content}
-						<Newline />
-					</Text>
+				<Box flexDirection="row" marginTop={1}>
+					{/* OpenCode uses a green "+" prefix for user messages. */}
+					<Text color={theme.successColor}>+ </Text>
+					<Box flexDirection="column" flexGrow={1} paddingRight={1}>
+						<Text color={theme.userText}>
+							{badge}
+							{content}
+							<Newline />
+						</Text>
+					</Box>
 				</Box>
 			)
-		case "assistant":
+		}
+		case "assistant": {
+			// Only the latest streaming assistant message gets the
+			// typewriter reveal. Historical messages render in full.
+			const isStreaming = isStreamingTarget === true && message.partial === true
 			return (
-				<Box flexDirection="column" paddingX={1}>
-					<Text bold color="yellow">
-						Njust-AI said:
-					</Text>
-					<Text color={theme.rooText}>
-						{content}
-						<Newline />
-					</Text>
+				<Box flexDirection="column" paddingLeft={3} marginTop={1}>
+					{isStreaming ? (
+						<StreamingText content={content} isStreaming={true} color={theme.rooText} />
+					) : (
+						<Text color={theme.rooText}>
+							{content}
+							<Newline />
+						</Text>
+					)}
 				</Box>
 			)
-		case "thinking":
+		}
+		case "thinking": {
+			// OpenCode-style "Thought: Xs" label derived from start/end ts.
+			const start = message.thinkingStartTs
+			const end = message.thinkingEndTs
+			const durationMs = start && end ? end - start : undefined
+			const durationLabel =
+				durationMs !== undefined
+					? durationMs < 1000
+						? `${Math.max(1, Math.round(durationMs / 100) / 10)}s`
+						: `${(durationMs / 1000).toFixed(1)}s`
+					: undefined
 			return (
-				<Box flexDirection="column" paddingX={1}>
-					<Text bold color={theme.thinkingHeader} dimColor>
-						Njust-AI is thinking:
-					</Text>
-					<Text color={theme.thinkingText} dimColor>
-						{content}
-						<Newline />
-					</Text>
+				<Box flexDirection="column" marginTop={1}>
+					{durationLabel && (
+						<Box paddingLeft={2}>
+							<Text color={theme.thinkingText} dimColor italic>
+								Thought: {durationLabel}
+							</Text>
+						</Box>
+					)}
+					<Box flexDirection="row">
+						<Text color={theme.thinkingHeader}>┃ </Text>
+						<Box flexDirection="column" flexGrow={1}>
+							<Text color={theme.thinkingText} dimColor italic>
+								{content}
+								<Newline />
+							</Text>
+						</Box>
+					</Box>
 				</Box>
 			)
+		}
 		case "tool": {
-			// Special rendering for update_todo_list tool - show full TODO list
 			if (
 				(message.toolName === "update_todo_list" || message.toolName === "updateTodoList") &&
 				message.todos &&
@@ -225,13 +300,15 @@ function ChatHistoryItem({ message, sendToExtension, workspacePath }: ChatHistor
 				return <TodoDisplay todos={message.todos} previousTodos={message.previousTodos} showProgress={true} />
 			}
 
-			// Render checkpoint actions for checkpoint tool messages
 			if (message.toolName === "checkpoint" && message.toolData?.commitHash && sendToExtension && workspacePath) {
 				return (
-					<Box flexDirection="column" paddingX={1}>
-						<Text bold color={theme.toolHeader}>
-							Checkpoint
-						</Text>
+					<Box flexDirection="column" paddingLeft={3}>
+						<Box flexDirection="row" gap={1}>
+							<ToolStatusIndicator status={message.toolStatus} />
+							<Text bold color={theme.toolHeader}>
+								Checkpoint
+							</Text>
+						</Box>
 						<Text color={theme.text}>{content}</Text>
 						<CheckpointActions
 							commitHash={message.toolData.commitHash}
@@ -246,26 +323,81 @@ function ChatHistoryItem({ message, sendToExtension, workspacePath }: ChatHistor
 				)
 			}
 
-			// Use the new structured tool renderers when toolData is available
 			if (message.toolData) {
 				const ToolRenderer = getToolRenderer(message.toolData.tool)
 				return <ToolRenderer toolData={message.toolData} rawContent={message.content} />
 			}
 
-			// Fallback to generic ToolDisplay for messages without toolData
 			return <ToolDisplay message={message} />
 		}
-		case "system":
-			// System messages are typically rendered as Header, not here.
-			// But if they appear, show them subtly.
+		case "system": {
+			const category = getSystemEventCategory(message.originalType)
+			const meta = getSystemEventMeta(category)
+
+			let displayContent = content
+			if (message.originalType === "too_many_tools_warning") {
+				try {
+					const data = JSON.parse(content) as {
+						toolCount?: number
+						serverCount?: number
+						threshold?: number
+					}
+					if (data.toolCount !== undefined) {
+						displayContent = `Too many MCP tools (${data.toolCount} tools from ${data.serverCount ?? 0} servers; threshold ${data.threshold ?? "?"}).`
+					}
+				} catch {
+					// Fall back to raw content
+				}
+			}
+
+			const isInProgress =
+				message.partial &&
+				(message.originalType === "condense_context" || message.originalType === "sliding_window_truncation")
+
+			// Error-category system events get a left-bordered "card" so
+			// they stand out from regular info lines (mirrors OpenCode's
+			// BlockTool error styling, which uses a left border + panel
+			// background).
+			if (category === "error") {
+				return (
+					<Box
+						flexDirection="column"
+						paddingLeft={1}
+						marginTop={1}
+						marginLeft={3}
+						borderStyle="bold"
+						borderColor={meta.color}
+						borderLeft
+						borderRight={false}
+						borderTop={false}
+						borderBottom={false}>
+						<Text bold color={meta.color}>
+							{meta.label}
+						</Text>
+						{displayContent && displayContent !== "..." && (
+							<Text color={meta.color}>
+								{displayContent}
+								<Newline />
+							</Text>
+						)}
+					</Box>
+				)
+			}
+
 			return (
-				<Box flexDirection="column" paddingX={1}>
-					<Text color="gray" dimColor>
-						{content}
-						<Newline />
+				<Box flexDirection="column" paddingLeft={3} marginTop={1}>
+					<Text bold color={meta.color}>
+						{isInProgress ? `${meta.label} (in progress)...` : meta.label}
 					</Text>
+					{displayContent && displayContent !== "..." && (
+						<Text color={meta.color}>
+							{displayContent}
+							<Newline />
+						</Text>
+					)}
 				</Box>
 			)
+		}
 		default:
 			return null
 	}

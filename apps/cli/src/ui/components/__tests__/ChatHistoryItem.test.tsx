@@ -166,7 +166,7 @@ describe("ChatHistoryItem", () => {
 	})
 
 	describe("message rendering", () => {
-		it("renders user messages with correct header", () => {
+		it("renders user messages with green + prefix", () => {
 			const message: TUIMessage = {
 				id: "1",
 				role: "user",
@@ -176,11 +176,12 @@ describe("ChatHistoryItem", () => {
 			const { lastFrame } = render(<ChatHistoryItem message={message} />)
 			const output = lastFrame()
 
-			expect(output).toContain("You said:")
+			// OpenCode-style green "+" prefix for user messages.
+			expect(output).toContain("+")
 			expect(output).toContain("Hello")
 		})
 
-		it("renders assistant messages with correct header", () => {
+		it("renders assistant messages with indentation", () => {
 			const message: TUIMessage = {
 				id: "2",
 				role: "assistant",
@@ -190,11 +191,10 @@ describe("ChatHistoryItem", () => {
 			const { lastFrame } = render(<ChatHistoryItem message={message} />)
 			const output = lastFrame()
 
-			expect(output).toContain("Njust-AI said:")
 			expect(output).toContain("Hi there")
 		})
 
-		it("renders thinking messages with correct header", () => {
+		it("renders thinking messages with left border", () => {
 			const message: TUIMessage = {
 				id: "3",
 				role: "thinking",
@@ -204,7 +204,7 @@ describe("ChatHistoryItem", () => {
 			const { lastFrame } = render(<ChatHistoryItem message={message} />)
 			const output = lastFrame()
 
-			expect(output).toContain("Njust-AI is thinking:")
+			expect(output).toContain("┃")
 			expect(output).toContain("Let me think...")
 		})
 
@@ -380,6 +380,46 @@ describe("ChatHistoryItem", () => {
 
 			// CompletionTool renders the question content directly without icon or header
 			expect(output).toContain("What color would you like?")
+		})
+	})
+
+	describe("tool status indicator", () => {
+		const baseToolMessage = (overrides: Partial<TUIMessage> = {}): TUIMessage => ({
+			id: "tool-1",
+			role: "tool",
+			content: JSON.stringify({ tool: "read_file", path: "test.txt", content: "data" }),
+			toolName: "read_file",
+			toolDisplayName: "Read File",
+			...overrides,
+		})
+
+		it("renders ✓ (done) indicator when toolStatus is 'done'", () => {
+			const message = baseToolMessage({ toolStatus: "done" })
+			const { lastFrame } = render(<ChatHistoryItem message={message} />)
+			expect(lastFrame() ?? "").toContain("✓")
+		})
+
+		it("renders ⧗ (pending) indicator when toolStatus is 'pending'", () => {
+			const message = baseToolMessage({ toolStatus: "pending" })
+			const { lastFrame } = render(<ChatHistoryItem message={message} />)
+			expect(lastFrame() ?? "").toContain("⧗")
+		})
+
+		it("renders ✗ (error) indicator when toolStatus is 'error'", () => {
+			const message = baseToolMessage({ toolStatus: "error" })
+			const { lastFrame } = render(<ChatHistoryItem message={message} />)
+			expect(lastFrame() ?? "").toContain("✗")
+		})
+
+		it("renders no status glyph when toolStatus is undefined", () => {
+			const message = baseToolMessage()
+			const { lastFrame } = render(<ChatHistoryItem message={message} />)
+			const frame = lastFrame() ?? ""
+			expect(frame).not.toContain("✓")
+			expect(frame).not.toContain("⧗")
+			expect(frame).not.toContain("✗")
+			// Tool header should still be present
+			expect(frame).toContain("Read File")
 		})
 	})
 })

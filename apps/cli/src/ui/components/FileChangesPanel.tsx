@@ -2,7 +2,7 @@ import { useMemo, useState } from "react"
 import { Box, Text, useInput } from "ink"
 
 import type { TUIMessage } from "../types.js"
-import * as theme from "../theme.js"
+import { useTheme } from "../theme.js"
 
 interface FileChangesPanelProps {
 	messages: TUIMessage[]
@@ -20,6 +20,7 @@ interface FileChange {
  * Aggregates file changes from tool messages and displays them grouped by file.
  */
 export function FileChangesPanel({ messages, onClose }: FileChangesPanelProps) {
+	const theme = useTheme()
 	const fileChanges = useMemo(() => {
 		const changes = new Map<string, FileChange>()
 

@@ -23,6 +23,12 @@ export interface UseGlobalInputOptions {
 	closePicker: () => void
 	requestCondense?: () => void
 	condenseInProgress?: boolean
+	/**
+	 * Suspend all global keyboard shortcuts while a modal dialog is open
+	 * (Ink stacks `useInput` listeners; without this guard each keystroke
+	 * is delivered to both the dialog and these globals at once).
+	 */
+	disabled?: boolean
 }
 
 /**
@@ -50,6 +56,7 @@ export function useGlobalInput({
 	closePicker,
 	requestCondense,
 	condenseInProgress,
+	disabled,
 }: UseGlobalInputOptions): void {
 	const { isLoading, currentTodos } = useCLIStore()
 	const {
@@ -63,6 +70,8 @@ export function useGlobalInput({
 		setShowFileChanges,
 		showHistory,
 		setShowHistory,
+		showCommandPalette,
+		setShowCommandPalette,
 		showExitHint: _showExitHint,
 		setShowExitHint,
 		pendingExit,
@@ -82,7 +91,8 @@ export function useGlobalInput({
 	}, [])
 
 	// Handle global keyboard shortcuts
-	useInput((input, key) => {
+	useInput(
+		(input, key) => {
 		// Tab to toggle focus between scroll area and input (only when input is available)
 		if (key.tab && canToggleFocus && !pickerIsOpen) {
 			toggleFocus()
@@ -155,13 +165,26 @@ export function useGlobalInput({
 			return
 		}
 
+		// Ctrl+O to open command palette
+		if (matchesGlobalSequence(input, key, "ctrl-o")) {
+			if (pickerIsOpen) {
+				closePicker()
+			}
+			setShowCommandPalette(!showCommandPalette)
+			return
+		}
+
 		// Escape key to close overlays
-		if (key.escape && (showTodoViewer || showModelPicker || showSettings || showFileChanges || showHistory)) {
+		if (
+			key.escape &&
+			(showTodoViewer || showModelPicker || showSettings || showFileChanges || showHistory || showCommandPalette)
+		) {
 			setShowTodoViewer(false)
 			setShowModelPicker(false)
 			setShowSettings(false)
 			setShowFileChanges(false)
 			setShowHistory(false)
+			setShowCommandPalette(false)
 			return
 		}
 
@@ -205,5 +228,7 @@ export function useGlobalInput({
 				}, 2000)
 			}
 		}
-	})
+		},
+		{ isActive: !disabled },
+	)
 }

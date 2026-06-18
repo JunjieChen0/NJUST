@@ -32,6 +32,33 @@ describe("globalCommands", () => {
 				expect(typeof cmd.action).toBe("string")
 			}
 		})
+
+		it("ships every OpenCode-aligned built-in slash command", () => {
+			const required = [
+				"new",
+				"history",
+				"compact",
+				"export",
+				"copy",
+				"models",
+				"agents",
+				"connect",
+				"mcps",
+				"settings",
+				"themes",
+				"edit",
+				"delete",
+				"changes",
+				"enhance",
+				"websearch",
+				"status",
+				"help",
+				"exit",
+			]
+			for (const name of required) {
+				expect(GLOBAL_COMMANDS.some((c) => c.name === name)).toBe(true)
+			}
+		})
 	})
 
 	describe("getGlobalCommand", () => {
@@ -51,12 +78,32 @@ describe("globalCommands", () => {
 			const cmd = getGlobalCommand("NEW")
 			expect(cmd).toBeUndefined()
 		})
+
+		it("resolves /clear as alias of /new", () => {
+			const cmd = getGlobalCommand("clear")
+			expect(cmd?.name).toBe("new")
+			expect(cmd?.action).toBe("clearTask")
+		})
+
+		it("resolves /model (singular) as alias of /models", () => {
+			const cmd = getGlobalCommand("model")
+			expect(cmd?.name).toBe("models")
+			expect(cmd?.action).toBe("openModelPicker")
+		})
+
+		it("resolves /q as alias of /exit", () => {
+			const cmd = getGlobalCommand("q")
+			expect(cmd?.name).toBe("exit")
+			expect(cmd?.action).toBe("exitApp")
+		})
 	})
 
 	describe("getGlobalCommandsForAutocomplete", () => {
 		it("should return commands in autocomplete format", () => {
 			const commands = getGlobalCommandsForAutocomplete()
-			expect(commands.length).toBe(GLOBAL_COMMANDS.length)
+			// One entry per canonical command + one per alias.
+			const aliasCount = GLOBAL_COMMANDS.reduce((n, c) => n + (c.aliases?.length ?? 0), 0)
+			expect(commands.length).toBe(GLOBAL_COMMANDS.length + aliasCount)
 
 			for (const cmd of commands) {
 				expect(cmd.name).toBeTruthy()
@@ -82,6 +129,13 @@ describe("globalCommands", () => {
 				expect(cmd).not.toHaveProperty("argumentHint")
 			}
 		})
+
+		it("emits aliases as separate entries pointing to the same action", () => {
+			const commands = getGlobalCommandsForAutocomplete()
+			const clear = commands.find((c) => c.name === "clear")
+			expect(clear?.action).toBe("clearTask")
+			expect(clear?.description).toContain("Alias for /new")
+		})
 	})
 
 	describe("type safety", () => {
@@ -94,6 +148,19 @@ describe("globalCommands", () => {
 				"toggleWebSearch",
 				"openFileChanges",
 				"openHistory",
+				"editMessage",
+				"deleteMessage",
+				"toggleTheme",
+				"copyLastMessage",
+				"exportSession",
+				"compactSession",
+				"connectProvider",
+				"openModelPicker",
+				"openAgentPicker",
+				"openMcpManager",
+				"showHelp",
+				"showStatus",
+				"exitApp",
 			]
 
 			for (const cmd of GLOBAL_COMMANDS) {

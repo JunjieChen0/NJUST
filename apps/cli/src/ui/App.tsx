@@ -6,9 +6,10 @@ import { ExtensionHostInterface, ExtensionHostOptions } from "@/agent/index.js"
 
 import { getGlobalCommandsForAutocomplete } from "@/lib/utils/commands.js"
 import { arePathsEqual } from "@/lib/utils/path.js"
-import { getContextWindow } from "@/lib/utils/context-window.js"
+import { getContextWindow, getModelIdForProvider } from "@/lib/utils/context-window.js"
+import { getProviderSettings } from "@/lib/utils/provider.js"
 
-import * as theme from "./theme.js"
+import { useTheme } from "./theme.js"
 import { useCLIStore } from "./store.js"
 import { useUIStateStore } from "./stores/uiStateStore.js"
 
@@ -31,7 +32,7 @@ import {
 import { getView } from "./utils/index.js"
 
 // Import components.
-import Header from "./components/Header.js"
+import { NJUST_AI_LOGO } from "@/types/constants.js"
 import ChatHistoryItem from "./components/ChatHistoryItem.js"
 import LoadingText from "./components/LoadingText.js"
 import ToastDisplay from "./components/ToastDisplay.js"
@@ -40,8 +41,11 @@ import ModelPicker from "./components/ModelPicker.js"
 import MessageQueue from "./components/MessageQueue.js"
 import FileChangesPanel from "./components/FileChangesPanel.js"
 import HistoryView from "./components/HistoryView.js"
+import { CommandPaletteDialog } from "./components/CommandPaletteDialog.js"
+import { ConnectDialog } from "./components/ConnectDialog.js"
+import { DialogModel } from "./components/DialogModel.js"
 import { SettingsOverlay } from "./components/settings/SettingsOverlay.js"
-import { HorizontalLine } from "./components/HorizontalLine.js"
+import { DialogHost, useDialog, useHasOpenDialog } from "./dialog/index.js"
 import {
 	type AutocompleteInputHandle,
 	type AutocompleteTrigger,
@@ -64,6 +68,8 @@ import {
 } from "./components/autocomplete/index.js"
 import { ScrollArea, useScrollToBottom } from "./components/ScrollArea.js"
 import ScrollIndicator from "./components/ScrollIndicator.js"
+import SessionFooter from "./components/SessionFooter.js"
+import ContextSidebar from "./components/ContextSidebar.js"
 
 const PICKER_HEIGHT = 10
 
@@ -73,6 +79,7 @@ export interface TUIAppProps extends ExtensionHostOptions {
 	initialSessionId?: string
 	continueSession?: boolean
 	version: string
+	needsApiKey?: boolean
 	// Create extension host factory for dependency injection.
 	createExtensionHost: (options: ExtensionHostOptions) => ExtensionHostInterface
 }
@@ -99,9 +106,11 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		reasoningEffort,
 		ephemeral,
 		version,
+		needsApiKey,
 	} = extensionHostOptions
 
 	const { exit } = useApp()
+	const theme = useTheme()
 
 	const {
 		messages,
@@ -123,6 +132,7 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		currentApiConfigName,
 		listApiConfigMeta,
 		queuedMessages: _queuedMessages,
+		mcpServers,
 	} = useCLIStore()
 
 	// Access UI state from the UI store
@@ -136,12 +146,14 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		showSettings,
 		showFileChanges,
 		showHistory,
+		showCommandPalette,
 		pickerState,
 		setIsTransitioningToCustomInput,
 		setShowModelPicker,
 		setShowSettings,
 		setShowFileChanges,
 		setShowHistory,
+		setShowCommandPalette,
 	} = useUIStateStore()
 
 	// Compute context window from router models and API configuration
@@ -274,7 +286,14 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 	}, [commandResults])
 
 	// Scroll area state
-	const { rows } = useTerminalSize()
+	const { rows, columns } = useTerminalSize()
+	// OpenCode V2 reference: max-w-[720px] centered prompt panel.
+	// In Ink columns, ~80 columns ≈ 800px. Cap to terminal width with a margin
+	// so the prompt panel feels generous but never touches the edges.
+	const promptWidth = Math.max(40, Math.min(80, columns - 8))
+	// Inner column budget for MultilineTextInput: panel width minus
+	// border (2) + paddingLeft(1) + paddingRight(1).
+	const inputColumns = Math.max(20, promptWidth - 4)
 	const [scrollState, setScrollState] = useState({ scrollTop: 0, maxScroll: 0, isAtBottom: true })
 	const { scrollToBottomTrigger, scrollToBottom } = useScrollToBottom()
 
@@ -284,6 +303,8 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 
 	// Toast notifications for ephemeral messages (e.g., mode changes).
 	const { currentToast, showInfo } = useToast()
+	const dialog = useDialog()
+	const hasOpenDialog = useHasOpenDialog()
 
 	const {
 		handleExtensionMessage,
@@ -324,6 +345,84 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		openSettings: () => useUIStateStore.getState().setShowSettings(true),
 		openFileChanges: () => useUIStateStore.getState().setShowFileChanges(true),
 		openHistory: () => useUIStateStore.getState().setShowHistory(true),
+		openConnect: () => {
+			dialog.replace({
+				size: "medium",
+				render: () => (
+					<ConnectDialog
+						sendToExtension={sendToExtension}
+						onSuccess={(provider) => {
+							showInfo?.(`Connected ${provider}. Key saved to cli-settings.json.`, 3000)
+						}}
+						onCancel={() => dialog.pop()}
+					/>
+				),
+			})
+		},
+		// /models — open the OpenCode-style model picker dialog.
+		openModelPicker: () => {
+			const state = useCLIStore.getState()
+			dialog.replace({
+				size: "large",
+				render: () => (
+					<DialogModel
+						currentProvider={state.apiConfiguration?.apiProvider}
+						currentModel={state.apiConfiguration ? getModelIdForProvider(state.apiConfiguration) : undefined}
+						onSelect={(providerID, modelID) => {
+							// Update the extension host with the new model selection.
+							if (sendToExtension) {
+								const profileName = `cli-${providerID}`
+								const apiConfiguration = {
+									apiProvider: providerID as any,
+									...getProviderSettings(providerID as any, undefined, modelID),
+								}
+								sendToExtension({
+									type: "upsertApiConfiguration",
+									text: profileName,
+									apiConfiguration,
+								})
+								sendToExtension({
+									type: "loadApiConfiguration",
+									text: profileName,
+								})
+							}
+							showInfo?.(`Switched to ${providerID}/${modelID}`, 3000)
+						}}
+					/>
+				),
+			})
+		},
+		// /agents — alias for `/mode` (cycle modes via Ctrl+M handler).
+		// We surface modes in the existing settings panel, so we route
+		// `/agents` there for now.
+		openAgentPicker: () => useUIStateStore.getState().setShowSettings(true),
+		// /mcps — MCP manager isn't a separate panel yet, so we route
+		// users to settings (the MCP section lives there). When a
+		// dedicated MCP overlay lands, swap this for `setShowMcp(true)`.
+		openMcpManager: () => useUIStateStore.getState().setShowSettings(true),
+		// /help — concise toast listing the most useful shortcuts.
+		openHelp: () =>
+			showInfo?.(
+				"Shortcuts: tab=focus  ctrl+o=commands  ctrl+m=mode  ctrl+t=todos  esc=cancel  ctrl+c x2=exit",
+				6000,
+			),
+		// /status — toast surfacing workspace + active provider/model.
+		openStatus: () => {
+			const state = useCLIStore.getState()
+			const provider = state.apiConfiguration?.apiProvider ?? "no-provider"
+			const profile = state.currentApiConfigName ?? "default"
+			const tokens = state.tokenUsage?.contextTokens ?? 0
+			showInfo?.(
+				`Profile: ${profile} • Provider: ${provider} • Mode: ${state.currentMode ?? mode} • Ctx: ${tokens}`,
+				5000,
+			)
+		},
+		// /exit — quit the CLI cleanly. Defer one tick so the toast
+		// (if any) has time to flush before Ink unmounts.
+		exitApp: () => {
+			showInfo?.("Goodbye.", 500)
+			setTimeout(() => process.exit(0), 50)
+		},
 		showInfo,
 	})
 
@@ -369,9 +468,29 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		closePicker: handlePickerClose,
 		requestCondense,
 		condenseInProgress: condenseTaskContextInProgress,
+		disabled: hasOpenDialog,
 	})
 
-	// Determine current view
+	// OpenCode-style: auto-open provider dialog when no API key is available
+	// on first mount. This overlays the main UI so the user must connect
+	// before they can interact with the prompt.
+	useEffect(() => {
+		if (needsApiKey) {
+			dialog.replace({
+				size: "medium",
+				render: () => (
+					<ConnectDialog
+						sendToExtension={sendToExtension}
+						onSuccess={(provider) => {
+							showInfo?.(`Connected ${provider}. Key saved to cli-settings.json.`, 3000)
+						}}
+						onCancel={() => dialog.pop()}
+					/>
+				),
+			})
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [needsApiKey])
 	const view = getView(messages, pendingAsk, isLoading)
 
 	// Determine if we should show the approval prompt (Y/N) instead of text input
@@ -381,6 +500,47 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 	const displayMessages = useMemo(() => {
 		return messages
 	}, [messages])
+
+	// Bridge legacy `showCommandPalette` boolean → DialogProvider (single source).
+	// Open: replace any current dialog with the palette; close-callback flips
+	// the boolean back so existing keymap toggles in `useGlobalInput` still work.
+	const paletteDialogIdRef = useRef<number | null>(null)
+	useEffect(() => {
+		if (showCommandPalette) {
+			if (paletteDialogIdRef.current !== null) return
+			paletteDialogIdRef.current = dialog.replace({
+				size: "medium",
+				render: () => (
+					<CommandPaletteDialog
+						onSelect={(entry) => {
+							paletteDialogIdRef.current = null
+							setShowCommandPalette(false)
+							dialog.clear()
+							if (entry.name.startsWith("/")) {
+								handleSubmit(entry.name)
+							}
+						}}
+						onCancel={() => {
+							paletteDialogIdRef.current = null
+							setShowCommandPalette(false)
+							dialog.clear()
+						}}
+					/>
+				),
+				onClose: () => {
+					paletteDialogIdRef.current = null
+					setShowCommandPalette(false)
+				},
+			})
+		} else if (paletteDialogIdRef.current !== null) {
+			const id = paletteDialogIdRef.current
+			paletteDialogIdRef.current = null
+			dialog.popById(id)
+		}
+		// `dialog` is stable (same hook), `handleSubmit` is recreated each
+		// render so we read it via closure rather than depending on it.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [showCommandPalette])
 
 	// Scroll to bottom when new messages arrive (if auto-scroll is enabled)
 	const prevMessageCount = useRef(messages.length)
@@ -607,10 +767,10 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 
 	// Status bar content
 	// Priority: Toast > Exit hint > Loading > Scroll indicator > Input hint
-	// Don't show spinner when waiting for user input (pendingAsk is set)
-	const statusBarMessage = currentToast ? (
-		<ToastDisplay toast={currentToast} />
-	) : showExitHint ? (
+	// Don't show spinner when waiting for user input (pendingAsk is set).
+	// (Toast itself is rendered as a floating overlay near the App root —
+	// see the `<ToastDisplay floating={true} />` at the bottom.)
+	const _statusBarMessage = showExitHint ? (
 		<Text color="yellow">Press Ctrl+C again to exit</Text>
 	) : isLoading && !pendingAsk ? (
 		<Box>
@@ -646,21 +806,18 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		)
 	}
 
-	return (
+	const isEmptySession = messages.length === 0 && !isLoading
+
+	const homeDir = process.env.HOME || process.env.USERPROFILE || ""
+	const displayPath = workspacePath.startsWith(homeDir)
+		? workspacePath.replace(homeDir, "~")
+		: workspacePath
+
+		return (
 		<Box flexDirection="column" height={rows - 1}>
-			{/* Header - fixed size */}
-			<Box flexShrink={0}>
-				<Header
-					{...extensionHostOptions}
-					mode={currentMode || mode}
-					version={version}
-					tokenUsage={tokenUsage}
-					contextWindow={contextWindow}
-					condenseInProgress={condenseTaskContextInProgress}
-					onCondense={requestCondense}
-					currentApiConfigName={currentApiConfigName}
-				/>
-			</Box>
+			{/* Empty home state shows logo+path inline above the prompt panel
+			    (see the input area block below). Nothing is rendered here in
+			    that case so the prompt sits naturally below `flexGrow` content. */}
 
 			{/* Model picker overlay */}
 			{showModelPicker && (
@@ -673,6 +830,8 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 					/>
 				</Box>
 			)}
+
+			{/* Command palette: now driven via DialogProvider (see effect below). */}
 
 			{/* Settings overlay */}
 			{showSettings && (
@@ -706,82 +865,238 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 				</Box>
 			) : (
 				<>
-					{/* Scrollable message history area - fills remaining space via flexGrow */}
-					<ScrollArea
-						isActive={isScrollAreaActive}
-						onScroll={handleScroll}
-						scrollToBottomTrigger={scrollToBottomTrigger}>
-						{displayMessages.map((message) => (
-							<ChatHistoryItem
-								key={message.id}
-								message={message}
-								sendToExtension={sendToExtension}
-								workspacePath={workspacePath}
-							/>
-						))}
-					</ScrollArea>
+					{isEmptySession && !pendingAsk ? (
+						/* Empty home: logo pinned near the top of the screen,
+						   with a flex spacer pushing the prompt panel down to
+						   roughly the upper-third (mirrors OpenCode V2
+						   `top:25.375%`). The logo lives here (not inside the
+						   input area) so it stays visible on short terminals. */
+						<Box flexDirection="column" alignItems="center" flexGrow={1} flexShrink={1} paddingTop={2}>
+							<Box flexDirection="column" alignItems="center" marginBottom={1}>
+								{NJUST_AI_LOGO.map((line, i) => (
+									<Text key={i} color="black">
+										{line}
+									</Text>
+								))}
+								<Text color={theme.dimText}>{displayPath}</Text>
+							</Box>
+							<Box flexGrow={1} flexShrink={1} />
+						</Box>
+					) : (
+						/* Active session: scrollable message history on the left
+						   and an OpenCode-style ContextSidebar on the right when
+						   the terminal is wide enough (≥ 100 columns). */
+						<Box flexDirection="row" flexGrow={1} flexShrink={1}>
+							<ScrollArea
+								isActive={isScrollAreaActive}
+								onScroll={handleScroll}
+								scrollToBottomTrigger={scrollToBottomTrigger}>
+								{displayMessages.map((message, index) => (
+									<ChatHistoryItem
+										key={message.id}
+										message={message}
+										sendToExtension={sendToExtension}
+										workspacePath={workspacePath}
+										isStreamingTarget={
+											isLoading &&
+											index === displayMessages.length - 1 &&
+											message.role === "assistant"
+										}
+									/>
+								))}
+							</ScrollArea>
+							{columns >= 100 && (
+								<ContextSidebar
+									contextFraction={
+										tokenUsage && contextWindow && contextWindow > 0
+											? tokenUsage.contextTokens / contextWindow
+											: undefined
+									}
+									mcpCount={mcpServers.filter((s) => s.status === "connected").length}
+									mcpHasError={mcpServers.some((s) => s.status === "disconnected" && s.error)}
+								/>
+							)}
+						</Box>
+					)}
+
+					{/* Thinking status — shown above the prompt while the model
+					    is responding (OpenCode-style). Hidden when waiting on
+					    user input (pendingAsk) so it doesn't compete with the
+					    Y/N prompt or followup picker. */}
+					{isLoading && !pendingAsk ? (
+						<Box flexDirection="row" paddingLeft={3} flexShrink={0}>
+							<Text color={theme.accent}>: </Text>
+							<LoadingText>{view === "ToolUse" ? "Using tool" : "Thinking"}</LoadingText>
+						</Box>
+					) : null}
 
 					{/* Inline queued messages */}
 					{isLoading && <MessageQueue sendToExtension={sendToExtension} />}
 
-					{/* Input area - with borders like Claude Code - fixed size */}
-					<Box flexDirection="column" flexShrink={0}>
-						{pendingAsk?.type === "followup" ? (
-							<Box flexDirection="column">
-								<Text color={theme.rooHeader}>{pendingAsk.content}</Text>
-								{pendingAsk.suggestions && pendingAsk.suggestions.length > 0 && !showCustomInput ? (
-									<Box flexDirection="column" marginTop={1}>
-										<HorizontalLine active={true} />
-										<Select
-											options={[
-												...pendingAsk.suggestions.map((s) => ({
-													label: s.answer,
-													value: s.answer,
-												})),
-												{ label: "Type something...", value: "__CUSTOM__" },
-											]}
-											onChange={(value) => {
-												if (!value || typeof value !== "string") return
-												if (showCustomInput || isTransitioningToCustomInput) return
+					{/* Input area — centered prompt panel (OpenCode V2 alignment).
+					    The outer column owns horizontal centering; the inner Box
+					    owns the panel width. The bg-fill Box gives the prompt the
+					    visual edge against the terminal background. SessionFooter
+					    is rendered directly under the panel, same width. */}
+					<Box flexDirection="column" alignItems="center" flexShrink={0}>
+						<Box width={promptWidth} flexDirection="column">
+							{/* Logo lives in the top spacer (see empty-state
+							    branch above) so it stays pinned near the top
+							    on short terminals instead of being squeezed
+							    above the prompt panel. */}
+							<Box
+								flexDirection="column"
+								backgroundColor={theme.backgroundElement}
+								borderStyle="round"
+								borderColor={isInputAreaActive ? theme.accent : theme.borderColor}
+								paddingLeft={1}
+								paddingRight={1}
+								paddingTop={1}
+								paddingBottom={1}
+							>
+								{pendingAsk?.type === "followup" ? (
+								<Box flexDirection="column">
+									<Text color={theme.rooHeader}>{pendingAsk.content}</Text>
+									{pendingAsk.suggestions && pendingAsk.suggestions.length > 0 && !showCustomInput ? (
+										<Box flexDirection="row" marginTop={1}>
+											<Text color={theme.primary}>┃ </Text>
+											<Box flexDirection="column" flexGrow={1}>
+												<Select
+													options={[
+														...pendingAsk.suggestions.map((s) => ({
+															label: s.answer,
+															value: s.answer,
+														})),
+														{ label: "Type something...", value: "__CUSTOM__" },
+													]}
+													onChange={(value) => {
+														if (!value || typeof value !== "string") return
+														if (showCustomInput || isTransitioningToCustomInput) return
 
-												if (value === "__CUSTOM__") {
-													// Clear countdown timer and switch to custom input
-													cancelCountdown()
-													setIsTransitioningToCustomInput(true)
-													useUIStateStore.getState().setShowCustomInput(true)
-												} else if (value.trim()) {
-													handleSubmit(value)
-												}
-											}}
-										/>
-										<HorizontalLine active={true} />
+														if (value === "__CUSTOM__") {
+															// Clear countdown timer and switch to custom input
+															cancelCountdown()
+															setIsTransitioningToCustomInput(true)
+															useUIStateStore.getState().setShowCustomInput(true)
+														} else if (value.trim()) {
+															handleSubmit(value)
+														}
+													}}
+												/>
+												<Text color={theme.dimText}>
+													↑↓ navigate • Enter select
+													{countdownSeconds !== null && (
+														<Text color={theme.warningColor}>
+															{" "}
+															• Auto-select in {countdownSeconds}s
+														</Text>
+													)}
+												</Text>
+											</Box>
+										</Box>
+									) : (
+									<Box flexDirection="row" marginTop={1}>
+										<Text color={theme.primary}>┃ </Text>
+										<Box flexDirection="column" flexGrow={1}>
+											<AutocompleteInput
+												ref={followupAutocompleteRef}
+												placeholder="Type your response..."
+												onSubmit={(text: string) => {
+													if (text && text.trim()) {
+														handleSubmit(text)
+														useUIStateStore.getState().setShowCustomInput(false)
+														setIsTransitioningToCustomInput(false)
+													}
+												}}
+												isActive={!hasOpenDialog}
+												triggers={autocompleteTriggers}
+												onPickerStateChange={handlePickerStateChange}
+												prompt="› "
+												columnOverride={inputColumns}
+											/>
+												{pickerState.isOpen ? (
+													<Box flexDirection="column" height={PICKER_HEIGHT}>
+														<PickerSelect
+															results={pickerState.results}
+															selectedIndex={pickerState.selectedIndex}
+															maxVisible={PICKER_HEIGHT - 1}
+															onSelect={handlePickerSelect}
+															onEscape={handlePickerClose}
+															onIndexChange={handlePickerIndexChange}
+															renderItem={getPickerRenderItem()}
+															emptyMessage={pickerState.activeTrigger?.emptyMessage}
+															isActive={isInputAreaActive && pickerState.isOpen}
+															isLoading={pickerState.isLoading}
+														/>
+													</Box>
+												) : (
+													<Box height={1}>
+														<Text color={theme.dimText}>
+															↑↓ navigate • Enter select
+															{countdownSeconds !== null && (
+																<Text color={theme.warningColor}>
+																	{" "}
+																	• Auto-select in {countdownSeconds}s
+																</Text>
+															)}
+														</Text>
+													</Box>
+												)}
+											</Box>
+										</Box>
+									)}
+								</Box>
+							) : showApprovalPrompt ? (
+								<Box flexDirection="row" marginTop={1}>
+									<Text color={theme.primary}>┃ </Text>
+									<Box flexDirection="column">
+										{pendingAsk?.type === "api_req_failed" ? (
+											<Text bold color={theme.errorColor}>
+												✗ {pendingAsk.content}
+											</Text>
+										) : pendingAsk?.type === "mistake_limit_reached" ? (
+											<Text bold color={theme.warningColor}>
+												⚠ {pendingAsk.content}
+											</Text>
+										) : pendingAsk?.type === "auto_approval_max_req_reached" ? (
+											<Text bold color={theme.warningColor}>
+												⏸ {pendingAsk.content}
+											</Text>
+										) : (
+											<Text color={theme.rooHeader}>{pendingAsk?.content}</Text>
+										)}
 										<Text color={theme.dimText}>
-											↑↓ navigate • Enter select
-											{countdownSeconds !== null && (
-												<Text color="yellow"> • Auto-select in {countdownSeconds}s</Text>
-											)}
+											Press <Text color={theme.successColor}>Y</Text> to approve,{" "}
+											<Text color={theme.errorColor}>N</Text> to reject
 										</Text>
 									</Box>
-								) : (
-									<Box flexDirection="column" marginTop={1}>
-										<HorizontalLine active={isInputAreaActive} />
+								</Box>
+							) : (
+								<Box flexDirection="row" marginTop={1}>
+									<Text color={isInputAreaActive ? theme.primary : theme.borderColor}>┃ </Text>
+									<Box flexDirection="column" flexGrow={1}>
 										<AutocompleteInput
-											ref={followupAutocompleteRef}
-											placeholder="Type your response..."
-											onSubmit={(text: string) => {
-												if (text && text.trim()) {
-													handleSubmit(text)
-													useUIStateStore.getState().setShowCustomInput(false)
-													setIsTransitioningToCustomInput(false)
-												}
-											}}
-											isActive={true}
+											ref={autocompleteRef}
+											placeholder={
+											isComplete
+												? "Type to continue..."
+												: 'Ask anything, / for commands, @ for context...'
+										}
+											onSubmit={handleSubmit}
+											isActive={isInputAreaActive && !hasOpenDialog}
 											triggers={autocompleteTriggers}
 											onPickerStateChange={handlePickerStateChange}
-											prompt="> "
+											prompt="› "
+											columnOverride={inputColumns}
 										/>
-										<HorizontalLine active={isInputAreaActive} />
-										{pickerState.isOpen ? (
+										{showTodoViewer ? (
+											<Box flexDirection="column" height={PICKER_HEIGHT}>
+												<TodoDisplay todos={currentTodos} showProgress={true} title="TODO List" />
+												<Box height={1}>
+													<Text color={theme.dimText}>Ctrl+T to close</Text>
+												</Box>
+											</Box>
+										) : pickerState.isOpen ? (
 											<Box flexDirection="column" height={PICKER_HEIGHT}>
 												<PickerSelect
 													results={pickerState.results}
@@ -797,60 +1112,65 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 												/>
 											</Box>
 										) : (
-											<Box height={1}>{statusBarMessage}</Box>
+											<Box flexDirection="column">
+												{/* Row 1: mode · provider/model on the left,
+												    keyboard hints (right-aligned) on the right.
+												    Mirrors OpenCode V2 prompt footer layout.
+												    Reads `apiConfiguration` and `currentApiConfigName`
+												    from the live store so the row updates after
+												    /connect, /models, or any extension-side profile
+												    change — not the constants captured at launch. */}
+												<Box height={1} flexDirection="row" justifyContent="space-between">
+													<Text color={theme.textMuted}>
+														{currentMode || mode} <Text color={theme.border}>·</Text>{" "}
+														{(apiConfiguration?.apiProvider ?? provider)}/
+														{(apiConfiguration && getModelIdForProvider(apiConfiguration)) ?? model}
+													</Text>
+													<Text color={theme.textMuted}>
+														<Text bold>tab</Text> agents{"  "}
+														<Text bold>ctrl+o</Text> commands
+													</Text>
+												</Box>
+												{/* Row 2: token usage (left) — only shown when
+												    we have data, otherwise hide the row. */}
+												{tokenUsage && contextWindow && contextWindow > 0 ? (
+													<Box height={1}>
+														<Text color={theme.textMuted}>
+															<Text>
+																{Math.round((tokenUsage.contextTokens / contextWindow) * 100)}%
+															</Text>
+															<Text color={theme.border}> · </Text>
+															<Text>${tokenUsage.totalCost.toFixed(2)}</Text>
+														</Text>
+													</Box>
+												) : null}
+											</Box>
 										)}
 									</Box>
-								)}
+								</Box>
+							)}
 							</Box>
-						) : showApprovalPrompt ? (
-							<Box flexDirection="column">
-								<Text color={theme.rooHeader}>{pendingAsk?.content}</Text>
-								<Text color={theme.dimText}>
-									Press <Text color={theme.successColor}>Y</Text> to approve,{" "}
-									<Text color={theme.errorColor}>N</Text> to reject
-								</Text>
-								<Box height={1}>{statusBarMessage}</Box>
-							</Box>
-						) : (
-							<Box flexDirection="column">
-								<HorizontalLine active={isInputAreaActive} />
-								<AutocompleteInput
-									ref={autocompleteRef}
-									placeholder={isComplete ? "Type to continue..." : ""}
-									onSubmit={handleSubmit}
-									isActive={isInputAreaActive}
-									triggers={autocompleteTriggers}
-									onPickerStateChange={handlePickerStateChange}
-									prompt="› "
-								/>
-								<HorizontalLine active={isInputAreaActive} />
-								{showTodoViewer ? (
-									<Box flexDirection="column" height={PICKER_HEIGHT}>
-										<TodoDisplay todos={currentTodos} showProgress={true} title="TODO List" />
-										<Box height={1}>
-											<Text color={theme.dimText}>Ctrl+T to close</Text>
-										</Box>
-									</Box>
-								) : pickerState.isOpen ? (
-									<Box flexDirection="column" height={PICKER_HEIGHT}>
-										<PickerSelect
-											results={pickerState.results}
-											selectedIndex={pickerState.selectedIndex}
-											maxVisible={PICKER_HEIGHT - 1}
-											onSelect={handlePickerSelect}
-											onEscape={handlePickerClose}
-											onIndexChange={handlePickerIndexChange}
-											renderItem={getPickerRenderItem()}
-											emptyMessage={pickerState.activeTrigger?.emptyMessage}
-											isActive={isInputAreaActive && pickerState.isOpen}
-											isLoading={pickerState.isLoading}
-										/>
-									</Box>
-								) : (
-									<Box height={1}>{statusBarMessage}</Box>
-								)}
-							</Box>
+						</Box>
+					</Box>
+					{isEmptySession && !pendingAsk ? (
+						/* Bottom spacer in the empty state — works with the top
+						   spacer above to position the prompt at roughly
+						   1/3 from the top (OpenCode V2 ≈ `top:25.375%`). */
+						<Box flexGrow={2} flexShrink={1} />
+					) : null}
+					{/* SessionFooter — full-width status bar pinned to the
+					    bottom of the terminal (OpenCode V2 layout). */}
+					<Box flexShrink={0}>
+						<SessionFooter
+							workspacePath={workspacePath}
+							showStatusHint
+							connected={Boolean(
+							apiKey ||
+								apiConfiguration?.apiKey ||
+								apiConfiguration?.apiProvider ||
+								currentApiConfigName,
 						)}
+						/>
 					</Box>
 				</>
 			)}
@@ -865,6 +1185,15 @@ export function App(props: TUIAppProps) {
 	return (
 		<TerminalSizeProvider>
 			<AppInner {...props} />
+			<FloatingToast />
+			<DialogHost />
 		</TerminalSizeProvider>
 	)
+}
+
+/** Reads the current toast from the hook and renders it floating at top-right. */
+function FloatingToast() {
+	const { currentToast } = useToast()
+	if (!currentToast) return null
+	return <ToastDisplay toast={currentToast} floating />
 }

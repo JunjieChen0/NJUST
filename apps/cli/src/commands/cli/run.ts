@@ -9,9 +9,7 @@ import { setLogger } from "@njust-ai/vscode-shim"
 
 import {
 	FlagOptions,
-	isSupportedProvider,
 	OnboardingProviderChoice,
-	supportedProviders,
 	DEFAULT_FLAGS,
 	REASONING_EFFORTS,
 	SDK_BASE_URL,
@@ -22,9 +20,10 @@ import { JsonEventEmitter } from "@/agent/json-event-emitter.js"
 
 import { createClient } from "@/lib/sdk/index.js"
 import { loadToken, loadSettings } from "@/lib/storage/index.js"
+import { loadModelStore, parseModelString, resolveInitialModel, pushRecent, saveModelStore, PROVIDER_DEFAULT_MODEL } from "@/lib/storage/local-model-store.js"
 import { readWorkspaceTaskSessions, resolveWorkspaceResumeSessionId } from "@/lib/task-history/index.js"
 import { isRecord } from "@/lib/utils/guards.js"
-import { getEnvVarName, getApiKeyFromEnv } from "@/lib/utils/provider.js"
+import { getEnvVarName, getApiKeyFromEnv, isValidProvider } from "@/lib/utils/provider.js"
 import { runOnboarding } from "@/lib/utils/onboarding.js"
 import { validateTerminalShellPath } from "@/lib/utils/shell.js"
 import { getDefaultExtensionPath } from "@/lib/utils/extension.js"
@@ -99,7 +98,9 @@ async function warmRooModels(host: ExtensionHost): Promise<void> {
 		}
 
 		const timeoutId = setTimeout(() => {
-			finish(() => reject(new Error(`timed out waiting for Njust-AI models after ${NJUST_AI_MODEL_WARMUP_TIMEOUT_MS}ms`)))
+			finish(() =>
+				reject(new Error(`timed out waiting for Njust-AI models after ${NJUST_AI_MODEL_WARMUP_TIMEOUT_MS}ms`)),
+			)
 		}, NJUST_AI_MODEL_WARMUP_TIMEOUT_MS)
 
 		host.on("extensionWebviewMessage", onMessage)
@@ -172,9 +173,39 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	let rooToken = await loadToken()
 	const settings = await loadSettings()
 
+	// Inject persisted per-provider API keys into the current process env so
+	// downstream `getApiKeyFromEnv()` lookups find them. Set via the `/connect`
+	// slash command. Native env vars take precedence (only set if missing).
+	if (settings.apiKeysByProvider) {
+		for (const [providerName, key] of Object.entries(settings.apiKeysByProvider)) {
+			if (!key) continue
+			if (!isValidProvider(providerName)) continue
+			const envName = getEnvVarName(providerName)
+			if (!process.env[envName]) {
+				process.env[envName] = key
+			}
+		}
+	}
+
 	const isTuiSupported = process.stdin.isTTY && process.stdout.isTTY
 	const isTuiEnabled = !flagOptions.print && isTuiSupported
 	const isOnboardingEnabled = isTuiEnabled && !rooToken && !flagOptions.provider && !settings.provider
+
+	// Load persisted model store (recent / favorite / variant) so we can
+	// derive the effective provider/model using OpenCode's priority chain:
+	// CLI flag > settings file > recent[0] > provider default table.
+	const modelStore = await loadModelStore()
+
+	const resolvedModelRef = resolveInitialModel({
+		cliFlag: parseModelString(flagOptions.model ?? ""),
+		settingsModel: settings.provider && settings.model
+			? { providerID: settings.provider, modelID: settings.model }
+			: undefined,
+		recent: modelStore.recent,
+		providerDefault: settings.provider
+			? { providerID: settings.provider, modelID: PROVIDER_DEFAULT_MODEL[settings.provider] ?? "" }
+			: undefined,
+	})
 
 	// Determine effective values: CLI flags > settings file > DEFAULT_FLAGS.
 	const effectiveMode = flagOptions.mode || settings.mode || DEFAULT_FLAGS.mode
@@ -217,8 +248,8 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		reasoningEffort: effectiveReasoningEffort === "unspecified" ? undefined : effectiveReasoningEffort,
 		consecutiveMistakeLimit: effectiveConsecutiveMistakeLimit,
 		user: null,
-		provider: effectiveProvider,
-		model: effectiveModel,
+		provider: (resolvedModelRef?.providerID ?? effectiveProvider) as ExtensionHostOptions["provider"],
+		model: resolvedModelRef?.modelID ?? effectiveModel,
 		workspacePath: effectiveWorkspacePath,
 		extensionPath: path.resolve(flagOptions.extension || getDefaultExtensionPath(__dirname)),
 		nonInteractive: !effectiveRequireApproval,
@@ -276,9 +307,10 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	// TODO: Validate the API key for the chosen provider.
 	// TODO: Validate the model for the chosen provider.
 
-	if (!isSupportedProvider(extensionHostOptions.provider)) {
+	if (!isValidProvider(extensionHostOptions.provider)) {
 		console.error(
-			`[CLI] Error: Invalid provider: ${extensionHostOptions.provider}; must be one of: ${supportedProviders.join(", ")}`,
+			`[CLI] Error: Unknown provider: ${extensionHostOptions.provider}. ` +
+				`Check --provider spelling or see the supported list in the documentation.`,
 		)
 		process.exit(1)
 	}
@@ -286,22 +318,40 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	extensionHostOptions.apiKey =
 		extensionHostOptions.apiKey || flagOptions.apiKey || getApiKeyFromEnv(extensionHostOptions.provider)
 
-	if (!extensionHostOptions.apiKey) {
-		if (extensionHostOptions.provider === "njust-ai") {
-			console.error("[CLI] Error: Authentication with NJUST_AI Cloud failed or was cancelled.")
-			console.error("[CLI] Please run: njust-ai auth login")
-			console.error("[CLI] Or use --api-key to provide your own API key.")
-		} else {
-			console.error(
-				`[CLI] Error: No API key provided. Use --api-key or set the appropriate environment variable.`,
-			)
-			console.error(
-				`[CLI] For ${extensionHostOptions.provider}, set ${getEnvVarName(extensionHostOptions.provider)}`,
-			)
+	// If the active provider doesn't have a key but ANOTHER provider in the
+	// persisted `apiKeysByProvider` map does, fall back to that provider so
+	// the TUI doesn't re-prompt on every launch. Mirrors OpenCode: the
+	// model dialog remembers the last used provider/model and re-uses it
+	// across launches without forcing the user to re-enter credentials.
+	if (!extensionHostOptions.apiKey && settings.apiKeysByProvider) {
+		for (const [providerName, key] of Object.entries(settings.apiKeysByProvider)) {
+			if (!key || !isValidProvider(providerName)) continue
+			extensionHostOptions.provider = providerName
+			extensionHostOptions.apiKey = key
+			// Sync env so the extension host's downstream lookups also find it.
+			const envName = getEnvVarName(providerName)
+			if (!process.env[envName]) process.env[envName] = key
+			break
 		}
-
-		process.exit(1)
 	}
+
+		if (!extensionHostOptions.apiKey) {
+			if (isTuiEnabled) {
+				// TUI mode: entry without API key is fine — user can connect a
+				// provider later via `/connect` (like OpenCode).
+				console.warn("[CLI] No API key; TUI will prompt to connect a provider.")
+			} else {
+				if (extensionHostOptions.provider === "njust-ai") {
+					console.error("[CLI] Authentication with NJUST_AI Cloud failed or was cancelled.")
+					console.error("[CLI] Please run: njust-ai auth login")
+					console.error("[CLI] Or use --api-key to provide your own API key.")
+				} else {
+					console.error("[CLI] No API key provided. Use --api-key or set the appropriate environment variable.")
+					console.error(`[CLI] For ${extensionHostOptions.provider}, set ${getEnvVarName(extensionHostOptions.provider)}`)
+				}
+				process.exit(1)
+			}
+		}
 
 	if (!fs.existsSync(extensionHostOptions.workspacePath)) {
 		console.error(`[CLI] Error: Workspace path does not exist: ${extensionHostOptions.workspacePath}`)
@@ -340,7 +390,9 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 	if (flagOptions.signalOnlyExit && !flagOptions.stdinPromptStream) {
 		console.error("[CLI] Error: --signal-only-exit requires --stdin-prompt-stream")
-		console.error("[CLI] Usage: njust-ai --print --output-format stream-json --stdin-prompt-stream --signal-only-exit")
+		console.error(
+			"[CLI] Usage: njust-ai --print --output-format stream-json --stdin-prompt-stream --signal-only-exit",
+		)
 		process.exit(1)
 	}
 
@@ -408,34 +460,67 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 	// Run!
 
-	if (isTuiEnabled) {
-		try {
-			const { render } = await import("ink")
-			const { App } = await import("../../ui/App.js")
+		if (isTuiEnabled) {
+			try {
+				const { render } = await import("ink")
+				const { App } = await import("../../ui/App.js")
+				const { useThemeStore } = await import("../../ui/theme/store.js")
 
-			render(
-				createElement(App, {
-					...extensionHostOptions,
-					initialPrompt: prompt,
-					initialTaskId: requestedCreateSessionId,
-					initialSessionId: resolvedResumeSessionId,
-					continueSession: false,
-					version: VERSION,
-					createExtensionHost: (opts: ExtensionHostOptions) => new ExtensionHost(opts),
-				}),
-				// Handle Ctrl+C in App component for double-press exit.
-				{ exitOnCtrlC: false },
-			)
-		} catch (error) {
-			console.error("[CLI] Failed to start TUI:", error instanceof Error ? error.message : String(error))
+				// Hydrate theme zustand store from persisted CLI settings before mount.
+				useThemeStore.getState().hydrate({
+					active: settings.theme,
+					lock: settings.themeModeLock,
+				})
 
-			if (error instanceof Error) {
-				console.error(error.stack)
+				// Enter the terminal's alternate screen buffer so the TUI
+				// renders on a clean canvas (mirrors OpenCode). The previous
+				// terminal contents — including the `pnpm dev` invocation and
+				// any leftover scrollback — are restored when the TUI exits.
+				const supportsAltScreen = process.stdout.isTTY
+				if (supportsAltScreen) {
+					process.stdout.write("\x1b[?1049h\x1b[H")
+					const restoreScreen = () => {
+						try {
+							process.stdout.write("\x1b[?1049l")
+						} catch {
+							// Stream may already be closed; ignore.
+						}
+					}
+					process.once("exit", restoreScreen)
+					process.once("SIGINT", () => {
+						restoreScreen()
+						process.exit(130)
+					})
+					process.once("SIGTERM", () => {
+						restoreScreen()
+						process.exit(143)
+					})
+				}
+
+				render(
+					createElement(App, {
+						...extensionHostOptions,
+						initialPrompt: prompt,
+						initialTaskId: requestedCreateSessionId,
+						initialSessionId: resolvedResumeSessionId,
+						continueSession: false,
+						version: VERSION,
+						createExtensionHost: (opts: ExtensionHostOptions) => new ExtensionHost(opts),
+						needsApiKey: !extensionHostOptions.apiKey,
+					}),
+					// Handle Ctrl+C in App component for double-press exit.
+					{ exitOnCtrlC: false },
+				)
+			} catch (error) {
+				console.error("[CLI] Failed to start TUI:", error instanceof Error ? error.message : String(error))
+
+				if (error instanceof Error) {
+					console.error(error.stack)
+				}
+
+				process.exit(1)
 			}
-
-			process.exit(1)
-		}
-	} else {
+		} else {
 		const useJsonOutput = outputFormat === "json" || outputFormat === "stream-json"
 		const signalOnlyExit = flagOptions.signalOnlyExit
 

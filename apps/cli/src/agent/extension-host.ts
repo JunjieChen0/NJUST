@@ -19,6 +19,7 @@ import pWaitFor from "p-wait-for"
 import type {
 	ClineMessage,
 	ExtensionMessage,
+	ProviderName,
 	ReasoningEffortExtended,
 	NJUST_AISettings,
 	WebviewMessage,
@@ -26,7 +27,7 @@ import type {
 import { createVSCodeAPI, IExtensionHost, ExtensionHostEventMap, setRuntimeConfigValues } from "@njust-ai/vscode-shim"
 import { DebugLogger, setDebugLogEnabled } from "@njust-ai/core/cli"
 
-import { DEFAULT_FLAGS, type SupportedProvider } from "@/types/index.js"
+import { DEFAULT_FLAGS } from "@/types/index.js"
 import type { User } from "@/lib/sdk/index.js"
 import { getProviderSettings } from "@/lib/utils/provider.js"
 import { createEphemeralStorageDir } from "@/lib/storage/index.js"
@@ -68,7 +69,7 @@ export interface ExtensionHostOptions {
 	reasoningEffort?: ReasoningEffortExtended | "unspecified" | "disabled"
 	consecutiveMistakeLimit?: number
 	user: User | null
-	provider: SupportedProvider
+	provider: ProviderName
 	apiKey?: string
 	model: string
 	workspacePath: string
@@ -373,6 +374,24 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 			throw new Error(`Extension bundle not found at: ${bundlePath}`)
 		}
 
+		// Suppress noisy console.error from the extension bundle (e.g. ModelCache
+		// dynamic fetch failures for providers without API keys).
+		const originalConsoleError = console.error
+		console.error = (...args: unknown[]) => {
+			const msg = args.map((a) => (typeof a === "string" ? a : "")).join(" ")
+			// Silently ignore known non-fatal errors
+			if (
+				msg.includes("ModelCache") ||
+				msg.includes("Dynamic fetch failed") ||
+				msg.includes("[Unbound]") ||
+				msg.includes("Missing") && msg.includes("API key") ||
+				msg.includes("Models response is invalid")
+			) {
+				return
+			}
+			originalConsoleError(...args)
+		}
+
 		let storageDir: string | undefined
 
 		if (this.options.ephemeral) {
@@ -398,7 +417,7 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 			return originalResolve.call(this, request, parent, isMain, options)
 		}
 
-		require.cache["vscode-mock"] = {
+		const mockCacheEntry = {
 			id: "vscode-mock",
 			filename: "vscode-mock",
 			loaded: true,
@@ -410,6 +429,12 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 			parent: null,
 			require: require,
 		} as unknown as NodeJS.Module
+
+		// Register in BOTH the local createRequire cache and Module._cache so the
+		// extension bundle's __commonJS wrappers (which use Node's global require)
+		// see the same mock object.
+		require.cache["vscode-mock"] = mockCacheEntry
+		Module._cache["vscode-mock"] = mockCacheEntry
 
 		try {
 			this.extensionModule = require(bundlePath) as ExtensionModule

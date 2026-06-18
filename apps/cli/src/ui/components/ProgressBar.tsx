@@ -1,7 +1,7 @@
 import { memo } from "react"
 import { Text } from "ink"
 
-import * as theme from "../theme.js"
+import { useTheme } from "../theme.js"
 
 interface ProgressBarProps {
 	/** Current value (e.g., contextTokens) */
@@ -23,6 +23,7 @@ interface ProgressBarProps {
  * Visual example: [████████░░░░░░░░] 50%
  */
 function ProgressBar({ value, max, width = 16 }: ProgressBarProps) {
+	const theme = useTheme()
 	// Calculate percentage, clamped to 0-100
 	const percentage = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0
 

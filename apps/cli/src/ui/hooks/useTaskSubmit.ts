@@ -1,11 +1,16 @@
 import { useCallback } from "react"
 import { randomUUID } from "crypto"
+import fs from "fs"
+import path from "path"
 import type { WebviewMessage } from "@njust-ai/types"
 
 import { getGlobalCommand } from "../../lib/utils/commands.js"
 
 import { useCLIStore } from "../store.js"
 import { useUIStateStore } from "../stores/uiStateStore.js"
+import { useThemeStore } from "../theme/store.js"
+import { copyToClipboard } from "../utils/clipboard.js"
+import { formatTranscript, getLastAssistantMessage } from "../utils/transcript.js"
 
 export interface UseTaskSubmitOptions {
 	sendToExtension: ((msg: WebviewMessage) => void) | null
@@ -15,6 +20,13 @@ export interface UseTaskSubmitOptions {
 	openSettings?: () => void
 	openFileChanges?: () => void
 	openHistory?: () => void
+	openConnect?: () => void
+	openModelPicker?: () => void
+	openAgentPicker?: () => void
+	openMcpManager?: () => void
+	openHelp?: () => void
+	openStatus?: () => void
+	exitApp?: () => void
 	showInfo?: (msg: string, duration?: number) => void
 }
 
@@ -42,6 +54,13 @@ export function useTaskSubmit({
 	openSettings,
 	openFileChanges,
 	openHistory,
+	openConnect,
+	openModelPicker,
+	openAgentPicker,
+	openMcpManager,
+	openHelp,
+	openStatus,
+	exitApp,
 	showInfo,
 }: UseTaskSubmitOptions): UseTaskSubmitReturn {
 	const {
@@ -56,6 +75,9 @@ export function useTaskSubmit({
 		setLoading,
 		setComplete,
 		setError,
+		messages,
+		setEditingMessageTs,
+		setDeletingMessageTs,
 	} = useCLIStore()
 
 	const { setShowCustomInput, setIsTransitioningToCustomInput } = useUIStateStore()
@@ -72,6 +94,19 @@ export function useTaskSubmit({
 			const trimmedText = text.trim()
 
 			if (trimmedText === "__CUSTOM__") {
+				return
+			}
+
+			// If we're in edit mode, submit the edited message to the extension
+			const currentEditingTs = useCLIStore.getState().editingMessageTs
+			if (currentEditingTs !== null) {
+				sendToExtension({
+					type: "editMessageConfirm",
+					messageTs: currentEditingTs,
+					text: trimmedText,
+				})
+				setEditingMessageTs(null)
+				showInfo?.("Message edited", 1500)
 				return
 			}
 
@@ -99,6 +134,41 @@ export function useTaskSubmit({
 
 					if (globalCommand?.action === "openSettings") {
 						openSettings?.()
+						return
+					}
+
+					if (globalCommand?.action === "connectProvider") {
+						openConnect?.()
+						return
+					}
+
+					if (globalCommand?.action === "openModelPicker") {
+						openModelPicker?.()
+						return
+					}
+
+					if (globalCommand?.action === "openAgentPicker") {
+						openAgentPicker?.()
+						return
+					}
+
+					if (globalCommand?.action === "openMcpManager") {
+						openMcpManager?.()
+						return
+					}
+
+					if (globalCommand?.action === "showHelp") {
+						openHelp?.()
+						return
+					}
+
+					if (globalCommand?.action === "showStatus") {
+						openStatus?.()
+						return
+					}
+
+					if (globalCommand?.action === "exitApp") {
+						exitApp?.()
 						return
 					}
 
@@ -133,6 +203,96 @@ export function useTaskSubmit({
 
 					if (globalCommand?.action === "openHistory") {
 						openHistory?.()
+						return
+					}
+
+					if (globalCommand?.action === "editMessage") {
+						// Extract the message number from /edit <n>
+						const numStr = trimmedText.replace(/^\/edit\s*/, "").trim()
+						const msgNum = parseInt(numStr, 10)
+						if (isNaN(msgNum) || msgNum < 1) {
+							showInfo?.("Usage: /edit <number>", 2000)
+							return
+						}
+						// Find the n-th user message (in display order)
+						const userMessages = messages.filter((m) => m.role === "user")
+						const targetMsg = userMessages[msgNum - 1]
+						if (!targetMsg) {
+							showInfo?.(`Message #${msgNum} not found (max: ${userMessages.length})`, 2000)
+							return
+						}
+						const ts = parseInt(targetMsg.id, 10)
+						if (isNaN(ts)) {
+							showInfo?.("Cannot edit this message (no timestamp)", 2000)
+							return
+						}
+						// Enter edit mode: load text into input, set editing flag
+						setEditingMessageTs(ts)
+						// Use pendingPromptReplacement to inject the text into the input
+						useUIStateStore.getState().setPendingPromptReplacement(targetMsg.content)
+						showInfo?.(`Editing message #${msgNum} — press Enter to save, Esc to cancel`, 3000)
+						return
+					}
+
+					if (globalCommand?.action === "deleteMessage") {
+						// Extract the message number from /delete <n>
+						const numStr = trimmedText.replace(/^\/delete\s*/, "").trim()
+						const msgNum = parseInt(numStr, 10)
+						if (isNaN(msgNum) || msgNum < 1) {
+							showInfo?.("Usage: /delete <number>", 2000)
+							return
+						}
+						const userMessages = messages.filter((m) => m.role === "user")
+						const targetMsg = userMessages[msgNum - 1]
+						if (!targetMsg) {
+							showInfo?.(`Message #${msgNum} not found (max: ${userMessages.length})`, 2000)
+							return
+						}
+						const ts = parseInt(targetMsg.id, 10)
+						if (isNaN(ts)) {
+							showInfo?.("Cannot delete this message (no timestamp)", 2000)
+							return
+						}
+						// Enter delete confirmation mode
+						setDeletingMessageTs(ts)
+						return
+					}
+
+					if (globalCommand?.action === "toggleTheme") {
+						const themeStore = useThemeStore.getState()
+						const newMode = themeStore.mode === "dark" ? "light" : "dark"
+						themeStore.setMode(newMode)
+						showInfo?.(`Theme: ${newMode}`, 1500)
+						return
+					}
+
+					if (globalCommand?.action === "compactSession") {
+						sendToExtension({ type: "condenseTaskContextRequest" })
+						showInfo?.("Compacting session...", 2000)
+						return
+					}
+
+					if (globalCommand?.action === "copyLastMessage") {
+						const lastAssistant = getLastAssistantMessage(messages)
+						if (lastAssistant) {
+							const ok = await copyToClipboard(lastAssistant)
+							showInfo?.(ok ? "Copied to clipboard" : "Copy failed", 2000)
+						} else {
+							showInfo?.("No assistant message to copy", 2000)
+						}
+						return
+					}
+
+					if (globalCommand?.action === "exportSession") {
+						const transcript = formatTranscript(messages)
+						const filename = `session-${Date.now()}.md`
+						const filepath = path.resolve(process.cwd(), filename)
+						try {
+							fs.writeFileSync(filepath, transcript, "utf-8")
+							showInfo?.(`Exported to ${filename}`, 3000)
+						} catch {
+							showInfo?.("Export failed", 2000)
+						}
 						return
 					}
 				}
@@ -202,15 +362,25 @@ export function useTaskSubmit({
 			setLoading,
 			setComplete,
 			setError,
+			messages,
+			setEditingMessageTs,
+			setDeletingMessageTs,
 			setShowCustomInput,
 			setIsTransitioningToCustomInput,
 			seenMessageIds,
 			firstTextMessageSkipped,
-			openSettings,
-			openFileChanges,
-			openHistory,
-			showInfo,
-		],
+				openSettings,
+				openFileChanges,
+				openHistory,
+				openConnect,
+				openModelPicker,
+				openAgentPicker,
+				openMcpManager,
+				openHelp,
+				openStatus,
+				exitApp,
+				showInfo,
+			],
 	)
 
 	/**

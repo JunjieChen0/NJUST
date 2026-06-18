@@ -1,6 +1,6 @@
 import { Box, Text } from "ink"
 
-import * as theme from "../../theme.js"
+import { useTheme } from "../../theme.js"
 import { Icon } from "../Icon.js"
 
 import type { ToolRendererProps } from "./types.js"
@@ -9,6 +9,7 @@ import { truncateText, sanitizeContent, getToolIconName } from "./utils.js"
 const MAX_OUTPUT_LINES = 10
 
 export function CommandTool({ toolData }: ToolRendererProps) {
+	const theme = useTheme()
 	const iconName = getToolIconName(toolData.tool)
 	const command = toolData.command || ""
 	const output = toolData.output ? sanitizeContent(toolData.output) : ""

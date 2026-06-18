@@ -1,6 +1,6 @@
 import { Box, Text } from "ink"
 
-import * as theme from "../../theme.js"
+import { useTheme } from "../../theme.js"
 import { Icon } from "../Icon.js"
 
 import type { ToolRendererProps } from "./types.js"
@@ -9,6 +9,7 @@ import { truncateText, sanitizeContent, getToolDisplayName, getToolIconName } fr
 const MAX_CONTENT_LINES = 12
 
 export function GenericTool({ toolData, rawContent }: ToolRendererProps) {
+	const theme = useTheme()
 	const iconName = getToolIconName(toolData.tool)
 	const displayName = getToolDisplayName(toolData.tool)
 

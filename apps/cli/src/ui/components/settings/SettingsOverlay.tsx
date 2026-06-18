@@ -3,7 +3,7 @@ import { Box, Text, useInput } from "ink"
 import type { WebviewMessage } from "@njust-ai/types"
 
 import { useCLIStore } from "../../store.js"
-import * as theme from "../../theme.js"
+import { useTheme } from "../../theme.js"
 import { SettingsPanel, SettingsSection, ToggleSetting } from "./SettingsPanel.js"
 
 /**
@@ -96,6 +96,7 @@ interface McpServerListProps {
 }
 
 export function McpServerList({ sendToExtension }: McpServerListProps) {
+	const theme = useTheme()
 	const { mcpServers } = useCLIStore()
 	const [selectedIndex, setSelectedIndex] = useState(0)
 

@@ -3,7 +3,7 @@ import { Box, Text, useInput } from "ink"
 import type { WebviewMessage } from "@njust-ai/types"
 import { spawn } from "child_process"
 
-import * as theme from "../theme.js"
+import { useTheme } from "../theme.js"
 
 interface CheckpointActionsProps {
 	commitHash: string
@@ -13,6 +13,7 @@ interface CheckpointActionsProps {
 }
 
 export function CheckpointActions({ commitHash, ts, sendToExtension, workspacePath }: CheckpointActionsProps) {
+	const theme = useTheme()
 	const [selectedIndex, setSelectedIndex] = useState(0)
 	const [showingConfirm, setShowingConfirm] = useState(false)
 

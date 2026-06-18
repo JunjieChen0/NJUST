@@ -1,12 +1,13 @@
 import { Box, Text } from "ink"
 
-import * as theme from "../../theme.js"
+import { useTheme } from "../../theme.js"
 import { Icon } from "../Icon.js"
 
 import type { ToolRendererProps } from "./types.js"
 import { getToolIconName } from "./utils.js"
 
 export function ModeTool({ toolData }: ToolRendererProps) {
+	const theme = useTheme()
 	const iconName = getToolIconName(toolData.tool)
 	const mode = toolData.mode || ""
 	const isSwitch = toolData.tool.includes("switch") || toolData.tool.includes("Switch")

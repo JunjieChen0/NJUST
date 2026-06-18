@@ -4,7 +4,7 @@ import type { WebviewMessage } from "@njust-ai/types"
 import Fuzzysort from "fuzzysort"
 
 import type { TaskHistoryItem } from "../types.js"
-import * as theme from "../theme.js"
+import { useTheme } from "../theme.js"
 
 interface HistoryViewProps {
 	taskHistory: TaskHistoryItem[]
@@ -26,6 +26,7 @@ type SortMode = "newest" | "oldest" | "most-expensive" | "most-tokens"
  * - Enter to resume a task
  */
 export function HistoryView({ taskHistory, workspacePath, sendToExtension, onClose, onResumeTask }: HistoryViewProps) {
+	const theme = useTheme()
 	const [searchQuery, setSearchQuery] = useState("")
 	const [sortMode, setSortMode] = useState<SortMode>("newest")
 	const [selectedIndex, setSelectedIndex] = useState(0)

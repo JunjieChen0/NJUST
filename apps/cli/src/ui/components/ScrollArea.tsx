@@ -1,7 +1,7 @@
 import { Box, DOMElement, measureElement, Text, useInput } from "ink"
 import { useEffect, useReducer, useRef, useCallback, useMemo, useState } from "react"
 
-import * as theme from "../theme.js"
+import { useTheme } from "../theme.js"
 
 interface ScrollAreaState {
 	innerHeight: number
@@ -177,6 +177,7 @@ export function ScrollArea({
 	showScrollbar = true,
 	autoScroll: autoScrollProp = true,
 }: ScrollAreaProps) {
+	const theme = useTheme()
 	// Ref for measuring outer container height when not provided
 	const outerRef = useRef<DOMElement>(null)
 	const [measuredHeight, setMeasuredHeight] = useState(0)

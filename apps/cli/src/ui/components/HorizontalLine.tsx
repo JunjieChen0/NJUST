@@ -1,6 +1,6 @@
 import { Text } from "ink"
 
-import * as theme from "../theme.js"
+import { useTheme } from "../theme.js"
 import { useTerminalSize } from "../hooks/TerminalSizeContext.js"
 
 interface HorizontalLineProps {
@@ -8,6 +8,7 @@ interface HorizontalLineProps {
 }
 
 export function HorizontalLine({ active = false }: HorizontalLineProps) {
+	const theme = useTheme()
 	const { columns } = useTerminalSize()
 	const color = active ? theme.borderColorActive : theme.borderColor
 	return <Text color={color}>{"─".repeat(columns)}</Text>

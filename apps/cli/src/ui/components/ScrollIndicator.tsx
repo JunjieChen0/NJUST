@@ -1,7 +1,7 @@
 import { Box, Text } from "ink"
 import { memo } from "react"
 
-import * as theme from "../theme.js"
+import { useTheme } from "../theme.js"
 
 interface ScrollIndicatorProps {
 	scrollTop: number
@@ -10,6 +10,7 @@ interface ScrollIndicatorProps {
 }
 
 function ScrollIndicator({ scrollTop, maxScroll, isScrollFocused = false }: ScrollIndicatorProps) {
+	const theme = useTheme()
 	// Calculate percentage - show 100% when at bottom or no scrolling needed.
 	const percentage = maxScroll > 0 ? Math.round((scrollTop / maxScroll) * 100) : 100
 

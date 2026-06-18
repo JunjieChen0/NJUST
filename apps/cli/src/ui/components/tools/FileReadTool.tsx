@@ -1,6 +1,6 @@
 import { Box, Text } from "ink"
 
-import * as theme from "../../theme.js"
+import { useTheme } from "../../theme.js"
 import { Icon } from "../Icon.js"
 
 import type { ToolRendererProps } from "./types.js"
@@ -23,6 +23,7 @@ function isActualContent(content: string, path: string): boolean {
 }
 
 export function FileReadTool({ toolData }: ToolRendererProps) {
+	const theme = useTheme()
 	const iconName = getToolIconName(toolData.tool)
 	const displayName = getToolDisplayName(toolData.tool)
 	const path = toolData.path || ""

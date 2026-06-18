@@ -3,7 +3,7 @@ import { Text, Box } from "ink"
 
 import type { TokenUsage } from "@njust-ai/types"
 
-import * as theme from "../theme.js"
+import { useTheme } from "../theme.js"
 import ProgressBar from "./ProgressBar.js"
 
 interface MetricsDisplayProps {
@@ -52,9 +52,11 @@ function MetricsDisplay({
 	condenseInProgress = false,
 	contextWarningThreshold = 0.8,
 }: MetricsDisplayProps) {
-	const { totalCost, totalTokensIn, totalTokensOut, contextTokens } = tokenUsage
+	const theme = useTheme()
+	const { totalCost, totalTokensIn, totalTokensOut, contextTokens, totalCacheWrites, totalCacheReads } = tokenUsage
 	const contextPercent = contextWindow > 0 ? contextTokens / contextWindow : 0
 	const isWarning = contextPercent >= contextWarningThreshold
+	const hasCacheData = (totalCacheWrites ?? 0) > 0 || (totalCacheReads ?? 0) > 0
 
 	return (
 		<Box flexDirection="column" alignItems="flex-end">
@@ -68,6 +70,14 @@ function MetricsDisplay({
 				<Text color={theme.dimText}>
 					↑ <Text color={theme.text}>{formatNumber(totalTokensOut)}</Text>
 				</Text>
+				{hasCacheData && (
+					<>
+						<Text color={theme.dimText}> • </Text>
+						<Text color={theme.dimText}>
+							⟳ <Text color={theme.text}>{formatNumber((totalCacheReads ?? 0) + (totalCacheWrites ?? 0))}</Text>
+						</Text>
+					</>
+				)}
 				<Text color={theme.dimText}> • </Text>
 				<ProgressBar value={contextTokens} max={contextWindow} width={12} />
 				<Text color={isWarning ? theme.warningColor : theme.dimText}> {Math.round(contextPercent * 100)}%</Text>

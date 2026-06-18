@@ -3,7 +3,7 @@ import { Box, Text } from "ink"
 
 import type { TodoItem } from "@njust-ai/types"
 
-import * as theme from "../theme.js"
+import { useTheme, getTheme } from "../theme.js"
 import ProgressBar from "./ProgressBar.js"
 import { Icon, type IconName } from "./Icon.js"
 
@@ -20,14 +20,15 @@ const STATUS_ICON_NAMES: Record<TodoItem["status"], IconName> = {
  * Get the color for a TODO status
  */
 function getStatusColor(status: TodoItem["status"]): string {
+	const t = getTheme()
 	switch (status) {
 		case "completed":
-			return theme.successColor
+			return t.successColor
 		case "in_progress":
-			return theme.warningColor
+			return t.warningColor
 		case "pending":
 		default:
-			return theme.dimText
+			return t.dimText
 	}
 }
 
@@ -71,6 +72,7 @@ function TodoDisplay({
 	showChangesOnly = false,
 	title = "Progress",
 }: TodoDisplayProps) {
+	const theme = useTheme()
 	if (!todos || todos.length === 0) {
 		return null
 	}

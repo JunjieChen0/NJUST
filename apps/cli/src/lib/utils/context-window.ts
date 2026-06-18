@@ -58,4 +58,4 @@ function getModelIdForProvider(config: ProviderSettings): string | undefined {
 	}
 }
 
-export { DEFAULT_CONTEXT_WINDOW }
+export { DEFAULT_CONTEXT_WINDOW, getModelIdForProvider }

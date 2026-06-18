@@ -1,6 +1,6 @@
 import { Box, Text } from "ink"
 
-import * as theme from "../../theme.js"
+import { useTheme } from "../../theme.js"
 
 import type { ToolRendererProps } from "./types.js"
 import { truncateText, sanitizeContent } from "./utils.js"
@@ -8,6 +8,7 @@ import { truncateText, sanitizeContent } from "./utils.js"
 const MAX_CONTENT_LINES = 15
 
 export function CompletionTool({ toolData }: ToolRendererProps) {
+	const theme = useTheme()
 	const result = toolData.result ? sanitizeContent(toolData.result) : ""
 	const question = toolData.question ? sanitizeContent(toolData.question) : ""
 	const content = toolData.content ? sanitizeContent(toolData.content) : ""

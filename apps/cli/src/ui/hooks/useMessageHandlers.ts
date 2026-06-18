@@ -110,7 +110,13 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 				return
 			}
 
-			if (say === "user_feedback") {
+			// api_req_finished is handled by the metrics display (token/cost aggregation).
+			// Rendering it inline would duplicate the information.
+			if (say === "api_req_finished") {
+				return
+			}
+
+			if (say === "user_feedback" || say === "user_feedback_diff") {
 				seenMessageIds.current.add(messageId)
 				return
 			}
@@ -132,6 +138,8 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 			let toolDisplayName: string | undefined
 			let toolDisplayOutput: string | undefined
 			let toolData: ToolData | undefined
+			let thinkingStartTs: number | undefined
+			let thinkingEndTs: number | undefined
 
 			if (say === "command_output") {
 				role = "tool"
@@ -143,6 +151,43 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 				pendingCommandRef.current = null
 			} else if (say === "reasoning") {
 				role = "thinking"
+				// OpenCode-style reasoning timer: capture start on first chunk,
+				// end when the final (non-partial) chunk arrives.
+				thinkingStartTs = Date.now()
+				if (!partial) {
+					thinkingEndTs = Date.now()
+				}
+			} else if (say === "mcp_server_response") {
+				// MCP tool response - render like a tool result
+				role = "tool"
+				toolName = "mcp"
+				toolDisplayName = "mcp"
+				toolDisplayOutput = text
+				toolData = { tool: "mcp", content: text }
+			} else if (
+				say === "error" ||
+				say === "diff_error" ||
+				say === "rooignore_error" ||
+				say === "shell_integration_warning" ||
+				say === "too_many_tools_warning" ||
+				say === "condense_context" ||
+				say === "condense_context_error" ||
+				say === "sliding_window_truncation" ||
+				say === "subtask_result"
+			) {
+				// System events: errors, warnings, context management, subtask results.
+				// ChatHistoryItem will apply color/styling based on originalType.
+				role = "system"
+			}
+
+			// Derive toolStatus from say type (only when message is a tool result).
+			let toolStatus: TUIMessage["toolStatus"]
+			if (role === "tool") {
+				toolStatus = "done"
+			} else if (role === "system") {
+				if (say === "error" || say === "diff_error" || say === "rooignore_error") {
+					toolStatus = "error"
+				}
 			}
 
 			seenMessageIds.current.add(messageId)
@@ -157,6 +202,9 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 				partial,
 				originalType: say,
 				toolData,
+				toolStatus,
+				thinkingStartTs,
+				thinkingEndTs,
 			})
 		},
 		[addMessage],
@@ -220,6 +268,7 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 						toolDisplayOutput: formatToolOutput({ tool: "attempt_completion", ...completionInfo }),
 						originalType: ask,
 						toolData,
+						toolStatus: "done",
 					})
 				} catch {
 					// If parsing fails, still add a basic completion message
@@ -235,6 +284,7 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 							tool: "attempt_completion",
 							content: text,
 						},
+						toolStatus: "done",
 					})
 				}
 				return
@@ -292,6 +342,11 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 						toolData,
 						todos,
 						previousTodos,
+						// Non-interactive path auto-approves and runs, so the
+						// tool is immediately "running" — it will move to
+						// "done" when the corresponding command_output /
+						// mcp_server_response say arrives.
+						toolStatus: "running",
 					})
 				} else {
 					addMessage({
@@ -322,6 +377,31 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 				} catch {
 					// Use raw text if not valid JSON
 				}
+			} else if (ask === "api_req_failed") {
+				// API request failed — the generic Y/N prompt is misleading.
+				// Surface the error clearly; the user can still approve (retry)
+				// or reject (abort). The content carries the failure reason.
+				questionText = text || "API request failed"
+			} else if (ask === "mistake_limit_reached") {
+				// Model is repeating mistakes. Show the guidance text from the
+				// extension verbatim instead of the raw JSON.
+				questionText = text || "Consecutive mistake limit reached"
+			} else if (ask === "use_mcp_server") {
+				// MCP tool call — format the server/tool info for readability.
+				try {
+					const mcpInfo = JSON.parse(text) as Record<string, unknown>
+					const server = mcpInfo.serverName ?? mcpInfo.server ?? "mcp"
+					const tool = mcpInfo.toolName ?? mcpInfo.tool ?? "tool"
+					questionText = `MCP [${server}] → ${tool}`
+					if (typeof mcpInfo.arguments === "string" && mcpInfo.arguments.length > 0) {
+						questionText += `\n${mcpInfo.arguments}`
+					}
+				} catch {
+					questionText = text
+				}
+			} else if (ask === "auto_approval_max_req_reached") {
+				// Auto-approval limit hit — user must manually approve.
+				questionText = text || "Auto-approval limit reached. Approve this request manually?"
 			}
 			// Note: ask === "command" is handled above before the nonInteractive block
 

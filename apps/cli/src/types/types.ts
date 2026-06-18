@@ -1,21 +1,6 @@
 import type { ProviderName, ReasoningEffortExtended } from "@njust-ai/types"
 import type { OutputFormat } from "./json-events.js"
 
-export const supportedProviders = [
-	"anthropic",
-	"openai-native",
-	"gemini",
-	"openrouter",
-	"vercel-ai-gateway",
-	"njust-ai",
-] as const satisfies ProviderName[]
-
-export type SupportedProvider = (typeof supportedProviders)[number]
-
-export function isSupportedProvider(provider: string): provider is SupportedProvider {
-	return supportedProviders.includes(provider as SupportedProvider)
-}
-
 export type ReasoningEffortFlagOptions = ReasoningEffortExtended | "unspecified" | "disabled"
 
 export type FlagOptions = {
@@ -32,7 +17,7 @@ export type FlagOptions = {
 	requireApproval: boolean
 	exitOnError: boolean
 	apiKey?: string
-	provider?: SupportedProvider
+	provider?: ProviderName
 	model?: string
 	mode?: string
 	terminalShell?: string
@@ -59,7 +44,7 @@ export interface CliSettings {
 	/** Default mode to use (e.g., "code", "architect", "ask", "debug") */
 	mode?: string
 	/** Default provider to use */
-	provider?: SupportedProvider
+	provider?: ProviderName
 	/** Default model to use */
 	model?: string
 	/** Default reasoning effort level */
@@ -72,4 +57,17 @@ export interface CliSettings {
 	dangerouslySkipPermissions?: boolean
 	/** Exit upon task completion */
 	oneshot?: boolean
+	/** Active theme name (one of the bundled OpenCode-compatible themes) */
+	theme?: string
+	/** Locked theme mode — when set, user pinned dark/light explicitly */
+	themeModeLock?: "dark" | "light"
+	/**
+	 * Per-provider API keys persisted via the `/connect` slash command.
+	 * Stored on disk in `cli-settings.json` (mode 0o600). At startup the
+	 * matching entry is injected into `process.env` for the corresponding
+	 * provider env var (e.g. `OPENROUTER_API_KEY`). Plain text — not
+	 * encrypted; suitable for local development. For production use prefer
+	 * native env vars or a secret manager.
+	 */
+	apiKeysByProvider?: Record<string, string>
 }

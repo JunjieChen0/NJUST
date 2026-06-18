@@ -373,16 +373,15 @@ export function MultilineTextInput({
 		{ isActive },
 	)
 
-	// Split value into lines for rendering
+	// Split value into lines for rendering. When the input is empty we keep a
+	// single empty visual line so the cursor still renders; the placeholder is
+	// drawn as an overlay row by `renderVisualRow` (see `isPlaceholder` below).
 	const lines = useMemo(() => {
-		if (!value && !isActive) {
-			return [placeholder]
-		}
 		if (!value) {
 			return [""]
 		}
 		return value.split("\n")
-	}, [value, placeholder, isActive])
+	}, [value])
 
 	// Determine which line and column the cursor is on
 	const cursorPosition = useMemo(() => {
@@ -416,7 +415,12 @@ export function MultilineTextInput({
 	// - Column 2: Text content
 	const renderVisualRow = useCallback(
 		(row: VisualRow, rowIndex: number) => {
+			// Static placeholder (value is empty, input not focused).
 			const isPlaceholder = !value && !isActive && row.logicalLineIndex === 0
+			// Active placeholder overlay: input is focused but empty — render
+			// the hint text after the cursor so users see the call-to-action
+			// without losing the cursor (mirrors OpenCode's V2 prompt overlay).
+			const showActivePlaceholder = !value && isActive && placeholder.length > 0 && row.logicalLineIndex === 0 && row.isFirstRowOfLine
 			const promptWidth = prompt.length
 			// Only show the prompt on the very first visual row (first row of first line)
 			const showPrompt = row.logicalLineIndex === 0 && row.isFirstRowOfLine
@@ -471,6 +475,9 @@ export function MultilineTextInput({
 						<Text>{beforeCursor}</Text>
 						<Text inverse>{cursorChar}</Text>
 						<Text>{afterCursor}</Text>
+						{showActivePlaceholder && cursorAtEnd ? (
+							<Text dimColor>{placeholder}</Text>
+						) : null}
 					</Box>
 				)
 			}
@@ -486,7 +493,7 @@ export function MultilineTextInput({
 				</Box>
 			)
 		},
-		[prompt, cursorPosition, value, isActive, visualRows, columns],
+		[prompt, cursorPosition, value, isActive, visualRows, columns, placeholder],
 	)
 
 	return <Box flexDirection="column">{visualRows.map((row, index) => renderVisualRow(row, index))}</Box>

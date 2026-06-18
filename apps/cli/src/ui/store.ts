@@ -127,6 +127,12 @@ interface CLIState {
 
 	// Current checkpoint for diff/restore
 	currentCheckpoint: { ts: number; commitHash: string } | null
+
+	// Message edit/delete tracking
+	/** Timestamp of the message being edited (edit mode). Null when not editing. */
+	editingMessageTs: number | null
+	/** Timestamp of the message pending deletion confirmation. Null when not deleting. */
+	deletingMessageTs: number | null
 }
 
 interface CLIActions {
@@ -215,6 +221,10 @@ interface CLIActions {
 
 	// Checkpoint actions
 	setCurrentCheckpoint: (checkpoint: { ts: number; commitHash: string } | null) => void
+
+	// Message edit/delete actions
+	setEditingMessageTs: (ts: number | null) => void
+	setDeletingMessageTs: (ts: number | null) => void
 }
 
 const initialState: CLIState = {
@@ -254,6 +264,8 @@ const initialState: CLIState = {
 	queuedMessages: [],
 	commitSearchResults: [],
 	currentCheckpoint: null,
+	editingMessageTs: null,
+	deletingMessageTs: null,
 }
 
 export const useCLIStore = create<CLIState & CLIActions>((set, get) => ({
@@ -299,10 +311,18 @@ export const useCLIStore = create<CLIState & CLIActions>((set, get) => ({
 					for (const update of updates) {
 						const idx = newMessages.findIndex((m) => m.id === update.id)
 						if (idx !== -1 && newMessages[idx]) {
+							const existing = newMessages[idx]
+							// For reasoning messages, stamp the start time on the
+							// first streamed chunk (OpenCode-style "Thought: Xs"
+							// duration label). Already-set value is preserved.
+							const thinkingStartTs =
+								existing.thinkingStartTs ??
+								(existing.role === "thinking" ? update.timestamp : existing.thinkingStartTs)
 							newMessages[idx] = {
-								...newMessages[idx],
+								...existing,
 								content: update.content,
 								partial: update.partial,
+								thinkingStartTs,
 							}
 							hasChanges = true
 						}
@@ -442,4 +462,6 @@ export const useCLIStore = create<CLIState & CLIActions>((set, get) => ({
 			shallowArrayEqual(state.commitSearchResults, commits) ? state : { commitSearchResults: commits },
 		),
 	setCurrentCheckpoint: (checkpoint) => set({ currentCheckpoint: checkpoint }),
+	setEditingMessageTs: (ts) => set({ editingMessageTs: ts }),
+	setDeletingMessageTs: (ts) => set({ deletingMessageTs: ts }),
 }))

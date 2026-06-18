@@ -15,12 +15,25 @@ export const REASONING_EFFORTS = [...reasoningEffortsExtended, "unspecified", "d
  */
 export const FOLLOWUP_TIMEOUT_SECONDS = 60
 
-export const ASCII_ROO = `  _,'   ___
- <__\\__/   \\
-    \\_  /  _\\
-      \\,\\ / \\\\
-        //   \\\\
-      ,/'     \`\\_,`
+/**
+ * Five-line block ASCII logo for the empty-home state of the TUI.
+ * Reads as `NJUST_AI`; rendered in pure black to keep the wordmark
+ * crisp against the muted terminal background.
+ *
+ * Compressed from a 7-row Standard/Big block font down to 5 rows by
+ * dropping the two interior repeated rows of each glyph; this keeps
+ * the brand legible while reclaiming vertical space for the prompt.
+ *
+ * Rows 1 and 5 are nudged 3 cells right so the wider top/bottom
+ * strokes of `N` line up with the rest of the letters.
+ */
+export const NJUST_AI_LOGO = [
+	"   ███    ██        ██████  ██    ██  ███████  ████████          ██████  ████████",
+	"████   ██           ██   ██    ██  ██          ██             ██    ██    ██",
+	"██  ██ ██           ██   ██    ██  ███████     ██             ████████    ██",
+	"██   ████    ██     ██   ██    ██       ██     ██             ██    ██    ██",
+	"   ██     ██     ██████      ██████   ███████     ██    ██████   ██    ██ ████████",
+]
 
 export const AUTH_BASE_URL = process.env.NJUST_AI_AUTH_BASE_URL ?? ""
 

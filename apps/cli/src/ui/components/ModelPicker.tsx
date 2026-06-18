@@ -2,7 +2,7 @@ import { useMemo, useState } from "react"
 import { Box, Text, useInput } from "ink"
 import type { ProviderSettingsEntry, WebviewMessage } from "@njust-ai/types"
 
-import * as theme from "../theme.js"
+import { useTheme } from "../theme.js"
 
 interface ModelPickerProps {
 	currentApiConfigName: string | null
@@ -29,6 +29,7 @@ type Mode = "list" | "create" | "rename" | "deleteConfirm"
  * - d: delete selected profile (with confirmation)
  */
 export function ModelPicker({ currentApiConfigName, listApiConfigMeta, sendToExtension, onClose }: ModelPickerProps) {
+	const theme = useTheme()
 	const items = useMemo<PickerItem[]>(() => {
 		const profileItems = listApiConfigMeta.map((entry) => ({
 			key: entry.id,

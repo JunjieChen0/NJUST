@@ -3,7 +3,7 @@ import { Box, Text, useInput } from "ink"
 import type { WebviewMessage } from "@njust-ai/types"
 
 import { useCLIStore } from "../store.js"
-import * as theme from "../theme.js"
+import { useTheme } from "../theme.js"
 
 interface MessageQueueProps {
 	sendToExtension: ((msg: WebviewMessage) => void) | null
@@ -17,6 +17,7 @@ interface MessageQueueProps {
  * the queue stays in sync.
  */
 export function MessageQueue({ sendToExtension }: MessageQueueProps) {
+	const theme = useTheme()
 	const { queuedMessages, removeQueuedMessage, editQueuedMessage } = useCLIStore()
 	const [selectedIndex, setSelectedIndex] = useState(0)
 	const [editingId, setEditingId] = useState<string | null>(null)
