@@ -1,6 +1,6 @@
 import { Writable } from "stream"
 
-import { JsonEventEmitter } from "../json-event-emitter.js"
+import { JsonEventEmitter } from "../json-event-emitter.ts"
 
 function createMockStdout(): { stdout: NodeJS.WriteStream; lines: () => Record<string, unknown>[] } {
 	const chunks: string[] = []

@@ -1,4 +1,4 @@
-import type { TUIMessage, PendingAsk, View } from "../types.js"
+import type { TUIMessage, PendingAsk, View } from "../types.ts"
 
 /**
  * Determine the current view state based on messages and pending asks

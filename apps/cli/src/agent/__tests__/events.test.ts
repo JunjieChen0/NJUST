@@ -1,10 +1,15 @@
 import type { ClineMessage } from "@njust-ai/types"
 
-import { detectAgentState } from "../agent-state.js"
-import { taskCompleted } from "../events.js"
+import { detectAgentState } from "../agent-state.ts"
+import { taskCompleted } from "../events.ts"
 
 function createMessage(overrides: Partial<ClineMessage>): ClineMessage {
-	return { id: `msg-${Date.now()}-${Math.random()}`, ts: Date.now() + Math.random() * 1000, type: "say", ...overrides }
+	return {
+		id: `msg-${Date.now()}-${Math.random()}`,
+		ts: Date.now() + Math.random() * 1000,
+		type: "say",
+		...overrides,
+	}
 }
 
 describe("taskCompleted", () => {

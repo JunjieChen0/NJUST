@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react"
-import { FOLLOWUP_TIMEOUT_SECONDS } from "../../types/constants.js"
-import { useUIStateStore } from "../stores/uiStateStore.js"
-import type { PendingAsk } from "../types.js"
+import { FOLLOWUP_TIMEOUT_SECONDS } from "../../types/constants.ts"
+import { useUIStateStore } from "../stores/uiStateStore.ts"
+import type { PendingAsk } from "../types.ts"
 
 export interface UseFollowupCountdownOptions {
 	pendingAsk: PendingAsk | null

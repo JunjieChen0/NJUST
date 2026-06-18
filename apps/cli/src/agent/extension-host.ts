@@ -32,12 +32,14 @@ import type { User } from "@/lib/sdk/index.js"
 import { getProviderSettings } from "@/lib/utils/provider.js"
 import { createEphemeralStorageDir } from "@/lib/storage/index.js"
 
-import type { WaitingForInputEvent, TaskCompletedEvent } from "./events.js"
-import type { AgentStateInfo } from "./agent-state.js"
-import { ExtensionClient } from "./extension-client.js"
-import { OutputManager } from "./output-manager.js"
-import { PromptManager } from "./prompt-manager.js"
-import { AskDispatcher } from "./ask-dispatcher.js"
+import type { WaitingForInputEvent, TaskCompletedEvent } from "./events.ts"
+import type { AgentStateInfo } from "./agent-state.ts"
+import { streamChat } from "@/lib/api/direct.js"
+import type { ChatMessage } from "@/lib/api/direct.js"
+import { ExtensionClient } from "./extension-client.ts"
+import { OutputManager } from "./output-manager.ts"
+import { PromptManager } from "./prompt-manager.ts"
+import { AskDispatcher } from "./ask-dispatcher.ts"
 
 // Pre-configured logger for CLI message activity debugging.
 const cliLogger = new DebugLogger("CLI")
@@ -121,6 +123,7 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 	private vscode: ReturnType<typeof createVSCodeAPI> | null = null
 	private extensionModule: ExtensionModule | null = null
 	private extensionAPI: unknown = null
+	private _usingDirectApi = false
 	private options: ExtensionHostOptions
 	private isReady = false
 	private messageListener: ((message: ExtensionMessage) => void) | null = null
@@ -440,10 +443,28 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 			this.extensionModule = require(bundlePath) as ExtensionModule
 		} catch (error) {
 			Module._resolveFilename = originalResolve
+			this.restoreConsole()
 
-			throw new Error(
-				`Failed to load extension bundle: ${error instanceof Error ? error.message : String(error)}`,
-			)
+			const originalMessage = error instanceof Error ? error.message : String(error)
+
+			if (originalMessage.includes("Class extends value undefined")) {
+				// Extension bundle has circular dependency - use direct API fallback.
+				cliLogger.debug("Extension bundle has circular dependency; falling back to direct API calls")
+				this._usingDirectApi = true
+				this.extensionModule = {
+					activate: async (_context: unknown) => {
+						this.markWebviewReady()
+						return {}
+					},
+				}
+			} else {
+				const helpHint =
+					"\n\nTry rebuilding:\n" +
+					`  cd ${path.resolve(CLI_PACKAGE_ROOT, "../..")} && pnpm clean && pnpm install && pnpm build\n` +
+					`  pnpm --filter njust-ai bundle`
+
+				throw new Error(`Failed to load extension bundle: ${originalMessage}${helpHint}`)
+			}
 		}
 
 		Module._resolveFilename = originalResolve
@@ -489,6 +510,11 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 	// ==========================================================================
 
 	public sendToExtension(message: WebviewMessage): void {
+		if (this._usingDirectApi) {
+			cliLogger.debug("ExtensionHost", `Direct API fallback received ${message.type} (no extension loaded)`)
+			return
+		}
+
 		if (!this.isReady) {
 			throw new Error("You cannot send messages to the extension before it is ready")
 		}
@@ -547,6 +573,88 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 		configuration?: NJUST_AISettings,
 		images?: string[],
 	): Promise<void> {
+		// Direct API fallback: when extension bundle failed to load
+		if (this._usingDirectApi) {
+			const provider = this.options.provider
+			const apiKey = this.options.apiKey || ""
+			const model = this.options.model
+
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const client = this.client as any
+
+			// Send user message to client so TUI can display it
+			client.handleMessage({
+				type: "say",
+				say: "user",
+				text: prompt,
+				ts: Date.now(),
+			})
+
+			const messages: ChatMessage[] = [{ role: "user", content: prompt }]
+
+			try {
+				const stream = streamChat(provider, apiKey, model, messages)
+				let fullText = ""
+
+				for await (const event of stream) {
+					if (event.type === "text") {
+						fullText += event.text
+						client.handleMessage({
+							type: "say",
+							say: "text",
+							text: event.text,
+							ts: Date.now(),
+							partial: true,
+						})
+					}
+					if (event.type === "reasoning") {
+						client.handleMessage({
+							type: "say",
+							say: "reasoning",
+							text: event.text,
+							ts: Date.now(),
+							partial: true,
+						})
+					}
+					if (event.type === "error") {
+						client.handleMessage({
+							type: "say",
+							say: "error",
+							text: event.error,
+							ts: Date.now(),
+						})
+						client.emit("error", new Error(event.error))
+						return
+					}
+				}
+
+				// Send completion message
+				client.handleMessage({
+					type: "say",
+					say: "completion_result",
+					text: fullText,
+					ts: Date.now(),
+				})
+
+				client.emit("taskCompleted", {
+					type: "ask",
+					ask: "completion_result",
+					text: fullText,
+					ts: Date.now(),
+				})
+			} catch (error) {
+				const errMsg = error instanceof Error ? error.message : String(error)
+				client.handleMessage({
+					type: "say",
+					say: "error",
+					text: errMsg,
+					ts: Date.now(),
+				})
+				client.emit("error", new Error(errMsg))
+			}
+			return
+		}
+
 		this.sendToExtension({
 			type: "newTask",
 			text: prompt,
@@ -558,6 +666,15 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 	}
 
 	public async resumeTask(taskId: string): Promise<void> {
+		// Direct API fallback does not support task resume
+		if (this._usingDirectApi) {
+			cliLogger.warn(
+				"ExtensionHost",
+				"Direct API fallback does not support task resume. Starting new task instead.",
+			)
+			return this.runTask("Continue previous task", taskId)
+		}
+
 		this.sendToExtension({ type: "showTaskWithId", text: taskId })
 		return this.waitForTaskCompletion()
 	}

@@ -3,8 +3,8 @@ import { Box, Text } from "ink"
 import { useTheme } from "../../theme.js"
 import { Icon } from "../Icon.js"
 
-import type { ToolRendererProps } from "./types.js"
-import { truncateText, sanitizeContent, getToolDisplayName, getToolIconName, parseDiff } from "./utils.js"
+import type { ToolRendererProps } from "./types.ts"
+import { truncateText, sanitizeContent, getToolDisplayName, getToolIconName, parseDiff } from "./utils.ts"
 
 const MAX_DIFF_LINES = 15
 

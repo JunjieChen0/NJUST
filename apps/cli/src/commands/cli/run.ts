@@ -2,7 +2,6 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 
-import { createElement } from "react"
 import pWaitFor from "p-wait-for"
 
 import { setLogger } from "@njust-ai/vscode-shim"
@@ -31,8 +30,11 @@ import { isValidSessionId } from "@/lib/utils/session-id.js"
 import { VERSION } from "@/lib/utils/version.js"
 
 import { ExtensionHost, ExtensionHostOptions } from "@/agent/index.js"
-import { isExpectedControlFlowError } from "./cancellation.js"
-import { runStdinStreamMode } from "./stdin-stream.js"
+import { isExpectedControlFlowError } from "./cancellation.ts"
+import { runStdinStreamMode } from "./stdin-stream.ts"
+
+// React is only needed for Ink TUI mode. Import dynamically to avoid loading in OpenTUI mode.
+let createElement: typeof import("react").createElement
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const NJUST_AI_MODEL_WARMUP_TIMEOUT_MS = 10_000
@@ -172,6 +174,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 	let rooToken = await loadToken()
 	const settings = await loadSettings()
+	await loadKV()
 
 	// Inject persisted per-provider API keys into the current process env so
 	// downstream `getApiKeyFromEnv()` lookups find them. Set via the `/connect`
@@ -211,8 +214,16 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	const effectiveMode = flagOptions.mode || settings.mode || DEFAULT_FLAGS.mode
 	const effectiveModel = flagOptions.model || settings.model || DEFAULT_FLAGS.model
 	const effectiveReasoningEffort =
-		flagOptions.reasoningEffort || settings.reasoningEffort || DEFAULT_FLAGS.reasoningEffort
-	const effectiveProvider = flagOptions.provider ?? settings.provider ?? (rooToken ? "njust-ai" : "openrouter")
+		flagOptions.reasoningEffort ||
+		(kvReasoningEffort as typeof DEFAULT_FLAGS.reasoningEffort) ||
+		settings.reasoningEffort ||
+		DEFAULT_FLAGS.reasoningEffort
+	const kvProvider = getKV<string>("provider")
+	const effectiveProvider =
+		flagOptions.provider ??
+		(kvProvider as ExtensionHostOptions["provider"]) ??
+		settings.provider ??
+		(rooToken ? "njust-ai" : undefined)
 	const effectiveWorkspacePath = flagOptions.workspace ? path.resolve(flagOptions.workspace) : process.cwd()
 	const legacyRequireApprovalFromSettings =
 		settings.requireApproval ??
@@ -316,7 +327,11 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	}
 
 	extensionHostOptions.apiKey =
-		extensionHostOptions.apiKey || flagOptions.apiKey || getApiKeyFromEnv(extensionHostOptions.provider)
+		extensionHostOptions.apiKey ||
+		flagOptions.apiKey ||
+		getKV<string>("apiKey") ||
+		getApiKeyFromEnv(extensionHostOptions.provider || "") ||
+		""
 
 	// If the active provider doesn't have a key but ANOTHER provider in the
 	// persisted `apiKeysByProvider` map does, fall back to that provider so

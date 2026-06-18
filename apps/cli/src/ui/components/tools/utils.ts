@@ -1,4 +1,4 @@
-import type { IconName } from "../Icon.js"
+import type { IconName } from "../Icon.tsx"
 
 /**
  * Truncate text and return truncation info

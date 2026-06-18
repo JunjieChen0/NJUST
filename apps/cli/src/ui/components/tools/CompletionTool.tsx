@@ -2,8 +2,8 @@ import { Box, Text } from "ink"
 
 import { useTheme } from "../../theme.js"
 
-import type { ToolRendererProps } from "./types.js"
-import { truncateText, sanitizeContent } from "./utils.js"
+import type { ToolRendererProps } from "./types.ts"
+import { truncateText, sanitizeContent } from "./utils.ts"
 
 const MAX_CONTENT_LINES = 15
 

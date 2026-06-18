@@ -3,8 +3,8 @@ import { Box, Text } from "ink"
 import { useTheme } from "../../theme.js"
 import { Icon } from "../Icon.js"
 
-import type { ToolRendererProps } from "./types.js"
-import { getToolIconName } from "./utils.js"
+import type { ToolRendererProps } from "./types.ts"
+import { getToolIconName } from "./utils.ts"
 
 export function ModeTool({ toolData }: ToolRendererProps) {
 	const theme = useTheme()

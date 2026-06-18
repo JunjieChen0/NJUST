@@ -5,7 +5,7 @@ import {
 	getDefaultCliTaskStoragePath,
 	readWorkspaceTaskSessions,
 	resolveWorkspaceResumeSessionId,
-} from "../index.js"
+} from "../index.ts"
 
 vi.mock("@njust-ai/core/cli", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@njust-ai/core/cli")>()

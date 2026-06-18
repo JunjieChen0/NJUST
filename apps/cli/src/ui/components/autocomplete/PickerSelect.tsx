@@ -1,7 +1,7 @@
 import { useRef, useMemo, type ReactNode } from "react"
 import { Box, Text, useInput } from "ink"
 
-import type { AutocompleteItem } from "./types.js"
+import type { AutocompleteItem } from "./types.ts"
 
 export interface PickerSelectProps<T extends AutocompleteItem> {
 	/** Results to display in the picker */

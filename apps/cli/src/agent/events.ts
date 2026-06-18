@@ -10,7 +10,7 @@ import { EventEmitter } from "events"
 
 import { ClineMessage, ClineAsk } from "@njust-ai/types"
 
-import type { AgentStateInfo } from "./agent-state.js"
+import type { AgentStateInfo } from "./agent-state.ts"
 
 // =============================================================================
 // Event Types
@@ -80,6 +80,26 @@ export interface ClientEventMap {
 	 * Emitted on any error during message processing.
 	 */
 	error: Error
+
+	// === TUI Migration Structured Events (Phase 1.5) ===
+	/** Emitted when a text part starts streaming */
+	textStarted: { messageId: string; ts: number }
+	/** Emitted when a text part completes */
+	textCompleted: { messageId: string; ts: number; text?: string }
+	/** Emitted when a reasoning part starts streaming */
+	reasoningStarted: { messageId: string; ts: number }
+	/** Emitted when a reasoning part completes */
+	reasoningCompleted: { messageId: string; ts: number; text?: string }
+	/** Emitted when a tool execution starts */
+	toolStarted: { messageId: string; ts: number }
+	/** Emitted when a tool execution completes */
+	toolCompleted: { messageId: string; ts: number }
+	/** Emitted when a tool execution fails */
+	toolFailed: { messageId: string; ts: number; error?: string }
+	/** Emitted when user approval is requested */
+	approvalRequested: { messageId: string; ts: number }
+	/** Emitted when a question is requested */
+	questionRequested: { messageId: string; ts: number }
 }
 
 /**

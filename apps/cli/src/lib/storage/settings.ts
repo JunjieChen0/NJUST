@@ -3,7 +3,7 @@ import path from "path"
 
 import type { CliSettings } from "@/types/index.js"
 
-import { getConfigDir } from "./index.js"
+import { getConfigDir } from "./index.ts"
 
 export function getSettingsPath(): string {
 	return path.join(getConfigDir(), "cli-settings.json")

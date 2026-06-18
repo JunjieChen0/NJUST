@@ -20,8 +20,8 @@
 import { ExtensionMessage, ClineMessage } from "@njust-ai/types"
 import { debugLog } from "@njust-ai/core/cli"
 
-import type { StateStore } from "./state-store.js"
-import type { TypedEventEmitter, AgentStateChangeEvent, WaitingForInputEvent, TaskCompletedEvent } from "./events.js"
+import type { StateStore } from "./state-store.ts"
+import type { TypedEventEmitter, AgentStateChangeEvent, WaitingForInputEvent, TaskCompletedEvent } from "./events.ts"
 import {
 	isSignificantStateChange,
 	transitionedToWaiting,
@@ -29,8 +29,8 @@ import {
 	streamingStarted,
 	streamingEnded,
 	taskCompleted,
-} from "./events.js"
-import type { AgentStateInfo } from "./agent-state.js"
+} from "./events.ts"
+import type { AgentStateInfo } from "./agent-state.ts"
 
 // =============================================================================
 // Message Processor Options
@@ -76,6 +76,7 @@ export class MessageProcessor {
 	private store: StateStore
 	private emitter: TypedEventEmitter
 	private options: Required<MessageProcessorOptions>
+	private _previousMessageIds: Set<string> = new Set()
 
 	constructor(store: StateStore, emitter: TypedEventEmitter, options: MessageProcessorOptions = {}) {
 		this.store = store
@@ -221,6 +222,9 @@ export class MessageProcessor {
 
 		// Emit new message events for any messages we haven't seen
 		this.emitNewMessageEvents(previousState, currentState, clineMessages)
+
+		// Track seen message IDs for future delta detection
+		this._previousMessageIds = new Set(clineMessages.map((m) => m.id))
 	}
 
 	/**
@@ -246,6 +250,9 @@ export class MessageProcessor {
 
 		// Emit message updated event
 		this.emitter.emit("messageUpdated", clineMessage)
+
+		// Derive structured events for this message update
+		this.deriveStructuredEvents(clineMessage)
 
 		// Emit state change events
 		this.emitStateChangeEvents(previousState, currentState)
@@ -363,19 +370,83 @@ export class MessageProcessor {
 	/**
 	 * Emit events for new messages.
 	 *
-	 * We compare the previous and current message counts to find new messages.
-	 * This is a simple heuristic - for more accuracy, we'd track by timestamp.
+	 * Enhanced for TUI Migration (Phase 1.5):
+	 * - Emits ALL messages, not just the last one
+	 * - Derives structured events from say/ask values
+	 * - Supports delta streaming via ClineMessage.delta field
 	 */
 	private emitNewMessageEvents(
 		_previousState: AgentStateInfo,
 		_currentState: AgentStateInfo,
 		messages: ClineMessage[],
 	): void {
-		// For now, just emit the last message as new
-		// A more sophisticated implementation would track seen message timestamps
-		const lastMessage = messages[messages.length - 1]
-		if (lastMessage) {
-			this.emitter.emit("message", lastMessage)
+		for (const message of messages) {
+			// Emit all messages that weren't in the previous state
+			if (!this._previousMessageIds.has(message.id)) {
+				this.emitter.emit("message", message)
+
+				// Derive structured events from say/ask values
+				this.deriveStructuredEvents(message)
+			} else if (message.delta) {
+				// Message exists but has new delta - emit delta event
+				this.emitter.emit("messageUpdated", message)
+			}
+		}
+	}
+
+	/**
+	 * Derive structured TUI events from ClineMessage say/ask values.
+	 *
+	 * This enables Adapter to consume structured events without protocol changes.
+	 */
+	private deriveStructuredEvents(message: ClineMessage): void {
+		if (message.type === "say" && message.say) {
+			switch (message.say) {
+				case "text":
+					if (message.partial) {
+						this.emitter.emit("textStarted", { messageId: message.id, ts: message.ts })
+					} else {
+						this.emitter.emit("textCompleted", { messageId: message.id, ts: message.ts })
+					}
+					break
+				case "reasoning":
+					if (message.partial) {
+						this.emitter.emit("reasoningStarted", { messageId: message.id, ts: message.ts })
+					} else {
+						this.emitter.emit("reasoningCompleted", { messageId: message.id, ts: message.ts })
+					}
+					break
+				case "tool":
+					this.emitter.emit("toolStarted", { messageId: message.id, ts: message.ts })
+					break
+				case "command_output":
+					this.emitter.emit("toolCompleted", { messageId: message.id, ts: message.ts })
+					break
+				case "error":
+					this.emitter.emit("toolFailed", { messageId: message.id, ts: message.ts, error: message.text })
+					break
+				case "completion_result":
+					this.emitter.emit("taskCompleted", {
+						success: true,
+						stateInfo: this.store.getAgentState(),
+						message,
+					})
+					break
+			}
+		}
+
+		if (message.type === "ask" && message.ask) {
+			switch (message.ask) {
+				case "tool":
+					this.emitter.emit("approvalRequested", { messageId: message.id, ts: message.ts })
+					break
+				case "followup":
+					this.emitter.emit("questionRequested", { messageId: message.id, ts: message.ts })
+					break
+				case "command":
+					this.emitter.emit("approvalRequested", { messageId: message.id, ts: message.ts })
+					break
+			}
 		}
 	}
 

@@ -2,7 +2,7 @@ import { render } from "ink-testing-library"
 
 import type { TodoItem } from "@njust-ai/types"
 
-import TodoChangeDisplay from "../TodoChangeDisplay.js"
+import TodoChangeDisplay from "../TodoChangeDisplay.tsx"
 
 describe("TodoChangeDisplay", () => {
 	it("renders all todos for initial state (no previous todos)", () => {

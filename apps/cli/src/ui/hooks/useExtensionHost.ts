@@ -7,7 +7,7 @@ import type { ExtensionMessage, HistoryItem, WebviewMessage } from "@njust-ai/ty
 import { ExtensionHostInterface, ExtensionHostOptions } from "@/agent/index.js"
 import { arePathsEqual } from "@/lib/utils/path.js"
 
-import { useCLIStore } from "../store.js"
+import { useCLIStore } from "../store.ts"
 
 const TASK_HISTORY_WAIT_TIMEOUT_MS = 2_000
 

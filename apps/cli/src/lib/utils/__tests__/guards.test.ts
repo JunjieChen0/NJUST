@@ -1,4 +1,4 @@
-import { isRecord } from "../guards.js"
+import { isRecord } from "../guards.ts"
 
 describe("isRecord", () => {
 	it("returns true for plain objects", () => {

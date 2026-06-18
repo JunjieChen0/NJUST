@@ -28,7 +28,10 @@ import {
 	hasToken,
 	getCredentialsPath,
 	getLegacyCredentialsPath,
-} from "../credentials.js"
+	saveProviderApiKey,
+	loadProviderApiKey,
+	clearProviderApiKey,
+} from "../credentials.ts"
 
 // Re-derive the test config dir for use in tests (must match the hoisted one)
 const actualTestConfigDir = getTestConfigDir()
@@ -166,6 +169,64 @@ describe("Token Storage (encrypted)", () => {
 		it("should return false if no token exists", async () => {
 			const exists = await hasToken()
 			expect(exists).toBe(false)
+		})
+	})
+
+	describe("Provider API Key Storage", () => {
+		it("should save and load provider API key", async () => {
+			await saveProviderApiKey("anthropic", "sk-ant-test123")
+
+			const loaded = await loadProviderApiKey("anthropic")
+			expect(loaded).toBe("sk-ant-test123")
+		})
+
+		it("should return null for non-existent provider", async () => {
+			const loaded = await loadProviderApiKey("openai")
+			expect(loaded).toBeNull()
+		})
+
+		it("should store multiple provider keys", async () => {
+			await saveProviderApiKey("anthropic", "sk-ant-test123")
+			await saveProviderApiKey("openai", "sk-openai-test456")
+
+			const anthropicKey = await loadProviderApiKey("anthropic")
+			const openaiKey = await loadProviderApiKey("openai")
+
+			expect(anthropicKey).toBe("sk-ant-test123")
+			expect(openaiKey).toBe("sk-openai-test456")
+		})
+
+		it("should update existing provider key", async () => {
+			await saveProviderApiKey("anthropic", "old-key")
+			await saveProviderApiKey("anthropic", "new-key")
+
+			const loaded = await loadProviderApiKey("anthropic")
+			expect(loaded).toBe("new-key")
+		})
+
+		it("should clear provider key", async () => {
+			await saveProviderApiKey("anthropic", "sk-ant-test123")
+			await clearProviderApiKey("anthropic")
+
+			const loaded = await loadProviderApiKey("anthropic")
+			expect(loaded).toBeNull()
+		})
+
+		it("should not affect other providers when clearing one", async () => {
+			await saveProviderApiKey("anthropic", "sk-ant-test123")
+			await saveProviderApiKey("openai", "sk-openai-test456")
+			await clearProviderApiKey("anthropic")
+
+			const openaiKey = await loadProviderApiKey("openai")
+			expect(openaiKey).toBe("sk-openai-test456")
+		})
+
+		it("should encrypt provider keys at rest", async () => {
+			await saveProviderApiKey("anthropic", "sk-ant-test123")
+
+			const encData = await fs.readFile(expectedEncFile, "utf-8")
+			// Encrypted file should NOT contain plaintext API key
+			expect(encData).not.toContain("sk-ant-test123")
 		})
 	})
 

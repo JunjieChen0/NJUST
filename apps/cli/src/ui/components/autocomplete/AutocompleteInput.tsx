@@ -6,8 +6,8 @@ import { useTerminalSize } from "../../hooks/TerminalSizeContext.js"
 import { useUIStateStore } from "../../stores/uiStateStore.js"
 import { MultilineTextInput } from "../MultilineTextInput.js"
 
-import type { AutocompleteItem, AutocompleteTrigger, AutocompletePickerState } from "./types.js"
-import { useAutocompletePicker } from "./useAutocompletePicker.js"
+import type { AutocompleteItem, AutocompleteTrigger, AutocompletePickerState } from "./types.ts"
+import { useAutocompletePicker } from "./useAutocompletePicker.ts"
 
 export interface AutocompleteInputProps<T extends AutocompleteItem = AutocompleteItem> {
 	/** Placeholder text when input is empty */
@@ -331,11 +331,11 @@ export const AutocompleteInput = forwardRef(AutocompleteInputInner) as <T extend
 /**
  * Re-export types and hook for convenience
  */
-export { useAutocompletePicker } from "./useAutocompletePicker.js"
+export { useAutocompletePicker } from "./useAutocompletePicker.ts"
 export type {
 	AutocompleteItem,
 	AutocompleteTrigger,
 	AutocompletePickerState,
 	AutocompletePickerActions,
 	TriggerDetectionResult,
-} from "./types.js"
+} from "./types.ts"

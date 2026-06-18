@@ -1,6 +1,6 @@
 import { NJUST_AISettings } from "@njust-ai/types"
 
-import { useCLIStore } from "../store.js"
+import { useCLIStore } from "../store.ts"
 
 describe("useCLIStore", () => {
 	beforeEach(() => {

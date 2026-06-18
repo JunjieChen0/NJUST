@@ -1,6 +1,6 @@
 import { render } from "ink-testing-library"
 
-import { createHistoryTrigger, toHistoryResult, type HistoryResult } from "../HistoryTrigger.js"
+import { createHistoryTrigger, toHistoryResult, type HistoryResult } from "../HistoryTrigger.tsx"
 
 const mockHistoryItems: HistoryResult[] = [
 	{

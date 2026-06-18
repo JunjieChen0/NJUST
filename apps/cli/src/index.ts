@@ -67,6 +67,7 @@ program
 		'Output format (only works with --print): "text" (default), "json" (single result), or "stream-json" (realtime streaming)',
 		"text",
 	)
+	.option("--tui-engine <engine>", 'TUI engine: "opentui" (default, requires Bun runtime) or "ink"', "opentui")
 	.action(run)
 
 const listCommand = program

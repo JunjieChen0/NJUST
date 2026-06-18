@@ -1,4 +1,4 @@
-export { type FileResult, type FileTriggerConfig, createFileTrigger, toFileResult } from "./FileTrigger.js"
+export { type FileResult, type FileTriggerConfig, createFileTrigger, toFileResult } from "./FileTrigger.tsx"
 
 export { type GitResult, type GitTriggerConfig, createGitTrigger, toGitResult } from "./GitTrigger.js"
 
@@ -13,15 +13,15 @@ export {
 	type SlashCommandTriggerConfig,
 	createSlashCommandTrigger,
 	toSlashCommandResult,
-} from "./SlashCommandTrigger.js"
+} from "./SlashCommandTrigger.tsx"
 
-export { type ModeResult, type ModeTriggerConfig, createModeTrigger, toModeResult } from "./ModeTrigger.js"
+export { type ModeResult, type ModeTriggerConfig, createModeTrigger, toModeResult } from "./ModeTrigger.tsx"
 
-export { type HelpShortcutResult, createHelpTrigger } from "./HelpTrigger.js"
+export { type HelpShortcutResult, createHelpTrigger } from "./HelpTrigger.tsx"
 
 export {
 	type HistoryResult,
 	type HistoryTriggerConfig,
 	createHistoryTrigger,
 	toHistoryResult,
-} from "./HistoryTrigger.js"
+} from "./HistoryTrigger.tsx"

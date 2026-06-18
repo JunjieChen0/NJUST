@@ -3,7 +3,7 @@ import * as os from "os"
 import fs from "fs/promises"
 import path from "path"
 
-import { getConfigDir, getSecureDir, ensureSecureDir } from "./index.js"
+import { getConfigDir, getSecureDir, ensureSecureDir } from "./index.ts"
 
 const CREDENTIALS_FILE = path.join(getConfigDir(), "cli-credentials.json")
 const CREDENTIALS_ENC_FILE = path.join(getConfigDir(), "cli-credentials.enc")
@@ -24,6 +24,72 @@ export interface Credentials {
 	createdAt: string
 	userId?: string
 	orgId?: string
+	/** Per-provider API keys (encrypted at rest) */
+	providerApiKeys?: Record<string, string>
+}
+
+/**
+ * Save a per-provider API key to encrypted storage.
+ */
+export async function saveProviderApiKey(provider: string, apiKey: string): Promise<void> {
+	const credentials = (await loadCredentials()) || {
+		token: "",
+		createdAt: new Date().toISOString(),
+	}
+
+	if (!credentials.providerApiKeys) {
+		credentials.providerApiKeys = {}
+	}
+
+	credentials.providerApiKeys[provider] = apiKey
+	await saveCredentials(credentials)
+}
+
+/**
+ * Load a per-provider API key from encrypted storage.
+ */
+export async function loadProviderApiKey(provider: string): Promise<string | null> {
+	const credentials = await loadCredentials()
+	return credentials?.providerApiKeys?.[provider] ?? null
+}
+
+/**
+ * Clear a per-provider API key from encrypted storage.
+ */
+export async function clearProviderApiKey(provider: string): Promise<void> {
+	const credentials = await loadCredentials()
+	if (credentials?.providerApiKeys) {
+		delete credentials.providerApiKeys[provider]
+		await saveCredentials(credentials)
+	}
+}
+
+/**
+ * Save credentials to encrypted storage.
+ */
+export async function saveCredentials(credentials: Credentials): Promise<void> {
+	await fs.mkdir(getConfigDir(), { recursive: true })
+
+	const plaintext = JSON.stringify(credentials, null, 2)
+	const masterKey = await getOrCreateMasterKey()
+	const encrypted = VERSION_PREFIX + encrypt(plaintext, masterKey)
+
+	await fs.writeFile(CREDENTIALS_ENC_FILE, encrypted, { mode: 0o600 })
+
+	// Clean up legacy plaintext file if it exists
+	await unlinkIfExists(CREDENTIALS_FILE)
+}
+
+export async function saveToken(token: string, options?: { userId?: string; orgId?: string }): Promise<void> {
+	const credentials = (await loadCredentials()) || {
+		token: "",
+		createdAt: new Date().toISOString(),
+	}
+
+	credentials.token = token
+	credentials.userId = options?.userId
+	credentials.orgId = options?.orgId
+	await saveCredentials(credentials)
 }
 
 /**
@@ -77,26 +143,6 @@ function deriveLegacyKey(): Buffer {
 }
 
 // ── Public API ────────────────────────────────────────────────────
-
-export async function saveToken(token: string, options?: { userId?: string; orgId?: string }): Promise<void> {
-	await fs.mkdir(getConfigDir(), { recursive: true })
-
-	const credentials: Credentials = {
-		token,
-		createdAt: new Date().toISOString(),
-		userId: options?.userId,
-		orgId: options?.orgId,
-	}
-
-	const plaintext = JSON.stringify(credentials, null, 2)
-	const masterKey = await getOrCreateMasterKey()
-	const encrypted = VERSION_PREFIX + encrypt(plaintext, masterKey)
-
-	await fs.writeFile(CREDENTIALS_ENC_FILE, encrypted, { mode: 0o600 })
-
-	// Clean up legacy plaintext file if it exists
-	await unlinkIfExists(CREDENTIALS_FILE)
-}
 
 export async function loadToken(): Promise<string | null> {
 	const credentials = await loadCredentials()

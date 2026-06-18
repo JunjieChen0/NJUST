@@ -274,6 +274,17 @@ export const clineMessageSchema = z.object({
 	isProtected: z.boolean().optional(),
 	apiProtocol: z.union([z.literal("openai"), z.literal("anthropic")]).optional(),
 	isAnswered: z.boolean().optional(),
+	// === TUI Migration Extension Fields (Phase 1.5) ===
+	/** Incremental text delta (alternative to full text replacement with partial=true) */
+	delta: z.string().optional(),
+	/** Type of delta content: text, reasoning, or tool_input */
+	deltaType: z.union([z.literal("text"), z.literal("reasoning"), z.literal("tool_input")]).optional(),
+	/** Group ID for associating multiple parts of the same assistant response */
+	messageGroupId: z.string().optional(),
+	/** Part index within the message group */
+	partIndex: z.number().optional(),
+	/** Type of this part within the message group */
+	partType: z.union([z.literal("text"), z.literal("reasoning"), z.literal("tool_result")]).optional(),
 })
 
 export type ClineMessage = z.infer<typeof clineMessageSchema>

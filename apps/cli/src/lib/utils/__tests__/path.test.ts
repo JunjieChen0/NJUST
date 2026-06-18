@@ -1,4 +1,4 @@
-import { normalizePath, arePathsEqual } from "../path.js"
+import { normalizePath, arePathsEqual } from "../path.ts"
 
 // Helper to create platform-specific expected paths
 const expectedPath = (...segments: string[]) => {

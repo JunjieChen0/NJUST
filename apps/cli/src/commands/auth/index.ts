@@ -1,3 +1,3 @@
-export * from "./login.js"
-export * from "./logout.js"
-export * from "./status.js"
+export * from "./login.ts"
+export * from "./logout.ts"
+export * from "./status.ts"

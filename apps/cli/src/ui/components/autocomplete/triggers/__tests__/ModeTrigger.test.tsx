@@ -1,4 +1,4 @@
-import { type ModeResult, createModeTrigger, toModeResult } from "../ModeTrigger.js"
+import { type ModeResult, createModeTrigger, toModeResult } from "../ModeTrigger.tsx"
 
 describe("ModeTrigger", () => {
 	const testModes: ModeResult[] = [

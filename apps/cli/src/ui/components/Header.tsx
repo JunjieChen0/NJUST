@@ -9,7 +9,7 @@ import { ExtensionHostOptions } from "@/agent/index.js"
 import { useTerminalSize } from "../hooks/TerminalSizeContext.js"
 import { useTheme } from "../theme.js"
 
-import MetricsDisplay from "./MetricsDisplay.js"
+import MetricsDisplay from "./MetricsDisplay.tsx"
 
 interface HeaderProps extends ExtensionHostOptions {
 	version: string

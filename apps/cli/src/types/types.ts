@@ -1,5 +1,5 @@
 import type { ProviderName, ReasoningEffortExtended } from "@njust-ai/types"
-import type { OutputFormat } from "./json-events.js"
+import type { OutputFormat } from "./json-events.ts"
 
 export type ReasoningEffortFlagOptions = ReasoningEffortExtended | "unspecified" | "disabled"
 
@@ -26,6 +26,8 @@ export type FlagOptions = {
 	ephemeral: boolean
 	oneshot: boolean
 	outputFormat?: OutputFormat
+	/** TUI engine selection: "ink" or "opentui" */
+	tuiEngine?: "ink" | "opentui"
 }
 
 export enum OnboardingProviderChoice {

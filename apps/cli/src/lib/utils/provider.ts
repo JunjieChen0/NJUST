@@ -29,6 +29,9 @@ const ENV_VAR_OVERRIDES: Record<string, string> = {
 	openai: "OPENAI_API_KEY",
 	// njust-ai cloud uses its own namespaced variable.
 	"njust-ai": "NJUST_AI_API_KEY",
+	unbound: "UNBOUND_API_KEY",
+	ollama: "", // Local, no API key needed
+	lmstudio: "", // Local, no API key needed
 }
 
 function toEnvVarName(provider: string): string {

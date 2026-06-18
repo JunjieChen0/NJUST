@@ -1,8 +1,8 @@
 import { render } from "ink-testing-library"
 
-import type { TUIMessage } from "../../types.js"
-import ChatHistoryItem from "../ChatHistoryItem.js"
-import { resetNerdFontCache } from "../Icon.js"
+import type { TUIMessage } from "../../types.ts"
+import ChatHistoryItem from "../ChatHistoryItem.tsx"
+import { resetNerdFontCache } from "../Icon.tsx"
 
 describe("ChatHistoryItem", () => {
 	beforeEach(() => {

@@ -15,7 +15,7 @@
 
 import { ClineMessage, ClineSay } from "@njust-ai/types"
 
-import { Observable } from "./events.js"
+import { Observable } from "./events.ts"
 
 // =============================================================================
 // Types

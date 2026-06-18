@@ -1,6 +1,6 @@
 import type { TodoItem } from "@njust-ai/types"
 
-import type { ToolData } from "../types.js"
+import type { ToolData } from "../types.ts"
 
 /**
  * Extract structured ToolData from parsed tool JSON

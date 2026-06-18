@@ -1,6 +1,6 @@
 import { render } from "ink-testing-library"
 
-import { Icon, isNerdFontSupported, resetNerdFontCache, getIconChar } from "../Icon.js"
+import { Icon, isNerdFontSupported, resetNerdFontCache, getIconChar } from "../Icon.tsx"
 
 describe("Icon", () => {
 	beforeEach(() => {

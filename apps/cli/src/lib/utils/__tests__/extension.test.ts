@@ -1,7 +1,7 @@
 import fs from "fs"
 import path from "path"
 
-import { getDefaultExtensionPath } from "../extension.js"
+import { getDefaultExtensionPath } from "../extension.ts"
 
 vi.mock("fs")
 

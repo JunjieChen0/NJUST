@@ -6,7 +6,7 @@ import type {
 	AutocompletePickerState,
 	AutocompletePickerActions,
 	TriggerDetectionResult,
-} from "./types.js"
+} from "./types.ts"
 
 const DEFAULT_DEBOUNCE_MS = 150
 

@@ -4,9 +4,9 @@ import type { WebviewMessage } from "@njust-ai/types"
 
 import { matchesGlobalSequence } from "@/lib/utils/input.js"
 
-import type { ModeResult } from "../components/autocomplete/index.js"
-import { useUIStateStore } from "../stores/uiStateStore.js"
-import { useCLIStore } from "../store.js"
+import type { ModeResult } from "../components/autocomplete/index.ts"
+import { useUIStateStore } from "../stores/uiStateStore.ts"
+import { useCLIStore } from "../store.ts"
 
 export interface UseGlobalInputOptions {
 	canToggleFocus: boolean

@@ -3,7 +3,7 @@ import fuzzysort from "fuzzysort"
 
 import { GlobalCommandAction } from "@/lib/utils/commands.js"
 
-import type { AutocompleteTrigger, AutocompleteItem, TriggerDetectionResult } from "../types.js"
+import type { AutocompleteTrigger, AutocompleteItem, TriggerDetectionResult } from "../types.ts"
 
 export interface SlashCommandResult extends AutocompleteItem {
 	name: string

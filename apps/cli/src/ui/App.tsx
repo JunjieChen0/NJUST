@@ -3,6 +3,7 @@ import { Select } from "@inkjs/ui"
 import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from "react"
 
 import { ExtensionHostInterface, ExtensionHostOptions } from "@/agent/index.js"
+import type { SupportedProvider } from "@/types/index.js"
 
 import { getGlobalCommandsForAutocomplete } from "@/lib/utils/commands.js"
 import { arePathsEqual } from "@/lib/utils/path.js"
@@ -29,7 +30,7 @@ import {
 } from "./hooks/index.js"
 
 // Import extracted utilities.
-import { getView } from "./utils/index.js"
+import { getView } from "./utils/index.ts"
 
 // Import components.
 import { NJUST_AI_LOGO } from "@/types/constants.js"
@@ -85,9 +86,13 @@ export interface TUIAppProps extends ExtensionHostOptions {
 }
 
 /**
- * Inner App component that uses the terminal size context
+ * AppContent - Main TUI content with all hooks and rendering
  */
-function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps) {
+function AppContent({
+	createExtensionHost,
+	onBackToSetup,
+	...extensionHostOptions
+}: TUIAppProps & { onBackToSetup: () => void }) {
 	const {
 		initialPrompt,
 		initialTaskId,
@@ -296,6 +301,10 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 	const inputColumns = Math.max(20, promptWidth - 4)
 	const [scrollState, setScrollState] = useState({ scrollTop: 0, maxScroll: 0, isAtBottom: true })
 	const { scrollToBottomTrigger, scrollToBottom } = useScrollToBottom()
+
+	// Sidebar visibility: auto-show on wide terminals, manual toggle otherwise
+	const wide = columns > 120
+	const sidebarVisible = showSidebar || wide
 
 	// RAF-style throttle refs for scroll updates (prevents multiple state updates per event loop tick).
 	const rafIdRef = useRef<NodeJS.Immediate | null>(null)
@@ -733,6 +742,13 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		}
 	})
 
+	// Handle back-to-setup key for extension load errors
+	useInput((input, _key) => {
+		if (error && input === "b") {
+			onBackToSetup()
+		}
+	})
+
 	// Cancel countdown timer when user navigates in the followup suggestion menu
 	// This provides better UX - any user interaction cancels the auto-accept timer
 	const showFollowupSuggestions =
@@ -760,6 +776,9 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 				</Text>
 				<Text color="gray" dimColor>
 					Press Ctrl+C to exit
+				</Text>
+				<Text color="gray" dimColor>
+					Press B to go back to setup
 				</Text>
 			</Box>
 		)
@@ -791,7 +810,7 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 	) : isScrollAreaActive ? (
 		<ScrollIndicator scrollTop={scrollState.scrollTop} maxScroll={scrollState.maxScroll} isScrollFocused={true} />
 	) : isInputAreaActive ? (
-		<Text color={theme.dimText}>? for shortcuts</Text>
+		<Text color={theme.dimText}>? for shortcuts • Ctrl+K commands • Ctrl+B sidebar • Tab focus</Text>
 	) : null
 
 	const getPickerRenderItem = (): ((item: AutocompleteItem, isSelected: boolean) => ReactNode) => {
@@ -1176,6 +1195,32 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 			)}
 		</Box>
 	)
+}
+
+/**
+ * AppInner - Manages apiKey state and conditionally renders ApiKeyPrompt or AppContent
+ */
+function AppInner(props: TUIAppProps) {
+	const [apiKey, setApiKey] = useState<string | undefined>(props.apiKey)
+	const [provider, setProvider] = useState<SupportedProvider | undefined>(props.provider)
+	const [ready, setReady] = useState(Boolean(props.apiKey && props.provider))
+
+	if (!ready) {
+		return (
+			<WelcomeScreen
+				onReady={(selectedProvider, key) => {
+					setProvider(selectedProvider)
+					setApiKey(key)
+					setReady(true)
+				}}
+				onExit={() => {
+					process.exit(0)
+				}}
+			/>
+		)
+	}
+
+	return <AppContent {...props} apiKey={apiKey} provider={provider!} onBackToSetup={() => setReady(false)} />
 }
 
 /**

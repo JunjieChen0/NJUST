@@ -1,6 +1,6 @@
 import type { Key } from "ink"
 
-import { GLOBAL_INPUT_SEQUENCES, isGlobalInputSequence, matchesGlobalSequence } from "../input.js"
+import { GLOBAL_INPUT_SEQUENCES, isGlobalInputSequence, matchesGlobalSequence } from "../input.ts"
 
 function createKey(overrides: Partial<Key> = {}): Key {
 	return {

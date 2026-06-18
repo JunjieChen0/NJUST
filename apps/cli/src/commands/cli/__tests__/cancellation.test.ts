@@ -3,7 +3,7 @@ import {
 	isExpectedControlFlowError,
 	isNoActiveTaskLikeError,
 	isStreamTeardownLikeError,
-} from "../cancellation.js"
+} from "../cancellation.ts"
 
 describe("isCancellationLikeError", () => {
 	it("returns true for aborted error messages", () => {

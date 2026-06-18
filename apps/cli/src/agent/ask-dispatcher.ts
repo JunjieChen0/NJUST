@@ -28,8 +28,8 @@ import { debugLog } from "@njust-ai/core/cli"
 
 import { FOLLOWUP_TIMEOUT_SECONDS } from "@/types/index.js"
 
-import type { OutputManager } from "./output-manager.js"
-import type { PromptManager } from "./prompt-manager.js"
+import type { OutputManager } from "./output-manager.ts"
+import type { PromptManager } from "./prompt-manager.ts"
 
 // =============================================================================
 // Types

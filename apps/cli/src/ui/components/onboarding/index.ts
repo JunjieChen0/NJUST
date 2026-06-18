@@ -1,1 +1,1 @@
-export * from "./OnboardingScreen.js"
+export * from "./OnboardingScreen.tsx"

@@ -1,7 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 
-import { getHistoryFilePath, loadHistory, saveHistory, addToHistory, MAX_HISTORY_ENTRIES } from "../history.js"
+import { getHistoryFilePath, loadHistory, saveHistory, addToHistory, MAX_HISTORY_ENTRIES } from "../history.ts"
 
 vi.mock("fs/promises")
 

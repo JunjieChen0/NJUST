@@ -4,7 +4,7 @@ import fs from "fs"
 import path from "path"
 import type { WebviewMessage } from "@njust-ai/types"
 
-import { getGlobalCommand } from "../../lib/utils/commands.js"
+import { getGlobalCommand } from "../../lib/utils/commands.ts"
 
 import { useCLIStore } from "../store.js"
 import { useUIStateStore } from "../stores/uiStateStore.js"

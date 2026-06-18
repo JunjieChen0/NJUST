@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { AutocompletePickerState } from "../components/autocomplete/types.js"
+import type { AutocompletePickerState } from "../components/autocomplete/types.ts"
 
 /**
  * UI-specific state that doesn't need to persist across task switches.

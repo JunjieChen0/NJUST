@@ -1,7 +1,7 @@
 // Export existing hooks
-export { TerminalSizeProvider, useTerminalSize } from "./TerminalSizeContext.js"
-export { useToast, useToastStore } from "./useToast.js"
-export { useInputHistory } from "./useInputHistory.js"
+export { TerminalSizeProvider, useTerminalSize } from "./TerminalSizeContext.tsx"
+export { useToast, useToastStore } from "./useToast.ts"
+export { useInputHistory } from "./useInputHistory.ts"
 
 // Export new extracted hooks
 export { useFollowupCountdown } from "./useFollowupCountdown.js"
@@ -15,10 +15,10 @@ export { useCondenseTask } from "./useCondenseTask.js"
 export { useCheckpoints } from "./useCheckpoints.js"
 
 // Export types
-export type { UseFollowupCountdownOptions } from "./useFollowupCountdown.js"
-export type { UseFocusManagementOptions, UseFocusManagementReturn } from "./useFocusManagement.js"
-export type { UseMessageHandlersOptions, UseMessageHandlersReturn } from "./useMessageHandlers.js"
-export type { UseExtensionHostOptions, UseExtensionHostReturn } from "./useExtensionHost.js"
-export type { UseTaskSubmitOptions, UseTaskSubmitReturn } from "./useTaskSubmit.js"
-export type { UseGlobalInputOptions } from "./useGlobalInput.js"
-export type { UsePickerHandlersOptions, UsePickerHandlersReturn } from "./usePickerHandlers.js"
+export type { UseFollowupCountdownOptions } from "./useFollowupCountdown.ts"
+export type { UseFocusManagementOptions, UseFocusManagementReturn } from "./useFocusManagement.ts"
+export type { UseMessageHandlersOptions, UseMessageHandlersReturn } from "./useMessageHandlers.ts"
+export type { UseExtensionHostOptions, UseExtensionHostReturn } from "./useExtensionHost.ts"
+export type { UseTaskSubmitOptions, UseTaskSubmitReturn } from "./useTaskSubmit.ts"
+export type { UseGlobalInputOptions } from "./useGlobalInput.ts"
+export type { UsePickerHandlersOptions, UsePickerHandlersReturn } from "./usePickerHandlers.ts"
