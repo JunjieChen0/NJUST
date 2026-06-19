@@ -14,6 +14,7 @@ type SecurityMetricName =
 	| "permission_auto_downgrade"
 	| "execute_command_high_risk"
 	| "execute_command_high_risk_bypass"
+	| "execute_command_cwd_escape"
 	| "tool_exec_duration_ms"
 	| "tool_memory_delta_mb"
 	| "tool_memory_rss_mb"

@@ -19,6 +19,7 @@ import { AskIgnoredError } from "./AskIgnoredError"
 import { NJUST_AIEventName } from "@njust-ai/types"
 import { getErrorMessage } from "../../shared/error-utils"
 import { logger } from "../../shared/logger"
+import { getAuditLogger } from "../../services/auditAccessor"
 import type { ICloudAgentHost } from "./interfaces/ICloudAgentHost"
 import { TaskAbortedError } from "./TaskErrors"
 import { t } from "../../i18n"
@@ -788,6 +789,17 @@ export class CloudAgentOrchestrator {
 				}
 			}
 		} else {
+			// Confirmation is OFF: the user has chosen to apply remote workspace
+			// operations in batch without per-step approval. Surface a single
+			// prominent chat warning and audit each op (path, type, outcome) so
+			// the trail still exists for security review.
+			await this.host.say(
+				"text",
+				`⚠️ Applying ${ops.length} remote workspace operation(s) WITHOUT per-step confirmation ` +
+					`(\`njust-ai.cloudAgent.confirmRemoteWorkspaceOps = false\`). ` +
+					`Each operation will be audited.`,
+			)
+
 			const applied = await this.service.applyCloudWorkspaceOps(
 				this.host.cwd,
 				ops,
@@ -795,6 +807,34 @@ export class CloudAgentOrchestrator {
 				this.host.rooIgnoreController,
 				this.host.rooProtectedController,
 			)
+
+			const audit = getAuditLogger()
+			if (audit) {
+				const ts = new Date().toISOString()
+				for (let i = 0; i < ops.length; i++) {
+					const op = ops[i]!
+					const result = applied.results[i]
+					// `result` may be undefined when the loop short-circuited
+					// before reaching this op (e.g. abort).
+					audit.log({
+						timestamp: ts,
+						category: "tool.execution",
+						action: `cloud_agent.workspace_op.${op.op}`,
+						taskId: this.host.taskId,
+						tool: "cloud_agent",
+						outcome: result === undefined ? "error" : result.ok ? "success" : "error",
+						meta: {
+							path: op.path,
+							opType: op.op,
+							batchSize: ops.length,
+							batchIndex: i,
+							confirmed: false,
+							message: result?.message,
+						},
+					})
+				}
+			}
+
 			const lines = applied.results.map((r) => `${r.ok ? "OK" : "FAIL"} ${r.path}: ${r.message}`)
 			const succeededCount = applied.results.filter((r) => r.ok).length
 			const header = applied.ok

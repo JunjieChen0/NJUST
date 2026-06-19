@@ -10,24 +10,42 @@ description = "Test API keys used in tests"
 regex = '''sk-test-[a-zA-Z0-9]{20,}'''
 tags = ["test", "api-key"]
 
+# ── Allowlist ──────────────────────────────────────────────────────
+#
+# This allowlist is **deliberately narrow**. Earlier versions whitelisted the
+# entire `__tests__` tree, which let a real-shaped secret leak through gitleaks
+# as long as it was placed in any test file. We now only allow:
+#
+#   * obvious fake-key shapes (`sk-test-…`, `test-api-key-…`, `mock-token-…`)
+#   * specific fixture paths that legitimately contain key-shaped strings
+#
+# This is kept in lock-step with `scripts/check-secrets.mjs`'s
+# ALLOWLISTED_FINDINGS list. When you add an entry here, also update that file.
+
 [allowlist]
-# Allow test fixtures and mock data
+# Allow fixture/sample files that legitimately contain key-shaped strings.
 paths = [
-	'''__tests__''',
-	'''\.spec\.(ts|tsx|js|jsx)$''',
-	'''\.test\.(ts|tsx|js|jsx)$''',
-	'''src/test-cloud-agent-mock\.mjs$''',
+	'''^src/test-cloud-agent-mock\.mjs$''',
 	'''^\.njust-ai/skills/cangjie-full-docs/libs_stdx/logger/logger_samples/logger_sample\.md$''',
 	'''^CangjieCorpus-1\.0\.0/libs/stdx/logger/logger_samples/logger_sample\.md$''',
 	'''^webview-ui/src/i18n/locales/(en|zh-CN|zh-TW)/settings\.json$''',
+	# Specific test files that intentionally contain real-shaped tokens to
+	# exercise the secret-pattern matcher itself. Adding broader paths here
+	# is not allowed — see check-secrets.mjs ALLOWLISTED_FINDINGS for parity.
+	'''^src/utils/__tests__/git\.spec\.ts$''',
+	'''^src/core/tools/permissions/__tests__/BashCommandAnalyzer\.spec\.ts$''',
+	'''^packages/core/src/security/__tests__/secretPatterns\.spec\.ts$''',
 ]
 
-# Allow specific test patterns
+# Allow only obviously-fake key shapes. These are intentionally narrow so a
+# real-format key embedded next to one cannot piggyback through the allowlist.
 regexes = [
 	'''sk-test-[a-zA-Z0-9]+''',
 	'''test-api-key-[a-zA-Z0-9]+''',
 	'''mock-token-[a-zA-Z0-9]+''',
+	'''ghp_TEST[a-zA-Z0-9]+''',
+	'''AKIA[A-Z0-9]{0,15}EXAMPLE''',
 ]
 
-# Allow specific files
+# No commits should be allowlisted. New entries require security review.
 commits = []

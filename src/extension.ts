@@ -24,10 +24,12 @@ import { McpServerManager } from "./services/mcp/McpServerManager"
 import { CodeIndexManager } from "./services/code-index/manager"
 import { AuditLogger } from "./services/AuditLogger"
 import { AuditSink } from "./services/AuditSink"
+import { setAuditServices } from "./services/auditAccessor"
 import { cleanupOrphanedTestFiles, initTestCleanup } from "./services/cangjie-lsp/cangjieGeneratedTestCleanup"
 import { migrateSettings } from "./utils/migrateSettings"
 import { autoImportSettings } from "./core/config/autoImportSettings"
 import { startupProfiler } from "./utils/profiler"
+import { decodeDiffBase64Query } from "./utils/decodeDiffBase64Query"
 import { API } from "./extension/api"
 import { TokenBucketRateLimiter } from "./services/rate-limiter/TokenBucketRateLimiter"
 import { setModelCacheStore } from "./api/providers/fetchers/modelCacheStore"
@@ -128,6 +130,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Initialize audit log system (NDJSON in globalStorage/audit/)
 	auditLogger = new AuditLogger(context.globalStorageUri.fsPath)
 	auditSink = new AuditSink(auditLogger)
+	setAuditServices(auditLogger, auditSink)
 
 	initTestCleanup(context.workspaceState)
 	void cleanupOrphanedTestFiles(context.globalStorageUri.fsPath)
@@ -311,10 +314,18 @@ export async function activate(context: vscode.ExtensionContext) {
 	 * readonly so users know to edit the right side if they want to keep their changes.
 	 *
 	 * https://code.visualstudio.com/api/extension-guides/virtual-documents
+	 *
+	 * Defence-in-depth: cap the size of the encoded query before decoding so an
+	 * attacker (or accidental misuse) can't pin the extension host with multi-GB
+	 * URI payloads. See {@link decodeDiffBase64Query}.
 	 */
 	const diffContentProvider = new (class implements vscode.TextDocumentContentProvider {
 		provideTextDocumentContent(uri: vscode.Uri): string {
-			return Buffer.from(uri.query, "base64").toString("utf-8")
+			const result = decodeDiffBase64Query(uri.query)
+			if (!result.ok) {
+				outputChannel.appendLine(`[DiffContentProvider] ${result.content}`)
+			}
+			return result.content
 		}
 	})()
 
@@ -434,6 +445,7 @@ export async function deactivate() {
 		await auditLogger.dispose()
 		auditLogger = undefined
 	}
+	setAuditServices(undefined, undefined)
 
 	// Flush telemetry before exit
 	if (TelemetryService.hasInstance()) {

@@ -6,7 +6,8 @@
 			"dependsOn": ["@njust-ai/types#build"]
 		},
 		"test": {
-			"dependsOn": ["@njust-ai/types#build"]
+			"dependsOn": ["@njust-ai/types#build"],
+			"outputs": ["coverage/**", "test-results/**"]
 		},
 		"format": {},
 		"clean": {
@@ -22,6 +23,7 @@
 			"outputs": ["dist/**"]
 		},
 		"bundle:nightly": {
+			"dependsOn": ["^build"],
 			"outputs": ["build/**"]
 		},
 		"vsix": {

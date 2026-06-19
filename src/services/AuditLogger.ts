@@ -47,12 +47,14 @@ export class AuditLogger {
 	private currentDate = ""
 	private entryCount = 0
 	private disposed = false
+	/** Once-per-rotation flag: surface the cap one time, then suppress until a rotation reset. */
+	private warnedAtCap = false
 
 	constructor(baseDir: string) {
 		this.baseDir = path.join(baseDir, "audit")
 	}
 
-	/** Write a single audit entry. Silently drops if disposed or over limit. */
+	/** Write a single audit entry. Drops once over the per-file cap; warns the first time. */
 	log(entry: AuditEntry): void {
 		if (this.disposed) {
 			return
@@ -64,7 +66,15 @@ export class AuditLogger {
 		}
 
 		if (this.entryCount >= MAX_ENTRIES_PER_FILE) {
-			return // Silently drop to prevent unbounded growth
+			if (!this.warnedAtCap) {
+				this.warnedAtCap = true
+				logger.warn(
+					"AuditLogger",
+					`Daily entry cap (${MAX_ENTRIES_PER_FILE}) reached for ${this.currentDate}; ` +
+						"subsequent entries are being dropped until midnight rotation.",
+				)
+			}
+			return // Drop to prevent unbounded growth, but no longer silently.
 		}
 
 		const line = JSON.stringify(entry) + "\n"
@@ -104,6 +114,7 @@ export class AuditLogger {
 		})
 		this.currentDate = date
 		this.entryCount = 0
+		this.warnedAtCap = false
 
 		logger.info("AuditLogger", `Rotated to ${filePath}`)
 	}

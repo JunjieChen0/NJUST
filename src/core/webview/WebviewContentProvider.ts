@@ -11,6 +11,7 @@ import axios from "axios"
 
 import { getNonce } from "./getNonce"
 import { getUri } from "./getUri"
+import { resolveHmrViteServerHost } from "./resolveHmrViteServerHost"
 import { t } from "../../i18n"
 import { logger } from "../../shared/logger"
 import { TelemetryEventName } from "@njust-ai/types"
@@ -29,35 +30,33 @@ export class WebviewContentProvider {
 	 * Falls back to production build if dev server is not running.
 	 */
 	async getHMRHtmlContent(webview: vscode.Webview): Promise<string> {
-		let localPort = "5173"
+		let rawPort: string | null = null
 
 		try {
 			const portFilePath = path.resolve(__dirname, "../../.vite-port")
 
 			if (fs.existsSync(portFilePath)) {
-				const raw = fs.readFileSync(portFilePath, "utf8").trim()
-				const portNum = parseInt(raw, 10)
-				if (Number.isInteger(portNum) && portNum >= 1 && portNum <= 65535 && String(portNum) === raw) {
-					localPort = raw
-					logger.info("WebviewContentProvider", `Using Vite server port from ${portFilePath}: ${localPort}`)
-				} else {
-					logger.warn(
-						"WebviewContentProvider",
-						`Invalid port in ${portFilePath}: "${raw}", using default: ${localPort}`,
-					)
-				}
+				rawPort = fs.readFileSync(portFilePath, "utf8").trim()
 			} else {
-				logger.info(
-					"WebviewContentProvider",
-					`Port file not found at ${portFilePath}, using default port: ${localPort}`,
-				)
+				logger.info("WebviewContentProvider", `Port file not found at ${portFilePath}, using default port`)
 			}
 		} catch (err) {
 			logger.error("WebviewContentProvider", "Failed to read Vite port file:", err)
 			TelemetryService.reportError(err, TelemetryEventName.WEBVIEW_ERROR)
 		}
 
-		const localServerUrl = `localhost:${localPort}`
+		const resolved = resolveHmrViteServerHost({ rawPort })
+		if (!resolved.ok) {
+			logger.warn(
+				"WebviewContentProvider",
+				`HMR port input rejected (${resolved.reason}); falling back to default ${resolved.host}:${resolved.port}`,
+			)
+		} else {
+			logger.info("WebviewContentProvider", `Using Vite server port: ${resolved.host}:${resolved.port}`)
+		}
+
+		const localPort = String(resolved.port)
+		const localServerUrl = `${resolved.host}:${localPort}`
 
 		// Check if local dev server is running.
 		try {
@@ -92,6 +91,29 @@ export class WebviewContentProvider {
 			</script>
 		`
 
+		// ──────────────────────────────────────────────────────────────────
+		// HMR-only CSP. PRODUCTION uses `getHtmlContent()` below, which has a
+		// strict CSP without `unsafe-eval` / `unsafe-inline` for scripts and
+		// without any `http://` origin.
+		//
+		// Why the relaxations are STILL necessary in HMR:
+		//   * `'unsafe-eval'` — Vite's dev runtime and React Refresh evaluate
+		//     module source generated at request time; removing it breaks HMR.
+		//   * `'unsafe-inline'` for style-src — Vite injects CSS as inline
+		//     <style> tags during HMR.
+		//   * `http://${localServerUrl}` and `ws://${localServerUrl}` — the
+		//     dev server speaks plain HTTP/WS on loopback only.
+		//
+		// Why this is acceptable in this code path only:
+		//   * `localServerUrl` is hard-locked to a loopback host — see
+		//     `resolveHmrViteServerHost`. No LAN/internet origin can reach it.
+		//   * The HMR HTML is never produced in production builds (only when
+		//     `IS_DEV` is true and the developer has started Vite).
+		//   * The strict CSP from `getHtmlContent()` is what ships to users.
+		//
+		// If you ever need to ship `getHMRHtmlContent()` outside dev, the
+		// `unsafe-eval` and `unsafe-inline` directives must be removed first.
+		// ──────────────────────────────────────────────────────────────────
 		const csp = [
 			"default-src 'none'",
 			`font-src ${webview.cspSource} data:`,

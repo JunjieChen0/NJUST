@@ -1260,5 +1260,100 @@ describe("CloudAgentOrchestrator", () => {
 
 			expect(host.say).toHaveBeenCalledWith("text", expect.stringContaining("workspace_ops applied"))
 		})
+
+		it("audits each op and shows a prominent warning when confirm is false (success)", async () => {
+			const auditAccessor = await import("../../../services/auditAccessor")
+			const fakeLog = vi.fn()
+			const fakeAuditLogger = { log: fakeLog } as unknown as ReturnType<typeof auditAccessor.getAuditLogger>
+			const setSpy = vi.spyOn(auditAccessor, "getAuditLogger").mockReturnValue(fakeAuditLogger)
+
+			try {
+				mockVscodeConfig({
+					"cloudAgent.deferredProtocol": false,
+					"cloudAgent.confirmRemoteWorkspaceOps": false,
+				})
+				mockClientInstance.submitTask.mockResolvedValueOnce({
+					memorySummary: "done",
+					tokensIn: 100,
+					tokensOut: 200,
+					cost: 0.01,
+					workspaceOps: [
+						{ op: "write_file", path: "a.ts", content: "x" },
+						{ op: "apply_diff", path: "b.ts", diff: "d" },
+					],
+				})
+				vi.mocked(applyCloudWorkspaceOps).mockResolvedValueOnce({
+					ok: true,
+					results: [
+						{ ok: true, path: "a.ts", message: "applied" },
+						{ ok: true, path: "b.ts", message: "applied" },
+					],
+				})
+				const host = createMockHost()
+				const orch = new CloudAgentOrchestrator(host)
+
+				await orch.run("hello")
+
+				// Warning chat message about confirmation being disabled.
+				expect(host.say).toHaveBeenCalledWith("text", expect.stringMatching(/WITHOUT per-step confirmation/i))
+
+				// One audit entry per op, with the right metadata.
+				expect(fakeLog).toHaveBeenCalledTimes(2)
+				const firstCall = fakeLog.mock.calls[0]![0]
+				expect(firstCall).toMatchObject({
+					category: "tool.execution",
+					action: "cloud_agent.workspace_op.write_file",
+					outcome: "success",
+				})
+				expect(firstCall.meta).toMatchObject({
+					path: "a.ts",
+					opType: "write_file",
+					batchSize: 2,
+					batchIndex: 0,
+					confirmed: false,
+				})
+				const secondCall = fakeLog.mock.calls[1]![0]
+				expect(secondCall.meta).toMatchObject({ path: "b.ts", opType: "apply_diff", batchIndex: 1 })
+			} finally {
+				setSpy.mockRestore()
+			}
+		})
+
+		it("audits failed ops with outcome=error when confirm is false", async () => {
+			const auditAccessor = await import("../../../services/auditAccessor")
+			const fakeLog = vi.fn()
+			const fakeAuditLogger = { log: fakeLog } as unknown as ReturnType<typeof auditAccessor.getAuditLogger>
+			const setSpy = vi.spyOn(auditAccessor, "getAuditLogger").mockReturnValue(fakeAuditLogger)
+
+			try {
+				mockVscodeConfig({
+					"cloudAgent.deferredProtocol": false,
+					"cloudAgent.confirmRemoteWorkspaceOps": false,
+				})
+				mockClientInstance.submitTask.mockResolvedValueOnce({
+					memorySummary: "done",
+					tokensIn: 100,
+					tokensOut: 200,
+					cost: 0.01,
+					workspaceOps: [{ op: "write_file", path: "a.ts", content: "x" }],
+				})
+				vi.mocked(applyCloudWorkspaceOps).mockResolvedValueOnce({
+					ok: false,
+					failedAtIndex: 0,
+					results: [{ ok: false, path: "a.ts", message: "permission denied" }],
+				})
+				const host = createMockHost()
+				const orch = new CloudAgentOrchestrator(host)
+
+				await orch.run("hello")
+
+				expect(fakeLog).toHaveBeenCalledTimes(1)
+				const entry = fakeLog.mock.calls[0]![0]
+				expect(entry.outcome).toBe("error")
+				expect(entry.meta.message).toBe("permission denied")
+			} finally {
+				setSpy.mockRestore()
+			}
+		})
 	})
 })

@@ -3,6 +3,8 @@ import * as path from "path"
 
 import { TerminalOutputPreviewSize, TERMINAL_PREVIEW_BYTES, PersistedCommandOutput } from "@njust-ai/types"
 
+import { StreamingSecretRedactor } from "../../utils/StreamingSecretRedactor"
+
 /**
  * Configuration options for creating an OutputInterceptor instance.
  */
@@ -85,6 +87,15 @@ export class OutputInterceptor {
 	private readonly tailBudget: number
 
 	/**
+	 * Token-aware redactor. Holds back input that has entered "sensitive mode"
+	 * (a known secret-bearing prefix has been seen) until a line boundary is
+	 * reached, so the entire secret value — even one longer than any fixed
+	 * tail-carry — is redacted before it touches preview / pendingChunks /
+	 * writeStream.
+	 */
+	private readonly redactor: StreamingSecretRedactor = new StreamingSecretRedactor()
+
+	/**
 	 * Creates a new OutputInterceptor instance.
 	 *
 	 * @param options - Configuration options for the interceptor
@@ -114,23 +125,40 @@ export class OutputInterceptor {
 	 * ```
 	 */
 	write(chunk: string): void {
-		const chunkBytes = Buffer.byteLength(chunk, "utf8")
-		this.totalBytes += chunkBytes
+		if (!chunk) {
+			return
+		}
 
-		// Always update the head/tail preview buffers
-		this.addToPreviewBuffers(chunk)
+		// Account for the FULL chunk in totalBytes — even though the redactor
+		// may hold a tail back temporarily, downstream consumers (spill
+		// threshold, finalize) must see consistent counts based on the raw
+		// input length.
+		const rawChunkBytes = Buffer.byteLength(chunk, "utf8")
+		this.totalBytes += rawChunkBytes
 
-		// Handle disk spilling for full output preservation
-		if (!this.spilledToDisk) {
-			// Accumulate ALL chunks for lossless disk storage
-			this.pendingChunks.push(chunk)
+		// Token-aware streaming redaction. The redactor enters "sensitive
+		// mode" on Bearer / Authorization / api_key / sk-… markers and
+		// holds the carry until a line boundary, so a >256-char token is
+		// redacted as one unit and never leaks its tail to disk.
+		const sanitized = this.redactor.write(chunk)
 
-			if (this.totalBytes > this.previewBytes) {
-				this.spillToDisk()
+		if (sanitized) {
+			// Always update the head/tail preview buffers
+			this.addToPreviewBuffers(sanitized)
+
+			if (this.spilledToDisk) {
+				// Already spilling - write directly to disk
+				this.writeStream?.write(sanitized)
+			} else {
+				// Accumulate ALL chunks for lossless disk storage
+				this.pendingChunks.push(sanitized)
 			}
-		} else {
-			// Already spilling - write directly to disk
-			this.writeStream?.write(chunk)
+		}
+
+		// Use raw byte counter for spill decision so the threshold behaviour
+		// matches the pre-redaction implementation regardless of carry size.
+		if (!this.spilledToDisk && this.totalBytes > this.previewBytes) {
+			this.spillToDisk()
 		}
 	}
 
@@ -310,6 +338,20 @@ export class OutputInterceptor {
 	 * ```
 	 */
 	async finalize(): Promise<PersistedCommandOutput> {
+		// Flush any deferred redactor state (e.g. a sensitive-mode tail that
+		// never saw a newline). The bytes have already been counted in
+		// totalBytes when the original chunks were written; only commit the
+		// redacted output to the preview/disk here.
+		const tail = this.redactor.flush()
+		if (tail) {
+			this.addToPreviewBuffers(tail)
+			if (this.spilledToDisk) {
+				this.writeStream?.write(tail)
+			} else {
+				this.pendingChunks.push(tail)
+			}
+		}
+
 		// Close write stream if open and wait for it to fully flush.
 		// This ensures the artifact is completely written before we advertise the artifact_id.
 		if (this.writeStream) {

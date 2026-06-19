@@ -125,7 +125,7 @@
 		"@vscode/test-electron": "^2.5.2",
 		"@vscode/vsce": "^3.3.2",
 		"ai": "^6.0.75",
-		"esbuild-wasm": "^0.25.0",
+		"esbuild-wasm": "^0.28.1",
 		"@vitest/eslint-plugin": "^1.6.20",
 		"execa": "^9.5.2",
 		"glob": "^11.1.0",

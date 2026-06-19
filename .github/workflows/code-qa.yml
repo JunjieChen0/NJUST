@@ -178,6 +178,17 @@ jobs:
             - name: Check for circular dependencies between critical modules
               run: pnpm check:circular
 
+    unsafe-any-gate:
+        name: unsafe-any-gate
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+            - name: Setup Node.js and pnpm
+              uses: ./.github/actions/setup-node-pnpm
+            - name: Verify UnsafeAny / cast counts have not grown
+              run: pnpm check:any-gate
+
     bundle-size:
         name: bundle-size-check
         runs-on: ubuntu-latest

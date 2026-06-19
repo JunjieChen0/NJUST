@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import fs from "fs"
 import * as path from "path"
 import * as os from "os"
 
 import { AuditLogger, type AuditEntry } from "../AuditLogger"
+import { logger as sharedLogger } from "../../shared/logger"
 
 describe("AuditLogger", () => {
 	let tmpDir: string
@@ -114,5 +115,30 @@ describe("AuditLogger", () => {
 			tool: "read_file",
 			meta: { toolUseId: "use-456", inputSummary: '{"path":"/foo"}' },
 		})
+	})
+
+	it("emits a single warn when the daily entry cap is reached", async () => {
+		const warnSpy = vi.spyOn(sharedLogger, "warn").mockImplementation(() => {})
+		try {
+			// Seed the rotation by writing one normal entry so currentDate is set;
+			// further log() calls won't rotate again on the same day.
+			logger.log(makeEntry({ action: "tool.first" }))
+
+			// Force the per-file cap via the internal counter; this is the only
+			// way to exercise the cap path without writing 50k real entries.
+			;(logger as unknown as { entryCount: number }).entryCount = 50_000
+
+			logger.log(makeEntry({ action: "tool.dropped.1" }))
+			logger.log(makeEntry({ action: "tool.dropped.2" }))
+			logger.log(makeEntry({ action: "tool.dropped.3" }))
+
+			// First over-cap log emits the warn; subsequent over-cap logs do not.
+			const matchingCalls = warnSpy.mock.calls.filter(
+				(c) => c[0] === "AuditLogger" && /Daily entry cap/.test(String(c[1])),
+			)
+			expect(matchingCalls).toHaveLength(1)
+		} finally {
+			warnSpy.mockRestore()
+		}
 	})
 })

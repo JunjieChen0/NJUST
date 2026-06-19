@@ -35,6 +35,7 @@ import { recordSecurityMetric } from "../security/metrics"
 import { checkCommandSafety } from "./helpers/commandSafety"
 import { logger } from "../../shared/logger"
 import { TIMING } from "../../shared/constants"
+import { resolveWithinWorkspaceAsync } from "../../utils/resolveWithinWorkspace"
 
 /** Uses {@link checkCommandSafety} so high-risk detection stays aligned with permission classifiers. */
 function _isHighRiskShellCommand(command: string): boolean {
@@ -310,11 +311,27 @@ export async function executeCommandInTerminal(
 	let workingDir: string
 
 	if (!customCwd) {
+		// Preserve the historical behaviour: if the agent did not supply a
+		// custom cwd, run in `task.cwd` exactly as configured. No resolution
+		// pass is needed because nothing untrusted is being honoured.
 		workingDir = task.cwd
-	} else if (path.isAbsolute(customCwd)) {
-		workingDir = customCwd
 	} else {
-		workingDir = path.resolve(task.cwd, customCwd)
+		// Constrain customCwd to the task workspace. Absolute paths, '..'
+		// traversal and symlink escapes must NOT be honoured. See
+		// resolveWithinWorkspace.
+		const cwdResolution = await resolveWithinWorkspaceAsync(task.cwd, customCwd)
+		if (!cwdResolution.ok) {
+			logger.warn("ExecuteCommandTool", "execute_command: rejected cwd outside workspace:", {
+				cwd: customCwd,
+				reason: cwdResolution.reason,
+			})
+			recordSecurityMetric("execute_command_cwd_escape", {
+				cwd: typeof customCwd === "string" ? customCwd.slice(0, 240) : "",
+				reason: cwdResolution.reason.slice(0, 240),
+			})
+			return [false, `Working directory '${customCwd}' is rejected: ${cwdResolution.reason}`]
+		}
+		workingDir = cwdResolution.resolved
 	}
 
 	try {

@@ -121,7 +121,7 @@ describe("OutputInterceptor", () => {
 			expect(result.preview).toContain("bytes omitted...]")
 		})
 
-		it("should write subsequent chunks directly to disk after spilling", () => {
+		it("should write subsequent chunks directly to disk after spilling", async () => {
 			const interceptor = new OutputInterceptor({
 				executionId: "12345",
 				taskId: "task-1",
@@ -138,11 +138,15 @@ describe("OutputInterceptor", () => {
 			// Clear mock to track next write
 			mockWriteStream.write.mockClear()
 
-			// Write another chunk - should go directly to disk
+			// Write another chunk - should go directly to disk. The redaction
+			// carry may hold the trailing 256 chars back until the next write
+			// or finalize(), so verify the union of writes contains nextChunk.
 			const nextChunk = "y".repeat(1000)
 			interceptor.write(nextChunk)
+			await interceptor.finalize()
 
-			expect(mockWriteStream.write).toHaveBeenCalledWith(nextChunk)
+			const written = mockWriteStream.write.mock.calls.map((c: unknown[]) => String(c[0])).join("")
+			expect(written).toContain(nextChunk)
 		})
 	})
 
@@ -526,6 +530,122 @@ describe("OutputInterceptor", () => {
 			expect(result.preview.endsWith("C")).toBe(true)
 			// Should have omission indicator
 			expect(result.preview).toContain("[...")
+		})
+	})
+
+	describe("Secret redaction", () => {
+		it("redacts api keys in small in-memory output before reaching the preview", async () => {
+			const interceptor = new OutputInterceptor({
+				executionId: "redact-1",
+				taskId: "task-r",
+				command: "echo secret",
+				storageDir,
+				previewSize: "small",
+			})
+
+			interceptor.write("Authorization: Bearer abcdef0123456789ABCDEF\n")
+			interceptor.write("api_key=sk-this-is-a-fake-but-formatted-secret-12345\n")
+
+			const result = await interceptor.finalize()
+			// Security objective: the raw secrets must not be present in the preview.
+			expect(result.preview).not.toContain("abcdef0123456789ABCDEF")
+			expect(result.preview).not.toContain("sk-this-is-a-fake-but-formatted-secret-12345")
+			expect(result.preview).toMatch(/\[REDACTED\]/)
+		})
+
+		it("redacts secrets that have been spilled to disk", () => {
+			const interceptor = new OutputInterceptor({
+				executionId: "redact-2",
+				taskId: "task-r",
+				command: "echo secret",
+				storageDir,
+				previewSize: "small", // 5KB
+			})
+
+			const filler = "x".repeat(3000)
+			interceptor.write(filler)
+			interceptor.write("Authorization: Bearer ABCDEFGHIJKLMNOPQRSTUVWXYZ\n")
+			interceptor.write(filler) // forces spill
+
+			expect(interceptor.hasSpilledToDisk()).toBe(true)
+
+			// Inspect what was written to the underlying mock stream — the
+			// raw secret must NOT be present anywhere on disk.
+			const writeCalls = mockWriteStream.write.mock.calls.map((c: unknown[]) => String(c[0])).join("")
+			expect(writeCalls).not.toContain("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+			expect(writeCalls).toMatch(/\[REDACTED\]/)
+		})
+
+		it("redacts a Bearer token split across two writes via tail-carry", async () => {
+			const interceptor = new OutputInterceptor({
+				executionId: "redact-3",
+				taskId: "task-r",
+				command: "echo secret",
+				storageDir,
+				previewSize: "small",
+			})
+
+			// Split mid-token — earlier this would have leaked the secret.
+			// Pad so the split point falls within the carry window.
+			const pad = "y".repeat(400)
+			interceptor.write(pad + "Authorization: Bearer abcdef")
+			interceptor.write("ghijkl0123456789\n")
+
+			const result = await interceptor.finalize()
+			expect(result.preview).not.toContain("abcdefghijkl0123456789")
+			expect(result.preview).toMatch(/\[REDACTED\]/)
+		})
+
+		it("redacts a 300+ char Bearer token even when the value spans many writes", async () => {
+			const interceptor = new OutputInterceptor({
+				executionId: "redact-long",
+				taskId: "task-r",
+				command: "echo long-secret",
+				storageDir,
+				previewSize: "small",
+			})
+
+			// 600-char token — the previous fixed 256-char tail-carry leaked
+			// the suffix (last 256 chars). The streaming redactor must hold
+			// the entire sensitive line until the newline.
+			const longToken = "A".repeat(600)
+			interceptor.write("Authorization: Bearer ")
+			// Stream the token in 50-char fragments to maximally stress the
+			// boundary handling.
+			for (let i = 0; i < longToken.length; i += 50) {
+				interceptor.write(longToken.slice(i, i + 50))
+			}
+			interceptor.write("\nfollow-up line\n")
+
+			const result = await interceptor.finalize()
+			expect(result.preview).not.toContain(longToken)
+			// Suffix-only check: the last 256 / 512 chars of the token must
+			// not survive — directly addresses the reviewer's leak repro.
+			expect(result.preview).not.toContain(longToken.slice(-256))
+			expect(result.preview).not.toContain(longToken.slice(-512))
+			expect(result.preview).toContain("follow-up line")
+		})
+
+		it("redacts a long token in the spilled-to-disk path", () => {
+			const interceptor = new OutputInterceptor({
+				executionId: "redact-long-disk",
+				taskId: "task-r",
+				command: "echo big",
+				storageDir,
+				previewSize: "small", // 5KB
+			})
+
+			const longToken = "Z".repeat(700)
+			// Force spill: write enough non-sensitive padding, then the secret.
+			interceptor.write("x".repeat(3000))
+			interceptor.write(`Authorization: Bearer ${longToken}\n`)
+			interceptor.write("x".repeat(3000)) // pushes us over threshold
+
+			expect(interceptor.hasSpilledToDisk()).toBe(true)
+			const written = mockWriteStream.write.mock.calls.map((c: unknown[]) => String(c[0])).join("")
+			expect(written).not.toContain(longToken)
+			expect(written).not.toContain(longToken.slice(-256))
+			expect(written).toMatch(/\[REDACTED\]/)
 		})
 	})
 })

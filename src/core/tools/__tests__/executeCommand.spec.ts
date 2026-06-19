@@ -185,17 +185,10 @@ describe("executeCommand", () => {
 	})
 
 	describe("Custom Working Directory", () => {
-		it("should handle absolute custom cwd and use terminal.getCurrentWorkingDirectory() in output", async () => {
+		it("should reject an absolute custom cwd that escapes the task workspace", async () => {
+			// Security: an absolute path outside `task.cwd` must NOT be honoured,
+			// even if the agent supplies it. See resolveWithinWorkspace.
 			const customCwd = "/custom/absolute/path"
-
-			mockTerminal.getCurrentWorkingDirectory.mockReturnValue(customCwd)
-			mockTerminal.runCommand.mockImplementation(function (command: string, callbacks: RooTerminalCallbacks) {
-				setTimeout(async () => {
-					await callbacks.onCompleted("Command output", mockProcess)
-					callbacks.onShellExecutionComplete({ exitCode: 0 }, mockProcess)
-				}, 0)
-				return mockProcess
-			})
 
 			const options: ExecuteCommandOptions = {
 				executionId: "test-123",
@@ -204,13 +197,13 @@ describe("executeCommand", () => {
 				terminalShellIntegrationDisabled: false,
 			}
 
-			// Execute
 			const [rejected, result] = await executeCommandInTerminal(mockTask, options)
 
-			// Verify
 			expect(rejected).toBe(false)
-			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(customCwd, mockTask.taskId, "vscode")
-			expect(result).toContain(`within working directory '${customCwd}'`)
+			expect(String(result)).toMatch(
+				/is rejected: Target path '\/custom\/absolute\/path' resolves outside workspace/,
+			)
+			expect(TerminalRegistry.getOrCreateTerminal).not.toHaveBeenCalled()
 		})
 
 		it("should handle relative custom cwd and use terminal.getCurrentWorkingDirectory() in output", async () => {
@@ -236,13 +229,29 @@ describe("executeCommand", () => {
 			// Execute
 			const [rejected, result] = await executeCommandInTerminal(mockTask, options)
 
-			// Verify
+			// Verify — terminal is created with the resolved cwd; we don't pin
+			// the exact string because realpath/normalisation may rewrite it.
 			expect(rejected).toBe(false)
-			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(resolvedCwd, mockTask.taskId, "vscode")
+			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalled()
 			expect(result).toContain(`within working directory '${resolvedCwd.toPosix()}'`)
 		})
 
-		it("should return error when custom working directory does not exist", async () => {
+		it("should reject a relative custom cwd that climbs out via '..'", async () => {
+			const options: ExecuteCommandOptions = {
+				executionId: "test-123",
+				command: "echo test",
+				customCwd: "../escape",
+				terminalShellIntegrationDisabled: false,
+			}
+
+			const [rejected, result] = await executeCommandInTerminal(mockTask, options)
+
+			expect(rejected).toBe(false)
+			expect(String(result)).toMatch(/is rejected:/)
+			expect(TerminalRegistry.getOrCreateTerminal).not.toHaveBeenCalled()
+		})
+
+		it("should return rejection error when custom working directory is outside workspace", async () => {
 			const nonExistentCwd = "/non/existent/path"
 
 			// Mock fs.access to throw error for non-existent directory
@@ -258,9 +267,10 @@ describe("executeCommand", () => {
 			// Execute
 			const [rejected, result] = await executeCommandInTerminal(mockTask, options)
 
-			// Verify
+			// Verify — boundary check fires before fs.access; the rejection
+			// reason describes the workspace escape rather than a missing dir.
 			expect(rejected).toBe(false)
-			expect(result).toBe(`Working directory '${nonExistentCwd}' does not exist.`)
+			expect(String(result)).toMatch(/is rejected:/)
 			expect(TerminalRegistry.getOrCreateTerminal).not.toHaveBeenCalled()
 		})
 	})

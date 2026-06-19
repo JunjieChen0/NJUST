@@ -1,18 +1,26 @@
 /**
  * check-any-gate.mjs
  *
- * CI gate script: counts `eslint-disable @typescript-eslint/no-explicit-any`
- * occurrences across the codebase. Fails if the count exceeds the baseline,
- * enforcing a "never increase" policy on UnsafeAny usage.
+ * CI gate for "UnsafeAny / casting" hygiene. Counts three distinct dangerous
+ * patterns across the production code tree and fails if any one of them grows
+ * beyond its recorded baseline:
+ *
+ *   1. eslint-disable @typescript-eslint/no-explicit-any  → escape hatch for `any`
+ *   2. literal `UnsafeAny` token usage                    → project-wide alias for `any`
+ *   3. `as unknown as` double-casts                       → opaque cross-module boundary cast
+ *
+ * Each pattern has its own baseline file in scripts/ so refactors that improve
+ * one pattern can be locked in independently. New PRs must not raise *any* of
+ * the counts; the gate exits non-zero if any pattern grows.
  *
  * Usage: node scripts/check-any-gate.mjs [--update-baseline]
  *
- * The --update-baseline flag writes the current count as the new baseline.
- * Use this ONLY when the count has legitimately decreased (e.g., after a
- * dedicated narrowing PR). Never use it to raise the baseline.
+ * The --update-baseline flag rewrites all baselines to the current counts,
+ * but ONLY if every count has decreased (or stayed equal). It will NEVER
+ * raise a baseline; that requires a manual edit and review.
  */
 
-import { readFileSync, writeFileSync } from "node:fs"
+import { readFileSync, writeFileSync, existsSync } from "node:fs"
 import { resolve, dirname, join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 import { execSync } from "node:child_process"
@@ -20,10 +28,35 @@ import { execSync } from "node:child_process"
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const rootDir = resolve(__dirname, "..")
 
-// ── Configuration ──────────────────────────────────────────────────
-// Baseline: the maximum allowed number of eslint-disable any comments.
-// Set to the current count as of 2026-06-13. This must only decrease.
-const BASELINE_FILE = join(__dirname, ".any-gate-baseline")
+// ── Pattern definitions ────────────────────────────────────────────
+
+/** @typedef {{ name: string, baselineFile: string, regex: RegExp, description: string }} Pattern */
+
+/** @type {Pattern[]} */
+const PATTERNS = [
+	{
+		name: "eslint-disable-any",
+		baselineFile: join(__dirname, ".any-gate-baseline"),
+		regex: /eslint-disable(?:-next-line|-line)?\s+@typescript-eslint\/no-explicit-any/g,
+		description: "eslint-disable @typescript-eslint/no-explicit-any",
+	},
+	{
+		name: "unsafe-any-token",
+		baselineFile: join(__dirname, ".unsafe-any-baseline"),
+		// Match the bare token in code positions (not inside strings or comments
+		// — we accept some over-counting in tests; the goal is to lock growth).
+		// We exclude the alias declaration itself by skipping `unsafe-any.d.ts`
+		// when scanning files.
+		regex: /\bUnsafeAny\b/g,
+		description: "literal UnsafeAny references",
+	},
+	{
+		name: "as-unknown-as",
+		baselineFile: join(__dirname, ".as-unknown-as-baseline"),
+		regex: /\bas\s+unknown\s+as\b/g,
+		description: "`as unknown as` double-casts",
+	},
+]
 
 // Directories to scan (production code only, no node_modules)
 const SCAN_DIRS = ["src", "packages", "apps", "webview-ui"]
@@ -31,9 +64,14 @@ const SCAN_DIRS = ["src", "packages", "apps", "webview-ui"]
 // File extensions to scan
 const EXTENSIONS = [".ts", ".tsx", ".mjs"]
 
-// Pattern to match eslint-disable for no-explicit-any
-// Covers: eslint-disable, eslint-disable-next-line, eslint-disable-line
-const ANY_DISABLE_RE = /eslint-disable(?:-next-line|-line)?\s+@typescript-eslint\/no-explicit-any/g
+/** Files that legitimately contain a pattern and should be excluded from counting. */
+const EXCLUDE_FILES = new Set([
+	// The single canonical declaration of `type UnsafeAny = any`. Counting it
+	// would create a phantom +1 we can never narrow.
+	"src/shared/unsafe-any.d.ts",
+	// This script's own pattern table.
+	"scripts/check-any-gate.mjs",
+])
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -47,105 +85,115 @@ function getAllFiles(dir) {
 			.trim()
 			.split("\n")
 			.filter((f) => EXTENSIONS.some((ext) => f.endsWith(ext)))
+			.filter((f) => !EXCLUDE_FILES.has(f.replace(/\\/g, "/")))
 		return entries
 	} catch {
-		// Fallback: use find (slower but works without git)
+		// Fallback: caller will see a 0 count; CI environments without git are rare.
 		return []
 	}
 }
 
-function countDisablesInFile(filePath) {
+function countMatchesInFile(filePath, regex) {
 	try {
 		const content = readFileSync(join(rootDir, filePath), "utf-8")
-		const matches = content.match(ANY_DISABLE_RE)
+		// `regex` may have global flag; reset lastIndex defensively.
+		const matches = content.match(regex)
 		return matches ? matches.length : 0
 	} catch {
 		return 0
 	}
 }
 
-function readBaseline() {
+function readBaseline(baselineFile) {
 	try {
-		return parseInt(readFileSync(BASELINE_FILE, "utf-8").trim(), 10)
+		return parseInt(readFileSync(baselineFile, "utf-8").trim(), 10)
 	} catch {
 		return null
 	}
 }
 
-function writeBaseline(count) {
-	writeFileSync(BASELINE_FILE, `${count}\n`, "utf-8")
+function writeBaseline(baselineFile, count) {
+	writeFileSync(baselineFile, `${count}\n`, "utf-8")
+}
+
+/** Count one pattern across all scanned dirs and return {totalCount, perDir}. */
+function scanPattern(pattern) {
+	let totalCount = 0
+	const perDir = {}
+	for (const dir of SCAN_DIRS) {
+		const files = getAllFiles(dir)
+		let dirCount = 0
+		for (const file of files) {
+			dirCount += countMatchesInFile(file, pattern.regex)
+		}
+		perDir[dir] = dirCount
+		totalCount += dirCount
+	}
+	return { totalCount, perDir }
 }
 
 // ── Main ───────────────────────────────────────────────────────────
 
 const updateBaseline = process.argv.includes("--update-baseline")
 
-console.log("🔍 UnsafeAny Gate: scanning for eslint-disable @typescript-eslint/no-explicit-any...\n")
+console.log("🔍 UnsafeAny / cast gate: scanning production code...\n")
 
-let totalCount = 0
-const perDir = {}
+let anyFailed = false
+const results = []
 
-for (const dir of SCAN_DIRS) {
-	const files = getAllFiles(dir)
-	let dirCount = 0
+for (const pattern of PATTERNS) {
+	const { totalCount, perDir } = scanPattern(pattern)
 
-	for (const file of files) {
-		const count = countDisablesInFile(file)
-		if (count > 0) {
-			dirCount += count
-		}
+	console.log(`── ${pattern.description} ──`)
+	for (const [dir, count] of Object.entries(perDir)) {
+		console.log(`   ${dir}: ${count}`)
+	}
+	console.log(`   total: ${totalCount}`)
+
+	let baseline = readBaseline(pattern.baselineFile)
+	if (baseline === null) {
+		baseline = totalCount
+		writeBaseline(pattern.baselineFile, baseline)
+		console.log(`   📝 No baseline found. Initialized ${relative(rootDir, pattern.baselineFile)} to ${totalCount}.`)
 	}
 
-	perDir[dir] = dirCount
-	totalCount += dirCount
-}
+	const result = { pattern, totalCount, baseline }
+	results.push(result)
 
-// Print per-directory breakdown
-console.log("📊 Per-directory breakdown:")
-for (const [dir, count] of Object.entries(perDir)) {
-	console.log(`   ${dir}: ${count}`)
-}
-console.log(`\n   Total: ${totalCount}`)
-
-// Read or initialize baseline
-let baseline = readBaseline()
-if (baseline === null) {
-	// First run: set baseline to current count
-	baseline = totalCount
-	writeBaseline(baseline)
-	console.log(`\n📝 No baseline found. Initialized to ${totalCount}.`)
-	console.log(`   Baseline file: ${relative(rootDir, BASELINE_FILE)}`)
-}
-
-if (updateBaseline) {
 	if (totalCount > baseline) {
 		console.error(
-			`\n❌ REFUSED: Count increased from ${baseline} to ${totalCount}. ` +
-				`The --update-baseline flag can only be used when the count has decreased.`,
+			`   ❌ FAIL: ${pattern.description} grew from ${baseline} to ${totalCount} (+${totalCount - baseline}).`,
 		)
-		process.exit(1)
+		anyFailed = true
+	} else if (totalCount < baseline) {
+		console.log(`   ✅ ok (${totalCount} ≤ baseline ${baseline}, ↓${baseline - totalCount}).`)
+	} else {
+		console.log(`   ✅ ok (${totalCount} = baseline ${baseline}).`)
 	}
-	writeBaseline(totalCount)
-	console.log(`\n✅ Baseline updated: ${baseline} → ${totalCount}`)
-	process.exit(0)
+	console.log("")
 }
 
-// Gate check
-if (totalCount > baseline) {
+if (anyFailed) {
 	console.error(
-		`\n❌ UnsafeAny gate FAILED: ${totalCount} eslint-disable any comments found, ` +
-			`but baseline is ${baseline} (+${totalCount - baseline}).\n` +
-			`   Each PR must not increase the total count of eslint-disable @typescript-eslint/no-explicit-any.\n` +
-			`   Please narrow at least ${totalCount - baseline} UnsafeAny usage(s) or use a more specific type.`,
+		"❌ UnsafeAny / cast gate FAILED.\n" +
+			"   Each PR must not increase the count of any tracked pattern.\n" +
+			"   Narrow at least the increased pattern(s) or use a more specific type.\n",
 	)
 	process.exit(1)
 }
 
-if (totalCount < baseline) {
-	console.log(
-		`\n✅ UnsafeAny gate PASSED: ${totalCount} (baseline ${baseline}, ↓${baseline - totalCount}). ` +
-			`Great progress! Run with --update-baseline to lock in the improvement.`,
-	)
-} else {
-	console.log(`\n✅ UnsafeAny gate PASSED: ${totalCount} (baseline ${baseline}, no change).`)
+if (updateBaseline) {
+	for (const { pattern, totalCount, baseline } of results) {
+		if (totalCount > baseline) {
+			// Should be unreachable because we exited above, but check defensively.
+			console.error(`❌ Refusing to raise baseline for ${pattern.name}.`)
+			process.exit(1)
+		}
+		if (totalCount < baseline) {
+			writeBaseline(pattern.baselineFile, totalCount)
+			console.log(`   📝 ${pattern.name}: baseline updated ${baseline} → ${totalCount}.`)
+		}
+	}
 }
+
+console.log("✅ UnsafeAny / cast gate PASSED.")
