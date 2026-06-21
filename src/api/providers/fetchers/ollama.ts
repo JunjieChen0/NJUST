@@ -4,6 +4,10 @@ import { ollamaDefaultModelInfo } from "@njust-ai/core/providers"
 import { z } from "zod"
 
 import { logger } from "../../../shared/logger"
+import { safeAxiosConfig } from "./safeFetch"
+
+/** Maximum concurrent /api/show requests when fetching model details. */
+const MAX_CONCURRENT_SHOW_REQUESTS = 4
 
 const OllamaModelDetailsSchema = z.object({
 	family: z.string(),
@@ -82,22 +86,46 @@ export async function getOllamaModels(
 			headers["Authorization"] = `Bearer ${apiKey}`
 		}
 
-		const response = await axios.get<OllamaModelsResponse>(`${baseUrl}/api/tags`, { headers })
+		const response = await axios.get<OllamaModelsResponse>(`${baseUrl}/api/tags`, {
+			headers,
+			...safeAxiosConfig(),
+		})
 		const parsedResponse = OllamaModelsResponseSchema.safeParse(response.data)
-		const modelInfoPromises = []
+		const modelInfoPromises: Promise<void>[] = []
+
+		// Limit concurrency to avoid overloading the local Ollama server
+		// when many models are present. Tokens are released as each completes.
+		let activeRequests = 0
+		const waitQueue: Array<() => void> = []
+		const acquireSlot = (): Promise<void> => {
+			if (activeRequests < MAX_CONCURRENT_SHOW_REQUESTS) {
+				activeRequests++
+				return Promise.resolve()
+			}
+			return new Promise<void>((resolve) => waitQueue.push(resolve))
+		}
+		const releaseSlot = (): void => {
+			const next = waitQueue.shift()
+			if (next) {
+				next()
+			} else {
+				activeRequests--
+			}
+		}
 
 		if (parsedResponse.success) {
 			for (const ollamaModel of parsedResponse.data.models) {
 				modelInfoPromises.push(
-					axios
-						.post<OllamaModelInfoResponse>(
-							`${baseUrl}/api/show`,
-							{
-								model: ollamaModel.model,
-							},
-							{ headers },
-						)
-						.then((ollamaModelInfo) => {
+					(async () => {
+						await acquireSlot()
+						try {
+							const ollamaModelInfo = await axios.post<OllamaModelInfoResponse>(
+								`${baseUrl}/api/show`,
+								{
+									model: ollamaModel.model,
+								},
+								{ headers, ...safeAxiosConfig() },
+							)
 							const parsedModelInfo = _OllamaModelInfoResponseSchema.safeParse(ollamaModelInfo.data)
 							if (!parsedModelInfo.success) {
 								logger.error(
@@ -112,7 +140,10 @@ export async function getOllamaModels(
 							if (modelInfo) {
 								models[ollamaModel.name] = modelInfo
 							}
-						}),
+						} finally {
+							releaseSlot()
+						}
+					})(),
 				)
 			}
 

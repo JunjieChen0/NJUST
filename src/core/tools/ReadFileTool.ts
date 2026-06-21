@@ -581,9 +581,34 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 
 		if (remaining.length === 0) return
 
-		if (remaining.length > 1) {
+		// Hard-deny reads outside the workspace — this is a security boundary,
+		// not just a UI marker. Aligns with executeLegacy() and with
+		// WriteToFileTool / EditTool's ensureWithinWorkspace policy. Without
+		// this, auto-approval would let the model read arbitrary files outside
+		// the workspace via the executeNew() path.
+		const deniedOutside: FileResult[] = []
+		const toApprove: FileResult[] = []
+		for (const fr of remaining) {
+			const fullPath = path.resolve(task.cwd, fr.path)
+			if (isPathOutsideWorkspace(fullPath)) {
+				deniedOutside.push(fr)
+			} else {
+				toApprove.push(fr)
+			}
+		}
+		for (const fr of deniedOutside) {
+			const errorMsg = `Access denied — path is outside the workspace.`
+			await task.say("error", `Error reading file ${fr.path}: ${errorMsg}`)
+			updateFileResult(fr.path, {
+				status: "denied",
+				nativeContent: `File: ${fr.path}\nError: ${errorMsg}`,
+			})
+		}
+		if (toApprove.length === 0) return
+
+		if (toApprove.length > 1) {
 			// Batch approval
-			const batchFiles = remaining.map((fileResult) => {
+			const batchFiles = toApprove.map((fileResult) => {
 				const relPath = fileResult.path
 				const fullPath = path.resolve(task.cwd, relPath)
 				const isOutsideWorkspace = isPathOutsideWorkspace(fullPath)
@@ -600,13 +625,13 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 
 			if (response === "yesButtonClicked") {
 				if (text) await task.say("user_feedback", text, images)
-				remaining.forEach((fr) => {
+				toApprove.forEach((fr) => {
 					updateFileResult(fr.path, { status: "approved", feedbackText: text, feedbackImages: images })
 				})
 			} else if (response === "noButtonClicked") {
 				if (text) await task.say("user_feedback", text, images)
 				task.didRejectTool = true
-				remaining.forEach((fr) => {
+				toApprove.forEach((fr) => {
 					updateFileResult(fr.path, {
 						status: "denied",
 						nativeContent: `File: ${fr.path}\nStatus: Denied by user`,
@@ -621,7 +646,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 					let hasAnyDenial = false
 
 					batchFiles.forEach((batchFile, index) => {
-						const fileResult = remaining[index]!
+						const fileResult = toApprove[index]!
 						const approved = individualPermissions[batchFile.key] === true
 
 						if (approved) {
@@ -639,7 +664,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				} catch (err) {
 					logger.error("ReadFileTool", "Approval callback failed:", err)
 					task.didRejectTool = true
-					remaining.forEach((fr) => {
+					toApprove.forEach((fr) => {
 						updateFileResult(fr.path, {
 							status: "denied",
 							nativeContent: `File: ${fr.path}\nStatus: Denied by user`,
@@ -649,7 +674,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			}
 		} else {
 			// Single file approval
-			const fileResult = remaining[0]!
+			const fileResult = toApprove[0]!
 			const relPath = fileResult.path
 			const fullPath = path.resolve(task.cwd, relPath)
 

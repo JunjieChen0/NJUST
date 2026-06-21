@@ -108,129 +108,137 @@ export class TaskAskSayHandler {
 
 		const timeouts: NodeJS.Timeout[] = []
 
-		const provider = this.host.hostRef.deref()
-		const state = provider ? await provider.getState() : undefined
-		const approval = await checkAutoApproval({ state, ask: type, text, isProtected })
+		try {
+			const provider = this.host.hostRef.deref()
+			const state = provider ? await provider.getState() : undefined
+			const approval = await checkAutoApproval({ state, ask: type, text, isProtected })
 
-		if (approval.decision === "approve") {
-			this.host.approveAsk()
-		} else if (approval.decision === "deny") {
-			this.host.denyAsk()
-		} else if (approval.decision === "timeout") {
-			this.host.autoApprovalTimeoutRef = setTimeout(() => {
-				const { askResponse, text, images } = approval.fn!()
-				this.handleWebviewAskResponse(askResponse, text, images)
-				this.host.autoApprovalTimeoutRef = undefined
-			}, approval.timeout) as NodeJS.Timeout
-			timeouts.push(this.host.autoApprovalTimeoutRef)
-		}
-
-		const isBlocking = !(this.host.askResponse !== undefined || this.host.lastMessageTs !== askTs)
-		const isMessageQueued = !this.host.messageQueueService.isEmpty()
-		const shouldDrainQueuedMessageForAsk = type !== "command_output" && !isIdleAsk(type)
-		const isStatusMutable = !partial && isBlocking && !isMessageQueued && approval.decision === "ask"
-
-		if (isStatusMutable) {
-			const statusMutationTimeout = 2_000
-
-			if (isInteractiveAsk(type)) {
-				timeouts.push(
-					setTimeout(() => {
-						const message = this.host.findMessageByTimestamp(askTs)
-						if (message) {
-							this.host.interactiveAsk = message
-							this.host.emit(NJUST_AIEventName.TaskInteractive, this.host.taskId)
-							provider?.postMessageToWebview({ type: "interactionRequired" })
-						}
-					}, statusMutationTimeout),
-				)
-			} else if (isResumableAsk(type)) {
-				timeouts.push(
-					setTimeout(() => {
-						const message = this.host.findMessageByTimestamp(askTs)
-						if (message) {
-							this.host.resumableAsk = message
-							this.host.emit(NJUST_AIEventName.TaskResumable, this.host.taskId)
-						}
-					}, statusMutationTimeout),
-				)
-			} else if (isIdleAsk(type)) {
-				timeouts.push(
-					setTimeout(() => {
-						const message = this.host.findMessageByTimestamp(askTs)
-						if (message) {
-							this.host.idleAsk = message
-							this.host.emit(NJUST_AIEventName.TaskIdle, this.host.taskId)
-						}
-					}, statusMutationTimeout),
-				)
+			if (approval.decision === "approve") {
+				this.host.approveAsk()
+			} else if (approval.decision === "deny") {
+				this.host.denyAsk()
+			} else if (approval.decision === "timeout") {
+				this.host.autoApprovalTimeoutRef = setTimeout(() => {
+					const { askResponse, text, images } = approval.fn!()
+					this.handleWebviewAskResponse(askResponse, text, images)
+					this.host.autoApprovalTimeoutRef = undefined
+				}, approval.timeout) as NodeJS.Timeout
+				timeouts.push(this.host.autoApprovalTimeoutRef)
 			}
-		} else if (isMessageQueued && shouldDrainQueuedMessageForAsk) {
-			const message = this.host.messageQueueService.dequeueMessage()
-			if (message) {
-				if (type === "tool" || type === "command" || type === "use_mcp_server") {
-					this.handleWebviewAskResponse("yesButtonClicked", message.text, message.images)
-				} else {
-					this.handleWebviewAskResponse("messageResponse", message.text, message.images)
-				}
-			}
-		}
 
-		await pWaitFor(
-			() => {
-				if (this.host.askResponse !== undefined || this.host.lastMessageTs !== askTs) {
-					return true
+			const isBlocking = !(this.host.askResponse !== undefined || this.host.lastMessageTs !== askTs)
+			const isMessageQueued = !this.host.messageQueueService.isEmpty()
+			const shouldDrainQueuedMessageForAsk = type !== "command_output" && !isIdleAsk(type)
+			const isStatusMutable = !partial && isBlocking && !isMessageQueued && approval.decision === "ask"
+
+			if (isStatusMutable) {
+				const statusMutationTimeout = 2_000
+
+				if (isInteractiveAsk(type)) {
+					timeouts.push(
+						setTimeout(() => {
+							const message = this.host.findMessageByTimestamp(askTs)
+							if (message) {
+								this.host.interactiveAsk = message
+								this.host.emit(NJUST_AIEventName.TaskInteractive, this.host.taskId)
+								provider?.postMessageToWebview({ type: "interactionRequired" })
+							}
+						}, statusMutationTimeout),
+					)
+				} else if (isResumableAsk(type)) {
+					timeouts.push(
+						setTimeout(() => {
+							const message = this.host.findMessageByTimestamp(askTs)
+							if (message) {
+								this.host.resumableAsk = message
+								this.host.emit(NJUST_AIEventName.TaskResumable, this.host.taskId)
+							}
+						}, statusMutationTimeout),
+					)
+				} else if (isIdleAsk(type)) {
+					timeouts.push(
+						setTimeout(() => {
+							const message = this.host.findMessageByTimestamp(askTs)
+							if (message) {
+								this.host.idleAsk = message
+								this.host.emit(NJUST_AIEventName.TaskIdle, this.host.taskId)
+							}
+						}, statusMutationTimeout),
+					)
 				}
-				// Stop polling immediately when the task is aborted or
-				// abandoned — avoids an indefinite spin that prevents GC.
-				if (this.host.abort || this.host.abandoned) {
-					return true
-				}
-				if (shouldDrainQueuedMessageForAsk && !this.host.messageQueueService.isEmpty()) {
-					const message = this.host.messageQueueService.dequeueMessage()
-					if (message) {
-						if (type === "tool" || type === "command" || type === "use_mcp_server") {
-							this.handleWebviewAskResponse("yesButtonClicked", message.text, message.images)
-						} else {
-							this.handleWebviewAskResponse("messageResponse", message.text, message.images)
-						}
+			} else if (isMessageQueued && shouldDrainQueuedMessageForAsk) {
+				const message = this.host.messageQueueService.dequeueMessage()
+				if (message) {
+					if (type === "tool" || type === "command" || type === "use_mcp_server") {
+						this.handleWebviewAskResponse("yesButtonClicked", message.text, message.images)
+					} else {
+						this.handleWebviewAskResponse("messageResponse", message.text, message.images)
 					}
 				}
-				return false
-			},
-			{ interval: 100, timeout: ASK_RESPONSE_TIMEOUT_MS },
-		)
+			}
 
-		// If the task was aborted while we were waiting for a user response,
-		// throw immediately so the caller can perform clean-up.
-		if (this.host.abort || this.host.abandoned) {
-			throw new TaskAbortedError(this.host.taskId, this.host.instanceId)
+			await pWaitFor(
+				() => {
+					if (this.host.askResponse !== undefined || this.host.lastMessageTs !== askTs) {
+						return true
+					}
+					// Stop polling immediately when the task is aborted or
+					// abandoned — avoids an indefinite spin that prevents GC.
+					if (this.host.abort || this.host.abandoned) {
+						return true
+					}
+					if (shouldDrainQueuedMessageForAsk && !this.host.messageQueueService.isEmpty()) {
+						const message = this.host.messageQueueService.dequeueMessage()
+						if (message) {
+							if (type === "tool" || type === "command" || type === "use_mcp_server") {
+								this.handleWebviewAskResponse("yesButtonClicked", message.text, message.images)
+							} else {
+								this.handleWebviewAskResponse("messageResponse", message.text, message.images)
+							}
+						}
+					}
+					return false
+				},
+				{ interval: 100, timeout: ASK_RESPONSE_TIMEOUT_MS },
+			)
+
+			// If the task was aborted while we were waiting for a user response,
+			// throw immediately so the caller can perform clean-up.
+			if (this.host.abort || this.host.abandoned) {
+				throw new TaskAbortedError(this.host.taskId, this.host.instanceId)
+			}
+
+			if (this.host.lastMessageTs !== askTs) {
+				throw new AskIgnoredError("superseded")
+			}
+
+			const result = {
+				response: this.host.askResponse!,
+				text: this.host.askResponseText,
+				images: this.host.askResponseImages,
+			}
+			this.host.askResponse = undefined
+			this.host.askResponseText = undefined
+			this.host.askResponseImages = undefined
+
+			if (this.host.idleAsk || this.host.resumableAsk || this.host.interactiveAsk) {
+				this.host.idleAsk = undefined
+				this.host.resumableAsk = undefined
+				this.host.interactiveAsk = undefined
+				this.host.emit(NJUST_AIEventName.TaskActive, this.host.taskId)
+			}
+
+			this.host.emit(NJUST_AIEventName.TaskAskResponded)
+
+			return result
+		} finally {
+			// Always clear pending timers, including on the abort/ignore throw
+			// paths — otherwise status-mutation timers can fire after the task
+			// has already been abandoned, leaving zombie UI state behind.
+			for (const t of timeouts) {
+				clearTimeout(t)
+			}
 		}
-
-		if (this.host.lastMessageTs !== askTs) {
-			throw new AskIgnoredError("superseded")
-		}
-
-		const result = {
-			response: this.host.askResponse!,
-			text: this.host.askResponseText,
-			images: this.host.askResponseImages,
-		}
-		this.host.askResponse = undefined
-		this.host.askResponseText = undefined
-		this.host.askResponseImages = undefined
-
-		timeouts.forEach((timeout) => clearTimeout(timeout))
-
-		if (this.host.idleAsk || this.host.resumableAsk || this.host.interactiveAsk) {
-			this.host.idleAsk = undefined
-			this.host.resumableAsk = undefined
-			this.host.interactiveAsk = undefined
-			this.host.emit(NJUST_AIEventName.TaskActive, this.host.taskId)
-		}
-
-		this.host.emit(NJUST_AIEventName.TaskAskResponded)
-		return result
 	}
 
 	handleWebviewAskResponse(askResponse: ClineAskResponse, text?: string, images?: string[]) {

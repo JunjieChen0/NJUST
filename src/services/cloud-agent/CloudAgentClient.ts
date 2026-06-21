@@ -185,6 +185,15 @@ export class CloudAgentClient {
 			TelemetryService.reportError(e instanceof Error ? e : new Error(msg), TelemetryEventName.UTILITY_ERROR)
 		} finally {
 			if (timer) clearTimeout(timer)
+			// Release the temp adapter. For MCP profiles initialize() constructs a
+			// transport+client (no connection is opened here), but disconnect()
+			// is idempotent and guards against future initialize() implementations
+			// that might open resources.
+			try {
+				await tempAdapter.disconnect()
+			} catch {
+				// Best-effort cleanup — ignore failures from a short-lived adapter.
+			}
 		}
 	}
 

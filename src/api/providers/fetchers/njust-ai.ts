@@ -7,6 +7,7 @@ import { logger } from "../../../shared/logger"
 import { DEFAULT_HEADERS } from "../constants"
 import { resolveVersionedSettings, type VersionedSettings } from "./versionedSettings"
 import { getErrorMessage } from "../../../shared/error-utils"
+import { readBodyWithLimit, DEFAULT_MAX_BODY_BYTES } from "./safeFetch"
 
 /**
  * Fetches available models from the NJUST_AI Cloud provider
@@ -46,7 +47,7 @@ export async function getRooModels(baseUrl: string, apiKey?: string): Promise<Mo
 				// Log detailed error information
 				let errorBody = ""
 				try {
-					errorBody = await response.text()
+					errorBody = await readBodyWithLimit(response, 100 * 1024)
 				} catch {
 					errorBody = "(unable to read response body)"
 				}
@@ -61,7 +62,8 @@ export async function getRooModels(baseUrl: string, apiKey?: string): Promise<Mo
 				throw new Error(`HTTP ${response.status}: ${response.statusText}`)
 			}
 
-			const data = await response.json()
+			const text = await readBodyWithLimit(response, DEFAULT_MAX_BODY_BYTES)
+			const data = JSON.parse(text)
 			const models: ModelRecord = {}
 
 			// Validate response against schema

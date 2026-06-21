@@ -89,7 +89,9 @@ describe("fetchOpenAICompatibleModels", () => {
 	})
 
 	it("throws on HTTP error", async () => {
-		mockFetch.mockResolvedValueOnce({
+		// Use a persistent mock (not Once) so the retry logic keeps getting the
+		// same 429 on each attempt, eventually surfacing the HTTP error.
+		mockFetch.mockResolvedValue({
 			ok: false,
 			status: 429,
 			text: () => Promise.resolve("rate limited"),

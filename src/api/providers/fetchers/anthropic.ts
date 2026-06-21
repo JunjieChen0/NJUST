@@ -1,4 +1,5 @@
 import type { DynamicModelRecord, ListModelsOptions } from "../modelTypes"
+import { safeFetch, readBodyWithLimit, DEFAULT_MAX_BODY_BYTES } from "./safeFetch"
 
 export async function fetchAnthropicModels(options: ListModelsOptions = {}): Promise<DynamicModelRecord> {
 	const apiKey = options.apiKey ?? process.env.ANTHROPIC_API_KEY
@@ -8,20 +9,25 @@ export async function fetchAnthropicModels(options: ListModelsOptions = {}): Pro
 
 	const baseUrl = options.baseUrl || "https://api.anthropic.com/v1"
 
-	const res = await fetch(`${baseUrl.replace(/\/$/, "")}/models`, {
-		headers: {
-			"x-api-key": apiKey,
-			"anthropic-version": "2023-06-01",
-			Accept: "application/json",
+	const res = await safeFetch(
+		`${baseUrl.replace(/\/$/, "")}/models`,
+		{
+			headers: {
+				"x-api-key": apiKey,
+				"anthropic-version": "2023-06-01",
+				Accept: "application/json",
+			},
 		},
-	})
+		{ retries: 2 },
+	)
 
 	if (!res.ok) {
-		const body = await res.text().catch(() => "")
+		const body = await readBodyWithLimit(res, 100 * 1024).catch(() => "")
 		throw new Error(`Failed to fetch Anthropic models: ${res.status} ${body}`)
 	}
 
-	const json = await res.json()
+	const text = await readBodyWithLimit(res, DEFAULT_MAX_BODY_BYTES)
+	const json = JSON.parse(text)
 	const list = Array.isArray(json.data) ? json.data : []
 
 	const models: DynamicModelRecord = {}

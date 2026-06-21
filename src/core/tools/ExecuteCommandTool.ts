@@ -43,6 +43,42 @@ function _isHighRiskShellCommand(command: string): boolean {
 	return riskLevel === "forbidden" || riskLevel === "dangerous"
 }
 
+/**
+ * Patterns for commands whose effects are effectively irreversible (destroying
+ * local work, shared history, or deleting user data). These require explicit
+ * confirmation even when the task is running in bypass mode — bypass is an
+ * opt-in "skip routine confirmations" mode, not a license to silently run
+ * catastrophic commands. Forbidden commands are already hard-blocked above;
+ * this list covers the destructive-but-not-forbidden tier.
+ *
+ * NOTE: these intentionally err toward matching. The consequence of a false
+ * positive is an extra confirmation click; the consequence of a false negative
+ * is silent data loss / force-push in bypass mode.
+ */
+// Exported for direct unit testing (the full tool pipeline requires heavy
+// mocking of terminals/approval); see __tests__/ExecuteCommandTool.bypass.spec.ts.
+export const BYPASS_PROTECTED_PATTERNS: RegExp[] = [
+	// Recursive/forced deletion. Covers `-rf`, `-fr`, `-r`, `-R`, combined short
+	// flags like `-rvf`, and the GNU long options `--recursive` / `--force`.
+	/\brm\s+(-[a-z]*r[a-z]*f?|-[a-z]*f[a-z]*r?|-[a-z]*R|--recursive|--force)\b/,
+	// Destructive force push to a shared remote. The `.*` allows a refspec
+	// between `push` and the flag (e.g. `git push origin --force`). Negative
+	// lookahead exempts the safe variants `--force-with-lease` and
+	// `--force-if-includes` (which refuse to push if the remote has moved).
+	/\bgit\s+push\s+.*--force(?!(?:-with-lease|-if-includes))(?![a-z-])\b/,
+	// Short-form force push, including a refspec in the middle:
+	// `git push -f`, `git push origin -f`, `git push origin -f main`.
+	// `(?:\s.*)?` optionally consumes intervening args before `-f`.
+	/\bgit\s+push\s+(?:.*\s)?-f\b/,
+	/\bgit\s+reset\s+--hard\b/, // discard all local changes
+	/\bgit\s+clean\s+-[a-z]*[fdx]/, // delete untracked/ignored files
+	/\btruncate\s+-s\s*0\b/, // wipe file contents
+	// Fork bomb shapes. `:` is a non-word char so no `\b` anchor is valid
+	// before it; the body is matched loosely to cover spacing variants like
+	// `:(){ :|:& }`, `: () { : | : & }`, and `:(){:|:&}`.
+	/:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}/,
+]
+
 import { NamedError } from "@njust-ai/core/shared"
 
 class ShellIntegrationError extends NamedError {}
@@ -126,9 +162,9 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 			task.consecutiveMistakeCount = 0
 
 			const safetyCheck = checkCommandSafety(canonicalCommand)
-			const isBypassMode =
-				(task as Task & { permissionRuleEngine?: { getMode(): string } }).permissionRuleEngine?.getMode?.() ===
-				"bypass"
+			const permissionRuleEngine = (task as Task & { permissionRuleEngine?: { getMode(): string } })
+				.permissionRuleEngine
+			const isBypassMode = permissionRuleEngine?.getMode?.() === "bypass"
 
 			// Always block forbidden commands, even in bypass mode
 			if (safetyCheck.riskLevel === "forbidden") {
@@ -142,11 +178,24 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 				return
 			}
 
+			// A small set of catastrophic, effectively irreversible patterns that
+			// demand explicit confirmation even in bypass mode. Bypass mode is an
+			// opt-in "skip routine confirmations" mode, not a license to silently
+			// run commands that destroy work or shared state. When matched we keep
+			// the normal approval flow regardless of bypass.
+			const requiresConfirmationEvenInBypass = BYPASS_PROTECTED_PATTERNS.some((p) => p.test(canonicalCommand))
+
 			if (safetyCheck.requiresConfirmation) {
 				if (!isBypassMode) {
 					logger.warn(
 						"ExecuteCommandTool",
 						"execute_command: high-risk pattern; user must approve in UI:",
+						canonicalCommand,
+					)
+				} else if (requiresConfirmationEvenInBypass) {
+					logger.warn(
+						"ExecuteCommandTool",
+						"execute_command: catastrophic pattern; confirmation enforced despite bypass mode:",
 						canonicalCommand,
 					)
 				} else {
@@ -169,11 +218,11 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 
 			await reportProgress?.({ icon: "terminal", text: "Waiting for command approval" } as UnsafeAny)
 			const approvalMessage =
-				safetyCheck.requiresConfirmation && !isBypassMode
+				safetyCheck.requiresConfirmation && (!isBypassMode || requiresConfirmationEvenInBypass)
 					? `[High risk] This command may destroy data. Confirm to run:\n${canonicalCommand}\n\nReasons: ${safetyCheck.reasons.join("; ")}`
 					: canonicalCommand
 
-			if (!isBypassMode) {
+			if (!isBypassMode || requiresConfirmationEvenInBypass) {
 				const didApprove = await askApproval("command", approvalMessage)
 				if (!didApprove) {
 					return

@@ -153,6 +153,10 @@ export class McpHub implements IMcpHubService {
 	/**
 	 * Registers a client (e.g., ClineProvider) using this hub.
 	 * Increments the reference count.
+	 *
+	 * Guarded against double-registration: a client that registers twice without
+	 * unregistering in between is a programming error, but clamping keeps the
+	 * count meaningful rather than letting dispose-on-zero fire prematurely.
 	 */
 	public registerClient(): void {
 		this.refCount++
@@ -161,8 +165,17 @@ export class McpHub implements IMcpHubService {
 	/**
 	 * Unregisters a client. Decrements the reference count.
 	 * If the count reaches zero, disposes the hub.
+	 *
+	 * Guarded against over-decrement: once the hub is disposing/disposed the
+	 * count is clamped at zero so redundant unregister calls (e.g. from a retry
+	 * path) cannot drive it negative and trigger a second dispose.
 	 */
 	public async unregisterClient(): Promise<void> {
+		if (this.refCount <= 0 || this.isDisposed) {
+			// Already at zero (or disposing) — ignore the redundant unregister
+			// rather than letting the count go negative.
+			return
+		}
 		this.refCount--
 
 		if (this.refCount <= 0) {

@@ -6,6 +6,7 @@ import type { ModelInfo } from "@njust-ai/types"
 import { logger } from "../../../shared/logger"
 import { parseApiPrice } from "../../../shared/cost"
 import { toRequestyServiceUrl } from "../../../shared/utils/requesty"
+import { safeAxiosConfig } from "./safeFetch"
 
 const requestyModelSchema = z
 	.object({
@@ -42,7 +43,7 @@ export async function getRequestyModels(baseUrl?: string, apiKey?: string): Prom
 		const resolvedBaseUrl = toRequestyServiceUrl(baseUrl)
 		const modelsUrl = new URL("v1/models", resolvedBaseUrl)
 
-		const response = await axios.get(modelsUrl.toString(), { headers })
+		const response = await axios.get(modelsUrl.toString(), { headers, ...safeAxiosConfig() })
 		const parsedResponse = requestyModelsResponseSchema.safeParse(response.data)
 		const rawModels = parsedResponse.success ? parsedResponse.data.data : []
 

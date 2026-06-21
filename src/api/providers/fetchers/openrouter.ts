@@ -11,6 +11,7 @@ import {
 import type { ApiHandlerOptions } from "../../../shared/api"
 import { logger } from "../../../shared/logger"
 import { parseApiPrice } from "../../../shared/cost"
+import { safeAxiosConfig } from "./safeFetch"
 
 /**
  * OpenRouterBaseModel
@@ -99,7 +100,7 @@ export async function getOpenRouterModels(options?: ApiHandlerOptions): Promise<
 	const baseURL = options?.openRouterBaseUrl || "https://openrouter.ai/api/v1"
 
 	try {
-		const response = await axios.get<OpenRouterModelsResponse>(`${baseURL}/models`)
+		const response = await axios.get<OpenRouterModelsResponse>(`${baseURL}/models`, { ...safeAxiosConfig() })
 		const result = openRouterModelsResponseSchema.safeParse(response.data)
 
 		if (!result.success) {
@@ -153,7 +154,9 @@ export async function getOpenRouterModelEndpoints(
 	const baseURL = options?.openRouterBaseUrl || "https://openrouter.ai/api/v1"
 
 	try {
-		const response = await axios.get<OpenRouterModelEndpointsResponse>(`${baseURL}/models/${modelId}/endpoints`)
+		const response = await axios.get<OpenRouterModelEndpointsResponse>(`${baseURL}/models/${modelId}/endpoints`, {
+			...safeAxiosConfig(),
+		})
 		const result = openRouterModelEndpointsResponseSchema.safeParse(response.data)
 
 		if (!result.success) {

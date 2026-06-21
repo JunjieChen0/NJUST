@@ -11,7 +11,11 @@ export class AdapterFactory implements IProtocolAdapterFactory {
 	create(profile: CloudAgentProfile): IProtocolAdapter {
 		let adapter: IProtocolAdapter
 
-		switch (profile.protocolType) {
+		// Normalize to lowercase so user-supplied config like "MCP", "Mcp", or
+		// "REST" doesn't silently fall back to REST due to a case mismatch.
+		const protocolType = typeof profile.protocolType === "string" ? profile.protocolType.toLowerCase() : ""
+
+		switch (protocolType) {
 			case "mcp":
 				adapter = new McpProtocolAdapter()
 				break

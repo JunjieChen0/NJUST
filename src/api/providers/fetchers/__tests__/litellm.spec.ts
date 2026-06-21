@@ -36,6 +36,8 @@ describe("getLiteLLMModels", () => {
 				...DEFAULT_HEADERS,
 			},
 			timeout: 5000,
+			maxContentLength: 5 * 1024 * 1024,
+			maxBodyLength: 5 * 1024 * 1024,
 		})
 	})
 
@@ -57,6 +59,8 @@ describe("getLiteLLMModels", () => {
 				...DEFAULT_HEADERS,
 			},
 			timeout: 5000,
+			maxContentLength: 5 * 1024 * 1024,
+			maxBodyLength: 5 * 1024 * 1024,
 		})
 	})
 
@@ -78,6 +82,8 @@ describe("getLiteLLMModels", () => {
 				...DEFAULT_HEADERS,
 			},
 			timeout: 5000,
+			maxContentLength: 5 * 1024 * 1024,
+			maxBodyLength: 5 * 1024 * 1024,
 		})
 	})
 
@@ -99,6 +105,8 @@ describe("getLiteLLMModels", () => {
 				...DEFAULT_HEADERS,
 			},
 			timeout: 5000,
+			maxContentLength: 5 * 1024 * 1024,
+			maxBodyLength: 5 * 1024 * 1024,
 		})
 	})
 
@@ -120,6 +128,8 @@ describe("getLiteLLMModels", () => {
 				...DEFAULT_HEADERS,
 			},
 			timeout: 5000,
+			maxContentLength: 5 * 1024 * 1024,
+			maxBodyLength: 5 * 1024 * 1024,
 		})
 	})
 
@@ -141,6 +151,8 @@ describe("getLiteLLMModels", () => {
 				...DEFAULT_HEADERS,
 			},
 			timeout: 5000,
+			maxContentLength: 5 * 1024 * 1024,
+			maxBodyLength: 5 * 1024 * 1024,
 		})
 	})
 
@@ -162,6 +174,8 @@ describe("getLiteLLMModels", () => {
 				...DEFAULT_HEADERS,
 			},
 			timeout: 5000,
+			maxContentLength: 5 * 1024 * 1024,
+			maxBodyLength: 5 * 1024 * 1024,
 		})
 	})
 
@@ -214,6 +228,8 @@ describe("getLiteLLMModels", () => {
 				...DEFAULT_HEADERS,
 			},
 			timeout: 5000,
+			maxContentLength: 5 * 1024 * 1024,
+			maxBodyLength: 5 * 1024 * 1024,
 		})
 
 		expect(result).toEqual({
@@ -289,6 +305,8 @@ describe("getLiteLLMModels", () => {
 				...DEFAULT_HEADERS,
 			},
 			timeout: 5000,
+			maxContentLength: 5 * 1024 * 1024,
+			maxBodyLength: 5 * 1024 * 1024,
 		})
 	})
 

@@ -5,6 +5,7 @@ import { type ModelInfo } from "@njust-ai/types"
 import { lMStudioDefaultModelInfo } from "@njust-ai/core/providers"
 
 import { logger } from "../../../shared/logger"
+import { safeAxiosConfig } from "./safeFetch"
 
 const modelsWithLoadedDetails = new Set<string>()
 
@@ -46,7 +47,7 @@ export async function getLMStudioModels(baseUrl = "http://localhost:1234"): Prom
 
 		// test the connection to LM Studio first
 		// errors will be caught further down
-		await axios.get(`${baseUrl}/v1/models`)
+		await axios.get(`${baseUrl}/v1/models`, { ...safeAxiosConfig() })
 
 		const client = new LMStudioClient({ baseUrl: lmsUrl })
 

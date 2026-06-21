@@ -5,6 +5,7 @@ import { IVectorStore } from "./interfaces/vector-store"
 import { CodeIndexConfigManager } from "./config-manager"
 import { CodeIndexStateManager } from "./state-manager"
 import { logger } from "../../shared/logger"
+import { getErrorMessage } from "../../shared/error-utils"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
 
@@ -70,7 +71,7 @@ export class CodeIndexSearchService {
 		} catch (error) {
 			logger.error("CodeIndexSearchService", "Error during search:", error)
 			TelemetryService.reportError(error, TelemetryEventName.CODE_INDEX_ERROR)
-			this.stateManager.setSystemState("Error", `Search failed: ${(error as Error).message}`)
+			this.stateManager.setSystemState("Error", `Search failed: ${getErrorMessage(error)}`)
 
 			throw error // Re-throw the error after setting state
 		}

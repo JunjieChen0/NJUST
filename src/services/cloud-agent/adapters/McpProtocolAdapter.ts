@@ -27,6 +27,16 @@ export const MCP_TOOLS = {
 	COMPILE: "compile",
 } as const
 
+/**
+ * Default timeout for a single MCP tool call (submit_task / compile).
+ *
+ * The Cloud Agent server is expected to converge deferred logic internally, so
+ * a single callTool should return a final response. This guards against a
+ * server that hangs and leaves the client blocked indefinitely (the connect()
+ * timeout is separate and enforced by CloudAgentClient).
+ */
+const DEFAULT_CALL_TOOL_TIMEOUT_MS = 120_000
+
 export interface McpCallbackHandler {
 	onText?: (content: string) => Promise<void>
 	onReasoning?: (content: string) => Promise<void>
@@ -219,12 +229,44 @@ export class McpProtocolAdapter implements IProtocolAdapter {
 			await this.connect()
 		}
 
-		const result = await this.client.callTool({
-			name,
-			arguments: args,
+		// Enforce an upper bound on a single tool call so a server that never
+		// responds cannot block the orchestrator forever. The timeout is
+		// rewritten to a clear message rather than surfacing a bare AbortError.
+		const timeoutMs = DEFAULT_CALL_TOOL_TIMEOUT_MS
+		let timeoutId: ReturnType<typeof setTimeout> | undefined
+		const timeoutPromise = new Promise<never>((_, reject) => {
+			timeoutId = setTimeout(
+				() => reject(new Error(`MCP callTool("${name}") timed out after ${timeoutMs}ms`)),
+				timeoutMs,
+			)
 		})
 
-		return this.parseResponseBody(result as Record<string, unknown>)
+		try {
+			const result = await Promise.race([
+				this.client.callTool({
+					name,
+					arguments: args,
+				}),
+				timeoutPromise,
+			])
+
+			return this.parseResponseBody(result as Record<string, unknown>)
+		} catch (error) {
+			// On timeout the underlying callTool promise is orphaned (the SDK
+			// has no per-request cancel). Log an actionable warning so the
+			// orphaned server-side work is visible; the transport itself is
+			// released later by withMcpAdapter's error-path disconnect().
+			if (error instanceof Error && /timed out/i.test(error.message)) {
+				logger.warn(
+					"McpProtocolAdapter",
+					`callTool("${name}") timed out — the server may still be processing the abandoned request. ` +
+						`The connection will be torn down on return.`,
+				)
+			}
+			throw error
+		} finally {
+			if (timeoutId) clearTimeout(timeoutId)
+		}
 	}
 
 	// ─── Compile 响应解析 ──────────────────────────────────────────

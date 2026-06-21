@@ -62,8 +62,13 @@ export async function getLiteLLMModels(apiKey: string, baseUrl: string): Promise
 		// Normalize the pathname by removing trailing slashes and multiple slashes
 		urlObj.pathname = urlObj.pathname.replace(/\/+$/, "").replace(/\/+/g, "/") + "/v1/model/info"
 		const url = urlObj.href
-		// Added timeout to prevent indefinite hanging
-		const response = await axios.get(url, { headers, timeout: 5000 })
+		// Added timeout and size cap to prevent indefinite hanging / OOM
+		const response = await axios.get(url, {
+			headers,
+			timeout: 5000,
+			maxContentLength: 5 * 1024 * 1024,
+			maxBodyLength: 5 * 1024 * 1024,
+		})
 		const parsedResponse = liteLlmModelsResponseSchema.safeParse(response.data)
 		const models: ModelRecord = {}
 

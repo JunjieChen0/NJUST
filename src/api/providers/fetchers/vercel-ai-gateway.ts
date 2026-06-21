@@ -10,6 +10,7 @@ import {
 import type { ApiHandlerOptions } from "../../../shared/api"
 import { logger } from "../../../shared/logger"
 import { parseApiPrice } from "../../../shared/cost"
+import { safeAxiosConfig } from "./safeFetch"
 
 /**
  * VercelAiGatewayPricing
@@ -62,7 +63,9 @@ export async function getVercelAiGatewayModels(_options?: ApiHandlerOptions): Pr
 	const baseURL = "https://ai-gateway.vercel.sh/v1"
 
 	try {
-		const response = await axios.get<VercelAiGatewayModelsResponse>(`${baseURL}/models`)
+		const response = await axios.get<VercelAiGatewayModelsResponse>(`${baseURL}/models`, {
+			...safeAxiosConfig(),
+		})
 		const result = vercelAiGatewayModelsResponseSchema.safeParse(response.data)
 
 		if (!result.success) {

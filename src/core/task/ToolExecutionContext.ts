@@ -47,7 +47,17 @@ export class ToolExecutionContext {
 		return this._siblingAbortController?.signal.aborted ?? false
 	}
 
-	/** Reset for a new batch of tool executions */
+	/**
+	 * Reset for a new batch of tool executions.
+	 *
+	 * Intentionally drops the reference to the previous sibling controller
+	 * WITHOUT aborting it. The previous batch's tools have already resolved
+	 * (or the scheduler drained its waiters), so any abort listeners attached
+	 * to that signal will be released when the controller is garbage-collected.
+	 * A fresh controller is created lazily on the next {@link getSiblingAbortController}.
+	 * If you need to actively cancel pending siblings (e.g. on disposal), call
+	 * {@link signalSiblingAbort} or {@link dispose} instead.
+	 */
 	resetSiblingAbortController(): void {
 		this._siblingAbortController = null
 	}

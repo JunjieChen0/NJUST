@@ -41,6 +41,14 @@ vi.mock("fs/promises", () => ({
 
 vi.mock("isbinaryfile")
 
+// Mock pathUtils so the workspace-outside hard-deny check in requestApproval
+// (which reads vscode.workspace.workspaceFolders) does not flag every test
+// path as outside the workspace. Tests that need to exercise the outside-
+// workspace branch can override this mock per-test.
+vi.mock("../../../utils/pathUtils", () => ({
+	isPathOutsideWorkspace: vi.fn(() => false),
+}))
+
 vi.mock("../../../integrations/misc/extract-text", () => ({
 	extractTextFromFile: vi.fn(),
 	addLineNumbers: vi.fn(function (text: string, startLine = 1) {

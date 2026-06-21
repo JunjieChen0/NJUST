@@ -423,24 +423,31 @@ export class TaskExecutor {
 		const controlledStream = new BackpressureController(stream as UnsafeAny as AsyncGenerator<UnsafeAny>, 1000, 250)
 		const iterator = controlledStream[Symbol.asyncIterator]()
 
-		abortSignal.addEventListener("abort", () => {
+		// Listener that clears the current-request controller ref on abort.
+		// Registered with { once: true } so it self-removes after firing and
+		// never accumulates across requests.
+		const onCurrentRequestAbort = () => {
 			logger.info("TaskExecutor", `AbortSignal triggered for current request, task ${h.taskId}.${h.instanceId}`)
 			h.currentRequestAbortController = undefined
+		}
+		abortSignal.addEventListener("abort", onCurrentRequestAbort, { once: true })
+
+		// Listener used to race abort against the first chunk. Removed in the
+		// finally below once the race resolves so it doesn't leak onto the signal.
+		let onAbortReject: (() => void) | undefined
+		const abortPromise = new Promise<never>((_, reject) => {
+			if (abortSignal.aborted) {
+				reject(new Error("Request cancelled by user"))
+			} else {
+				onAbortReject = () => reject(new Error("Request cancelled by user"))
+				abortSignal.addEventListener("abort", onAbortReject, { once: true })
+			}
 		})
 
 		try {
 			h.isWaitingForFirstChunk = true
 
 			const firstChunkPromise = iterator.next()
-			const abortPromise = new Promise<never>((_, reject) => {
-				if (abortSignal.aborted) {
-					reject(new Error("Request cancelled by user"))
-				} else {
-					abortSignal.addEventListener("abort", () => {
-						reject(new Error("Request cancelled by user"))
-					})
-				}
-			})
 
 			const firstChunk = await Promise.race([firstChunkPromise, abortPromise])
 			await clearRetryEvents(h.globalStoragePath, h.taskId)
@@ -466,6 +473,14 @@ export class TaskExecutor {
 					this.attemptApiRequest(nextAttempt, nextOptions),
 			})
 			return
+		} finally {
+			// Clean up the abort listener that was racing the first chunk.
+			// Without this it would linger on the signal for the lifetime of the
+			// task. ({ once: true } already covers the abort path, but this also
+			// covers the normal-completion path where abort never fires.)
+			if (onAbortReject) {
+				abortSignal.removeEventListener("abort", onAbortReject)
+			}
 		}
 		// Delegate remainder: yield* requires AsyncIterable; reuse same iterator state after first manual next().
 		yield* {

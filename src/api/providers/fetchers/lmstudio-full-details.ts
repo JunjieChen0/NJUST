@@ -4,12 +4,13 @@ import { LMStudioClient } from "@lmstudio/sdk"
 import { logger } from "../../../shared/logger"
 import { flushModels } from "./modelCache"
 import { hasLoadedFullDetails, markFullDetailsLoaded } from "./lmstudio"
+import { safeAxiosConfig } from "./safeFetch"
 
 export { hasLoadedFullDetails }
 
 export const forceFullModelDetailsLoad = async (baseUrl: string, modelId: string): Promise<void> => {
 	try {
-		await axios.get(`${baseUrl}/v1/models`)
+		await axios.get(`${baseUrl}/v1/models`, { ...safeAxiosConfig() })
 		const lmsUrl = baseUrl.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://")
 
 		const client = new LMStudioClient({ baseUrl: lmsUrl })

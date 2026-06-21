@@ -1,5 +1,6 @@
 import type { ProviderName } from "@njust-ai/types"
 import type { DynamicModelRecord, ListModelsOptions } from "../modelTypes"
+import { safeFetch, readBodyWithLimit, DEFAULT_MAX_BODY_BYTES, joinUrl } from "./safeFetch"
 
 interface ProviderConfig {
 	apiKeyEnv: string
@@ -95,10 +96,6 @@ const configs: Partial<Record<ProviderName, ProviderConfig>> = {
 	},
 }
 
-function joinUrl(baseUrl: string, path: string): string {
-	return `${baseUrl.replace(/\/$/, "")}/${path.replace(/^\//, "")}`
-}
-
 export async function fetchOpenAICompatibleModels(
 	provider: ProviderName,
 	options: ListModelsOptions = {},
@@ -115,19 +112,24 @@ export async function fetchOpenAICompatibleModels(
 
 	const baseUrl = options.baseUrl || process.env[config.baseUrlEnv] || config.defaultBaseUrl
 
-	const res = await fetch(joinUrl(baseUrl, config.path), {
-		headers: {
-			Authorization: `Bearer ${apiKey}`,
-			Accept: "application/json",
+	const res = await safeFetch(
+		joinUrl(baseUrl, config.path),
+		{
+			headers: {
+				Authorization: `Bearer ${apiKey}`,
+				Accept: "application/json",
+			},
 		},
-	})
+		{ retries: 2 },
+	)
 
 	if (!res.ok) {
-		const body = await res.text().catch(() => "")
+		const body = await readBodyWithLimit(res, 100 * 1024).catch(() => "")
 		throw new Error(`Failed to fetch models for ${provider}: ${res.status} ${body}`)
 	}
 
-	const json = await res.json()
+	const text = await readBodyWithLimit(res, DEFAULT_MAX_BODY_BYTES)
+	const json = JSON.parse(text)
 	const list = Array.isArray(json.data) ? json.data : Array.isArray(json.models) ? json.models : []
 
 	const models: DynamicModelRecord = {}

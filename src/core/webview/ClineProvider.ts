@@ -142,6 +142,13 @@ export class ClineProvider
 	private codeIndexManager?: ICodeIndexManager
 	private _workspaceTracker?: WorkspaceTracker // workSpaceTracker read-only for access outside this class
 	public mcpHub?: IMcpHubService // Must be public to satisfy IWebviewStateHost
+	/**
+	 * Resolves once the MCP hub has finished initializing (or to `undefined` on
+	 * failure). Code that needs MCP capabilities and currently reads
+	 * `this.mcpHub` directly (which may still be `undefined` during early
+	 * startup) should `await this.mcpHubReady` first to avoid silently no-op'ing.
+	 */
+	public readonly mcpHubReady: Promise<IMcpHubService | undefined>
 	protected skillsManager?: ISkillsManager
 	private _memoryManager?: IMemoryManager
 	private taskCreationCallback: (task: Task) => void
@@ -305,17 +312,22 @@ export class ClineProvider
 			await this.postStateToWebviewWithoutClineMessages()
 		})
 
-		// Initialize MCP Hub through the singleton manager
-		this.services
+		// Initialize MCP Hub through the singleton manager.
+		// The promise is stored on `mcpHubReady` so callers that need MCP can
+		// `await this.mcpHubReady` rather than racing the async assignment to
+		// `this.mcpHub` (which is `undefined` until this resolves).
+		this.mcpHubReady = this.services
 			.getMcpHub(this.context, this)
 			.then((hub) => {
 				this.mcpHub = hub
 				if (this.mcpHub) {
 					this.mcpHub.registerClient()
 				}
+				return hub
 			})
 			.catch((error) => {
 				this.log(`Failed to initialize MCP Hub: ${error}`)
+				return undefined
 			})
 
 		this.planEngine = new PlanEngine(this, this.outputChannel)

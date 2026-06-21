@@ -5,6 +5,7 @@ import type { ModelInfo } from "@njust-ai/types"
 
 import { logger } from "../../../shared/logger"
 import { parseApiPrice } from "../../../shared/cost"
+import { safeAxiosConfig } from "./safeFetch"
 
 const unboundModelSchema = z
 	.object({
@@ -38,7 +39,7 @@ export async function getUnboundModels(apiKey?: string | null): Promise<Record<s
 			headers["Authorization"] = `Bearer ${apiKey}`
 		}
 
-		const response = await axios.get("https://api.getunbound.ai/models", { headers })
+		const response = await axios.get("https://api.getunbound.ai/models", { headers, ...safeAxiosConfig() })
 		const parsedResponse = unboundModelsResponseSchema.safeParse(response.data)
 		const rawModels = parsedResponse.success
 			? Array.isArray(parsedResponse.data)

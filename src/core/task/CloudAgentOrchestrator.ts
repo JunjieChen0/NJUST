@@ -417,7 +417,8 @@ export class CloudAgentOrchestrator {
 				)
 			} catch (error) {
 				if (this.host.abort) break
-				const status = (error as Error & { status?: number }).status
+				const status =
+					typeof error === "object" && error !== null ? (error as { status?: number }).status : undefined
 				if (status === 404 && sessionRecoveries < this.service.deferredConstants.sessionRecoveryMax) {
 					sessionRecoveries++
 					await this.host.say(
