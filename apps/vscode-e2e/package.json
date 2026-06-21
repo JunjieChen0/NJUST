@@ -16,12 +16,12 @@
 		"@njust-ai/mock-api-server": "workspace:^",
 		"@njust-ai/types": "workspace:^",
 		"@types/mocha": "^10.0.10",
-		"@types/node": "^20.0",
-		"@types/vscode": "^1.95.0",
-		"@vscode/test-cli": "^0.0.11",
-		"@vscode/test-electron": "^2.4.0",
+		"@types/node": "^26.0",
+		"@types/vscode": "^1.125.0",
+		"@vscode/test-cli": "^0.0.12",
+		"@vscode/test-electron": "^3.0.0",
 		"glob": "^11.1.0",
-		"mocha": "^11.1.0",
+		"mocha": "^11.7.6",
 		"rimraf": "^6.0.1"
 	}
 }
