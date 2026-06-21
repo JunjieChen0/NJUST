@@ -92,8 +92,8 @@
 	"devDependencies": {
 		"@njust-ai/config-eslint": "workspace:^",
 		"@njust-ai/config-typescript": "workspace:^",
-		"@testing-library/jest-dom": "^6.6.3",
-		"@testing-library/react": "^16.2.0",
+		"@testing-library/jest-dom": "^6.9.1",
+		"@testing-library/react": "^16.3.2",
 		"@testing-library/user-event": "^14.6.1",
 		"@types/diff": "^5.2.1",
 		"@types/jest": "^29.0.0",
@@ -105,12 +105,12 @@
 		"@types/stacktrace-js": "^2.0.3",
 		"@types/vscode-webview": "^1.57.5",
 		"@vitejs/plugin-react": "^4.3.4",
-		"@vitest/coverage-v8": "^4.1.8",
-		"@vitest/ui": "^4.1.8",
+		"@vitest/coverage-v8": "^4.1.9",
+		"@vitest/ui": "^4.1.9",
 		"babel-plugin-react-compiler": "^1.0.0",
 		"identity-obj-proxy": "^3.0.0",
-		"jsdom": "^26.0.0",
+		"jsdom": "^29.1.1",
 		"vite": "^6.4.2",
-		"vitest": "^4.1.8"
+		"vitest": "^4.1.9"
 	}
 }
