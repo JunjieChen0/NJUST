@@ -27,7 +27,7 @@
 		"clean": "rimraf .turbo"
 	},
 	"dependencies": {
-		"@anthropic-ai/sdk": "^0.52.0",
+		"@anthropic-ai/sdk": "^0.105.0",
 		"@njust-ai/telemetry": "workspace:^",
 		"@njust-ai/types": "workspace:^",
 		"esbuild": "^0.28.1",
