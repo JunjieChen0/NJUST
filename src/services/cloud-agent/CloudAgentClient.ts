@@ -50,7 +50,7 @@ async function readResponseBodyWithLimit(resp: Response, maxBytes: number): Prom
 			totalBytes += value.byteLength
 			if (totalBytes > maxBytes) {
 				// Cancel the stream to stop receiving further chunks
-				await reader.cancel().catch(() => {})
+				await reader.cancel().catch((err) => logger.debug("CloudAgentClient", "cancel reader", err))
 				throw new Error(`Cloud Agent: response body exceeds limit (${(maxBytes / 1024 / 1024).toFixed(1)} MB)`)
 			}
 
@@ -202,8 +202,8 @@ export class CloudAgentClient {
 			// that might open resources.
 			try {
 				await tempAdapter.disconnect()
-			} catch {
-				// Best-effort cleanup — ignore failures from a short-lived adapter.
+			} catch (err) {
+				logger.debug("CloudAgentClient", "temp adapter disconnect", err)
 			}
 		}
 	}

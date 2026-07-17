@@ -17,7 +17,6 @@ exports[`packages/core public API snapshot > exports match expected surface 1`] 
   "assertHeadersSafe",
   "assertPublicIp",
   "assertSafeOutboundUrl",
-  "assessCommandRisk",
   "classifyApiError",
   "consolidateApiRequests",
   "consolidateCommands",

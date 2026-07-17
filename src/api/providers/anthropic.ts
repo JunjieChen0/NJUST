@@ -24,9 +24,9 @@ import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from ".
 import { calculateApiCostAnthropic } from "../../shared/cost"
 import { convertOpenAIToolsToAnthropic, convertOpenAIToolChoiceToAnthropic } from "../transform/native-tool-converters"
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "../../shared/api-constants"
-import { summarizePromptCacheUsage } from "../../core/prompts/cache-monitor"
+import { summarizePromptCacheUsage } from "../../shared/cache-monitor"
 import { globalCostTracker } from "../../utils/costTracker"
-import { globalPromptCacheBreakDetector } from "../../core/prompts/promptCacheBreakDetection"
+import { globalPromptCacheBreakDetector } from "../../shared/promptCacheBreakDetection"
 
 import { debugLog } from "../../utils/debugLog"
 /**

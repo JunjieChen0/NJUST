@@ -38,6 +38,22 @@ import {
 	setCangjiePromptServices,
 } from "./sections/cangjie-context"
 import { Package } from "../../shared/package"
+import {
+	MIN_CONTEXT_WINDOW_FOR_CANGJIE,
+	CONTEXT_WINDOW_TIER_200K,
+	CONTEXT_WINDOW_TIER_100K,
+	CONTEXT_WINDOW_TIER_64K,
+	CONTEXT_WINDOW_TIER_32K,
+	CONTEXT_WINDOW_TIER_16K,
+	CANGJIE_BUDGET_TIER_200K,
+	CANGJIE_BUDGET_TIER_100K,
+	CANGJIE_BUDGET_TIER_64K,
+	CANGJIE_BUDGET_TIER_32K,
+	CANGJIE_BUDGET_TIER_16K,
+	CANGJIE_BUDGET_MIN_FLOOR,
+	CANGJIE_BUDGET_SCALE_FACTOR,
+	CANGJIE_FOLLOWUP_COMPRESSION_RATIO,
+} from "./constants"
 import { getMultiFileContextSection } from "./sections/multi-file-context"
 import { estimatePromptTokens, trimSectionsByBudget, derivePromptTokenBudget } from "./tokenBudget"
 import type { SectionBudget } from "./tokenBudget"
@@ -70,15 +86,15 @@ import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "../../shared/api-constants"
  */
 export function deriveCangjieContextTokenBudgetFromContextWindow(contextWindow: number | undefined): number {
 	const fallback = DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET
-	if (contextWindow === undefined || contextWindow <= 0 || contextWindow < 4096) {
+	if (contextWindow === undefined || contextWindow <= 0 || contextWindow < MIN_CONTEXT_WINDOW_FOR_CANGJIE) {
 		return fallback
 	}
-	if (contextWindow >= 200_000) return 6000
-	if (contextWindow >= 100_000) return 4500
-	if (contextWindow >= 64_000) return 3800
-	if (contextWindow >= 32_000) return 3000
-	if (contextWindow >= 16_000) return 2400
-	return Math.max(800, Math.min(fallback, Math.floor(contextWindow * 0.08)))
+	if (contextWindow >= CONTEXT_WINDOW_TIER_200K) return CANGJIE_BUDGET_TIER_200K
+	if (contextWindow >= CONTEXT_WINDOW_TIER_100K) return CANGJIE_BUDGET_TIER_100K
+	if (contextWindow >= CONTEXT_WINDOW_TIER_64K) return CANGJIE_BUDGET_TIER_64K
+	if (contextWindow >= CONTEXT_WINDOW_TIER_32K) return CANGJIE_BUDGET_TIER_32K
+	if (contextWindow >= CONTEXT_WINDOW_TIER_16K) return CANGJIE_BUDGET_TIER_16K
+	return Math.max(CANGJIE_BUDGET_MIN_FLOOR, Math.min(fallback, Math.floor(contextWindow * CANGJIE_BUDGET_SCALE_FACTOR)))
 }
 
 /**
@@ -212,84 +228,10 @@ async function generatePrompt(
 	return generatePromptImpl(cfg)
 }
 
-async function generatePromptImpl(cfg: SystemPromptConfig): Promise<SystemPromptParts> {
-	const {
-		context,
-		cwd,
-		supportsComputerUse: _supportsComputerUse,
-		mode,
-		mcpHub,
-		diffStrategy: _diffStrategy,
-		promptComponent,
-		customModeConfigs,
-		globalCustomInstructions,
-		experiments: _experiments,
-		language,
-		rooIgnoreInstructions,
-		settings,
-		skillsManager,
-		modelId: _modelId,
-	} = cfg
-	if (!context) {
-		throw new Error("Extension context is required for generating system prompt")
-	}
-
-	// Get the full mode config to ensure we have the role definition (used for groups, etc.)
-	const modeConfig = getModeBySlug(mode, customModeConfigs) || modes.find((m) => m.slug === mode) || modes[0]
-	const { roleDefinition, baseInstructions } = getModeSelection(mode, promptComponent, customModeConfigs)
-	let effectiveBaseInstructions = baseInstructions
-	if (mode === "cangjie" && skillsManager) {
-		const discovered = new Set(skillsManager.getSkillsForMode("cangjie").map((s) => s.name))
-		effectiveBaseInstructions = filterCangjieSkillRoutingRows(baseInstructions, discovered)
-	}
-
-	// Check if MCP functionality should be included
-	const hasMcpGroup = modeConfig!.groups.some((groupEntry) => getGroupName(groupEntry) === "mcp")
-	const hasMcpServers = mcpHub && mcpHub.getServers().length > 0
-	const shouldIncludeMcp = hasMcpGroup && hasMcpServers
-
-	CodeIndexManager.getInstance(context, cwd)
-
-	// Tool calling is native-only.
-	const _effectiveProtocol = "native"
-	const cangjieSkillTriggerText = settings?.lastUserMessageForCangjieHint
-
-	const [modesSection, skillsSection] = await Promise.all([
-		getModesSection(context),
-		getSkillsSection(skillsManager, mode as string, cangjieSkillTriggerText),
-	])
-
-	const pruningEnabled = settings?.enableTurnAwarePromptPruning ?? true
-	const isFollowupTurn = pruningEnabled && (settings?.turnIndex ?? 0) > 0
-
-	let cangjieTokenBudget = resolveCangjieContextTokenBudget(settings)
-	const trimCangjieBlockOnFollowup =
-		isFollowupTurn &&
-		(mode === "cangjie" ||
-			((mode === "ask" || mode === "architect") &&
-				detectCangjieRelevanceForAuxiliaryModes(cwd, settings?.lastUserMessageForCangjieHint)))
-	if (trimCangjieBlockOnFollowup) {
-		cangjieTokenBudget = Math.max(800, Math.floor(cangjieTokenBudget * 0.65))
-	}
-	setCangjiePromptServices(cfg.cangjieServices ?? new CangjiePromptServices())
-	const cangjieContextSection = await getCangjieContextSection(
-		cwd,
-		mode as string,
-		context.extensionPath,
-		cangjieTokenBudget,
-		context.globalStorageUri.fsPath,
-		settings?.lastUserMessageForCangjieHint,
-		settings?.cangjieContextIntensity,
-		settings?.cangjieRecentBuildRootCauses,
-		settings?.cangjieRepairDirective,
-	)
-	const multiFileContextSection = cangjieContextSection ? "" : getMultiFileContextSection(cwd)
-
-	// Tools catalog is not included in the system prompt.
-	const toolsCatalog = ""
-
-	const webSearchSection = settings?.enableWebSearch
-		? `
+/** Build web-search prompt section (empty when feature is disabled). */
+function buildWebSearchSection(enableWebSearch?: boolean): string {
+	if (!enableWebSearch) return ""
+	return `
 
 ====
 
@@ -306,7 +248,7 @@ EFFICIENCY RULES (IMPORTANT):
   GOOD: search "today gold price USD" (one query covers everything)
 - Do NOT repeat or rephrase searches if the first search returned relevant results.
 - If the first search gives a clear answer, STOP searching and respond immediately.
-- Only do a second search if the first one truly failed to answer the question.
+- Only do a second search if the first search truly failed to answer the question.
 
 WHEN TO USE:
 - When the user asks about recent events, current prices, latest versions, or time-sensitive topics
@@ -322,23 +264,77 @@ HOW TO USE:
 - Craft ONE specific, comprehensive search query that covers the user's full question
 - Always synthesize results and cite source URLs
 - Prefer web search results over training data when they conflict (search results are more recent)`
-		: ""
+}
 
-	const reducedModesSection = isFollowupTurn ? "" : modesSection
-	const reducedCapabilitiesSection = isFollowupTurn
+/** Resolve Cangjie context token budget and generate the context section. */
+async function buildCangjieContext(cfg: SystemPromptConfig, isFollowupTurn: boolean): Promise<{
+	cangjieContextSection: string | undefined
+	multiFileContextSection: string
+}> {
+	const { cwd, mode, context, settings } = cfg
+	let cangjieTokenBudget = resolveCangjieContextTokenBudget(settings)
+	const trimCangjieBlockOnFollowup =
+		isFollowupTurn &&
+		(mode === "cangjie" ||
+			((mode === "ask" || mode === "architect") &&
+				detectCangjieRelevanceForAuxiliaryModes(cwd, settings?.lastUserMessageForCangjieHint)))
+	if (trimCangjieBlockOnFollowup) {
+		cangjieTokenBudget = Math.max(CANGJIE_BUDGET_MIN_FLOOR, Math.floor(cangjieTokenBudget * CANGJIE_FOLLOWUP_COMPRESSION_RATIO))
+	}
+	setCangjiePromptServices(cfg.cangjieServices ?? new CangjiePromptServices())
+	const cangjieContextSection = await getCangjieContextSection(
+		cwd,
+		mode as string,
+		context.extensionPath,
+		cangjieTokenBudget,
+		context.globalStorageUri.fsPath,
+		settings?.lastUserMessageForCangjieHint,
+		settings?.cangjieContextIntensity,
+		settings?.cangjieRecentBuildRootCauses,
+		settings?.cangjieRepairDirective,
+	)
+	const multiFileContextSection = cangjieContextSection ? "" : getMultiFileContextSection(cwd)
+	return { cangjieContextSection, multiFileContextSection }
+}
+
+interface SectionEntry {
+	name: string
+	text: string
+	priority: number
+	required: boolean
+}
+
+/** Build the full list of named prompt sections with their text and priority. */
+async function buildSectionEntries(
+	cfg: SystemPromptConfig,
+	ctx: {
+		roleDefinition: string
+		effectiveBaseInstructions: string
+		shouldIncludeMcp: boolean
+		isFollowupTurn: boolean
+		modesSection: string
+		skillsSection: string | undefined
+		cangjieCtx: { cangjieContextSection: string | undefined; multiFileContextSection: string }
+	},
+): Promise<SectionEntry[]> {
+	const { cwd, mode, mcpHub, settings, language, rooIgnoreInstructions, globalCustomInstructions } = cfg
+
+	const toolsCatalog = "" // not included in system prompt
+	const webSearchSection = buildWebSearchSection(settings?.enableWebSearch)
+	const reducedModesSection = ctx.isFollowupTurn ? "" : ctx.modesSection
+	const reducedCapabilitiesSection = ctx.isFollowupTurn
 		? ""
-		: getCapabilitiesSection(cwd, shouldIncludeMcp ? mcpHub : undefined, settings?.taskId)
+		: getCapabilitiesSection(cwd, ctx.shouldIncludeMcp ? mcpHub : undefined, settings?.taskId)
 
-	// Build named sections for budget-aware trimming
-	const roleDefinitionText = roleDefinition
+	const roleDefinitionText = ctx.roleDefinition
 	const formattingText = markdownFormattingSection()
 	const toolUseText = `${getSharedToolUseSection()}${toolsCatalog}\n\n\t${getToolUseGuidelinesSection()}`
 	const capabilitiesText = reducedCapabilitiesSection
 	const webSearchText = webSearchSection
 	const modesText = reducedModesSection
-	const skillsText = skillsSection ? `\n${skillsSection}` : ""
-	const cangjieText = cangjieContextSection ? `\n${cangjieContextSection}` : ""
-	const multiFileText = multiFileContextSection ? `\n${multiFileContextSection}` : ""
+	const skillsText = ctx.skillsSection ? `\n${ctx.skillsSection}` : ""
+	const cangjieText = ctx.cangjieCtx.cangjieContextSection ? `\n${ctx.cangjieCtx.cangjieContextSection}` : ""
+	const multiFileText = ctx.cangjieCtx.multiFileContextSection ? `\n${ctx.cangjieCtx.multiFileContextSection}` : ""
 	const outputEfficiencyText = getOutputEfficiencySection()
 	const sessionMemoryText = settings?.sessionMemory ? buildBudgetedSessionMemoryPrompt(settings.sessionMemory) : ""
 	const memrlMemoryText = getMemrlMemorySection(settings?.memrlEpisodicHints ?? "", settings?.memrlLtmRules ?? "")
@@ -346,19 +342,14 @@ HOW TO USE:
 	const systemInfoText = getSystemInfoSection(cwd)
 	const objectiveText = getObjectiveSection()
 	const customInstructionsText = await addCustomInstructions(
-		effectiveBaseInstructions,
+		ctx.effectiveBaseInstructions,
 		globalCustomInstructions || "",
 		cwd,
 		mode,
-		{
-			language: language ?? "en",
-			rooIgnoreInstructions,
-			settings,
-		},
+		{ language: language ?? "en", rooIgnoreInstructions, settings },
 	)
 
-	// Define section budgets with priorities for trimming
-	const sectionEntries: { name: string; text: string; priority: number; required: boolean }[] = [
+	return [
 		{ name: "roleDefinition", text: roleDefinitionText, priority: 0, required: true },
 		{ name: "formatting", text: formattingText, priority: 0, required: true },
 		{ name: "toolDescriptions", text: toolUseText, priority: 0, required: true },
@@ -376,9 +367,14 @@ HOW TO USE:
 		{ name: "sessionMemory", text: sessionMemoryText, priority: 2, required: false },
 		{ name: "memrlMemory", text: memrlMemoryText, priority: 2, required: false },
 	]
+}
 
-	// Build SectionBudget array and apply trimming
-	const budget = derivePromptTokenBudget(settings?.contextWindow)
+/** Apply token-budget trimming and assemble static + dynamic parts. */
+function assembleAndTrimPrompt(
+	sectionEntries: SectionEntry[],
+	contextWindow: number | undefined,
+): SystemPromptParts {
+	const budget = derivePromptTokenBudget(contextWindow)
 	const maxTokens = budget?.systemPromptMaxTokens ?? Infinity
 
 	const sectionBudgets: SectionBudget[] = sectionEntries.map((e) => ({
@@ -387,10 +383,8 @@ HOW TO USE:
 		estimatedTokens: estimatePromptTokens(e.text),
 		required: e.required,
 	}))
-
 	const retainedSections = trimSectionsByBudget(sectionBudgets, maxTokens)
 
-	// Helper to include section content only if retained
 	const sec = (name: string): string => {
 		const entry = sectionEntries.find((e) => e.name === name)
 		if (!entry || !retainedSections.has(name)) return ""
@@ -408,7 +402,6 @@ HOW TO USE:
 		.filter(Boolean)
 		.join("\n\n")
 
-	// Priority order: objective/system/customInstructions first so applySystemPromptBudget does not truncate mode workflow or task goal from the tail of a single blob.
 	const skillsCangjieMulti = [sec("skillsSection"), sec("cangjieContext"), sec("multiFileContext")]
 		.filter(Boolean)
 		.join("")
@@ -428,17 +421,80 @@ HOW TO USE:
 		boundary: SYSTEM_PROMPT_DYNAMIC_BOUNDARY,
 		maxPromptTokens: budget?.systemPromptMaxTokens,
 	})
+
+	const toolDescriptionsText = sec("toolDescriptions")
+	const capabilitiesSectionText = sec("capabilitiesSection")
+	const webSearchSectionText = sec("webSearchSection")
 	const perToolHashes: Record<string, string> = {
-		toolDescriptions: crypto.createHash("sha256").update(toolUseText).digest("hex").slice(0, 16),
-		capabilitiesSection: crypto.createHash("sha256").update(capabilitiesText).digest("hex").slice(0, 16),
-		webSearchSection: crypto.createHash("sha256").update(webSearchText).digest("hex").slice(0, 16),
+		toolDescriptions: crypto.createHash("sha256").update(toolDescriptionsText).digest("hex").slice(0, 16),
+		capabilitiesSection: crypto.createHash("sha256").update(capabilitiesSectionText).digest("hex").slice(0, 16),
+		webSearchSection: crypto.createHash("sha256").update(webSearchSectionText).digest("hex").slice(0, 16),
 	}
+
 	return {
 		staticPart: renderedPrompt.staticPart,
 		dynamicPart: renderedPrompt.dynamicPart,
 		fullPrompt: renderedPrompt.fullPrompt,
 		perToolHashes,
 	}
+}
+
+async function generatePromptImpl(cfg: SystemPromptConfig): Promise<SystemPromptParts> {
+	const {
+		context,
+		cwd,
+		mode,
+		mcpHub,
+		promptComponent,
+		customModeConfigs,
+		settings,
+		skillsManager,
+	} = cfg
+	if (!context) {
+		throw new Error("Extension context is required for generating system prompt")
+	}
+
+	// 1. Resolve mode config & MCP availability
+	const modeConfig = getModeBySlug(mode, customModeConfigs) || modes.find((m) => m.slug === mode) || modes[0]
+	const { roleDefinition, baseInstructions } = getModeSelection(mode, promptComponent, customModeConfigs)
+	let effectiveBaseInstructions = baseInstructions
+	if (mode === "cangjie" && skillsManager) {
+		const discovered = new Set(skillsManager.getSkillsForMode("cangjie").map((s) => s.name))
+		effectiveBaseInstructions = filterCangjieSkillRoutingRows(baseInstructions, discovered)
+	}
+	const hasMcpGroup = modeConfig!.groups.some((groupEntry) => getGroupName(groupEntry) === "mcp")
+	const hasMcpServers = mcpHub && mcpHub.getServers().length > 0
+	const shouldIncludeMcp = hasMcpGroup && hasMcpServers
+
+	CodeIndexManager.getInstance(context, cwd)
+
+	// 2. Load async sections
+	const cangjieSkillTriggerText = settings?.lastUserMessageForCangjieHint
+	const [modesSection, skillsSection] = await Promise.all([
+		getModesSection(context),
+		getSkillsSection(skillsManager, mode as string, cangjieSkillTriggerText),
+	])
+
+	// 3. Determine follow-up turn status
+	const pruningEnabled = settings?.enableTurnAwarePromptPruning ?? true
+	const isFollowupTurn = pruningEnabled && (settings?.turnIndex ?? 0) > 0
+
+	// 4. Build Cangjie context
+	const cangjieCtx = await buildCangjieContext(cfg, isFollowupTurn)
+
+	// 5. Build all named section entries
+	const sectionEntries = await buildSectionEntries(cfg, {
+		roleDefinition,
+		effectiveBaseInstructions,
+		shouldIncludeMcp,
+		isFollowupTurn,
+		modesSection,
+		skillsSection,
+		cangjieCtx,
+	})
+
+	// 6. Apply budget trimming and assemble final prompt
+	return assembleAndTrimPrompt(sectionEntries, settings?.contextWindow)
 }
 
 /** Helper: resolve config from positional params (shared by SYSTEM_PROMPT_PARTS / SYSTEM_PROMPT). */

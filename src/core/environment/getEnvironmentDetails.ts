@@ -8,6 +8,7 @@ import delay from "delay"
 import { type ExperimentId, DEFAULT_MAX_OPEN_TABS_CONTEXT } from "@njust-ai/types"
 
 import { defaultModeSlug } from "../../shared/modes"
+import { logger } from "../../shared/logger"
 import { getFullModeDetails } from "../prompts/getFullModeDetails"
 import { getApiMetrics } from "../../shared/getApiMetrics"
 import { listFiles } from "../../services/glob/list-files"
@@ -86,8 +87,8 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 		await pWaitFor(() => busyTerminals.every((t) => !TerminalRegistry.isProcessHot(t.id)), {
 			interval: 100,
 			timeout: 2_000,
-		}).catch(() => {
-			/* best-effort; timeout is expected when terminals stay busy */
+		}).catch((err) => {
+			logger.debug("EnvironmentDetails", "terminal cooldown timeout", err)
 		})
 	}
 

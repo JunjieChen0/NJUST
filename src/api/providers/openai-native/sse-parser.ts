@@ -1,6 +1,7 @@
 import { ApiProviderError } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { getErrorMessage } from "../../../shared/error-utils"
+import { logger } from "../../../shared/logger"
 import { reportExtensionError } from "../../../utils/errorReporter"
 import type { ApiStream } from "../../transform/stream"
 import { type OpenAiNativeModel, type ResponsesStreamEvent } from "./base"
@@ -32,7 +33,7 @@ export async function* parseSseStream(
 				// Cancel the reader so the underlying HTTP connection
 				// is torn down immediately rather than lingering until
 				// the stream completes or times out.
-				reader.cancel().catch(() => {})
+				reader.cancel().catch((err) => logger.debug("SseParser", "cancel reader on abort", err))
 				break
 			}
 

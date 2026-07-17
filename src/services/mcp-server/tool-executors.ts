@@ -16,6 +16,7 @@ import { detectCangjieHome } from "../cangjie-lsp/cangjieToolUtils"
 import type { IPathValidator, IWriteProtector } from "../cloud-agent/interfaces/IPathAccessController"
 import { logSecurityEvent } from "../../shared/security-audit"
 import type { ResourceLimitsService } from "./ResourceLimitsService"
+import { logger } from "../../shared/logger"
 
 const MAX_READ_FILE_BYTES = 10 * 1024 * 1024
 const MAX_SCAN_BYTES = 50 * 1024 * 1024
@@ -419,8 +420,8 @@ async function atomicWriteFile(absPath: string, content: string): Promise<void> 
 	try {
 		const existingStat = await fs.stat(absPath)
 		originalMode = existingStat.mode
-	} catch {
-		// File doesn't exist — will use default mode
+	} catch (err) {
+		logger.debug("ToolExecutors", "stat file for mode", err)
 	}
 
 	let fd: fs.FileHandle | undefined
@@ -445,9 +446,9 @@ async function atomicWriteFile(absPath: string, content: string): Promise<void> 
 		}
 	} catch (err) {
 		if (fd) {
-			await fd.close().catch(() => {})
+			await fd.close().catch((err) => logger.debug("ToolExecutors", "close fd on error", err))
 		}
-		await fs.unlink(tmpPath).catch(() => {})
+		await fs.unlink(tmpPath).catch((err) => logger.debug("ToolExecutors", "unlink tmp file", err))
 		throw err
 	}
 }

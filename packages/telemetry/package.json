@@ -7,7 +7,8 @@
 	"scripts": {
 		"lint": "eslint src --ext=ts --max-warnings=0",
 		"build": "tsc",
-		"watch": "tsc --watch"
+		"watch": "tsc --watch",
+		"test": "vitest run"
 	},
 	"dependencies": {
 		"@njust-ai/types": "workspace:^",
@@ -15,6 +16,7 @@
 	},
 	"devDependencies": {
 		"@njust-ai/config-eslint": "workspace:^",
-		"typescript": "~5.8.3"
+		"typescript": "~5.8.3",
+		"vitest": "^4.1.8"
 	}
 }

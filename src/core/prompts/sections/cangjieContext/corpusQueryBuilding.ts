@@ -186,6 +186,18 @@ const CORPUS_EXTRA_SNIPPETS: { rel: string; keys: string[] }[] = [
 const CORPUS_EXTRA_MAX_FILES = 2
 const CORPUS_EXTRA_MAX_CHARS_PER_FILE = 1600
 
+/** Max chars of source text extracted per visible editor for corpus matching. */
+const EDITOR_TEXT_SLICE_LIMIT = 2800
+
+/** Max chars of a single corpus snippet included in the prompt. */
+const CORPUS_SNIPPET_CHAR_LIMIT = 400
+
+/** Max number of top-ranked corpus snippets included in the prompt. */
+const CORPUS_TOP_SNIPPET_COUNT = 3
+
+/** Total char budget for all compile-corpus snippets combined. */
+const COMPILE_CORPUS_MAX_CHARS = 1200
+
 let corpusExtraLatinKeyRegex: Map<string, RegExp> | null = null
 
 function getCorpusExtraLatinKeyRegexMap(): Map<string, RegExp> {
@@ -231,7 +243,7 @@ export async function buildCorpusExtraFewShotSection(
 	const textChunks: string[] = []
 	for (const ed of vscode.window.visibleTextEditors) {
 		if (ed.document.languageId === "cangjie" || ed.document.fileName.endsWith(".cj")) {
-			textChunks.push(ed.document.getText().slice(0, 2800))
+			textChunks.push(ed.document.getText().slice(0, EDITOR_TEXT_SLICE_LIMIT))
 		}
 	}
 	const hay = (
@@ -372,16 +384,15 @@ export function buildCompileErrorCorpusSearch(
 
 		const top = [...unique.values()]
 			.sort((a, b) => b.score - a.score)
-			.slice(0, 3)
+			.slice(0, CORPUS_TOP_SNIPPET_COUNT)
 			.map((x) => x.hit)
-
+		
 		if (top.length === 0) return null
-
-		const COMPILE_CORPUS_MAX_CHARS = 1200
+		
 		let used = 0
 		const snippets: string[] = []
 		for (const h of top) {
-			const snippet = `### ${h.heading}\n来源: \`${h.relPath}\`\n\`\`\`\n${h.snippet.slice(0, 400)}\n\`\`\``
+			const snippet = `### ${h.heading}\n来源: \`${h.relPath}\`\n\`\`\`\n${h.snippet.slice(0, CORPUS_SNIPPET_CHAR_LIMIT)}\n\`\`\``
 			if (used + snippet.length > COMPILE_CORPUS_MAX_CHARS) break
 			snippets.push(snippet)
 			used += snippet.length
