@@ -47,7 +47,7 @@ describe("admin-auth", () => {
 		})
 
 		it("rejects when secret is a default/forbidden value", async () => {
-			process.env.EVALS_ADMIN_SECRET = "changeme"
+			process.env.EVALS_ADMIN_SECRET = "changeme" // gitleaks:allow
 			const { headers } = await import("next/headers")
 			vi.mocked(headers).mockResolvedValue(new Headers() as never)
 
@@ -55,7 +55,7 @@ describe("admin-auth", () => {
 		})
 
 		it("rejects when secret is too short (< 32 chars)", async () => {
-			process.env.EVALS_ADMIN_SECRET = "short-secret"
+			process.env.EVALS_ADMIN_SECRET = "short-secret" // gitleaks:allow
 			const { headers } = await import("next/headers")
 			vi.mocked(headers).mockResolvedValue(new Headers() as never)
 

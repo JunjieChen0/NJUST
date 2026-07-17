@@ -13,7 +13,7 @@ import * as http from "http"
 import { DockerPolicyProxy } from "../server"
 import { DEFAULT_POLICY } from "../policy"
 
-const TEST_TOKEN = "test-auth-token-12345"
+const TEST_TOKEN = "mock-token-test-12345"
 
 function httpRequest(
 	port: number,
