@@ -225,6 +225,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
 
       - name: Get version
         id: version
@@ -247,7 +249,90 @@ jobs:
           mkdir -p release
           find artifacts -name "*.tar.gz" -exec cp {} release/ \;
           find artifacts -name "*.sha256" -exec cp {} release/ \;
+          cp apps/cli/install.sh release/install.sh
           ls -la release/
+
+      - name: Generate version manifest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          REQUIRED_PLATFORMS: "darwin-arm64 linux-x64 linux-arm64 win32-x64 win32-arm64"
+        run: |
+          MANIFEST_FILE="release/cli-manifest.json"
+
+          node -e "
+            const fs = require('fs')
+            const path = require('path')
+
+            const version = process.env.VERSION
+            const releaseDir = 'release'
+            const requiredPlatforms = process.env.REQUIRED_PLATFORMS.split(' ')
+            const SHA256_HEX = /^[0-9a-f]{64}$/
+            const artifacts = {}
+
+            for (const file of fs.readdirSync(releaseDir)) {
+              if (!file.endsWith('.sha256')) continue
+              const baseName = file.replace('.sha256', '')
+              const platformMatch = baseName.match(/^njust-ai-cli-(.+)\.tar\.gz$/)
+              if (!platformMatch) continue
+              const platform = platformMatch[1]
+              const sha256Content = fs.readFileSync(path.join(releaseDir, file), 'utf8').trim()
+              const sha256 = sha256Content.split(/\s+/)[0]
+
+              // Validate SHA-256 format: must be 64-char lowercase hex
+              if (!SHA256_HEX.test(sha256)) {
+                console.error('Invalid SHA-256 for ' + baseName + ': ' + sha256)
+                process.exit(1)
+              }
+
+              // Validate filename-platform consistency
+              const expectedFilename = 'njust-ai-cli-' + platform + '.tar.gz'
+              if (baseName !== expectedFilename) {
+                console.error('Filename mismatch: ' + baseName + ' vs ' + expectedFilename)
+                process.exit(1)
+              }
+
+              const fullPath = path.join(releaseDir, baseName)
+              const size = fs.statSync(fullPath).size
+
+              // Check for duplicate platforms
+              if (artifacts[platform]) {
+                console.error('Duplicate platform in manifest: ' + platform)
+                process.exit(1)
+              }
+
+              artifacts[platform] = {
+                platform: platform,
+                filename: baseName,
+                url: 'https://github.com/NJUST-AI/NJUST_AI/releases/download/cli-v' + version + '/' + baseName,
+                size: size,
+                sha256: sha256
+              }
+            }
+
+            // Check no extra platforms beyond required
+            const foundPlatforms = Object.keys(artifacts)
+            const extraPlatforms = foundPlatforms.filter(p => !requiredPlatforms.includes(p))
+            if (extraPlatforms.length > 0) {
+              console.error('Unexpected extra platforms in manifest: ' + extraPlatforms.join(', '))
+              process.exit(1)
+            }
+
+            const missingPlatforms = requiredPlatforms.filter(p => !artifacts[p])
+            if (missingPlatforms.length > 0) {
+              console.error('Missing platforms in manifest: ' + missingPlatforms.join(', '))
+              process.exit(1)
+            }
+
+            const manifest = {
+              version: version,
+              publishedAt: new Date().toISOString(),
+              artifacts: artifacts
+            }
+
+            fs.writeFileSync('release/cli-manifest.json', JSON.stringify(manifest, null, 2) + '\n')
+            console.log('Generated manifest:')
+            console.log(JSON.stringify(manifest, null, 2))
+          "
 
       - name: Extract changelog
         id: changelog
@@ -289,33 +374,27 @@ jobs:
           cat release/*.sha256 >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Check for existing release
+      - name: Check for existing release (immutability guard)
         id: check_release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           if gh release view "$TAG" &> /dev/null; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release $TAG already exists. Releases are immutable and cannot be overwritten." >&2
+            exit 1
           fi
-
-      - name: Delete existing release
-        if: steps.check_release.outputs.exists == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          echo "Deleting existing release $TAG..."
-          gh release delete "$TAG" --yes || true
-          git push origin ":refs/tags/$TAG" || true
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" 2>/dev/null; then
+            echo "Tag $TAG already exists on remote. Tags are immutable and cannot be overwritten." >&2
+            exit 1
+          fi
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ steps.version.outputs.tag }}
+          REPO: ${{ github.repository }}
           CHANGELOG_CONTENT: ${{ steps.changelog.outputs.content }}
           CHECKSUMS: ${{ steps.checksums.outputs.checksums }}
         run: |
@@ -331,12 +410,12 @@ jobs:
           echo "## Installation" >> "$NOTES_FILE"
           echo "" >> "$NOTES_FILE"
           echo '```bash' >> "$NOTES_FILE"
-          echo "curl -fsSL https://raw.githubusercontent.com/NJUST-AI/NJUST_AI/main/apps/cli/install.sh | sh" >> "$NOTES_FILE"
+          echo "curl -fsSL https://github.com/$REPO/releases/download/cli-v$VERSION/install.sh | sh" >> "$NOTES_FILE"
           echo '```' >> "$NOTES_FILE"
           echo "" >> "$NOTES_FILE"
           echo "Or install a specific version:" >> "$NOTES_FILE"
           echo '```bash' >> "$NOTES_FILE"
-          echo "NJUST_AI_VERSION=$VERSION curl -fsSL https://raw.githubusercontent.com/NJUST-AI/NJUST_AI/main/apps/cli/install.sh | sh" >> "$NOTES_FILE"
+          echo "NJUST_AI_VERSION=$VERSION curl -fsSL https://github.com/$REPO/releases/download/cli-v$VERSION/install.sh | sh" >> "$NOTES_FILE"
           echo '```' >> "$NOTES_FILE"
           echo "" >> "$NOTES_FILE"
           echo "## Requirements" >> "$NOTES_FILE"

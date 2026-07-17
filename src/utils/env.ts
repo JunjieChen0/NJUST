@@ -18,6 +18,8 @@ const SENSITIVE_ENV_PATTERNS = [
 	/_ACCESS_KEY$/i,
 	/_PRIVATE_KEY$/i,
 	/_SIGNING_KEY$/i,
+	/_AUTH$/i,
+	/_DSN$/i,
 	/^AWS_SECRET_/i,
 	/^AWS_ACCESS_KEY_ID$/i,
 	/^AWS_SESSION_TOKEN$/i,
@@ -34,6 +36,21 @@ const SENSITIVE_ENV_PATTERNS = [
 	/^TWINE_PASSWORD$/i,
 	/^COCOAPODS_TRUNK_TOKEN$/i,
 	/^COMPOSER_AUTH$/i,
+	/^SONAR_TOKEN$/i,
+	/^CODECOV_TOKEN$/i,
+	/^SENTRY_AUTH_TOKEN$/i,
+	/^SENTRY_DSN$/i,
+	/^HF_TOKEN$/i,
+	/^HUGGING_FACE_HUB_TOKEN$/i,
+	/^DATABASE_URL$/i,
+	/^REDIS_URL$/i,
+	/^MONGO_URI$/i,
+	/^POSTGRES_URL$/i,
+	/^MYSQL_URL$/i,
+	/^NEON_API_KEY$/i,
+	/^SUPABASE_ANON_KEY$/i,
+	/^SUPABASE_SERVICE_ROLE_KEY$/i,
+	/^NJUST_.*_(KEY|SECRET|TOKEN|PASSWORD)$/i,
 ]
 
 function isSensitiveEnvKey(key: string): boolean {
@@ -48,7 +65,11 @@ export function filterSensitiveEnv(extra?: Record<string, string | undefined>): 
 		}
 	}
 	if (extra) {
-		Object.assign(filtered, extra)
+		for (const [key, value] of Object.entries(extra)) {
+			if (!isSensitiveEnvKey(key)) {
+				filtered[key] = value
+			}
+		}
 	}
 	return filtered
 }
@@ -126,4 +147,28 @@ export function mergeSafeEnv(
 	}
 
 	return merged
+}
+
+/**
+ * Strip credentials from a URL for safe logging.
+ *
+ * Replaces `user:password@host` with `***@host` so that tokens and
+ * passwords never appear in log output.
+ *
+ * @example
+ *   sanitizeUrlForLog("https://user:pass123@api.example.com/v1")
+ *   // → "https://***@api.example.com/v1"
+ */
+export function sanitizeUrlForLog(url: string): string {
+	try {
+		const parsed = new URL(url)
+		if (parsed.username || parsed.password) {
+			parsed.username = "***"
+			parsed.password = ""
+		}
+		return parsed.toString()
+	} catch {
+		// Not a valid URL — redact anything after `://user:` pattern
+		return url.replace(/(\/\/[^:]*:)[^@]*(@)/, "$1***$2")
+	}
 }

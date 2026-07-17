@@ -25,7 +25,7 @@ import { CodeIndexManager } from "./services/code-index/manager"
 import { AuditLogger } from "./services/AuditLogger"
 import { AuditSink } from "./services/AuditSink"
 import { setAuditServices } from "./services/auditAccessor"
-import { cleanupOrphanedTestFiles, initTestCleanup } from "./services/cangjie-lsp/cangjieGeneratedTestCleanup"
+import { scanGeneratedFilesForCleanup, initTestCleanup } from "./services/cangjie-lsp/cangjieGeneratedTestCleanup"
 import { migrateSettings } from "./utils/migrateSettings"
 import { autoImportSettings } from "./core/config/autoImportSettings"
 import { startupProfiler } from "./utils/profiler"
@@ -133,14 +133,13 @@ export async function activate(context: vscode.ExtensionContext) {
 	setAuditServices(auditLogger, auditSink)
 
 	initTestCleanup(context.workspaceState)
-	void cleanupOrphanedTestFiles(context.globalStorageUri.fsPath)
-		.then((r) => {
-			if (r.filesRemoved > 0) {
+	void Promise.resolve()
+		.then(() => {
+			const scan = scanGeneratedFilesForCleanup()
+			const total = scan.detached.length + scan.legacy.length
+			if (total > 0) {
 				outputChannel.appendLine(
-					t("info.cangjie_test_cleanup_orphan", {
-						filesRemoved: r.filesRemoved,
-						taskEntriesRemoved: r.taskEntriesRemoved,
-					}),
+					t("info.cangjie_test_cleanup_scan", { total }),
 				)
 			}
 		})

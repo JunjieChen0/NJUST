@@ -150,8 +150,8 @@ vi.mock("../services/cangjie-lsp/CjlintDiagnostics", () => ({ CjlintDiagnostics:
 vi.mock("../services/cangjie-lsp/CjpmTaskProvider", () => ({ CjpmTaskProvider: mockConstructor() }))
 vi.mock("../services/cangjie-lsp/cangjieCommands", () => ({ registerCangjieCommands: vi.fn() }))
 vi.mock("../services/cangjie-lsp/cangjieGeneratedTestCleanup", () => ({
-	cleanupOrphanedTestFiles: mockAsyncFn(),
-	initTestCleanup: mockAsyncFn(),
+	scanGeneratedFilesForCleanup: vi.fn().mockReturnValue({ active: [], detached: [], legacy: [] }),
+	initTestCleanup: vi.fn(),
 }))
 vi.mock("../services/cangjie-lsp/CangjieCodeActionProvider", () => ({ CangjieCodeActionProvider: mockConstructor() }))
 vi.mock("../services/cangjie-lsp/CangjieSdkSetup", () => ({ checkAndPromptSdkSetup: mockAsyncFn() }))

@@ -112,6 +112,10 @@ export const processTaskInContainer = async ({
 		"--network", "evals_default",
 		"-v", "/tmp/evals:/var/log/evals",
 		"--env-file", envFilePath,
+		"--memory", "512m",
+		"--memory-swap", "1g",
+		"--pids-limit", "200",
+		"--cpus", "1"
 	]
 
 	const shellCommand = `pnpm --filter @njust-ai/evals cli --taskId ${taskId}`

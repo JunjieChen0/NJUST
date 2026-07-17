@@ -11,14 +11,14 @@
 # docker run -it --rm --network evals_default evals-runner bash
 #
 # To enable docker execution, run:
-# docker run -it --rm --network evals_default -v /var/run/docker.sock:/var/run/docker.sock -e HOST_EXECUTION_METHOD=docker evals-runner bash
+# docker run -it --rm --network evals_default -e DOCKER_HOST=tcp://docker-proxy:2375 -e HOST_EXECUTION_METHOD=docker evals-runner bash
 
 services:
     db:
         container_name: evals-db
         image: postgres:15.4
         ports:
-            - "${EVALS_DB_PORT:-5432}:5432"
+            - "127.0.0.1:${EVALS_DB_PORT:-5432}:5432"
         volumes:
             - ./.docker/postgres:/var/lib/postgresql/data
             - ./.docker/scripts/postgres:/docker-entrypoint-initdb.d
@@ -39,12 +39,33 @@ services:
         container_name: evals-redis
         image: redis:7-alpine
         ports:
-            - "${EVALS_REDIS_PORT:-6379}:6379"
+            - "127.0.0.1:${EVALS_REDIS_PORT:-6379}:6379"
         volumes:
             - ./.docker/redis:/data
         command: redis-server --appendonly yes
         profiles:
             - server
+
+    docker-proxy:
+        container_name: evals-docker-proxy
+        build:
+            context: ../../
+            dockerfile: packages/evals/Dockerfile.proxy
+        environment:
+            - DOCKER_ENDPOINT=unix:///var/run/docker.sock
+            - PROXY_PORT=2375
+            # REQUIRED: set this in your .env or deployment environment.
+            # Compose will fail with an error if PROXY_AUTH_TOKEN is not set.
+            - PROXY_AUTH_TOKEN=${PROXY_AUTH_TOKEN:?PROXY_AUTH_TOKEN must be set}
+        volumes:
+            # Note: :ro only restricts filesystem writes, not Docker API write operations.
+            # The proxy policy engine is the sole defense for API-level write control.
+            - /var/run/docker.sock:/var/run/docker.sock
+        networks:
+            - default
+        profiles:
+            - server
+            - runner
 
     web:
         container_name: evals-web
@@ -52,17 +73,22 @@ services:
             context: ../../
             dockerfile: packages/evals/Dockerfile.web
         ports:
-            - "${EVALS_WEB_PORT:-3446}:3446"
+            - "127.0.0.1:${EVALS_WEB_PORT:-3446}:3446"
         environment:
             - HOST_EXECUTION_METHOD=docker
+            - DOCKER_HOST=tcp://docker-proxy:2375
+            # Same auth token used to authenticate against the Docker proxy
+            - PROXY_AUTH_TOKEN=${PROXY_AUTH_TOKEN}
             - PRODUCTION_DATABASE_URL
+            - EVALS_ADMIN_SECRET
         volumes:
-            - /var/run/docker.sock:/var/run/docker.sock
             # Mount log files so web can access task logs
             - /tmp/evals:/tmp/evals:ro
         depends_on:
             db:
                 condition: service_healthy
+            docker-proxy:
+                condition: service_started
         profiles:
             - server
 
@@ -73,11 +99,16 @@ services:
             dockerfile: packages/evals/Dockerfile.runner
         environment:
             - HOST_EXECUTION_METHOD=docker
+            - DOCKER_HOST=tcp://docker-proxy:2375
+            # Same auth token used to authenticate against the Docker proxy
+            - PROXY_AUTH_TOKEN=${PROXY_AUTH_TOKEN}
         volumes:
-            - /var/run/docker.sock:/var/run/docker.sock
             - /tmp/evals:/var/log/evals
         stdin_open: true
         tty: true
+        depends_on:
+            docker-proxy:
+                condition: service_started
         profiles:
             - runner
 

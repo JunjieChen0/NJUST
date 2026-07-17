@@ -23,6 +23,9 @@ import { getAuditLogger } from "../../services/auditAccessor"
 import type { ICloudAgentHost } from "./interfaces/ICloudAgentHost"
 import { TaskAbortedError } from "./TaskErrors"
 import { t } from "../../i18n"
+import { createAuthContext, unauthenticatedContext, type AuthContext, type AuthTokenSource } from "../../services/cloud-agent/auth-context"
+import { getDeviceToken } from "../../services/cloud-agent/deviceToken"
+import { DeferredLifecycleGuard } from "../../services/cloud-agent/DeferredLifecycleGuard"
 
 export type { ICloudAgentHost } from "./interfaces/ICloudAgentHost"
 
@@ -260,19 +263,22 @@ export class CloudAgentOrchestrator {
 		lastNotifiedRunId = deferredResp.run_id
 		lastServerRevision = deferredResp.server_revision
 
+		const tokenSource = this.resolveTokenSource(profile)
+		const authContext: AuthContext = this.hasRealCredentials(profile)
+			? createAuthContext(profile.id, tokenSource)
+			: unauthenticatedContext()
+
+		const lifecycleGuard = new DeferredLifecycleGuard({
+			maxIterations,
+			maxDurationMs: this.service.deferredConstants.maxDurationMs,
+		})
+
 		let iteration = 0
-		const loopStartTime = Date.now()
-		while (deferredResp.status === "pending" && iteration < maxIterations && !this.host.abort) {
-			// Wall-clock upper limit check: break if the deferred loop has run too long.
-			if (Date.now() - loopStartTime > this.service.deferredConstants.maxDurationMs) {
-				const elapsedSec = Math.round((Date.now() - loopStartTime) / 1000)
-				await this.host.say(
-					"error",
-					t("errors.cloud_agent.max_duration_reached", {
-						elapsed: elapsedSec,
-						max: this.service.deferredConstants.maxDurationMs / 1000,
-					}),
-				)
+		while (deferredResp.status === "pending" && !this.host.abort) {
+			const pendingTools = deferredResp.pending_tools ?? []
+			const phaseCheck = lifecycleGuard.transitionToPending(pendingTools.length)
+			if (phaseCheck.action === "abort") {
+				await this.host.say("error", `Deferred lifecycle abort: ${phaseCheck.reason}`)
 				await this.service.sendDeferredAbort(
 					profile,
 					this.host.taskId,
@@ -281,7 +287,19 @@ export class CloudAgentOrchestrator {
 				)
 				break
 			}
-			iteration++
+
+			const iterCheck = lifecycleGuard.incrementIteration()
+			if (iterCheck.action === "abort") {
+				await this.host.say("error", `Deferred lifecycle abort: ${iterCheck.reason}`)
+				await this.service.sendDeferredAbort(
+					profile,
+					this.host.taskId,
+					lastNotifiedRunId,
+					behavior.requestTimeoutMs > 0 ? behavior.requestTimeoutMs : undefined,
+				)
+				break
+			}
+			iteration = lifecycleGuard.getIteration()
 
 			if (deferredResp.text) await this.host.say("text", deferredResp.text)
 			if (deferredResp.reasoning) await this.host.say("reasoning", deferredResp.reasoning)
@@ -308,13 +326,13 @@ export class CloudAgentOrchestrator {
 			}
 
 			const toolResults: DeferredToolResult[] = []
-			const pendingTools = deferredResp.pending_tools ?? []
 			for (const call of pendingTools) {
 				if (this.host.abort) break
 				await this.host.say("text", `[Deferred] executing tool: ${call.tool} (${call.call_id})`)
 				const approvalResult = await this.approveDeferredToolCall(call)
 				if (approvalResult) {
 					toolResults.push(approvalResult)
+					lifecycleGuard.recordToolCompletion()
 					if (approvalResult.is_error) {
 						await this.host.say(
 							"text",
@@ -326,12 +344,14 @@ export class CloudAgentOrchestrator {
 				const result = await this.service.executeDeferredToolCall(
 					this.host.cwd,
 					call,
+					authContext,
 					behavior.allowedCommands,
 					behavior.deniedCommands,
 					this.host.rooIgnoreController,
 					this.host.rooProtectedController,
 				)
 				toolResults.push(result)
+				lifecycleGuard.recordToolCompletion()
 				if (result.is_error) {
 					await this.host.say("text", `[Deferred] tool ${call.tool} error: ${result.content.slice(0, 500)}`)
 				}
@@ -339,11 +359,9 @@ export class CloudAgentOrchestrator {
 
 			if (this.host.abort) break
 
-			if (pendingTools.length > 0 && toolResults.length !== pendingTools.length) {
-				const msg = t("errors.cloud_agent.pending_tools_mismatch", {
-					pending: pendingTools.length,
-					results: toolResults.length,
-				})
+			const batchCheck = lifecycleGuard.validateBatchCompleteness()
+			if (batchCheck.action === "abort") {
+				const msg = `Deferred lifecycle abort: ${batchCheck.reason}`
 				await this.host.say("error", msg)
 				await this.host.ask("api_req_failed", msg)
 				return
@@ -367,6 +385,23 @@ export class CloudAgentOrchestrator {
 				"api_req_started",
 				JSON.stringify({ request: `Cloud Agent deferred/resume (iteration ${iteration})` }),
 			)
+
+			// Check if pending-to-running timeout has been exceeded
+			const pendingTimeoutCheck = lifecycleGuard.checkPendingTimeout()
+			if (pendingTimeoutCheck.action === "abort") {
+				const msg = `Deferred lifecycle abort: ${pendingTimeoutCheck.reason}`
+				await this.host.say("error", msg)
+				await this.host.ask("api_req_failed", msg)
+				return
+			}
+
+			const runningCheck = lifecycleGuard.transitionToRunning()
+			if (runningCheck.action === "abort") {
+				const msg = `Deferred lifecycle abort: ${runningCheck.reason}`
+				await this.host.say("error", msg)
+				await this.host.ask("api_req_failed", msg)
+				return
+			}
 
 			const resumeAbort = new AbortController()
 			this.host.setCurrentRequestAbortController(resumeAbort)
@@ -534,6 +569,56 @@ export class CloudAgentOrchestrator {
 				"completion_result",
 				deferredResp.ok ? t("info.cloud_agent.task_completed") : t("errors.cloud_agent.task_failed"),
 			)
+		}
+
+		lifecycleGuard.transitionToDone()
+	}
+
+	private resolveTokenSource(profile: CloudAgentProfile): AuthTokenSource {
+		const authType = profile.auth?.type
+		switch (authType) {
+			case "api-key":
+				return "api-key"
+			case "bearer":
+				return "bearer"
+			case "basic":
+				return "basic"
+			case "custom":
+				return "custom"
+			case "device-token":
+			default:
+				return profile.auth?.deviceTokenSource === "profile"
+					? "profile-device-token"
+					: "global-device-token"
+		}
+	}
+
+	/**
+	 * Check whether the profile has real credentials configured.
+	 * A profile with an ID but no actual credential should NOT be treated as authenticated.
+	 */
+	private hasRealCredentials(profile: CloudAgentProfile): boolean {
+		const auth = profile.auth
+		if (!auth) return false
+
+		switch (auth.type) {
+			case "api-key":
+				return !!auth.apiKey && auth.apiKey.trim().length > 0
+			case "bearer":
+				return !!auth.bearerToken && auth.bearerToken.trim().length > 0
+			case "basic":
+				return !!auth.basicPassword && auth.basicPassword.trim().length > 0
+			case "device-token":
+				if (auth.deviceTokenSource === "profile") {
+					return !!auth.deviceToken && auth.deviceToken.trim().length > 0
+				}
+				// Global device token: check actual value from the token store
+				return getDeviceToken().trim().length > 0
+			case "custom":
+				return !!auth.customHeaders && Object.keys(auth.customHeaders).length > 0
+					&& Object.values(auth.customHeaders).some((v) => v.trim().length > 0)
+			default:
+				return false
 		}
 	}
 

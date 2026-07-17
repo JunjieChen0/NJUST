@@ -27,6 +27,7 @@ import type {
 import type { CloudAgentProfile } from "./types/profile"
 import type { IPathValidator, IWriteProtector } from "./interfaces/IPathAccessController"
 import type { ICloudAgentClient, ICloudAgentService } from "./interfaces/ICloudAgentService"
+import type { AuthContext } from "./auth-context"
 
 /**
  * Thin adapter that exposes only the methods core/task needs.
@@ -92,12 +93,13 @@ export class CloudAgentService implements ICloudAgentService {
 	executeDeferredToolCall(
 		cwd: string,
 		call: DeferredToolCall,
+		authContext: AuthContext,
 		allowedCommands?: string[],
 		deniedCommands?: string[],
 		pathValidator?: IPathValidator,
 		writeProtector?: IWriteProtector,
 	): Promise<DeferredToolResult> {
-		return executeDeferredToolCall(cwd, call, allowedCommands, deniedCommands, pathValidator, writeProtector)
+		return executeDeferredToolCall(cwd, call, authContext, allowedCommands, deniedCommands, pathValidator, writeProtector)
 	}
 
 	buildCloudWorkspaceOpToolMessage(

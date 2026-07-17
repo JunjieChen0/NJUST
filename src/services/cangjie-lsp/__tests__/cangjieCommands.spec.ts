@@ -163,7 +163,14 @@ vi.mock("../cangjieSourceLayout", () => ({
 
 vi.mock("../cangjieGeneratedTestCleanup", () => ({
 	registerGeneratedCangjieTestFile: vi.fn(),
-	purgeAllTrackedCangjieTestFiles: vi.fn().mockReturnValue({ filesRemoved: 0, taskEntriesRemoved: 0 }),
+	scanGeneratedFilesForCleanup: vi.fn().mockReturnValue({ active: [], detached: [], legacy: [] }),
+	deleteConfirmedCangjieTestFiles: vi.fn().mockResolvedValue({
+		deleted: [],
+		skippedModified: [],
+		skippedOutsideWorkspace: [],
+		skippedLegacyNotConfirmed: [],
+		failed: [],
+	}),
 }))
 
 vi.mock("../../../core/prompts/sections/learnedFixesStorage", () => ({

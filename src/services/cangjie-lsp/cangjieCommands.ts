@@ -11,7 +11,13 @@ import {
 	saveLearnedFixes,
 } from "../../core/prompts/sections/learnedFixesStorage"
 import { inferCangjiePackageFromSrcLayout } from "./cangjieSourceLayout"
-import { registerGeneratedCangjieTestFile, purgeAllTrackedCangjieTestFiles } from "./cangjieGeneratedTestCleanup"
+import {
+	registerGeneratedCangjieTestFile,
+	scanGeneratedFilesForCleanup,
+	deleteConfirmedCangjieTestFiles,
+	reassociateLegacyFiles,
+	type CleanupResult,
+} from "./cangjieGeneratedTestCleanup"
 import {
 	resolveCangjieToolPath,
 	buildCangjieToolEnv,
@@ -52,6 +58,28 @@ function findCjpmRoot(): string | undefined {
 	}
 
 	return folders[0]?.uri.fsPath
+}
+
+async function reportCleanupResult(result: CleanupResult): Promise<void> {
+	const parts: string[] = []
+	if (result.deleted.length > 0) {
+		parts.push(t("info.cangjie_lsp.cleanup_deleted", { count: result.deleted.length }))
+	}
+	if (result.skippedModified.length > 0) {
+		parts.push(t("info.cangjie_lsp.cleanup_skipped_modified", { count: result.skippedModified.length }))
+	}
+	if (result.skippedOutsideWorkspace.length > 0) {
+		parts.push(t("info.cangjie_lsp.cleanup_skipped_outside", { count: result.skippedOutsideWorkspace.length }))
+	}
+	if (result.skippedLegacyNotConfirmed.length > 0) {
+		parts.push(t("info.cangjie_lsp.cleanup_skipped_legacy", { count: result.skippedLegacyNotConfirmed.length }))
+	}
+	if (result.failed.length > 0) {
+		parts.push(t("info.cangjie_lsp.cleanup_failed", { count: result.failed.length }))
+	}
+	if (parts.length > 0) {
+		void vscode.window.showInformationMessage(parts.join("  |  "))
+	}
 }
 
 function sanitizeCangjieTestSymbolBase(base: string): string {
@@ -276,7 +304,7 @@ async function runCangjieGenerateTestFile(
 		"}\n"
 
 	fs.writeFileSync(testPath, content, "utf-8")
-	registerGeneratedCangjieTestFile(getCurrentTaskId?.(), testPath)
+	await registerGeneratedCangjieTestFile(getCurrentTaskId?.(), testPath, folder?.uri.fsPath)
 	const doc = await vscode.workspace.openTextDocument(testPath)
 	await vscode.window.showTextDocument(doc)
 }
@@ -425,17 +453,64 @@ export function registerCangjieCommands(
 	)
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand("njust-ai.cangjieCleanGeneratedTests", () => {
-			const { filesRemoved, taskEntriesRemoved } = purgeAllTrackedCangjieTestFiles()
-			if (taskEntriesRemoved > 0) {
-				void vscode.window.showInformationMessage(
-					t("info.cangjie_lsp.cleaned_generated_tests", {
-						taskEntries: taskEntriesRemoved,
-						files: filesRemoved,
-					}),
-				)
-			} else {
+		vscode.commands.registerCommand("njust-ai.cangjieCleanGeneratedTests", async () => {
+			const scan = scanGeneratedFilesForCleanup()
+			const detachedFiles = scan.detached
+			const legacyFiles = scan.legacy
+
+			if (detachedFiles.length === 0 && legacyFiles.length === 0) {
 				void vscode.window.showInformationMessage(t("info.cangjie_lsp.no_tests_to_clean"))
+				return
+			}
+
+			if (detachedFiles.length > 0) {
+				const fileList = detachedFiles.map((f) => f.absolutePath).join("\n")
+				const confirm = await vscode.window.showInformationMessage(
+					t("info.cangjie_lsp.confirm_cleanup", { count: detachedFiles.length }),
+					{ modal: true, detail: fileList },
+					t("buttons.cangjie_lsp.confirm_delete"),
+				)
+				if (confirm !== t("buttons.cangjie_lsp.confirm_delete")) {
+					return
+				}
+				const result = await deleteConfirmedCangjieTestFiles(detachedFiles)
+				await reportCleanupResult(result)
+			}
+
+			if (legacyFiles.length > 0) {
+				// Re-associate legacy files with current workspace roots
+				const workspaceRoots = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath)
+				const _reassociateResult = reassociateLegacyFiles(workspaceRoots)
+
+				// Only include legacy files that were successfully re-associated
+				const deletableLegacy = legacyFiles.filter((f) => f.workspaceRoot.length > 0)
+				const nonWorkspaceLegacy = legacyFiles.length - deletableLegacy.length
+
+				if (deletableLegacy.length === 0) {
+					// All legacy files are outside workspace — cannot be deleted
+					const msg = nonWorkspaceLegacy > 0
+						? t("info.cangjie_lsp.legacy_all_outside_workspace", { count: nonWorkspaceLegacy })
+						: t("info.cangjie_lsp.no_tests_to_clean")
+					void vscode.window.showInformationMessage(msg)
+					return
+				}
+
+				const legacyList = deletableLegacy.map((f) => f.absolutePath).join("\n")
+				const detailParts = [legacyList]
+				if (nonWorkspaceLegacy > 0) {
+					detailParts.push(t("info.cangjie_lsp.legacy_outside_workspace_note", { count: nonWorkspaceLegacy }))
+				}
+
+				const legacyConfirm = await vscode.window.showWarningMessage(
+					t("info.cangjie_lsp.confirm_legacy_cleanup", { count: deletableLegacy.length }),
+					{ modal: true, detail: detailParts.join("\n\n") },
+					t("buttons.cangjie_lsp.confirm_delete"),
+				)
+				if (legacyConfirm !== t("buttons.cangjie_lsp.confirm_delete")) {
+					return
+				}
+				const legacyResult = await deleteConfirmedCangjieTestFiles(deletableLegacy, { allowLegacy: true })
+				await reportCleanupResult(legacyResult)
 			}
 		}),
 	)

@@ -9,6 +9,7 @@ import {
 import type { DeferredToolCall, DeferredToolResult } from "./types"
 import { getErrorMessage } from "../../shared/error-utils"
 import type { IPathValidator, IWriteProtector } from "./interfaces/IPathAccessController"
+import { checkToolExecutionAuth, type AuthContext } from "./auth-context"
 
 function expectString(args: Record<string, unknown>, key: string): string {
 	const val = args[key]
@@ -52,12 +53,22 @@ function expectOptionalBoolean(args: Record<string, unknown>, key: string): bool
 export async function executeDeferredToolCall(
 	cwd: string,
 	call: DeferredToolCall,
+	authContext: AuthContext,
 	allowedCommands?: string[],
 	deniedCommands?: string[],
 	pathValidator?: IPathValidator,
 	writeProtector?: IWriteProtector,
 ): Promise<DeferredToolResult> {
 	try {
+		const authCheck = checkToolExecutionAuth(authContext)
+		if (!authCheck.allowed) {
+			return {
+				call_id: call.call_id,
+				content: authCheck.reason ?? "Tool execution denied: authentication required.",
+				is_error: true,
+			}
+		}
+
 		const args = call.arguments
 		if (args._arguments_parse_failed === true) {
 			const raw = typeof args._raw_arguments === "string" ? args._raw_arguments : ""

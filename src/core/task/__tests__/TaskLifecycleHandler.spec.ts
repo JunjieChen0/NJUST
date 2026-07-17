@@ -7,7 +7,7 @@ const {
 	getBreaksBySourceMock,
 	getTotalBreaksMock,
 	clearMcpInstructionsDeltaMock,
-	deleteGeneratedCangjieTestFilesForTaskMock,
+	transitionTaskFilesToDetachedMock,
 	releaseTerminalsForTaskMock,
 	outputCleanupMock,
 } = vi.hoisted(() => ({
@@ -17,7 +17,7 @@ const {
 	getBreaksBySourceMock: vi.fn(),
 	getTotalBreaksMock: vi.fn(),
 	clearMcpInstructionsDeltaMock: vi.fn(),
-	deleteGeneratedCangjieTestFilesForTaskMock: vi.fn(),
+	transitionTaskFilesToDetachedMock: vi.fn(),
 	releaseTerminalsForTaskMock: vi.fn(),
 	outputCleanupMock: vi.fn(),
 }))
@@ -73,7 +73,7 @@ vi.mock("../../prompts/sections/mcp-instructions-delta", () => ({
 }))
 
 vi.mock("../../../services/cangjie-lsp/cangjieGeneratedTestCleanup", () => ({
-	deleteGeneratedCangjieTestFilesForTask: deleteGeneratedCangjieTestFilesForTaskMock,
+	transitionTaskFilesToDetached: transitionTaskFilesToDetachedMock,
 }))
 
 vi.mock("../../../integrations/terminal/TerminalRegistry", () => ({
@@ -262,7 +262,7 @@ describe("TaskLifecycleHandler", () => {
 
 		expect(host.isDisposed).toBe(true)
 		expect(clearMcpInstructionsDeltaMock).toHaveBeenCalledWith("task-1")
-		expect(deleteGeneratedCangjieTestFilesForTaskMock).toHaveBeenCalledWith("task-1")
+		expect(transitionTaskFilesToDetachedMock).toHaveBeenCalledWith("task-1")
 		expect(host.cancelCurrentRequest).toHaveBeenCalledTimes(1)
 		expect(host.modeHandler.dispose).toHaveBeenCalled()
 		expect(host.messageQueueService.removeListener).toHaveBeenCalledWith("stateChanged", expect.any(Function))

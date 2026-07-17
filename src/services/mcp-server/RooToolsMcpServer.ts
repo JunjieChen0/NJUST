@@ -15,7 +15,10 @@ import {
 	execApplyDiff,
 } from "./tool-executors"
 import { getErrorMessage } from "../../shared/error-utils"
+import { logSecurityEvent } from "../../shared/security-audit"
+import { logger } from "../../shared/logger"
 import type { RooProtectedController } from "../../core/protect/RooProtectedController"
+import { createPerRequestResourceLimits } from "./ResourceLimitsService"
 
 // ── Token-bucket rate limiter (no external deps) ──────────────────────────
 
@@ -44,6 +47,58 @@ class RateLimiter {
 	}
 }
 
+/**
+ * Per-IP rate limiter with automatic entry expiration.
+ * Each IP gets an independent token bucket. Stale entries (no activity
+ * for {@link IP_ENTRY_TTL_MS}) are pruned periodically to prevent
+ * unbounded memory growth from scanning attacks.
+ */
+class PerIpRateLimiter {
+	private buckets = new Map<string, { limiter: RateLimiter; lastSeen: number }>()
+	private cleanupTimer: ReturnType<typeof setInterval> | null = null
+
+	constructor(
+		private maxTokens: number,
+		private refillRate: number,
+	) {
+		// Prune stale entries every 10 minutes
+		this.cleanupTimer = setInterval(() => this.pruneStale(), 10 * 60 * 1000)
+		// Allow the timer to not prevent process exit
+		if (this.cleanupTimer && typeof this.cleanupTimer === "object" && "unref" in this.cleanupTimer) {
+			this.cleanupTimer.unref()
+		}
+	}
+
+	tryConsume(ip: string): boolean {
+		let entry = this.buckets.get(ip)
+		if (!entry) {
+			entry = { limiter: new RateLimiter(this.maxTokens, this.refillRate), lastSeen: Date.now() }
+			this.buckets.set(ip, entry)
+		}
+		entry.lastSeen = Date.now()
+		return entry.limiter.tryConsume()
+	}
+
+	private pruneStale(): void {
+		const now = Date.now()
+		for (const [ip, entry] of this.buckets) {
+			if (now - entry.lastSeen > IP_ENTRY_TTL_MS) {
+				this.buckets.delete(ip)
+			}
+		}
+	}
+
+	dispose(): void {
+		if (this.cleanupTimer) {
+			clearInterval(this.cleanupTimer)
+			this.cleanupTimer = null
+		}
+		this.buckets.clear()
+	}
+}
+
+const IP_ENTRY_TTL_MS = 30 * 60 * 1000 // 30 minutes — align with session idle TTL
+
 interface RooToolsMcpServerOptions {
 	workspacePath: string
 	port: number
@@ -54,12 +109,43 @@ interface RooToolsMcpServerOptions {
 	protectedController?: RooProtectedController
 }
 
+interface SessionMetadata {
+	sessionId: string
+	createdAt: number
+	lastActivityAt: number
+	remoteIp: string
+}
+
+interface SessionEntry {
+	transport: StreamableHTTPServerTransport
+	metadata: SessionMetadata
+	requestsInFlight: number
+	closing: boolean
+	graceDeadline: number | null
+}
+
+const MAX_SESSIONS = 20
+const MAX_SESSIONS_PER_IP = 5
+const IDLE_TTL_MS = 30 * 60 * 1000
+const ABSOLUTE_TTL_MS = 4 * 60 * 60 * 1000
+const GRACE_PERIOD_MS = 30 * 1000 // 30 seconds grace for in-flight requests
+const RECLAMATION_INTERVAL_MS = 5 * 60 * 1000
+
 export class RooToolsMcpServer {
 	private httpServer: http.Server | null = null
-	private transports = new Map<string, StreamableHTTPServerTransport>()
+	private transports = new Map<string, SessionEntry>()
 	private options: RooToolsMcpServerOptions
-	// Global rate limiter: 60 requests burst, refills at 10/s
 	private readonly globalLimiter = new RateLimiter(60, 10)
+	private readonly perIpLimiter = new PerIpRateLimiter(30, 5)
+	private reclamationTimer: ReturnType<typeof setInterval> | null = null
+	/** Atomic slot reservation: counts initialize requests in-flight before transport is registered */
+	private pendingSlots = 0
+	private pendingSlotsByIp = new Map<string, number>()
+
+	// ── Session metrics ──────────────────────────────────────────────────
+	private metricsSessionsCreated = 0
+	private metricsSessionsRejected = 0
+	private metricsSessionsExpired = 0
 
 	constructor(options: RooToolsMcpServerOptions) {
 		this.options = options
@@ -67,6 +153,23 @@ export class RooToolsMcpServer {
 
 	updateWorkspacePath(newPath: string): void {
 		this.options.workspacePath = newPath
+	}
+
+	/** Return current session metrics for monitoring. */
+	getSessionMetrics(): {
+		active: number
+		pending: number
+		totalCreated: number
+		totalRejected: number
+		totalExpired: number
+	} {
+		return {
+			active: this.transports.size,
+			pending: this.pendingSlots,
+			totalCreated: this.metricsSessionsCreated,
+			totalRejected: this.metricsSessionsRejected,
+			totalExpired: this.metricsSessionsExpired,
+		}
 	}
 
 	private get cwd(): string {
@@ -85,11 +188,14 @@ export class RooToolsMcpServer {
 				end_line: z.number().optional().describe("Ending line number (1-based, inclusive)"),
 			},
 			async (params) => {
+				const resourceLimits = createPerRequestResourceLimits()
 				try {
-					const result = await execReadFile(this.cwd, params)
+					const result = await execReadFile(this.cwd, params, resourceLimits)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: unknown) {
 					return { content: [{ type: "text" as const, text: `Error: ${getErrorMessage(e)}` }], isError: true }
+				} finally {
+					resourceLimits.dispose()
 				}
 			},
 		)
@@ -102,11 +208,14 @@ export class RooToolsMcpServer {
 				content: z.string().describe("The full content to write to the file"),
 			},
 			async (params) => {
+				const resourceLimits = createPerRequestResourceLimits()
 				try {
-					const result = await execWriteFile(this.cwd, params, this.options.protectedController)
+					const result = await execWriteFile(this.cwd, params, this.options.protectedController, resourceLimits)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: unknown) {
 					return { content: [{ type: "text" as const, text: `Error: ${getErrorMessage(e)}` }], isError: true }
+				} finally {
+					resourceLimits.dispose()
 				}
 			},
 		)
@@ -119,11 +228,14 @@ export class RooToolsMcpServer {
 				recursive: z.boolean().optional().describe("Whether to list files recursively (default: false)"),
 			},
 			async (params) => {
+				const resourceLimits = createPerRequestResourceLimits()
 				try {
-					const result = await execListFiles(this.cwd, params)
+					const result = await execListFiles(this.cwd, params, undefined, resourceLimits)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: unknown) {
 					return { content: [{ type: "text" as const, text: `Error: ${getErrorMessage(e)}` }], isError: true }
+				} finally {
+					resourceLimits.dispose()
 				}
 			},
 		)
@@ -137,11 +249,14 @@ export class RooToolsMcpServer {
 				file_pattern: z.string().optional().describe("Glob pattern to filter files (e.g. '*.ts')"),
 			},
 			async (params) => {
+				const resourceLimits = createPerRequestResourceLimits()
 				try {
-					const result = await execSearchFiles(this.cwd, params)
+					const result = await execSearchFiles(this.cwd, params, undefined, resourceLimits)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: unknown) {
 					return { content: [{ type: "text" as const, text: `Error: ${getErrorMessage(e)}` }], isError: true }
+				} finally {
+					resourceLimits.dispose()
 				}
 			},
 		)
@@ -177,11 +292,14 @@ export class RooToolsMcpServer {
 				diff: z.string().describe("The diff content using SEARCH/REPLACE block format"),
 			},
 			async (params) => {
+				const resourceLimits = createPerRequestResourceLimits()
 				try {
-					const result = await execApplyDiff(this.cwd, params, this.options.protectedController)
+					const result = await execApplyDiff(this.cwd, params, this.options.protectedController, resourceLimits)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: unknown) {
 					return { content: [{ type: "text" as const, text: `Error: ${getErrorMessage(e)}` }], isError: true }
+				} finally {
+					resourceLimits.dispose()
 				}
 			},
 		)
@@ -218,6 +336,12 @@ export class RooToolsMcpServer {
 			}
 
 			if (authToken && !this.verifyAuth(req, authToken)) {
+				logSecurityEvent({
+					action: "mcp.session.auth",
+					resource: this.getRemoteIp(req),
+					result: "denied",
+					reason: "invalid_auth_token",
+				})
 				res.writeHead(401, { "Content-Type": "application/json" })
 				res.end(JSON.stringify({ error: "Unauthorized" }))
 				return
@@ -226,6 +350,20 @@ export class RooToolsMcpServer {
 			if (!this.globalLimiter.tryConsume()) {
 				res.writeHead(429, { "Content-Type": "application/json", "Retry-After": "1" })
 				res.end(JSON.stringify({ error: "Rate limit exceeded. Try again later." }))
+				return
+			}
+
+			// Per-IP rate limit: prevent single IP from monopolizing global budget
+			const clientIp = this.getRemoteIp(req)
+			if (!this.perIpLimiter.tryConsume(clientIp)) {
+				logSecurityEvent({
+					action: "mcp.rate_limit.per_ip",
+					resource: clientIp,
+					result: "denied",
+					reason: "per_ip_rate_limit",
+				})
+				res.writeHead(429, { "Content-Type": "application/json", "Retry-After": "2" })
+				res.end(JSON.stringify({ error: "Per-IP rate limit exceeded. Try again later." }))
 				return
 			}
 
@@ -263,6 +401,13 @@ export class RooToolsMcpServer {
 
 		return new Promise<void>((resolve, reject) => {
 			this.httpServer!.listen(port, bindAddress, () => {
+				this.reclamationTimer = setInterval(() => {
+					this.reclaimExpiredSessions()
+				}, RECLAMATION_INTERVAL_MS)
+				// Allow the timer to not prevent process exit
+				if (this.reclamationTimer && typeof this.reclamationTimer === "object" && "unref" in this.reclamationTimer) {
+					this.reclamationTimer.unref()
+				}
 				resolve()
 			})
 			this.httpServer!.on("error", reject)
@@ -270,13 +415,21 @@ export class RooToolsMcpServer {
 	}
 
 	async stop(): Promise<void> {
-		for (const [_sessionId, transport] of this.transports) {
-			try {
-				await transport.close()
-			} catch {
-				// intentionally ignored: best-effort transport cleanup
-			}
+		if (this.reclamationTimer) {
+			clearInterval(this.reclamationTimer)
+			this.reclamationTimer = null
 		}
+		this.perIpLimiter.dispose()
+
+		const closePromises: Promise<void>[] = []
+		for (const [sessionId, entry] of this.transports) {
+			closePromises.push(
+				entry.transport.close().catch((err) => {
+					logger.debug("McpServer", `Transport close failed during stop for session ${sessionId}:`, err)
+				}),
+			)
+		}
+		await Promise.all(closePromises)
 		this.transports.clear()
 
 		if (this.httpServer) {
@@ -321,21 +474,207 @@ export class RooToolsMcpServer {
 		})
 	}
 
+	/**
+	 * Get the remote IP from the socket connection.
+	 * Does NOT trust X-Forwarded-For unless the server is behind a trusted
+	 * reverse proxy (not currently configured). Using the raw socket address
+	 * prevents spoofed headers from bypassing per-IP rate limits.
+	 */
+	private getRemoteIp(req: http.IncomingMessage): string {
+		return (req.socket.remoteAddress ?? "unknown").replace(/^::ffff:/, "")
+	}
+
+	/** Count sessions belonging to a given IP, including pending slots. */
+	private countSessionsForIp(ip: string): number {
+		let count = 0
+		for (const entry of this.transports.values()) {
+			if (entry.metadata.remoteIp === ip) count++
+		}
+		// Include pending slots for this IP
+		count += this.pendingSlotsByIp.get(ip) ?? 0
+		return count
+	}
+
+	private reclaimExpiredSessions(): void {
+		const now = Date.now()
+		const toClose: string[] = []
+		const toForceDelete: string[] = []
+
+		for (const [sid, entry] of this.transports) {
+			// Skip sessions already in closing state
+			if (entry.closing) {
+				// Check if grace period has expired
+				if (entry.graceDeadline !== null && now > entry.graceDeadline) {
+					toForceDelete.push(sid)
+				}
+				continue
+			}
+
+			const idleMs = now - entry.metadata.lastActivityAt
+			const ageMs = now - entry.metadata.createdAt
+			const expired = idleMs > IDLE_TTL_MS || ageMs > ABSOLUTE_TTL_MS
+
+			if (expired) {
+				if (entry.requestsInFlight > 0) {
+					// Enter grace period: mark as closing but wait for in-flight requests
+					entry.closing = true
+					entry.graceDeadline = now + GRACE_PERIOD_MS
+					logger.debug("McpSession", `Session ${sid} expired but has ${entry.requestsInFlight} in-flight request(s), entering grace period`)
+				} else {
+					toClose.push(sid)
+				}
+			}
+		}
+
+		// Graceful close: wait for transport to close before deleting
+		for (const sid of toClose) {
+			const entry = this.transports.get(sid)
+			if (entry) {
+				this.metricsSessionsExpired++
+				const reason = (Date.now() - entry.metadata.createdAt) > ABSOLUTE_TTL_MS
+					? "absolute_ttl"
+					: "idle_ttl"
+				logSecurityEvent({
+					action: "mcp.session.expire",
+					resource: sid,
+					result: "allowed",
+					reason,
+				})
+				entry.transport.close()
+					.then(() => {
+						this.transports.delete(sid)
+					})
+					.catch((err) => {
+						logger.debug("McpSession", `Transport close failed for session ${sid}:`, err)
+						this.transports.delete(sid)
+					})
+			}
+		}
+
+		// Force delete: grace period expired
+		for (const sid of toForceDelete) {
+			const entry = this.transports.get(sid)
+			if (entry) {
+				this.metricsSessionsExpired++
+				logger.debug("McpSession", `Force-deleting session ${sid} after grace period expired`)
+				logSecurityEvent({
+					action: "mcp.session.expire",
+					resource: sid,
+					result: "allowed",
+					reason: "grace_period_expired",
+				})
+				entry.transport.close().catch((err) => {
+					logger.debug("McpSession", `Transport close failed during force-delete for ${sid}:`, err)
+				})
+				this.transports.delete(sid)
+			}
+		}
+	}
+
 	private async handlePost(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
 		const body = await this.parseBody(req)
 		const sessionId = req.headers["mcp-session-id"] as string | undefined
 
 		if (sessionId && this.transports.has(sessionId)) {
-			const transport = this.transports.get(sessionId)!
-			await transport.handleRequest(req, res, body)
+			const entry = this.transports.get(sessionId)!
+			// Reject new requests on sessions in closing state (grace period only waits for existing in-flight)
+			if (entry.closing) {
+				res.writeHead(503, { "Content-Type": "application/json" })
+				res.end(
+					JSON.stringify({
+						jsonrpc: "2.0",
+						error: { code: -32000, message: "Session is closing. Please create a new session." },
+						id: null,
+					}),
+				)
+				return
+			}
+			entry.metadata.lastActivityAt = Date.now()
+			entry.requestsInFlight++
+			try {
+				await entry.transport.handleRequest(req, res, body)
+			} finally {
+				entry.requestsInFlight = Math.max(0, entry.requestsInFlight - 1)
+			}
 			return
 		}
 
 		if (!sessionId && isInitializeRequest(body)) {
+			const remoteIp = this.getRemoteIp(req)
+
+			// Reserve slot atomically before creating transport
+			const effectiveGlobalCount = this.transports.size + this.pendingSlots
+			if (effectiveGlobalCount >= MAX_SESSIONS) {
+				this.metricsSessionsRejected++
+				logSecurityEvent({
+					action: "mcp.session.create",
+					resource: remoteIp,
+					result: "denied",
+					reason: "max_sessions_reached",
+				})
+				res.writeHead(503, { "Content-Type": "application/json" })
+				res.end(
+					JSON.stringify({
+						jsonrpc: "2.0",
+						error: { code: -32000, message: "Maximum session count reached. Try again later." },
+						id: null,
+					}),
+				)
+				return
+			}
+
+			// Per-IP session limit (includes pending slots)
+			if (this.countSessionsForIp(remoteIp) >= MAX_SESSIONS_PER_IP) {
+				this.metricsSessionsRejected++
+				logSecurityEvent({
+					action: "mcp.session.create",
+					resource: remoteIp,
+					result: "denied",
+					reason: "max_sessions_per_ip",
+				})
+				res.writeHead(429, { "Content-Type": "application/json" })
+				res.end(
+					JSON.stringify({
+						jsonrpc: "2.0",
+						error: { code: -32000, message: "Too many sessions from this IP." },
+						id: null,
+					}),
+				)
+				return
+			}
+
+			// Atomically reserve the slot
+			this.pendingSlots++
+			this.pendingSlotsByIp.set(remoteIp, (this.pendingSlotsByIp.get(remoteIp) ?? 0) + 1)
+
+			const releasePendingSlot = (): void => {
+				this.pendingSlots = Math.max(0, this.pendingSlots - 1)
+				const ipPending = (this.pendingSlotsByIp.get(remoteIp) ?? 1) - 1
+				if (ipPending <= 0) {
+					this.pendingSlotsByIp.delete(remoteIp)
+				} else {
+					this.pendingSlotsByIp.set(remoteIp, ipPending)
+				}
+			}
+
 			const transport = new StreamableHTTPServerTransport({
 				sessionIdGenerator: () => randomUUID(),
 				onsessioninitialized: (sid) => {
-					this.transports.set(sid, transport)
+					// Convert pending slot to formal entry
+					releasePendingSlot()
+					this.metricsSessionsCreated++
+					this.transports.set(sid, {
+						transport,
+						metadata: {
+							sessionId: sid,
+							createdAt: Date.now(),
+							lastActivityAt: Date.now(),
+							remoteIp,
+						},
+						requestsInFlight: 0,
+						closing: false,
+						graceDeadline: null,
+					})
 				},
 			})
 
@@ -346,9 +685,17 @@ export class RooToolsMcpServer {
 				}
 			}
 
-			const mcpServer = this.createMcpServer()
-			await mcpServer.connect(transport)
-			await transport.handleRequest(req, res, body)
+			try {
+				const mcpServer = this.createMcpServer()
+				await mcpServer.connect(transport)
+				await transport.handleRequest(req, res, body)
+			} catch (err) {
+				// Release pending slot if transport setup fails and onsessioninitialized never fired
+				if (!transport.sessionId) {
+					releasePendingSlot()
+				}
+				throw err
+			}
 			return
 		}
 
@@ -370,8 +717,19 @@ export class RooToolsMcpServer {
 			return
 		}
 
-		const transport = this.transports.get(sessionId)!
-		await transport.handleRequest(req, res)
+		const entry = this.transports.get(sessionId)!
+		if (entry.closing) {
+			res.writeHead(503, { "Content-Type": "application/json" })
+			res.end(JSON.stringify({ error: "Session is closing" }))
+			return
+		}
+		entry.metadata.lastActivityAt = Date.now()
+		entry.requestsInFlight++
+		try {
+			await entry.transport.handleRequest(req, res)
+		} finally {
+			entry.requestsInFlight = Math.max(0, entry.requestsInFlight - 1)
+		}
 	}
 
 	private async handleDelete(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -382,7 +740,18 @@ export class RooToolsMcpServer {
 			return
 		}
 
-		const transport = this.transports.get(sessionId)!
-		await transport.handleRequest(req, res)
+		const entry = this.transports.get(sessionId)!
+		if (entry.closing) {
+			res.writeHead(503, { "Content-Type": "application/json" })
+			res.end(JSON.stringify({ error: "Session is closing" }))
+			return
+		}
+		entry.metadata.lastActivityAt = Date.now()
+		entry.requestsInFlight++
+		try {
+			await entry.transport.handleRequest(req, res)
+		} finally {
+			entry.requestsInFlight = Math.max(0, entry.requestsInFlight - 1)
+		}
 	}
 }

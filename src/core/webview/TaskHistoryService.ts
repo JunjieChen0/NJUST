@@ -19,7 +19,7 @@ import { GlobalFileNames } from "../../shared/globalFileNames"
 import { downloadTask, getTaskFileName } from "../../integrations/misc/export-markdown"
 import { resolveDefaultSaveUri, saveLastExportPath } from "../../utils/export"
 import { ShadowCheckpointService } from "../../services/checkpoints/ShadowCheckpointService"
-import { pruneStaleRegistrations, NO_TASK_KEY } from "../../services/cangjie-lsp/cangjieGeneratedTestCleanup"
+import { transitionStaleRegistrationsToDetached, NO_TASK_KEY } from "../../services/cangjie-lsp/cangjieGeneratedTestCleanup"
 import { aggregateTaskCostsRecursive, type AggregatedCosts } from "./aggregateTaskCosts"
 import { logger } from "../../shared/logger"
 import { getErrorMessage } from "../../shared/error-utils"
@@ -79,19 +79,19 @@ export class TaskHistoryService {
 			this._initialized = true
 
 			try {
-				const { filesRemoved, taskEntriesRemoved } = pruneStaleRegistrations((id) => {
+				const { taskEntriesTransitioned } = transitionStaleRegistrationsToDetached((id) => {
 					if (id === NO_TASK_KEY) return false
 					const h = this.host.taskHistoryStore.get(id)
 					if (!h || h.status === "completed") return false
 					return true
 				})
-				if (filesRemoved > 0) {
+				if (taskEntriesTransitioned > 0) {
 					this.host.outputChannel.appendLine(
-						`[CangjieTestCleanup] ${t("info.cangjie_test_cleanup_prune", { filesRemoved, taskEntriesRemoved })}`,
+						`[CangjieTestCleanup] ${t("info.cangjie_test_cleanup_transition", { taskEntriesTransitioned })}`,
 					)
 				}
 			} catch (e) {
-				this.log(`[CangjieTestCleanup] prune failed: ${getErrorMessage(e)}`)
+				this.log(`[CangjieTestCleanup] transition failed: ${getErrorMessage(e)}`)
 			}
 
 			const items = this.host.taskHistoryStore.getAll().filter((item: HistoryItem) => item.ts && item.task)

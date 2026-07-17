@@ -475,6 +475,7 @@ describe("CloudAgentOrchestrator", () => {
 			expect(executeDeferredToolCall).toHaveBeenCalledWith(
 				"/test/workspace",
 				{ call_id: "c1", tool: "read_file", arguments: { path: "a.ts" } },
+				expect.objectContaining({ authenticated: true, profileId: "test-profile" }),
 				[],
 				[],
 				undefined,
@@ -510,6 +511,7 @@ describe("CloudAgentOrchestrator", () => {
 			expect(executeDeferredToolCall).toHaveBeenCalledWith(
 				"/test/workspace",
 				{ call_id: "c1", tool: "write_file", arguments: { path: "a.ts", content: "x" } },
+				expect.objectContaining({ authenticated: true, profileId: "test-profile" }),
 				[],
 				[],
 				undefined,

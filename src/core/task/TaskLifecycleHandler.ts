@@ -24,7 +24,7 @@ import { getTaskDirectoryPath } from "../../utils/storage"
 import { globalCacheMetrics } from "../../utils/cacheMetrics"
 import { globalPromptCacheBreakDetector } from "../prompts/promptCacheBreakDetection"
 import { clearMcpInstructionsDelta } from "../prompts/sections/mcp-instructions-delta"
-import { deleteGeneratedCangjieTestFilesForTask } from "../../services/cangjie-lsp/cangjieGeneratedTestCleanup"
+import { transitionTaskFilesToDetached } from "../../services/cangjie-lsp/cangjieGeneratedTestCleanup"
 import { OutputInterceptor } from "../../integrations/terminal/OutputInterceptor"
 import { safeDispose } from "./TaskLifecycle"
 import { logger } from "../../shared/logger"
@@ -472,9 +472,9 @@ export class TaskLifecycleHandler {
 		clearMcpInstructionsDelta(t.taskId)
 
 		try {
-			deleteGeneratedCangjieTestFilesForTask(t.taskId)
+			transitionTaskFilesToDetached(t.taskId)
 		} catch (e) {
-			logger.error("TaskLifecycleHandler", "Error deleting generated Cangjie test files:", e)
+			logger.error("TaskLifecycleHandler", "Error transitioning generated Cangjie test files to detached:", e)
 			TelemetryService.reportError(e, TelemetryEventName.TASK_LIFECYCLE_ERROR)
 		}
 

@@ -102,10 +102,13 @@ const SENSITIVE_FILE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 const COMMAND_SUBSTITUTION_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 	{ pattern: /\$\(.*\)/, reason: "Command substitution $(...) — nested command execution" },
 	{ pattern: /`[^`]+`/, reason: "Backtick command substitution — nested command execution" },
+	{ pattern: /<\(/, reason: "Process substitution <() — pipe from subshell" },
+	{ pattern: />\(/, reason: "Process substitution >() — pipe to subshell" },
 	{ pattern: /\beval\s/, reason: "eval — dynamic code execution" },
 	{ pattern: /\bexec\s/, reason: "exec — replace current process" },
 	{ pattern: /\bsource\s/, reason: "source — execute script in current shell" },
 	{ pattern: /\b\.\s+\//, reason: "dot-source — execute script in current shell" },
+	{ pattern: /\0/, reason: "Null byte in command — potential injection" },
 ]
 
 // ── Risk level ordering ──────────────────────────────────────────────

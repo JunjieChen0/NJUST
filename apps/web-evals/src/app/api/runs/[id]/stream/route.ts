@@ -5,14 +5,27 @@ import { findRun } from "@njust-ai/evals"
 
 import { SSEStream } from "@/lib/server/sse-stream"
 import { redisClient } from "@/lib/server/redis"
+import { requireAdminForRequest } from "@/lib/server/admin-auth"
+import { validateOrigin } from "@/lib/server/origin-check"
+import { validateRunId } from "@/lib/server/validation"
 
 export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+	// Origin check — reject cross-origin requests
+	if (!validateOrigin(request)) {
+		return new Response("Forbidden: invalid origin", { status: 403 })
+	}
+
+	const authError = await requireAdminForRequest(request)
+	if (authError) {
+		return authError
+	}
+
 	const { id } = await params
 	const requestId = crypto.randomUUID()
 	const stream = new SSEStream()
-	const run = await findRun(Number(id))
+	const run = await findRun(validateRunId(id))
 	const redis = await redisClient()
 
 	let isStreamClosed = false

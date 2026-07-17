@@ -5,11 +5,14 @@ import { fileURLToPath } from "url"
 
 import { exerciseLanguages, listDirectories } from "@njust-ai/evals"
 
+import { requireAdminForAction } from "@/lib/server/admin-auth"
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url)) // <repo>/apps/web-evals/src/actions
 
 const EVALS_REPO_PATH = path.resolve(__dirname, "../../../../../evals")
 
 export const getExercises = async () => {
+	await requireAdminForAction()
 	const result = await Promise.all(
 		exerciseLanguages.map(async (language) => {
 			const languagePath = path.join(EVALS_REPO_PATH, language)

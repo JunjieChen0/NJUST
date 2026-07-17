@@ -1,0 +1,43 @@
+# Docker Policy Proxy — Lightweight Dockerfile
+#
+# Build with:
+# docker compose -f packages/evals/docker-compose.yml build docker-proxy
+#
+# This container runs a minimal Node.js proxy that intercepts Docker API calls
+# and validates them against a security policy before forwarding to the daemon.
+
+# ─── Builder stage: compile TypeScript with type definitions ──────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /build
+
+# Install TypeScript compiler and Node.js type definitions
+RUN npm init -y && npm install typescript@5.7.3 @types/node@20
+
+# Copy proxy source files
+COPY packages/evals/src/docker-policy-proxy/ ./src/
+
+# Compile to CommonJS JavaScript
+# NOTE: Do NOT use --project with source files (TS5042).
+RUN npx tsc \
+    src/main.ts src/server.ts src/policy.ts src/types.ts \
+    src/index.ts src/logger.ts src/security-audit.ts \
+    --outDir dist \
+    --esModuleInterop --module commonjs --target es2022 \
+    --moduleResolution node --skipLibCheck --resolveJsonModule --strict
+
+# ─── Runtime stage: minimal image with only compiled JS ───────────────────
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy compiled JavaScript from builder
+COPY --from=builder /build/dist/ ./
+
+# Create a minimal package.json (CommonJS, no workspace deps)
+RUN echo '{"name":"docker-policy-proxy","version":"1.0.0","private":true}' > package.json
+
+EXPOSE 2375
+
+# Run compiled JavaScript (no dev dependencies needed)
+CMD ["node", "/app/main.js"]

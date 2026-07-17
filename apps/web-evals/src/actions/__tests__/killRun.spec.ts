@@ -13,6 +13,23 @@ vi.mock("next/cache", () => ({
 	revalidatePath: vi.fn(),
 }))
 
+// Mock admin auth
+vi.mock("@/lib/server/admin-auth", () => ({
+	requireAdminForAction: vi.fn().mockResolvedValue(undefined),
+}))
+
+// Mock audit
+vi.mock("@/lib/server/audit", () => ({
+	logAuditEvent: vi.fn(),
+}))
+
+// Mock validation
+vi.mock("@/lib/server/validation", () => ({
+	validateRunId: (id: number) => id,
+	validateDescription: (d: string | null) => d,
+	MAX_BATCH_DELETE_COUNT: 1000,
+}))
+
 // Mock redis client
 vi.mock("@/lib/server/redis", () => ({
 	redisClient: vi.fn().mockResolvedValue({

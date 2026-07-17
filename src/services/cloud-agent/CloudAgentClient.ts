@@ -20,7 +20,7 @@ import type { IProtocolAdapterFactory } from "./adapters/IProtocolAdapterFactory
 import type { IProtocolAdapter, McpCallbackHandler, UniversalTaskResponse } from "./adapters/types"
 import { MCP_TOOLS } from "./adapters/McpProtocolAdapter"
 import { normalizeServerUrl } from "./urlUtils"
-import { assertSafeOutboundUrl, guardedFetch } from "../../core/security/networkGuard"
+import { guardedFetch, assertHeadersSafe } from "../../core/security/networkGuard"
 import { t } from "../../i18n"
 
 /** Maximum response body size (50 MB) before rejecting to avoid loading pathological payloads into memory. */
@@ -150,24 +150,35 @@ export class CloudAgentClient {
 		try {
 			const abortUrl = `${base}${tempAdapter.getEndpoint("deferredAbort")}`
 
-			// DNS rebinding protection (skip for localhost where rebinding is impossible)
+			// Validate headers against CRLF injection
+			assertHeadersSafe(headers)
+
+			// SSRF + HTTPS enforcement: use guardedFetch for non-localhost,
+			// raw fetch for localhost (guardedFetch blocks localhost hostnames).
 			const abortParsed = new URL(abortUrl)
 			const isLocalAbort =
 				abortParsed.hostname === "localhost" ||
 				abortParsed.hostname === "127.0.0.1" ||
-				abortParsed.hostname === "[::1]"
-			if (!isLocalAbort) {
-				await assertSafeOutboundUrl(abortUrl)
-			}
+				abortParsed.hostname === "[::1]" ||
+				abortParsed.hostname === "::1"
 
 			let resp: Response
 			try {
-				resp = await fetch(abortUrl, {
-					method: "POST",
-					headers,
-					body,
-					signal: controller.signal,
-				})
+				if (isLocalAbort) {
+					resp = await fetch(abortUrl, {
+						method: "POST",
+						headers,
+						body,
+						signal: controller.signal,
+					})
+				} else {
+					resp = await guardedFetch(abortUrl, {
+						method: "POST",
+						headers,
+						body,
+						signal: controller.signal,
+					})
+				}
 			} catch (e) {
 				throw enrichFetchError(e)
 			}
@@ -302,10 +313,13 @@ export class CloudAgentClient {
 		const isLocal =
 			parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]"
 		if (isLocal) {
+			// Validate headers even for localhost (defense in depth)
+			assertHeadersSafe(init?.headers as Headers | Record<string, string> | [string, string][] | undefined)
 			return fetch(url, init)
 		}
-		// guardedFetch validates each redirect hop, pins IPs, and strips
-		// sensitive headers on cross-origin redirects.
+		// guardedFetch validates each redirect hop, pins IPs, strips
+		// sensitive headers on cross-origin redirects, enforces HTTPS,
+		// and validates CRLF-safe headers.
 		return guardedFetch(url, init)
 	}
 

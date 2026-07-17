@@ -4,7 +4,10 @@ import net from "node:net"
 const BLOCKED_HOSTNAMES = new Set(["localhost", "localhost."])
 
 /** Maximum number of redirects to follow before giving up. */
-const MAX_REDIRECTS = 10
+const MAX_REDIRECTS = 5
+
+/** Maximum request body size (10 MB) to prevent abuse. */
+const MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024
 
 /** Sensitive headers to strip on cross-origin redirects. */
 const SENSITIVE_HEADERS = new Set(["authorization", "cookie", "set-cookie", "proxy-authorization", "x-api-key"])
@@ -102,6 +105,123 @@ export async function assertSafeOutboundUrl(url: string): Promise<URL> {
 }
 
 /**
+ * Assert that a URL uses HTTPS, with exceptions for loopback addresses.
+ * Used to enforce HTTPS on initial requests and redirect targets.
+ */
+function assertHttpsUnlessLocalhost(parsed: URL): void {
+	if (parsed.protocol === "https:") return
+	const h = parsed.hostname
+	if (h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1") return
+	throw new Error(`HTTPS is required for non-localhost connections. Got: ${parsed.protocol}//${parsed.hostname}`)
+}
+
+/**
+ * Validate that a redirect target stays within the same registrable domain.
+ * Prevents open-redirect attacks where a trusted server redirects to an
+ * attacker-controlled domain to leak authorization headers.
+ *
+ * Uses a simplified check: the hostname of the redirect target must equal
+ * or be a subdomain of the original hostname (or vice versa).
+ */
+function assertSameDomainRedirect(from: URL, to: URL): void {
+	const fromHost = from.hostname.toLowerCase()
+	const toHost = to.hostname.toLowerCase()
+	if (fromHost === toHost) return
+	// Allow subdomain matches: a.example.com → b.example.com
+	if (fromHost.endsWith(`.${toHost}`) || toHost.endsWith(`.${fromHost}`)) return
+	throw new Error(
+		`Cross-domain redirect blocked: ${fromHost} → ${toHost}. Redirects must stay within the same domain.`,
+	)
+}
+
+/**
+ * Validate that request headers do not contain CRLF injection sequences.
+ * Header names and values must not include \r, \n, or \0 characters.
+ */
+/**
+ * Collect header entries from any supported header representation.
+ * Uses `forEach` instead of `entries()` for compatibility with all Headers definitions.
+ */
+function collectHeaderEntries(headers: Headers): [string, string][] {
+	const entries: [string, string][] = []
+	headers.forEach((value, key) => {
+		entries.push([key, value])
+	})
+	return entries
+}
+
+export function assertHeadersSafe(
+	headers: Headers | Record<string, string> | [string, string][] | undefined,
+): void {
+	if (!headers) return
+	const CRLF_RE = /[\r\n\0]/
+	let entries: [string, string][]
+	if (headers instanceof Headers) {
+		entries = collectHeaderEntries(headers)
+	} else if (Array.isArray(headers)) {
+		entries = headers
+	} else {
+		entries = Object.entries(headers)
+	}
+	for (const [name, value] of entries) {
+		if (CRLF_RE.test(name)) {
+			throw new Error(`Header name contains invalid characters (CRLF injection): "${name}"`)
+		}
+		if (CRLF_RE.test(value)) {
+			throw new Error(`Header "${name}" contains invalid characters (CRLF injection)`)
+		}
+	}
+}
+
+/**
+ * Validate that a request body does not exceed the maximum allowed size.
+ *
+ * Explicitly supported BodyInit types with upfront length determination:
+ * - `string` (UTF-8 byte length)
+ * - `Uint8Array` (byteLength)
+ * - `ArrayBuffer` (byteLength)
+ *
+ * Types that cannot be reliably sized before consumption are **not** checked here:
+ * `Blob`, `FormData`, `ReadableStream`, `URLSearchParams`.
+ * For these, enforcement must happen server-side or via streaming limits.
+ */
+function assertRequestBodySize(body: BodyInit | null | undefined): void {
+	if (body === null || body === undefined) return
+
+	if (typeof body === "string") {
+		const byteLen = new TextEncoder().encode(body).byteLength
+		if (byteLen > MAX_REQUEST_BODY_BYTES) {
+			throw new Error(
+				`Request body size (${(byteLen / 1024 / 1024).toFixed(1)} MB) exceeds limit (${(MAX_REQUEST_BODY_BYTES / 1024 / 1024).toFixed(1)} MB)`,
+			)
+		}
+		return
+	}
+
+	if (body instanceof Uint8Array) {
+		if (body.byteLength > MAX_REQUEST_BODY_BYTES) {
+			throw new Error(
+				`Request body size (${(body.byteLength / 1024 / 1024).toFixed(1)} MB) exceeds limit (${(MAX_REQUEST_BODY_BYTES / 1024 / 1024).toFixed(1)} MB)`,
+			)
+		}
+		return
+	}
+
+	if (body instanceof ArrayBuffer) {
+		if (body.byteLength > MAX_REQUEST_BODY_BYTES) {
+			throw new Error(
+				`Request body size (${(body.byteLength / 1024 / 1024).toFixed(1)} MB) exceeds limit (${(MAX_REQUEST_BODY_BYTES / 1024 / 1024).toFixed(1)} MB)`,
+			)
+		}
+		return
+	}
+
+	// Blob, FormData, ReadableStream, URLSearchParams — size cannot be
+	// determined upfront without consuming the stream. Enforcement must
+	// rely on server-side limits or streaming byte counters.
+}
+
+/**
  * Strip sensitive headers when redirecting to a different origin.
  */
 function stripSensitiveHeadersForCrossOrigin(headers: Headers, fromOrigin: string, toOrigin: string): Headers {
@@ -172,8 +292,16 @@ function resolveRedirectLocation(location: string, currentUrl: URL): string {
  */
 export async function guardedFetch(url: string, init?: RequestInit): Promise<Response> {
 	let parsed = await assertSafeOutboundUrl(url)
+	// Enforce HTTPS for non-localhost initial URL
+	assertHttpsUnlessLocalhost(parsed)
+	// Validate headers against CRLF injection
+	assertHeadersSafe(init?.headers as Headers | Record<string, string> | [string, string][] | undefined)
+	// Validate request body size
+	assertRequestBodySize(init?.body)
+
 	let currentUrl = parsed.toString()
 	let headers = new Headers(init?.headers)
+	const initialProtocol = parsed.protocol
 
 	const { redirect: _ignored, ...restInit } = init ?? {}
 
@@ -190,13 +318,28 @@ export async function guardedFetch(url: string, init?: RequestInit): Promise<Res
 
 		const location = resp.headers.get("location")!
 		const redirectUrl = resolveRedirectLocation(location, new URL(currentUrl))
+		const prevUrl = new URL(currentUrl)
 
-		// Validate the redirect target.
+		// Validate the redirect target (DNS + IP + hostname).
 		parsed = await assertSafeOutboundUrl(redirectUrl)
+
+		// Prevent HTTPS → HTTP downgrade
+		if (initialProtocol === "https:" && parsed.protocol === "http:") {
+			const h = parsed.hostname
+			if (h !== "localhost" && h !== "127.0.0.1" && h !== "[::1]" && h !== "::1") {
+				throw new Error(
+					`HTTPS downgrade blocked: redirect from ${prevUrl.hostname} (HTTPS) to ${parsed.hostname} (HTTP)`,
+				)
+			}
+		}
+
+		// Same-domain redirect check
+		assertSameDomainRedirect(prevUrl, parsed)
+
 		const newOrigin = parsed.origin
 
 		// Strip sensitive headers on cross-origin redirects.
-		const oldOrigin = new URL(currentUrl).origin
+		const oldOrigin = prevUrl.origin
 		headers = stripSensitiveHeadersForCrossOrigin(headers, oldOrigin, newOrigin)
 
 		currentUrl = parsed.toString()

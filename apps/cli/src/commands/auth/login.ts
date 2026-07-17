@@ -1,10 +1,10 @@
 import http from "http"
 import { randomBytes } from "crypto"
-import net from "net"
 import { exec } from "child_process"
 
 import { AUTH_BASE_URL } from "@/types/index.js"
 import { saveToken } from "@/lib/storage/index.js"
+import { isTokenValid } from "@/lib/auth/token.js"
 
 export interface LoginOptions {
 	timeout?: number
@@ -22,75 +22,206 @@ export type LoginResult =
 	  }
 
 const LOCALHOST = "127.0.0.1"
+const MAX_URL_LENGTH = 4096
+const MAX_TOKEN_LENGTH = 4096
+const CALLBACK_PATH = "/callback"
+
+interface Deferred<T> {
+	promise: Promise<T>
+	resolve: (value: T) => void
+	reject: (error: Error) => void
+}
+
+function createDeferred<T>(): Deferred<T> {
+	let resolve!: (value: T) => void
+	let reject!: (error: Error) => void
+	const promise = new Promise<T>((res, rej) => {
+		resolve = res
+		reject = rej
+	})
+	return { promise, resolve, reject }
+}
+
+function isJwtFormat(token: string): boolean {
+	const parts = token.split(".")
+	if (parts.length !== 3) return false
+	return parts.every((part) => part.length > 0 && /^[A-Za-z0-9_-]+$/.test(part))
+}
 
 export async function login({ timeout = 5 * 60 * 1000, verbose = false }: LoginOptions = {}): Promise<LoginResult> {
 	const state = randomBytes(16).toString("hex")
-	const port = await getAvailablePort()
-	const host = `http://${LOCALHOST}:${port}`
 
 	if (verbose) {
-		console.log(`[Auth] Starting local callback server on port ${port}`)
+		console.log("[Auth] Starting local callback server...")
 	}
 
-	// Create promise that will be resolved when we receive the callback.
-	const tokenPromise = new Promise<{ token: string; state: string }>((resolve, reject) => {
-		const server = http.createServer((req, res) => {
-			const url = new URL(req.url!, host)
+	const tokenDeferred = createDeferred<{ token: string; state: string }>()
 
-			if (url.pathname === "/callback") {
-				const receivedState = url.searchParams.get("state")
-				const token = url.searchParams.get("token")
-				const error = url.searchParams.get("error")
+	let serverPort = 0
+	let timeoutId: ReturnType<typeof setTimeout> | undefined
+	let settled = false
 
-				if (error) {
-					const errorUrl = new URL(`${AUTH_BASE_URL}/cli/sign-in?error=error-in-callback`)
-					errorUrl.searchParams.set("message", error)
-					res.writeHead(302, { Location: errorUrl.toString() })
-					res.end(() => {
-						server.close()
-						reject(new Error(error))
-					})
-				} else if (!token) {
-					const errorUrl = new URL(`${AUTH_BASE_URL}/cli/sign-in?error=missing-token`)
-					errorUrl.searchParams.set("message", "Missing token in callback")
-					res.writeHead(302, { Location: errorUrl.toString() })
-					res.end(() => {
-						server.close()
-						reject(new Error("Missing token in callback"))
-					})
-				} else if (receivedState !== state) {
-					const errorUrl = new URL(`${AUTH_BASE_URL}/cli/sign-in?error=invalid-state-parameter`)
-					errorUrl.searchParams.set("message", "Invalid state parameter")
-					res.writeHead(302, { Location: errorUrl.toString() })
-					res.end(() => {
-						server.close()
-						reject(new Error("Invalid state parameter"))
-					})
-				} else {
-					res.writeHead(302, { Location: `${AUTH_BASE_URL}/cli/sign-in?success=true` })
-					res.end(() => {
-						server.close()
-						resolve({ token, state: receivedState })
-					})
-				}
-			} else {
-				res.writeHead(404, { "Content-Type": "text/plain" })
-				res.end("Not found")
-			}
-		})
+	const server = http.createServer((req, res) => {
+		const reqHost = `http://${LOCALHOST}:${serverPort}`
 
-		server.listen(port, LOCALHOST)
+		if (req.method !== "GET") {
+			res.writeHead(405, { "Content-Type": "text/plain", Allow: "GET" })
+			res.end("Method Not Allowed")
+			return
+		}
 
-		const timeoutId = setTimeout(() => {
-			server.close()
-			reject(new Error("Authentication timed out"))
-		}, timeout)
+		const rawUrl = req.url ?? ""
+		if (rawUrl.length > MAX_URL_LENGTH) {
+			res.writeHead(414, { "Content-Type": "text/plain" })
+			res.end("URI Too Long")
+			return
+		}
 
-		server.on("close", () => {
-			clearTimeout(timeoutId)
+		let url: URL
+		try {
+			url = new URL(rawUrl, reqHost)
+		} catch {
+			res.writeHead(400, { "Content-Type": "text/plain" })
+			res.end("Bad request")
+			return
+		}
+
+		if (url.pathname !== CALLBACK_PATH) {
+			res.writeHead(404, { "Content-Type": "text/plain" })
+			res.end("Not found")
+			return
+		}
+
+		if (settled) {
+			res.writeHead(409, { "Content-Type": "text/plain" })
+			res.end("Callback already processed")
+			return
+		}
+
+		const receivedState = url.searchParams.get("state")
+		const token = url.searchParams.get("token")
+		const error = url.searchParams.get("error")
+
+		res.setHeader("Connection", "close")
+
+		if (error) {
+			settled = true
+			const safeError = sanitizeForUrl(error)
+			const errorUrl = new URL(`${AUTH_BASE_URL}/cli/sign-in?error=error-in-callback`)
+			errorUrl.searchParams.set("message", safeError)
+			res.writeHead(302, { Location: errorUrl.toString() })
+			res.end(() => {
+				closeServer()
+				tokenDeferred.reject(new Error("Authentication error from provider"))
+			})
+			return
+		}
+
+		if (!token) {
+			settled = true
+			const errorUrl = new URL(`${AUTH_BASE_URL}/cli/sign-in?error=missing-token`)
+			res.writeHead(302, { Location: errorUrl.toString() })
+			res.end(() => {
+				closeServer()
+				tokenDeferred.reject(new Error("Missing token in callback"))
+			})
+			return
+		}
+
+		if (token.length > MAX_TOKEN_LENGTH) {
+			settled = true
+			const errorUrl = new URL(`${AUTH_BASE_URL}/cli/sign-in?error=token-too-long`)
+			res.writeHead(302, { Location: errorUrl.toString() })
+			res.end(() => {
+				closeServer()
+				tokenDeferred.reject(new Error("Token exceeds maximum length"))
+			})
+			return
+		}
+
+		if (!isJwtFormat(token)) {
+			settled = true
+			const errorUrl = new URL(`${AUTH_BASE_URL}/cli/sign-in?error=invalid-token-format`)
+			res.writeHead(302, { Location: errorUrl.toString() })
+			res.end(() => {
+				closeServer()
+				tokenDeferred.reject(new Error("Invalid token format"))
+			})
+			return
+		}
+
+		if (!isTokenValid(token)) {
+			settled = true
+			const errorUrl = new URL(`${AUTH_BASE_URL}/cli/sign-in?error=invalid-token`)
+			res.writeHead(302, { Location: errorUrl.toString() })
+			res.end(() => {
+				closeServer()
+				tokenDeferred.reject(new Error("Token validation failed"))
+			})
+			return
+		}
+
+		if (receivedState !== state) {
+			settled = true
+			const errorUrl = new URL(`${AUTH_BASE_URL}/cli/sign-in?error=invalid-state-parameter`)
+			res.writeHead(302, { Location: errorUrl.toString() })
+			res.end(() => {
+				closeServer()
+				tokenDeferred.reject(new Error("Invalid state parameter"))
+			})
+			return
+		}
+
+		settled = true
+		res.writeHead(302, { Location: `${AUTH_BASE_URL}/cli/sign-in?success=true` })
+		res.end(() => {
+			closeServer()
+			tokenDeferred.resolve({ token, state: receivedState! })
 		})
 	})
 
+	function closeServer(): void {
+		if (timeoutId) {
+			clearTimeout(timeoutId)
+			timeoutId = undefined
+		}
+		server.close()
+	}
+
+	server.on("close", () => {
+		if (timeoutId) {
+			clearTimeout(timeoutId)
+			timeoutId = undefined
+		}
+	})
+
+	server.on("error", (err: NodeJS.ErrnoException) => {
+		if (timeoutId) {
+			clearTimeout(timeoutId)
+			timeoutId = undefined
+		}
+		tokenDeferred.reject(err)
+	})
+
+	await new Promise<void>((resolve, reject) => {
+		server.once("listening", () => {
+			const addr = server.address()
+			if (addr && typeof addr === "object") {
+				serverPort = addr.port
+			}
+			timeoutId = setTimeout(() => {
+				closeServer()
+				if (!settled) {
+					tokenDeferred.reject(new Error("Authentication timed out"))
+				}
+			}, timeout)
+			resolve()
+		})
+		server.once("error", reject)
+		server.listen(0, LOCALHOST)
+	})
+
+	const host = `http://${LOCALHOST}:${serverPort}`
 	const authUrl = new URL(`${AUTH_BASE_URL}/cli/sign-in`)
 	authUrl.searchParams.set("state", state)
 	authUrl.searchParams.set("callback", `${host}/callback`)
@@ -109,7 +240,7 @@ export async function login({ timeout = 5 * 60 * 1000, verbose = false }: LoginO
 	}
 
 	try {
-		const { token } = await tokenPromise
+		const { token } = await tokenDeferred.promise
 		await saveToken(token)
 		console.log("✓ Successfully authenticated!")
 		return { success: true, token }
@@ -120,32 +251,8 @@ export async function login({ timeout = 5 * 60 * 1000, verbose = false }: LoginO
 	}
 }
 
-async function getAvailablePort(startPort = 49152, endPort = 65535): Promise<number> {
-	return new Promise((resolve, reject) => {
-		const server = net.createServer()
-		let port = startPort
-
-		const tryPort = () => {
-			server.once("error", (err: NodeJS.ErrnoException) => {
-				if (err.code === "EADDRINUSE" && port < endPort) {
-					port++
-					tryPort()
-				} else {
-					reject(err)
-				}
-			})
-
-			server.once("listening", () => {
-				server.close(() => {
-					resolve(port)
-				})
-			})
-
-			server.listen(port, LOCALHOST)
-		}
-
-		tryPort()
-	})
+function sanitizeForUrl(value: string): string {
+	return value.replace(/[^a-zA-Z0-9 _.-]/g, "").slice(0, 200)
 }
 
 function openBrowser(url: string): Promise<void> {
@@ -161,7 +268,6 @@ function openBrowser(url: string): Promise<void> {
 				command = `start "" "${url}"`
 				break
 			default:
-				// Linux and other Unix-like systems.
 				command = `xdg-open "${url}"`
 				break
 		}

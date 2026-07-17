@@ -3,17 +3,22 @@ import postgres from "postgres"
 
 import * as schema from "./schema"
 
-const pgClient = postgres(process.env.DATABASE_URL!, { prepare: false })
+const pgClient = process.env.DATABASE_URL
+	? postgres(process.env.DATABASE_URL, { prepare: false })
+	: postgres("postgresql://unused:unused@localhost:1/unused", { prepare: false })
 const client = drizzle({ client: pgClient, schema })
 
 let testDb: typeof client | undefined = undefined
 
 if (process.env.NODE_ENV === "test") {
-	if (!process.env.DATABASE_URL!.includes("test") || !process.env.DATABASE_URL!.includes("localhost")) {
+	if (!process.env.DATABASE_URL) {
+		// DATABASE_URL not set — skip test database connection
+		console.warn("[db] DATABASE_URL not set, skipping test database connection")
+	} else if (!process.env.DATABASE_URL.includes("test") || !process.env.DATABASE_URL.includes("localhost")) {
 		throw new Error("DATABASE_URL is not a test database")
+	} else {
+		testDb = client
 	}
-
-	testDb = client
 }
 
 let _productionPgClient: ReturnType<typeof postgres> | undefined = undefined

@@ -4,6 +4,7 @@
 	"type": "module",
 	"scripts": {
 		"lint": "eslint src --ext=ts,tsx --max-warnings=0",
+		"check:server-action-guards": "tsx scripts/scan-server-action-guards.ts",
 		"check-types": "tsc -b",
 		"dev": "scripts/check-services.sh && next dev -p 3446",
 		"format": "prettier --write src",
@@ -58,6 +59,7 @@
 		"@types/react": "^18.3.23",
 		"@types/react-dom": "^18.3.5",
 		"tailwindcss": "^4",
+		"tsx": "^4.19.0",
 		"vitest": "^4.1.8"
 	}
 }
