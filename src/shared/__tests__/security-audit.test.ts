@@ -35,8 +35,8 @@ describe("security-audit", () => {
 			})
 
 			expect(logger.info).toHaveBeenCalledTimes(1)
-			const logged = (logger.info as ReturnType<typeof vi.fn>).mock.calls[0]
-			const parsed = JSON.parse(logged[1])
+			const logged = (logger.info as ReturnType<typeof vi.fn>).mock.calls[0]!
+			const parsed = JSON.parse(logged[1]!)
 			expect(parsed.action).toBe("test.action")
 			expect(parsed.result).toBe("allowed")
 			expect(parsed.ts).toBeTypeOf("number")
@@ -52,7 +52,7 @@ describe("security-audit", () => {
 				requestId: "req-abc",
 			})
 
-			const parsed = JSON.parse((logger.warn as ReturnType<typeof vi.fn>).mock.calls[0][1])
+			const parsed = JSON.parse((logger.warn as ReturnType<typeof vi.fn>).mock.calls[0]![1]!)
 			expect(parsed.ts).toBe(12345)
 			expect(parsed.rid).toBe("req-abc")
 		})
@@ -93,7 +93,7 @@ describe("security-audit", () => {
 			})
 
 			expect(sink).toHaveBeenCalledTimes(1)
-			const event: SecurityAuditEvent = sink.mock.calls[0][0]
+			const event: SecurityAuditEvent = sink.mock.calls[0]![0]!
 			expect(event.action).toBe("test.action")
 			expect(event.result).toBe("allowed")
 			expect(event.requestId).toBeTypeOf("string")
@@ -138,7 +138,7 @@ describe("security-audit", () => {
 				reason: "hash_mismatch",
 			})
 
-			const parsed = JSON.parse((logger.warn as ReturnType<typeof vi.fn>).mock.calls[0][1])
+			const parsed = JSON.parse((logger.warn as ReturnType<typeof vi.fn>).mock.calls[0]![1]!)
 			expect(parsed.action).toBe("file.delete")
 			expect(parsed.actor).toBe("user-123")
 			expect(parsed.resource).toBe("/path/to/file.cj")
@@ -152,7 +152,7 @@ describe("security-audit", () => {
 				result: "allowed",
 			})
 
-			const parsed = JSON.parse((logger.info as ReturnType<typeof vi.fn>).mock.calls[0][1])
+			const parsed = JSON.parse((logger.info as ReturnType<typeof vi.fn>).mock.calls[0]![1]!)
 			expect(parsed.actor).toBe("unknown")
 		})
 	})
