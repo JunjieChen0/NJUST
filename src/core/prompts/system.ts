@@ -94,7 +94,10 @@ export function deriveCangjieContextTokenBudgetFromContextWindow(contextWindow: 
 	if (contextWindow >= CONTEXT_WINDOW_TIER_64K) return CANGJIE_BUDGET_TIER_64K
 	if (contextWindow >= CONTEXT_WINDOW_TIER_32K) return CANGJIE_BUDGET_TIER_32K
 	if (contextWindow >= CONTEXT_WINDOW_TIER_16K) return CANGJIE_BUDGET_TIER_16K
-	return Math.max(CANGJIE_BUDGET_MIN_FLOOR, Math.min(fallback, Math.floor(contextWindow * CANGJIE_BUDGET_SCALE_FACTOR)))
+	return Math.max(
+		CANGJIE_BUDGET_MIN_FLOOR,
+		Math.min(fallback, Math.floor(contextWindow * CANGJIE_BUDGET_SCALE_FACTOR)),
+	)
 }
 
 /**
@@ -267,7 +270,10 @@ HOW TO USE:
 }
 
 /** Resolve Cangjie context token budget and generate the context section. */
-async function buildCangjieContext(cfg: SystemPromptConfig, isFollowupTurn: boolean): Promise<{
+async function buildCangjieContext(
+	cfg: SystemPromptConfig,
+	isFollowupTurn: boolean,
+): Promise<{
 	cangjieContextSection: string | undefined
 	multiFileContextSection: string
 }> {
@@ -279,7 +285,10 @@ async function buildCangjieContext(cfg: SystemPromptConfig, isFollowupTurn: bool
 			((mode === "ask" || mode === "architect") &&
 				detectCangjieRelevanceForAuxiliaryModes(cwd, settings?.lastUserMessageForCangjieHint)))
 	if (trimCangjieBlockOnFollowup) {
-		cangjieTokenBudget = Math.max(CANGJIE_BUDGET_MIN_FLOOR, Math.floor(cangjieTokenBudget * CANGJIE_FOLLOWUP_COMPRESSION_RATIO))
+		cangjieTokenBudget = Math.max(
+			CANGJIE_BUDGET_MIN_FLOOR,
+			Math.floor(cangjieTokenBudget * CANGJIE_FOLLOWUP_COMPRESSION_RATIO),
+		)
 	}
 	setCangjiePromptServices(cfg.cangjieServices ?? new CangjiePromptServices())
 	const cangjieContextSection = await getCangjieContextSection(
@@ -370,10 +379,7 @@ async function buildSectionEntries(
 }
 
 /** Apply token-budget trimming and assemble static + dynamic parts. */
-function assembleAndTrimPrompt(
-	sectionEntries: SectionEntry[],
-	contextWindow: number | undefined,
-): SystemPromptParts {
+function assembleAndTrimPrompt(sectionEntries: SectionEntry[], contextWindow: number | undefined): SystemPromptParts {
 	const budget = derivePromptTokenBudget(contextWindow)
 	const maxTokens = budget?.systemPromptMaxTokens ?? Infinity
 
@@ -440,16 +446,7 @@ function assembleAndTrimPrompt(
 }
 
 async function generatePromptImpl(cfg: SystemPromptConfig): Promise<SystemPromptParts> {
-	const {
-		context,
-		cwd,
-		mode,
-		mcpHub,
-		promptComponent,
-		customModeConfigs,
-		settings,
-		skillsManager,
-	} = cfg
+	const { context, cwd, mode, mcpHub, promptComponent, customModeConfigs, settings, skillsManager } = cfg
 	if (!context) {
 		throw new Error("Extension context is required for generating system prompt")
 	}
@@ -463,7 +460,7 @@ async function generatePromptImpl(cfg: SystemPromptConfig): Promise<SystemPrompt
 		effectiveBaseInstructions = filterCangjieSkillRoutingRows(baseInstructions, discovered)
 	}
 	const hasMcpGroup = modeConfig!.groups.some((groupEntry) => getGroupName(groupEntry) === "mcp")
-	const hasMcpServers = mcpHub && mcpHub.getServers().length > 0
+	const hasMcpServers = !!(mcpHub && mcpHub.getServers().length > 0)
 	const shouldIncludeMcp = hasMcpGroup && hasMcpServers
 
 	CodeIndexManager.getInstance(context, cwd)

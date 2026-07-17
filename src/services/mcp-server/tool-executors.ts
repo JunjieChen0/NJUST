@@ -266,7 +266,8 @@ function truncateByUtf8Bytes(str: string, maxBytes: number): string {
 	// Find last newline before the byte limit for clean truncation
 	let cutPoint = maxBytes
 	for (let i = maxBytes; i > Math.max(0, maxBytes - 200); i--) {
-		if (buf[i] === 0x0a) { // newline
+		if (buf[i] === 0x0a) {
+			// newline
 			cutPoint = i
 			break
 		}
@@ -489,7 +490,8 @@ export async function execListFiles(
 		if (granted < outputBytes) {
 			const truncated = output.slice(0, granted)
 			const lastNewline = truncated.lastIndexOf("\n")
-			output = (lastNewline > 0 ? truncated.slice(0, lastNewline) : truncated) +
+			output =
+				(lastNewline > 0 ? truncated.slice(0, lastNewline) : truncated) +
 				"\n\n[Resource limit: listing truncated]"
 		}
 	}
@@ -524,7 +526,8 @@ export async function execSearchFiles(
 		if (granted < resultBytes) {
 			const truncated = result.slice(0, granted)
 			const lastNewline = truncated.lastIndexOf("\n")
-			result = (lastNewline > 0 ? truncated.slice(0, lastNewline) : truncated) +
+			result =
+				(lastNewline > 0 ? truncated.slice(0, lastNewline) : truncated) +
 				"\n\n[Resource limit: search results truncated]"
 		}
 	}
@@ -600,9 +603,7 @@ export async function execCommand(
 			result: "denied",
 			reason: "env_injection_detected",
 		})
-		throw new Error(
-			`Environment variable injection detected: 'env VAR=val cmd' is not allowed in MCP context`,
-		)
+		throw new Error(`Environment variable injection detected: 'env VAR=val cmd' is not allowed in MCP context`)
 	}
 
 	// Use the full command decision logic that properly handles:

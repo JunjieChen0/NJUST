@@ -386,9 +386,9 @@ export function buildCompileErrorCorpusSearch(
 			.sort((a, b) => b.score - a.score)
 			.slice(0, CORPUS_TOP_SNIPPET_COUNT)
 			.map((x) => x.hit)
-		
+
 		if (top.length === 0) return null
-		
+
 		let used = 0
 		const snippets: string[] = []
 		for (const h of top) {
