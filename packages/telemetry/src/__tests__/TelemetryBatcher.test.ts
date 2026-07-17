@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { TelemetryBatcher } from "../TelemetryBatcher.js"
-import type { TelemetryLogger, LogEntry } from "../TelemetryLogger.js"
+import type { TelemetryLogger } from "../TelemetryLogger.js"
 
 function createMockLogger(): TelemetryLogger {
 	return {
