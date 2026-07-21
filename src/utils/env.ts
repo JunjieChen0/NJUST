@@ -53,7 +53,7 @@ const SENSITIVE_ENV_PATTERNS = [
 	/^NJUST_.*_(KEY|SECRET|TOKEN|PASSWORD)$/i,
 ]
 
-function isSensitiveEnvKey(key: string): boolean {
+export function isSensitiveEnvKey(key: string): boolean {
 	return SENSITIVE_ENV_PATTERNS.some((p) => p.test(key))
 }
 

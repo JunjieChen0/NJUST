@@ -3,13 +3,20 @@ import { executeDeferredToolCall } from "../executeDeferredToolCall"
 import type { DeferredToolCall } from "../types"
 import type { IPathValidator, IWriteProtector } from "../interfaces/IPathAccessController"
 import { createAuthContext, type AuthContext } from "../auth-context"
+import { execCommand } from "../../mcp-server/tool-executors"
 
 vi.mock("../../mcp-server/tool-executors", () => ({
 	execReadFile: vi.fn(() => Promise.resolve("file content")),
 	execWriteFile: vi.fn(() => Promise.resolve("file written")),
 	execListFiles: vi.fn(() => Promise.resolve("file1\nfile2")),
 	execSearchFiles: vi.fn(() => Promise.resolve("search results")),
-	execCommand: vi.fn(function (_cwd: string, params: { command: string }, allowedCommands?: string[], deniedCommands?: string[]) {
+	execCommand: vi.fn(function (
+		_cwd: string,
+		params: { command: string },
+		_scope: unknown,
+		allowedCommands?: string[],
+		deniedCommands?: string[],
+	) {
 		if (allowedCommands?.length) {
 			const baseName = params.command.split(/\s+/)[0]
 			const hasWildcard = allowedCommands.some((c: string) => c.trim().toLowerCase() === "*")
@@ -56,7 +63,11 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { command: "echo test" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx, ["echo", "git"], [])
+			const result = await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				allowedCommands: ["echo", "git"],
+				deniedCommands: [],
+			})
 
 			expect(result.is_error).toBe(false)
 			expect(result.content).toBe("command executed")
@@ -69,7 +80,11 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { command: "rm file" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx, ["*"], ["rm"])
+			const result = await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				allowedCommands: ["*"],
+				deniedCommands: ["rm"],
+			})
 
 			expect(result.is_error).toBe(true)
 			expect(result.content).toContain("Command denied by policy")
@@ -82,7 +97,11 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { command: "npm install" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx, ["git", "echo"], [])
+			const result = await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				allowedCommands: ["git", "echo"],
+				deniedCommands: [],
+			})
 
 			expect(result.is_error).toBe(true)
 			expect(result.content).toContain("Command not in allowed list")
@@ -95,9 +114,33 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { command: "echo test" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, { taskId: "test-task" })
 
 			expect(result.is_error).toBe(false)
+		})
+
+		it("forwards the task instance resource scope", async () => {
+			const call: DeferredToolCall = {
+				call_id: "test-scope",
+				tool: "execute_command",
+				arguments: { command: "echo test" },
+			}
+
+			await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				resourceScopeId: "task:test-task:instance-2",
+			})
+
+			expect(execCommand).toHaveBeenLastCalledWith(
+				cwd,
+				expect.objectContaining({ command: "echo test" }),
+				expect.objectContaining({
+					taskId: "test-task",
+					resourceScopeId: "task:test-task:instance-2",
+				}),
+				undefined,
+				undefined,
+			)
 		})
 	})
 
@@ -110,7 +153,10 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { path: ".rooignore/config.json", content: "test" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx, undefined, undefined, pathValidator)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				pathValidator: pathValidator,
+			})
 
 			expect(result.is_error).toBe(true)
 			expect(result.content).toContain("Access denied by .rooignore")
@@ -124,7 +170,10 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { path: ".rooignore/config.json", diff: "test" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx, undefined, undefined, pathValidator)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				pathValidator: pathValidator,
+			})
 
 			expect(result.is_error).toBe(true)
 			expect(result.content).toContain("Access denied by .rooignore")
@@ -137,7 +186,7 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { path: "src/index.ts", content: "test" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, { taskId: "test-task" })
 
 			expect(result.is_error).toBe(false)
 		})
@@ -152,7 +201,10 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { path: ".rooignore/secret.txt" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx, undefined, undefined, pathValidator)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				pathValidator: pathValidator,
+			})
 
 			expect(result.is_error).toBe(true)
 			expect(result.content).toContain("Access denied by .rooignore")
@@ -165,7 +217,7 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { path: ".rooignore/secret.txt" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, { taskId: "test-task" })
 
 			expect(result.is_error).toBe(false)
 			expect(result.content).toBe("file content")
@@ -178,7 +230,7 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { path: "src/index.ts" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, { taskId: "test-task" })
 
 			expect(result.is_error).toBe(false)
 			expect(result.content).toBe("file content")
@@ -194,7 +246,10 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { path: ".rooignore" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx, undefined, undefined, pathValidator)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				pathValidator: pathValidator,
+			})
 
 			expect(result.is_error).toBe(true)
 			expect(result.content).toContain("Access denied by .rooignore")
@@ -207,7 +262,7 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { path: "src" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, { taskId: "test-task" })
 
 			expect(result.is_error).toBe(false)
 		})
@@ -222,7 +277,10 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { path: ".rooignore", regex: "test" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx, undefined, undefined, pathValidator)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				pathValidator: pathValidator,
+			})
 
 			expect(result.is_error).toBe(true)
 			expect(result.content).toContain("Access denied by .rooignore")
@@ -235,7 +293,7 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { path: "src", regex: "test" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, { taskId: "test-task" })
 
 			expect(result.is_error).toBe(false)
 		})
@@ -257,7 +315,10 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { command: "cat .rooignore/secret.txt" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx, undefined, undefined, pathValidator)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				pathValidator: pathValidator,
+			})
 
 			expect(result.is_error).toBe(true)
 			expect(result.content).toContain("Access denied by .rooignore")
@@ -273,7 +334,10 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { command: "echo test" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx, undefined, undefined, pathValidator)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				pathValidator: pathValidator,
+			})
 
 			expect(result.is_error).toBe(false)
 		})
@@ -289,7 +353,10 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { path: ".njust_ai/settings.json", content: "{}" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx, undefined, undefined, undefined, writeProtector)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				writeProtector: writeProtector,
+			})
 
 			expect(result.is_error).toBe(true)
 			expect(result.content).toContain("Write protected")
@@ -306,7 +373,10 @@ describe("executeDeferredToolCall security", () => {
 				arguments: { path: ".njust_ai/settings.json", diff: "test" },
 			}
 
-			const result = await executeDeferredToolCall(cwd, call, authCtx, undefined, undefined, undefined, writeProtector)
+			const result = await executeDeferredToolCall(cwd, call, authCtx, {
+				taskId: "test-task",
+				writeProtector: writeProtector,
+			})
 
 			expect(result.is_error).toBe(true)
 			expect(result.content).toContain("Write protected")

@@ -47,12 +47,14 @@ import { ChatParticipantHandler, registerLMTools } from "./chat"
 import { InlineCompletionProvider } from "./services/inline-completion/InlineCompletionProvider"
 import { resolveInlineCompletionApiHandler } from "./services/inline-completion/inlineCompletionApi"
 import { getErrorMessage } from "./shared/error-utils"
+import { SandboxExecutionService, VSCodeSandboxConfigProvider } from "./services/sandbox"
 
 import { initializeCloudAgent } from "./activate/cloudAgentInit"
 import { initializeCangjieLanguage, wireCangjieCommands, disposeCangjieLanguage } from "./activate/cangjieLanguage"
 import { setupMcpToolsServer } from "./activate/mcpToolsServer"
 import { setupDevModeWatcher } from "./activate/devModeWatcher"
 import { registerLatexCommands } from "./services/latex/latexCommands"
+import { isKnownNodeInspectorProtocolError } from "./utils/nodeInspector"
 
 /**
  * Built using https://github.com/microsoft/vscode-webview-ui-toolkit
@@ -74,6 +76,7 @@ let provider: ClineProvider | undefined
 // leaks listeners and inflates the process listener count indefinitely.
 let unhandledRejectionListener: NodeJS.UnhandledRejectionListener | undefined
 let uncaughtExceptionListener: NodeJS.UncaughtExceptionListener | undefined
+let nodeInspectorWarningLogged = false
 
 export async function activate(context: vscode.ExtensionContext) {
 	// Load environment variables from .env file
@@ -93,6 +96,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	startupProfiler.start("activate")
 	extensionContext = context
+	nodeInspectorWarningLogged = false
 	unhandledRejectionListener = (reason, _promise) => {
 		logger.error("Extension", "Unhandled promise rejection:", reason)
 		TelemetryService.reportError(
@@ -102,6 +106,14 @@ export async function activate(context: vscode.ExtensionContext) {
 	}
 	process.on("unhandledRejection", unhandledRejectionListener)
 	uncaughtExceptionListener = (error) => {
+		if (isKnownNodeInspectorProtocolError(error)) {
+			if (!nodeInspectorWarningLogged) {
+				nodeInspectorWarningLogged = true
+				logger.debug("Extension", "Ignored known Node inspector protocol error")
+			}
+			return
+		}
+
 		logger.error("Extension", "Uncaught exception:", error)
 		TelemetryService.reportError(error, TelemetryEventName.UTILITY_ERROR)
 		// Re-throw to preserve Node.js default fatal behavior.
@@ -138,9 +150,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const scan = scanGeneratedFilesForCleanup()
 			const total = scan.detached.length + scan.legacy.length
 			if (total > 0) {
-				outputChannel.appendLine(
-					t("info.cangjie_test_cleanup_scan", { total }),
-				)
+				outputChannel.appendLine(t("info.cangjie_test_cleanup_scan", { total }))
 			}
 		})
 		.catch((e) => {
@@ -175,6 +185,27 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Initialize terminal shell execution handlers.
 	TerminalRegistry.initialize()
+
+	// ── Initialize Sandbox Execution Service ──────────────────────────────────
+	const sandboxConfigProvider = new VSCodeSandboxConfigProvider()
+	const sandboxService = SandboxExecutionService.getInstance(sandboxConfigProvider)
+
+	void sandboxService
+		.initializeDocker()
+		.then((status) => {
+			logger.info("Extension", `Docker status: ${status}`)
+		})
+		.catch((e) => {
+			logger.warn("Extension", "Docker initialization failed:", e)
+		})
+
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeConfiguration(async (e) => {
+			if (e.affectsConfiguration("njust-ai.sandbox")) {
+				await sandboxService.refreshDockerBackend()
+			}
+		}),
+	)
 
 	// Get default commands from configuration.
 	const defaultCommands = vscode.workspace.getConfiguration(Package.name).get<string[]>("allowedCommands") || []
@@ -403,7 +434,6 @@ export async function deactivate() {
 	await disposeCangjieLanguage()
 
 	await McpServerManager.cleanup(extensionContext)
-	TerminalRegistry.cleanup()
 
 	// Dispose ClineProvider (releases webview, message router, services, etc.)
 	// This must run before disposing ContextProxy because the provider holds
@@ -415,6 +445,17 @@ export async function deactivate() {
 		}
 	} catch (e) {
 		logger.error("Extension", "Error disposing ClineProvider:", e)
+	}
+
+	TerminalRegistry.cleanup()
+
+	// Task and MCP scopes must finish cleanup before the singleton is reset.
+	try {
+		const sandboxService = SandboxExecutionService.getInstance()
+		await sandboxService.dispose()
+		SandboxExecutionService.resetInstance()
+	} catch (e) {
+		logger.warn("Extension", "Error cleaning up sandbox service:", e)
 	}
 
 	// Dispose ContextProxy — clears its secretRefreshInterval timer and cache.

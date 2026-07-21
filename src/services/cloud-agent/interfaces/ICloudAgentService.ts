@@ -13,6 +13,7 @@ import type { ApplyCloudWorkspaceOpsResult, CloudWorkspaceOpResult } from "../ap
 import type { ParseWorkspaceOpsResult } from "../parseWorkspaceOps"
 import type { IPathValidator, IWriteProtector } from "./IPathAccessController"
 import type { AuthContext } from "../auth-context"
+import type { DeferredToolExecutionOptions } from "../executeDeferredToolCall"
 
 /**
  * Minimal client interface exposed to core/task code.
@@ -49,10 +50,7 @@ export interface ICloudAgentService {
 		cwd: string,
 		call: DeferredToolCall,
 		authContext: AuthContext,
-		allowedCommands?: string[],
-		deniedCommands?: string[],
-		pathValidator?: IPathValidator,
-		writeProtector?: IWriteProtector,
+		options: DeferredToolExecutionOptions,
 	): Promise<DeferredToolResult>
 
 	buildCloudWorkspaceOpToolMessage(

@@ -9,6 +9,7 @@ import { t } from "../../i18n"
 /** Minimal shape of Task needed to build a cloud agent host. */
 interface CloudAgentTaskRef {
 	readonly taskId: string
+	readonly instanceId: string
 	readonly cwd: string
 	abort: boolean
 	rooIgnoreController?: ICloudAgentHost["rooIgnoreController"]
@@ -26,6 +27,7 @@ interface CloudAgentTaskRef {
 export function createCloudAgentHost(task: CloudAgentTaskRef & EventEmitter): ICloudAgentHost {
 	const host: ICloudAgentHost = {
 		taskId: task.taskId,
+		instanceId: task.instanceId,
 		cwd: task.cwd,
 		get abort() {
 			return task.abort

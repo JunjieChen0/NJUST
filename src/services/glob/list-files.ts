@@ -702,8 +702,8 @@ async function execRipgrep(rgPath: string, args: string[], limit: number): Promi
 			// Process any remaining output
 			processRipgrepOutput(true)
 
-			// Log non-zero exit codes but don't fail
-			if (code !== 0 && code !== null && code !== 143 /* SIGTERM */) {
+			// ripgrep uses exit code 1 for a successful search with no matches.
+			if (code !== 0 && code !== 1 && code !== null && code !== 143 /* SIGTERM */) {
 				logger.warn("ListFiles", `ripgrep process exited with code ${code}, returning partial results`)
 			}
 

@@ -3,6 +3,7 @@ import * as http from "http"
 import nock from "nock"
 
 import { RooToolsMcpServer } from "../RooToolsMcpServer"
+import { SandboxExecutionService } from "../../sandbox"
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -60,9 +61,7 @@ function postJson(port: number, body: string): Promise<{ status: number; body: s
 			(res) => {
 				const chunks: Buffer[] = []
 				res.on("data", (c: Buffer) => chunks.push(c))
-				res.on("end", () =>
-					resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString() }),
-				)
+				res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString() }))
 			},
 		)
 		req.on("error", reject)
@@ -85,6 +84,10 @@ function getPendingSlots(server: RooToolsMcpServer): number {
 	return (server as unknown as { pendingSlots: number }).pendingSlots
 }
 
+function getPendingSandboxCleanupSessions(server: RooToolsMcpServer): Set<string> {
+	return (server as unknown as { pendingSandboxCleanupSessions: Set<string> }).pendingSandboxCleanupSessions
+}
+
 function setPendingSlots(server: RooToolsMcpServer, value: number): void {
 	Object.defineProperty(server, "pendingSlots", { value, writable: true, configurable: true })
 }
@@ -94,7 +97,7 @@ function setPendingSlotsByIp(server: RooToolsMcpServer, value: Map<string, numbe
 }
 
 function reclaim(server: RooToolsMcpServer): void {
-	(server as unknown as { reclaimExpiredSessions: () => void }).reclaimExpiredSessions()
+	;(server as unknown as { reclaimExpiredSessions: () => void }).reclaimExpiredSessions()
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -244,6 +247,135 @@ describe("MCP Session Lifecycle", () => {
 
 		const resp = await postJson(port, INIT_BODY)
 		expect(resp.status).toBe(429)
+	})
+
+	it("rejects new sessions after shutdown admission closes", async () => {
+		Object.defineProperty(server, "stopping", { value: true, writable: true, configurable: true })
+
+		const resp = await postJson(port, INIT_BODY)
+
+		expect(resp.status).toBe(503)
+		expect(getTransports(server).size).toBe(0)
+		expect(getPendingSlots(server)).toBe(0)
+		Object.defineProperty(server, "stopping", { value: false, writable: true, configurable: true })
+	})
+
+	it("waits for session sandbox cleanup before stop resolves", async () => {
+		let resolveCleanup!: () => void
+		const cleanup = new Promise<void>((resolve) => {
+			resolveCleanup = resolve
+		})
+		const disposeTask = vi
+			.spyOn(SandboxExecutionService.getInstance(), "disposeTask")
+			.mockImplementation(() => cleanup)
+		getTransports(server).set("stop-session", makeEntry("127.0.0.1", Date.now()))
+
+		let stopped = false
+		const stopPromise = server.stop().then(() => {
+			stopped = true
+		})
+		await flushMicrotasks()
+
+		expect(disposeTask).toHaveBeenCalledWith("mcp:stop-session")
+		expect(stopped).toBe(false)
+
+		resolveCleanup()
+		await stopPromise
+		expect(stopped).toBe(true)
+		disposeTask.mockRestore()
+	})
+
+	it("does not clean the same session twice when transport close triggers cleanup", async () => {
+		const disposeTask = vi.spyOn(SandboxExecutionService.getInstance(), "disposeTask").mockResolvedValue(undefined)
+		const entry = makeEntry("127.0.0.1", Date.now())
+		entry.transport.close = vi.fn(async () => {
+			;(server as unknown as { cleanupSandboxSession: (sessionId: string) => void }).cleanupSandboxSession(
+				"dedupe-session",
+			)
+			await flushMicrotasks()
+		})
+		getTransports(server).set("dedupe-session", entry)
+
+		await server.stop()
+
+		expect(disposeTask).toHaveBeenCalledTimes(1)
+		expect(disposeTask).toHaveBeenCalledWith("mcp:dedupe-session")
+		disposeTask.mockRestore()
+	})
+
+	it("waits for cleanup that started after a session already closed", async () => {
+		let resolveCleanup!: () => void
+		const cleanup = new Promise<void>((resolve) => {
+			resolveCleanup = resolve
+		})
+		const disposeTask = vi
+			.spyOn(SandboxExecutionService.getInstance(), "disposeTask")
+			.mockImplementation(() => cleanup)
+		;(server as unknown as { cleanupSandboxSession: (sessionId: string) => Promise<void> })
+			.cleanupSandboxSession("closed-session")
+			.catch(() => {})
+
+		let stopped = false
+		const stopping = server.stop().then(() => {
+			stopped = true
+		})
+		await flushMicrotasks()
+		expect(stopped).toBe(false)
+
+		resolveCleanup()
+		await stopping
+		expect(stopped).toBe(true)
+		disposeTask.mockRestore()
+	})
+
+	it("retries a failed background session cleanup during stop", async () => {
+		const disposeTask = vi
+			.spyOn(SandboxExecutionService.getInstance(), "disposeTask")
+			.mockRejectedValueOnce(new Error("transient cleanup failure"))
+			.mockResolvedValueOnce(undefined)
+		;(
+			server as unknown as { scheduleSandboxSessionCleanup: (sessionId: string) => void }
+		).scheduleSandboxSessionCleanup("closed-failed-session")
+		await flushMicrotasks()
+
+		expect(disposeTask).toHaveBeenCalledOnce()
+		await expect(server.stop()).resolves.toBeUndefined()
+		expect(disposeTask).toHaveBeenCalledTimes(2)
+		expect(disposeTask).toHaveBeenLastCalledWith("mcp:closed-failed-session")
+		disposeTask.mockRestore()
+	})
+
+	it("retries a transient background cleanup failure while the server is running", async () => {
+		vi.useFakeTimers()
+		const disposeTask = vi
+			.spyOn(SandboxExecutionService.getInstance(), "disposeTask")
+			.mockRejectedValueOnce(new Error("transient cleanup failure"))
+			.mockResolvedValueOnce(undefined)
+		;(
+			server as unknown as { scheduleSandboxSessionCleanup: (sessionId: string) => void }
+		).scheduleSandboxSessionCleanup("background-retry")
+
+		await vi.advanceTimersByTimeAsync(0)
+		expect(disposeTask).toHaveBeenCalledOnce()
+		expect(getPendingSandboxCleanupSessions(server).has("background-retry")).toBe(true)
+
+		await vi.advanceTimersByTimeAsync(1_000)
+		expect(disposeTask).toHaveBeenCalledTimes(2)
+		expect(getPendingSandboxCleanupSessions(server).has("background-retry")).toBe(false)
+		vi.useRealTimers()
+		disposeTask.mockRestore()
+	})
+
+	it("propagates sandbox cleanup failures from stop", async () => {
+		const disposeTask = vi
+			.spyOn(SandboxExecutionService.getInstance(), "disposeTask")
+			.mockRejectedValue(new Error("container cleanup failed"))
+		getTransports(server).set("failed-cleanup", makeEntry("127.0.0.1", Date.now()))
+
+		await expect(server.stop()).rejects.toThrow("container cleanup failed")
+		expect(disposeTask).toHaveBeenCalledTimes(2)
+
+		disposeTask.mockRestore()
 	})
 
 	it("tracks session metrics: rejected on global limit", async () => {

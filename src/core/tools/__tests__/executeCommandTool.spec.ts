@@ -9,6 +9,9 @@ import { Task } from "../../task/Task"
 import { formatResponse } from "../../prompts/responses"
 import { ToolUse, AskApproval, HandleError, PushToolResult } from "../../../shared/tools"
 import { unescapeHtmlEntities } from "../../../utils/text-normalization"
+import { TerminalRegistry } from "../../../integrations/terminal/TerminalRegistry"
+import { Terminal } from "../../../integrations/terminal/Terminal"
+import { CommandTimeoutError, SandboxExecutionService } from "../../../services/sandbox"
 
 vitest.mock("@njust-ai/telemetry", () => ({
 	TelemetryService: {
@@ -96,6 +99,7 @@ describe("executeCommandTool", () => {
 		// Create mock implementations with eslint directives to handle the type issues
 		mockCline = {
 			taskId: "test-task-id",
+			instanceId: "test-instance-id",
 			ask: vitest.fn().mockResolvedValue(undefined),
 			say: vitest.fn().mockResolvedValue(undefined),
 			sayAndCreateMissingParamError: vitest.fn().mockResolvedValue("Missing parameter error"),
@@ -122,6 +126,7 @@ describe("executeCommandTool", () => {
 			},
 			lastMessageTs: Date.now(),
 			cwd: "/test/workspace",
+			supersedePendingAsk: vitest.fn(),
 		}
 
 		mockAskApproval = vitest.fn().mockResolvedValue(true)
@@ -149,6 +154,7 @@ describe("executeCommandTool", () => {
 	})
 
 	afterEach(() => {
+		vitest.useRealTimers()
 		process.env.NJUST_AI_CLI_RUNTIME = originalCliRuntime
 	})
 
@@ -316,6 +322,433 @@ describe("executeCommandTool", () => {
 		it("should honor model timeout outside CLI runtime", () => {
 			delete process.env.NJUST_AI_CLI_RUNTIME
 			expect(executeCommandModule.resolveAgentTimeoutMs(30)).toBe(30_000)
+		})
+
+		it("does not impose a sandbox cap when commandExecutionTimeout is 0 (user disabled timeout)", async () => {
+			vitest.useFakeTimers()
+			const abort = vitest.fn()
+			const continueProcess = vitest.fn()
+			const processPromise = new Promise<void>(() => {}) as Promise<void> & {
+				abort: () => void
+				continue: () => void
+			}
+			processPromise.abort = abort
+			processPromise.continue = continueProcess
+			const terminal = {
+				runCommand: vitest.fn().mockReturnValue(processPromise),
+				getCurrentWorkingDirectory: vitest.fn().mockReturnValue("/test/workspace"),
+			}
+			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
+			mockCline.supersedePendingAsk = vitest.fn()
+
+			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+				executionId: "background-timeout",
+				command: "long-running-command",
+				agentTimeout: 10,
+				commandExecutionTimeout: 0,
+			})
+
+			await vitest.advanceTimersByTimeAsync(10)
+			await vitest.advanceTimersByTimeAsync(50)
+			await execution
+			expect(continueProcess).toHaveBeenCalledOnce()
+			expect(abort).not.toHaveBeenCalled()
+
+			// With timeout=0, no sandbox cap applies — command runs indefinitely
+			await vitest.advanceTimersByTimeAsync(120_000)
+			expect(abort).not.toHaveBeenCalled()
+		})
+
+		it("keeps the user-configured hard timeout active after agent backgrounding", async () => {
+			vitest.useFakeTimers()
+			const abort = vitest.fn()
+			const continueProcess = vitest.fn()
+			const processPromise = new Promise<void>(() => {}) as Promise<void> & {
+				abort: () => void
+				continue: () => void
+			}
+			processPromise.abort = abort
+			processPromise.continue = continueProcess
+			const terminal = {
+				runCommand: vitest.fn().mockReturnValue(processPromise),
+				getCurrentWorkingDirectory: vitest.fn().mockReturnValue("/test/workspace"),
+			}
+			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
+
+			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+				executionId: "background-user-timeout",
+				command: "long-running-command",
+				agentTimeout: 10,
+				commandExecutionTimeout: 50,
+			})
+
+			await vitest.advanceTimersByTimeAsync(10)
+			expect(continueProcess).toHaveBeenCalledOnce()
+			expect(abort).not.toHaveBeenCalled()
+
+			await vitest.advanceTimersByTimeAsync(50)
+			await execution
+			expect(abort).toHaveBeenCalledOnce()
+			expect(mockCline.didToolFailInCurrentTurn).toBe(true)
+		})
+
+		it("does not pass agentTimeout to the Docker runner as a hard timeout", async () => {
+			vitest.useFakeTimers()
+			let finish: ((value: any) => void) | undefined
+			const run = vitest.fn(
+				() =>
+					new Promise((resolve) => {
+						finish = resolve
+					}),
+			)
+			const cancel = vitest.fn().mockResolvedValue(undefined)
+			const service = {
+				evaluatePolicyOnly: vitest.fn().mockResolvedValue("docker"),
+				run,
+				cancel,
+				getEffectiveTimeout: vitest.fn().mockReturnValue(120_000),
+			}
+			const getInstance = vitest
+				.spyOn(SandboxExecutionService, "getInstance")
+				.mockReturnValue(service as unknown as SandboxExecutionService)
+
+			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+				executionId: "docker-background",
+				command: "long-running-command",
+				agentTimeout: 10,
+				commandExecutionTimeout: 0,
+			})
+			await vitest.advanceTimersByTimeAsync(10)
+			const [, response] = await execution
+
+			expect(String(response)).toContain("still running in the Docker sandbox")
+			expect(run).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 0 }))
+			expect(cancel).not.toHaveBeenCalled()
+
+			finish?.({
+				executionId: "sandbox-exec",
+				backend: "docker",
+				exitCode: 0,
+				output: "done",
+				cancelled: false,
+				timedOut: false,
+			})
+			await vitest.runAllTimersAsync()
+			await vitest.waitFor(() => expect(mockCline.terminalProcess).toBeUndefined())
+			getInstance.mockRestore()
+		})
+
+		it("surfaces a Docker hard timeout before the agent background timeout", async () => {
+			vitest.useFakeTimers()
+			const service = {
+				evaluatePolicyOnly: vitest.fn().mockResolvedValue("docker"),
+				run: vitest.fn(
+					() =>
+						new Promise((_resolve, reject) => {
+							setTimeout(() => reject(new CommandTimeoutError(5_000)), 5_000)
+						}),
+				),
+				cancel: vitest.fn().mockResolvedValue(undefined),
+				getEffectiveTimeout: vitest.fn().mockReturnValue(5_000),
+			}
+			const getInstance = vitest
+				.spyOn(SandboxExecutionService, "getInstance")
+				.mockReturnValue(service as unknown as SandboxExecutionService)
+
+			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+				executionId: "docker-hard-timeout",
+				command: "long-running-command",
+				agentTimeout: 10_000,
+				commandExecutionTimeout: 5_000,
+			})
+			await vitest.advanceTimersByTimeAsync(5_000)
+			const [, response] = await execution
+
+			expect(String(response)).toContain("sandbox hard timeout")
+			expect(service.run).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 5_000 }))
+			expect(mockCline.didToolFailInCurrentTurn).toBe(true)
+			getInstance.mockRestore()
+		})
+
+		it("passes approval, safety, interactivity, and bypass metadata into sandbox audit", async () => {
+			mockCline.permissionRuleEngine = { getMode: vitest.fn().mockReturnValue("bypass") }
+			const unregister = vitest.fn()
+			const service = {
+				evaluatePolicyOnly: vitest.fn().mockResolvedValue("guarded-host"),
+				evaluateAndAuditExecution: vitest.fn(),
+				getEffectiveTimeout: vitest.fn().mockImplementation((requestedMs: number) => requestedMs || 120_000),
+				recordExecutionComplete: vitest.fn(),
+				registerExternalProcess: vitest.fn().mockReturnValue(unregister),
+			}
+			const getInstance = vitest
+				.spyOn(SandboxExecutionService, "getInstance")
+				.mockReturnValue(service as unknown as SandboxExecutionService)
+
+			await executeCommandTool.execute({ command: "export FOO=bar" }, mockCline as unknown as Task, {
+				askApproval: mockAskApproval as unknown as AskApproval,
+				handleError: mockHandleError as unknown as HandleError,
+				pushToolResult: mockPushToolResult as unknown as PushToolResult,
+			})
+
+			const audit = {
+				approvalResult: "bypass",
+				commandSafety: "unsafe",
+				interactive: false,
+				bypass: true,
+			}
+			expect(mockAskApproval).not.toHaveBeenCalled()
+			expect(service.evaluatePolicyOnly).toHaveBeenCalledWith("local", expect.objectContaining({ audit }))
+			expect(service.evaluateAndAuditExecution).toHaveBeenCalledWith(expect.objectContaining({ audit }))
+			expect(service.registerExternalProcess).toHaveBeenCalledWith(
+				"task:test-task-id:test-instance-id",
+				expect.anything(),
+			)
+			getInstance.mockRestore()
+		})
+
+		it("aborts a registered guarded-host process when its task instance scope is disposed", async () => {
+			const service = new SandboxExecutionService()
+			vitest.spyOn(service, "evaluatePolicyOnly").mockResolvedValue("guarded-host")
+			vitest.spyOn(service, "evaluateAndAuditExecution").mockReturnValue({
+				executionId: "scoped-host-process",
+				backend: "guarded-host",
+			})
+			vitest
+				.spyOn(service, "getEffectiveTimeout")
+				.mockImplementation((requestedMs: number) => requestedMs || 120_000)
+			vitest.spyOn(service, "recordExecutionComplete").mockImplementation(() => {})
+			const registerSpy = vitest.spyOn(service, "registerExternalProcess")
+			const getInstance = vitest.spyOn(SandboxExecutionService, "getInstance").mockReturnValue(service)
+
+			let resolveProcess!: () => void
+			let terminalCallbacks: any
+			const processPromise = new Promise<void>((resolve) => {
+				resolveProcess = resolve
+			}) as any
+			processPromise.command = "long-running-command"
+			processPromise.isHot = true
+			processPromise.run = vitest.fn()
+			processPromise.continue = vitest.fn()
+			processPromise.hasUnretrievedOutput = vitest.fn().mockReturnValue(false)
+			processPromise.getUnretrievedOutput = vitest.fn().mockReturnValue("")
+			processPromise.trimRetrievedOutput = vitest.fn()
+			processPromise.abort = vitest.fn(() => {
+				void Promise.resolve(terminalCallbacks.onCompleted("", processPromise)).finally(resolveProcess)
+			})
+			const terminal = {
+				runCommand: vitest.fn((_command, callbacks) => {
+					terminalCallbacks = callbacks
+					return processPromise
+				}),
+				getCurrentWorkingDirectory: vitest.fn().mockReturnValue("/test/workspace"),
+			}
+			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
+
+			try {
+				const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+					executionId: "scoped-host-process",
+					command: "long-running-command",
+				})
+				await vitest.waitFor(() => expect(registerSpy).toHaveBeenCalled())
+
+				await service.disposeScope("task:test-task-id:test-instance-id")
+				await execution
+
+				expect(registerSpy).toHaveBeenCalledWith("task:test-task-id:test-instance-id", processPromise)
+				expect(processPromise.abort).toHaveBeenCalledOnce()
+			} finally {
+				getInstance.mockRestore()
+			}
+		})
+
+		it("records a failed audit when terminal acquisition rejects", async () => {
+			const terminalError = new Error("terminal unavailable")
+			const service = {
+				evaluatePolicyOnly: vitest.fn().mockResolvedValue("guarded-host"),
+				evaluateAndAuditExecution: vitest.fn(),
+				getEffectiveTimeout: vitest.fn().mockImplementation((requestedMs: number) => requestedMs || 120_000),
+				recordExecutionComplete: vitest.fn(),
+				registerExternalProcess: vitest.fn().mockReturnValue(vitest.fn()),
+			}
+			const getInstance = vitest
+				.spyOn(SandboxExecutionService, "getInstance")
+				.mockReturnValue(service as unknown as SandboxExecutionService)
+			;(TerminalRegistry.getOrCreateTerminal as any).mockRejectedValueOnce(terminalError)
+
+			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+				executionId: "terminal-acquisition-error",
+				command: "echo test",
+			})
+
+			await expect(execution).rejects.toBe(terminalError)
+			const auditedRequest = service.evaluateAndAuditExecution.mock.calls[0][0]
+			expect(service.recordExecutionComplete).toHaveBeenCalledWith(
+				auditedRequest.executionId,
+				expect.objectContaining({
+					executionId: auditedRequest.executionId,
+					backend: "guarded-host",
+					cancelled: false,
+					timedOut: false,
+				}),
+				terminalError,
+			)
+			expect(service.recordExecutionComplete).toHaveBeenCalledTimes(1)
+			getInstance.mockRestore()
+		})
+
+		it("records one failed audit and rethrows when a VS Code terminal cannot be shown", async () => {
+			const showError = new Error("terminal show failed")
+			const service = {
+				evaluatePolicyOnly: vitest.fn().mockResolvedValue("guarded-host"),
+				evaluateAndAuditExecution: vitest.fn(),
+				getEffectiveTimeout: vitest.fn().mockImplementation((requestedMs: number) => requestedMs || 120_000),
+				recordExecutionComplete: vitest.fn(),
+				registerExternalProcess: vitest.fn().mockReturnValue(vitest.fn()),
+			}
+			const terminal = Object.assign(Object.create(Terminal.prototype), {
+				terminal: {
+					show: vitest.fn(() => {
+						throw showError
+					}),
+				},
+				runCommand: vitest.fn(),
+				getCurrentWorkingDirectory: vitest.fn().mockReturnValue("/test/workspace"),
+			})
+			const getInstance = vitest
+				.spyOn(SandboxExecutionService, "getInstance")
+				.mockReturnValue(service as unknown as SandboxExecutionService)
+			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
+
+			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+				executionId: "terminal-show-error",
+				command: "echo test",
+			})
+
+			await expect(execution).rejects.toBe(showError)
+			expect(service.recordExecutionComplete).toHaveBeenCalledTimes(1)
+			expect(service.recordExecutionComplete).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ backend: "guarded-host" }),
+				showError,
+			)
+			expect(terminal.runCommand).not.toHaveBeenCalled()
+			getInstance.mockRestore()
+		})
+
+		it("records one failed audit and rethrows when terminal cwd lookup fails", async () => {
+			const cwdError = new Error("terminal cwd failed")
+			const service = {
+				evaluatePolicyOnly: vitest.fn().mockResolvedValue("guarded-host"),
+				evaluateAndAuditExecution: vitest.fn(),
+				getEffectiveTimeout: vitest.fn().mockImplementation((requestedMs: number) => requestedMs || 120_000),
+				recordExecutionComplete: vitest.fn(),
+				registerExternalProcess: vitest.fn().mockReturnValue(vitest.fn()),
+			}
+			const terminal = Object.assign(Object.create(Terminal.prototype), {
+				terminal: { show: vitest.fn() },
+				runCommand: vitest.fn(),
+				getCurrentWorkingDirectory: vitest.fn(() => {
+					throw cwdError
+				}),
+			})
+			const getInstance = vitest
+				.spyOn(SandboxExecutionService, "getInstance")
+				.mockReturnValue(service as unknown as SandboxExecutionService)
+			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
+
+			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+				executionId: "terminal-cwd-error",
+				command: "echo test",
+			})
+
+			await expect(execution).rejects.toBe(cwdError)
+			expect(service.recordExecutionComplete).toHaveBeenCalledTimes(1)
+			expect(service.recordExecutionComplete).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ backend: "guarded-host" }),
+				cwdError,
+			)
+			expect(terminal.runCommand).not.toHaveBeenCalled()
+			getInstance.mockRestore()
+		})
+
+		it("records a failed audit when runCommand throws synchronously", async () => {
+			const runError = new Error("terminal launch failed")
+			const service = {
+				evaluatePolicyOnly: vitest.fn().mockResolvedValue("guarded-host"),
+				evaluateAndAuditExecution: vitest.fn(),
+				getEffectiveTimeout: vitest.fn().mockImplementation((requestedMs: number) => requestedMs || 120_000),
+				recordExecutionComplete: vitest.fn(),
+				registerExternalProcess: vitest.fn().mockReturnValue(vitest.fn()),
+			}
+			const terminal = {
+				runCommand: vitest.fn(() => {
+					throw runError
+				}),
+				getCurrentWorkingDirectory: vitest.fn().mockReturnValue("/test/workspace"),
+			}
+			const getInstance = vitest
+				.spyOn(SandboxExecutionService, "getInstance")
+				.mockReturnValue(service as unknown as SandboxExecutionService)
+			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
+
+			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+				executionId: "terminal-run-error",
+				command: "echo test",
+			})
+
+			await expect(execution).rejects.toBe(runError)
+			const auditedRequest = service.evaluateAndAuditExecution.mock.calls[0][0]
+			expect(service.recordExecutionComplete).toHaveBeenCalledWith(
+				auditedRequest.executionId,
+				expect.objectContaining({
+					executionId: auditedRequest.executionId,
+					backend: "guarded-host",
+					cancelled: false,
+					timedOut: false,
+				}),
+				runError,
+			)
+			expect(service.recordExecutionComplete).toHaveBeenCalledTimes(1)
+			getInstance.mockRestore()
+		})
+
+		it("aborts the process and records one failed audit when scope registration fails", async () => {
+			const registrationError = new Error("scope registration failed")
+			const abort = vitest.fn()
+			const processPromise = Object.assign(Promise.resolve(), { abort, continue: vitest.fn() })
+			const service = {
+				evaluatePolicyOnly: vitest.fn().mockResolvedValue("guarded-host"),
+				evaluateAndAuditExecution: vitest.fn(),
+				getEffectiveTimeout: vitest.fn().mockImplementation((requestedMs: number) => requestedMs || 120_000),
+				recordExecutionComplete: vitest.fn(),
+				registerExternalProcess: vitest.fn(() => {
+					throw registrationError
+				}),
+			}
+			const terminal = {
+				runCommand: vitest.fn().mockReturnValue(processPromise),
+				getCurrentWorkingDirectory: vitest.fn().mockReturnValue("/test/workspace"),
+			}
+			const getInstance = vitest
+				.spyOn(SandboxExecutionService, "getInstance")
+				.mockReturnValue(service as unknown as SandboxExecutionService)
+			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
+
+			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+				executionId: "terminal-registration-error",
+				command: "echo test",
+			})
+
+			await expect(execution).rejects.toBe(registrationError)
+			expect(abort).toHaveBeenCalledOnce()
+			expect(service.recordExecutionComplete).toHaveBeenCalledTimes(1)
+			expect(service.recordExecutionComplete).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ backend: "guarded-host" }),
+				registrationError,
+			)
+			getInstance.mockRestore()
 		})
 	})
 })

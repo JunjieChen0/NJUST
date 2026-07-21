@@ -101,8 +101,13 @@ export async function setupMcpToolsServer(deps: McpToolsServerDeps): Promise<voi
 				return
 			}
 			if (rooToolsMcpServer) {
-				rooToolsMcpServer.updateWorkspacePath(newPath)
-				outputChannel.appendLine(`[McpToolsServer] Workspace path updated to: ${newPath}`)
+				void rooToolsMcpServer.updateWorkspacePath(newPath).then(
+					() => outputChannel.appendLine(`[McpToolsServer] Workspace path updated to: ${newPath}`),
+					(error: unknown) =>
+						outputChannel.appendLine(
+							`[McpToolsServer] Failed to update workspace path: ${getErrorMessage(error)}`,
+						),
+				)
 			} else {
 				startMcpServer(newPath)
 			}

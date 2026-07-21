@@ -104,6 +104,8 @@ export interface TaskLifecycleHost {
 // ── Handler ──────────────────────────────────────────────────────────────
 
 export class TaskLifecycleHandler {
+	private sandboxCleanupPromise: Promise<void> | undefined
+
 	constructor(private host: TaskLifecycleHost) {}
 
 	// ── startTask ────────────────────────────────────────────────────────
@@ -427,8 +429,6 @@ export class TaskLifecycleHandler {
 
 		t.emitFinalTokenUsageUpdate()
 
-		t.emit(NJUST_AIEventName.TaskAborted)
-
 		try {
 			await t.saveClineMessages()
 		} catch (error) {
@@ -444,12 +444,34 @@ export class TaskLifecycleHandler {
 		// (consumeApiStream's finally block) can observe t.abort === true and
 		// bail out before we tear down resources via dispose().
 		await Promise.resolve()
+		let sandboxCleanupError: unknown
+		try {
+			await this.cleanupSandboxScope()
+		} catch (error) {
+			sandboxCleanupError = error
+		}
+
+		// Always emit — listeners depend on this for UI state reset and parent
+		// task notification. Cleanup errors are reported via telemetry, not by
+		// suppressing the event.
+		t.emit(NJUST_AIEventName.TaskAborted)
 
 		try {
 			t.dispose()
 		} catch (error) {
 			logger.error("TaskLifecycleHandler", `Error during task ${t.taskId}.${t.instanceId} disposal:`, error)
 			TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
+		}
+
+		if (sandboxCleanupError) {
+			// Do NOT rethrow — callers must not be blocked by cleanup failures.
+			// The task is already disposed; the periodic reaper handles residual containers.
+			logger.error(
+				"TaskLifecycleHandler",
+				`Sandbox cleanup failed during abort for task ${t.taskId}.${t.instanceId}:`,
+				sandboxCleanupError,
+			)
+			TelemetryService.reportError(sandboxCleanupError, TelemetryEventName.TASK_LIFECYCLE_ERROR)
 		}
 	}
 
@@ -519,6 +541,8 @@ export class TaskLifecycleHandler {
 				TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
 			})
 
+		void this.cleanupSandboxScope()
+
 		void getTaskDirectoryPath(t.globalStoragePath, t.taskId)
 			.then((taskDir: string) => OutputInterceptor.cleanup(path.join(taskDir, "command-output")))
 			.catch((error: unknown) => {
@@ -544,5 +568,24 @@ export class TaskLifecycleHandler {
 				})
 			}
 		})
+	}
+
+	private cleanupSandboxScope(): Promise<void> {
+		if (!this.sandboxCleanupPromise) {
+			const t = this.host
+			const cleanup = import("../../services/sandbox").then(
+				({ SandboxExecutionService, createTaskResourceScopeId }) =>
+					SandboxExecutionService.getInstance().disposeScope(
+						createTaskResourceScopeId(t.taskId, t.instanceId),
+					),
+			)
+			this.sandboxCleanupPromise = cleanup
+			void cleanup.catch((error: unknown) => {
+				if (this.sandboxCleanupPromise === cleanup) this.sandboxCleanupPromise = undefined
+				logger.error("TaskLifecycleHandler", "Error disposing sandbox scope:", error)
+				TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
+			})
+		}
+		return this.sandboxCleanupPromise
 	}
 }

@@ -76,6 +76,7 @@ export function createTestProvider(
 		log: vi.fn(),
 		getState: vi.fn().mockResolvedValue({}),
 		getMcpHub: vi.fn().mockReturnValue(undefined),
+		getMemoryManager: vi.fn().mockReturnValue(undefined),
 		getSkillsManager: vi.fn().mockReturnValue(undefined),
 		delegateParentAndOpenChild: vi.fn().mockResolvedValue({} as any),
 		setMode: vi.fn().mockResolvedValue(undefined),

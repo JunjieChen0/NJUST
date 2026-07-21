@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import * as path from "path"
 import * as childProcess from "child_process"
 import { listFiles } from "../list-files"
+import { logger } from "../../../shared/logger"
 
 vi.mock("child_process")
 vi.mock("fs")
@@ -162,6 +163,61 @@ describe("list-files symlink support", () => {
 		// On Unix, it would be /test/dir
 		// So we just check that it ends with the expected segments
 		expect(lastArg).toMatch(/[/\\]test[/\\]dir$/)
+	})
+
+	it("does not warn when ripgrep exits with code 1 and no matches", async () => {
+		const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined)
+		const mockSpawn = vi.mocked(childProcess.spawn)
+		const mockProcess = {
+			stdout: { on: vi.fn() },
+			stderr: { on: vi.fn() },
+			on: vi.fn(function (event, callback) {
+				if (event === "close") {
+					setTimeout(() => callback(1), 0)
+				}
+			}),
+			kill: vi.fn(),
+		}
+		mockSpawn.mockReturnValue(mockProcess as any)
+
+		try {
+			const [files] = await listFiles("/test/empty", false, 100)
+
+			expect(files).toEqual([])
+			expect(warnSpy).not.toHaveBeenCalledWith(
+				"ListFiles",
+				expect.stringContaining("ripgrep process exited with code 1"),
+			)
+		} finally {
+			warnSpy.mockRestore()
+		}
+	})
+
+	it("warns when ripgrep exits with an error code", async () => {
+		const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined)
+		const mockSpawn = vi.mocked(childProcess.spawn)
+		const mockProcess = {
+			stdout: { on: vi.fn() },
+			stderr: { on: vi.fn() },
+			on: vi.fn(function (event, callback) {
+				if (event === "close") {
+					setTimeout(() => callback(2), 0)
+				}
+			}),
+			kill: vi.fn(),
+		}
+		mockSpawn.mockReturnValue(mockProcess as any)
+
+		try {
+			await listFiles("/test/error", false, 100)
+
+			expect(warnSpy).toHaveBeenCalledWith(
+				"ListFiles",
+				"ripgrep process exited with code 2, returning partial results",
+			)
+		} finally {
+			warnSpy.mockRestore()
+		}
 	})
 
 	it("should ensure first-level directories are included when limit is reached", async () => {

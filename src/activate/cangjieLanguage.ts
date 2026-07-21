@@ -5,7 +5,7 @@ import * as shellQuote from "shell-quote"
 import { TelemetryEventName } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { Package } from "../shared/package"
-import { getErrorMessage } from "../shared/error-utils"
+import { getErrorMessage, wrapAsError } from "../shared/error-utils"
 import { logger } from "../shared/logger"
 import { CangjieLspClient } from "../services/cangjie-lsp/CangjieLspClient"
 import { CangjieLspStatusBar } from "../services/cangjie-lsp/CangjieLspStatusBar"
@@ -14,7 +14,12 @@ import { CjlintDiagnostics } from "../services/cangjie-lsp/CjlintDiagnostics"
 import { CjpmTaskProvider } from "../services/cangjie-lsp/CjpmTaskProvider"
 import { registerCangjieCommands } from "../services/cangjie-lsp/cangjieCommands"
 import { checkAndPromptSdkSetup } from "../services/cangjie-lsp/CangjieSdkSetup"
-import { probeCangjieToolchain } from "../services/cangjie-lsp/cangjieToolUtils"
+import {
+	buildCangjieToolEnv,
+	invalidateCangjieToolEnvCache,
+	probeCangjieToolchain,
+	resolveCangjieToolPath,
+} from "../services/cangjie-lsp/cangjieToolUtils"
 import { CangjieCodeActionProvider } from "../services/cangjie-lsp/CangjieCodeActionProvider"
 import { CangjieDocumentSymbolProvider } from "../services/cangjie-lsp/CangjieDocumentSymbolProvider"
 import { CangjieFoldingRangeProvider } from "../services/cangjie-lsp/CangjieFoldingRangeProvider"
@@ -38,8 +43,8 @@ import { CangjieInlayHintsProvider } from "../services/cangjie-lsp/CangjieInlayH
 import { CangjieCallHierarchyProvider } from "../services/cangjie-lsp/CangjieCallHierarchyProvider"
 import { CangjieTypeHierarchyProvider } from "../services/cangjie-lsp/CangjieTypeHierarchyProvider"
 import { CangjieWorkspaceSymbolProvider } from "../services/cangjie-lsp/CangjieWorkspaceSymbolProvider"
+import { SandboxExecutionService } from "../services/sandbox"
 import { CangjieCompileGuard } from "../services/cangjie-lsp/CangjieCompileGuard"
-import { invalidateCangjieToolEnvCache } from "../services/cangjie-lsp/cangjieToolUtils"
 import { bumpCangjieL3TtlConfigCache, invalidateCangjieL3ContextCache } from "../core/prompts/sections/cangjie-context"
 import { registerCangjieRulesHotReload } from "../services/cangjie-lsp/cangjieRulesHotReload"
 import { cangjieDiagnosticModeSwitch } from "../services/cangjie-lsp/cangjieDiagnosticModeSwitch"
@@ -57,6 +62,16 @@ let cangjieSymbolIndex: CangjieSymbolIndex | undefined
 let cangjieCompileGuard: CangjieCompileGuard | undefined
 let cangjieDebugFactory: CangjieDebugAdapterFactory | undefined
 let lastCangjieToolchainGapWarn = 0
+let cangjieSandboxChannel: vscode.OutputChannel | undefined
+
+/** Lazy singleton OutputChannel for Cangjie sandbox execution output. */
+function getCangjieSandboxChannel(): vscode.OutputChannel {
+	if (!cangjieSandboxChannel) {
+		cangjieSandboxChannel = vscode.window.createOutputChannel("Cangjie Sandbox", { log: true })
+	}
+	cangjieSandboxChannel.clear()
+	return cangjieSandboxChannel
+}
 
 function scheduleCangjieToolchainGapCheck(outputChannel: vscode.OutputChannel): void {
 	void (async () => {
@@ -295,16 +310,174 @@ function registerCangjieProviders(context: vscode.ExtensionContext): void {
 	)
 }
 
-function registerCangjieTestCommands(context: vscode.ExtensionContext): void {
+type CangjieTestExecutionTarget = "host-windows" | "host-posix" | "docker-linux"
+
+function quoteCangjieTestFilter(testName: string, target: CangjieTestExecutionTarget): string {
+	if (target === "host-windows") {
+		// Detect terminal shell: PowerShell uses '' escaping, cmd.exe needs "" escaping.
+		const shellPath = (vscode.env.shell ?? "").toLowerCase()
+		if (shellPath.includes("powershell") || shellPath.includes("pwsh")) {
+			return `'${testName.replace(/'/g, "''")}'`
+		}
+		// cmd.exe or unknown Windows shell: wrap in double quotes, escape internal double quotes
+		return `"${testName.replace(/"/g, '""')}"`
+	}
+	return shellQuote.quote([testName])
+}
+
+function findCangjieTestWorkspaceFolder(preferredUri?: vscode.Uri): vscode.WorkspaceFolder | undefined {
+	const folders = vscode.workspace.workspaceFolders
+	if (!folders) return undefined
+
+	if (preferredUri) {
+		const preferredFolder = vscode.workspace.getWorkspaceFolder(preferredUri)
+		return preferredFolder && fs.existsSync(path.join(preferredFolder.uri.fsPath, "cjpm.toml"))
+			? preferredFolder
+			: undefined
+	}
+
+	const activeUri = vscode.window.activeTextEditor?.document.uri
+	const activeFolder = activeUri ? vscode.workspace.getWorkspaceFolder(activeUri) : undefined
+	if (activeFolder && fs.existsSync(path.join(activeFolder.uri.fsPath, "cjpm.toml"))) {
+		return activeFolder
+	}
+
+	return folders.find((folder) => fs.existsSync(path.join(folder.uri.fsPath, "cjpm.toml")))
+}
+
+export function registerCangjieTestCommands(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(
-		vscode.commands.registerCommand("njust-ai.cangjieRunTest", (testName: string, fileUri?: vscode.Uri) => {
-			const folder = fileUri
-				? vscode.workspace.getWorkspaceFolder(fileUri)
-				: vscode.workspace.workspaceFolders?.[0]
-			const cwd = folder?.uri.fsPath
-			const terminal = vscode.window.createTerminal({ name: "Cangjie Test", cwd })
-			terminal.show()
-			terminal.sendText(`cjpm test --filter ${shellQuote.quote([testName])}`)
+		vscode.commands.registerCommand("njust-ai.cangjieRunTest", async (testName: string, fileUri?: vscode.Uri) => {
+			const folder = findCangjieTestWorkspaceFolder(fileUri)
+			if (!folder) {
+				vscode.window.showErrorMessage("No Cangjie project with cjpm.toml is open.")
+				return
+			}
+			const cwd = folder.uri.fsPath
+			const quotedTestName = shellQuote.quote([testName])
+
+			// ── Route through SandboxExecutionService ────────────────────────────
+			const sandboxService = SandboxExecutionService.getInstance()
+			const sandboxExecId = SandboxExecutionService.generateExecutionId()
+			const resourceScopeId = `user:cangjie-test:${sandboxExecId}`
+			let outputChannel: vscode.OutputChannel | undefined
+
+			try {
+				const preflightRequest = {
+					executionId: sandboxExecId,
+					taskId: "cangjie-test",
+					resourceScopeId,
+					command: `cjpm test --filter ${quotedTestName}`,
+					workspacePath: cwd,
+					cwd,
+					timeoutMs: 120_000,
+					source: "user" as const,
+					onOutput: () => {},
+				}
+				const sandboxBackend = await sandboxService.evaluatePolicyOnly("user", preflightRequest)
+				const target: CangjieTestExecutionTarget =
+					sandboxBackend === "docker"
+						? "docker-linux"
+						: process.platform === "win32"
+							? "host-windows"
+							: "host-posix"
+				const quotedExecutionTestName = quoteCangjieTestFilter(testName, target)
+
+				if (target === "docker-linux") {
+					let executionFailed = false
+					let executionError: unknown
+					let cleanupFailed = false
+					let cleanupError: unknown
+					try {
+						outputChannel = getCangjieSandboxChannel()
+						outputChannel.show()
+						const handle = await sandboxService.run({
+							...preflightRequest,
+							command: `/usr/local/bin/cjpm test --filter ${quotedExecutionTestName}`,
+							onOutput: (chunk: { text: string }) => outputChannel?.append(chunk.text),
+						})
+						outputChannel.appendLine(`\n[Exit code: ${handle.exitCode ?? 0}]`)
+					} catch (error) {
+						executionFailed = true
+						executionError = error
+					} finally {
+						try {
+							await sandboxService.disposeScope(resourceScopeId)
+						} catch (error) {
+							cleanupFailed = true
+							cleanupError = error
+						}
+					}
+					if (executionFailed && cleanupFailed) {
+						throw new AggregateError(
+							[executionError, cleanupError],
+							`Sandbox execution failed: ${wrapAsError(executionError).message}; scope cleanup failed: ${wrapAsError(cleanupError).message}`,
+						)
+					}
+					if (executionFailed) throw executionError
+					if (cleanupFailed) throw cleanupError
+					return
+				}
+
+				const cjpmPath = resolveCangjieToolPath("cjpm", "cangjieTools.cjpmPath")
+				if (!cjpmPath) {
+					vscode.window.showErrorMessage(t("errors.cangjie_lsp.cjpm_not_found"))
+					return
+				}
+				const testCmd =
+					target === "host-windows"
+						? `& "${cjpmPath}" test --filter ${quotedExecutionTestName}`
+						: `${shellQuote.quote([cjpmPath])} test --filter ${quotedExecutionTestName}`
+				const request = { ...preflightRequest, command: testCmd, timeoutMs: 0 }
+				await sandboxService.evaluateAndAuditExecution(request)
+				let stopTracking: (() => void) | undefined
+				try {
+					const terminal = vscode.window.createTerminal({
+						name: "Cangjie Test",
+						cwd,
+						env: buildCangjieToolEnv() as Record<string, string>,
+					})
+					terminal.show()
+					stopTracking = sandboxService.trackExternalTerminalExecution(
+						sandboxExecId,
+						terminal,
+						sandboxService.getEffectiveTimeout(0, "user"),
+					)
+					terminal.sendText(testCmd)
+				} catch (error) {
+					try {
+						stopTracking?.()
+					} catch (cleanupError) {
+						logger.debug(
+							"CangjieLanguage",
+							"Failed to stop terminal tracking after startup error",
+							cleanupError,
+						)
+					}
+					try {
+						sandboxService.recordExecutionComplete(
+							sandboxExecId,
+							{
+								executionId: sandboxExecId,
+								backend: "guarded-host",
+								exitCode: undefined,
+								output: "",
+								cancelled: false,
+								timedOut: false,
+							},
+							wrapAsError(error),
+						)
+					} catch (auditError) {
+						logger.warn("CangjieLanguage", "Failed to record terminal startup failure", auditError)
+					}
+					throw error
+				}
+			} catch (error) {
+				logger.debug("CangjieLanguage", "Test execution failed", error)
+				const message = error instanceof Error ? error.message : String(error)
+				outputChannel?.appendLine(`\n[Sandbox execution failed: ${message}]`)
+				vscode.window.showErrorMessage(`Cangjie test failed: ${message}`)
+			}
 		}),
 	)
 	context.subscriptions.push(

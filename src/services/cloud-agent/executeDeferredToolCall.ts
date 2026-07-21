@@ -50,14 +50,20 @@ function expectOptionalBoolean(args: Record<string, unknown>, key: string): bool
  * Execute a single deferred tool call locally and return an MCP-shaped result.
  * Unknown tools yield an is_error result rather than throwing.
  */
+export interface DeferredToolExecutionOptions {
+	taskId: string
+	resourceScopeId?: string
+	allowedCommands?: string[]
+	deniedCommands?: string[]
+	pathValidator?: IPathValidator
+	writeProtector?: IWriteProtector
+}
+
 export async function executeDeferredToolCall(
 	cwd: string,
 	call: DeferredToolCall,
 	authContext: AuthContext,
-	allowedCommands?: string[],
-	deniedCommands?: string[],
-	pathValidator?: IPathValidator,
-	writeProtector?: IWriteProtector,
+	options: DeferredToolExecutionOptions,
 ): Promise<DeferredToolResult> {
 	try {
 		const authCheck = checkToolExecutionAuth(authContext)
@@ -82,6 +88,8 @@ export async function executeDeferredToolCall(
 		let content: string
 
 		// Helper to check path access (replaces allowRooIgnorePathAccess)
+		const { pathValidator, writeProtector, allowedCommands, deniedCommands } = options
+
 		const isPathAccessAllowed = (validator: IPathValidator | undefined, filePath: string): boolean => {
 			return !validator || validator.validateAccess(filePath)
 		}
@@ -210,6 +218,11 @@ export async function executeDeferredToolCall(
 						command,
 						cwd: expectOptionalString(args, "cwd"),
 						timeout: expectOptionalNumber(args, "timeout"),
+					},
+					{
+						source: "cloud-agent",
+						taskId: options.taskId,
+						resourceScopeId: options.resourceScopeId,
 					},
 					allowedCommands,
 					deniedCommands,

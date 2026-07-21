@@ -184,7 +184,15 @@ export class ClineProviderTaskManagement {
 
 		task.cancelCurrentRequest()
 
-		void task.abortTask()
+		try {
+			await task.abortTask()
+		} catch (error) {
+			// Sandbox cleanup may fail (Docker CLI hang, network timeout).
+			// The task is already disposed inside abortTask(); continue with
+			// abandoned marking and rehydrate logic regardless.
+			logger.error("ClineProviderTaskManagement", "cancelTask: abortTask threw during cleanup", error)
+			TelemetryService.reportError(error, TelemetryEventName.WEBVIEW_ERROR)
+		}
 
 		task.abandoned = true
 

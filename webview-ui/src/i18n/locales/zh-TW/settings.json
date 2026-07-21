@@ -34,6 +34,7 @@
 		"notifications": "通知",
 		"contextManagement": "上下文",
 		"terminal": "終端機",
+		"sandbox": "沙箱",
 		"inlineCompletion": "程式碼補全",
 		"slashCommands": "斜線命令",
 		"prompts": "提示詞",
@@ -1060,6 +1061,91 @@
 			"label": "手動觸發（說明）",
 			"description": "預設快捷鍵的文字說明；實際按鍵請在「鍵盤快捷方式」中修改。",
 			"shortcutHint": "開啟 <ShortcutLink>鍵盤快捷方式</ShortcutLink> 可自訂手動觸發命令。"
+		}
+	},
+	"sandbox": {
+		"title": "沙箱",
+		"backend": {
+			"label": "執行後端",
+			"description": "選擇代理命令的執行位置。",
+			"guardedHost": "受保護的主機（預設）",
+			"docker": "Docker 沙箱",
+			"dockerUnavailable": "Docker 無法使用。在 Docker 恢復執行前，命令將被拒絕；不會退回主機執行。"
+		},
+		"dockerStatus": {
+			"label": "Docker 狀態",
+			"available": "Docker 可用且正在執行",
+			"daemonNotRunning": "Docker 常駐程式未執行。請啟動 Docker Desktop。",
+			"notInstalled": "找不到 Docker CLI。請安裝 Docker Desktop。",
+			"checking": "正在檢查 Docker 可用性……",
+			"unknown": "Docker 狀態未知"
+		},
+		"dockerImage": {
+			"label": "Docker 映像檔",
+			"description": "沙箱容器使用的映像檔參照。",
+			"placeholder": "njust-ai/sandbox:latest"
+		},
+		"networkMode": {
+			"label": "網路模式",
+			"description": "停用網路，或使用標準 Docker bridge 網路。",
+			"none": "無網路",
+			"bridge": "Bridge"
+		},
+		"workspaceAccess": {
+			"label": "工作區存取權限",
+			"readWrite": "讀寫",
+			"readOnly": "唯讀"
+		},
+		"limits": {
+			"memory": {
+				"label": "記憶體限制（MB）",
+				"description": "範圍：{{min}}-{{max}} MB。預設：{{default}} MB。"
+			},
+			"cpu": {
+				"label": "CPU 限制（核心）",
+				"description": "範圍：{{min}}-{{max}}。預設：{{default}}。"
+			},
+			"pids": {
+				"label": "PID 限制",
+				"description": "最大程序數：{{min}}-{{max}}。預設：{{default}}。"
+			},
+			"timeout": {
+				"label": "最大逾時（秒）",
+				"description": "超過限制的命令逾時會被截斷。範圍：{{min}}-{{max}} 秒。預設：{{default}}。"
+			}
+		},
+		"taskScoped": {
+			"label": "工作結束時銷毀容器",
+			"description": "停用後，同一工作區中的工作將共用容器。"
+		},
+		"security": {
+			"title": "一律強制執行的安全限制",
+			"readOnlyRoot": "唯讀根檔案系統",
+			"dropCapabilities": "移除全部 Linux capabilities",
+			"noNewPrivileges": "禁止取得新權限",
+			"nonRoot": "非 root 使用者（1000:1000）",
+			"noDockerSocket": "不掛載 Docker socket",
+			"noPrivilegedMode": "禁止 privileged 模式",
+			"noHostNamespaces": "不使用主機網路、PID 或 IPC 命名空間",
+			"noHostEnvironment": "不繼承主機環境變數",
+			"noHostFallback": "禁止退回主機執行"
+		},
+		"actions": {
+			"pull": "提取映像檔",
+			"checkDocker": "檢查 Docker",
+			"cleanupStale": "清理過期容器"
+		},
+		"timeouts": {
+			"test": "Docker 檢查逾時，請重試。",
+			"cleanup": "容器清理逾時，請重試。",
+			"pull": "映像檔提取逾時，請檢查 Docker 後重試。"
+		},
+		"validation": {
+			"settingsInvalid": "沙箱設定包含無效值。",
+			"imageInvalid": "請輸入有效且允許使用的 Docker 映像檔參照。",
+			"numberRequired": "請輸入有限數值。",
+			"integerRequired": "請輸入整數。",
+			"range": "請輸入 {{min}} 到 {{max}} 之間的值。"
 		}
 	},
 	"webSearch": {

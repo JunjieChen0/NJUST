@@ -27,7 +27,7 @@
 		"@ai-sdk/mistral": "^3.0.19",
 		"@ai-sdk/xai": "^3.0.48",
 		"@anthropic-ai/sdk": "^0.52.0",
-		"@anthropic-ai/vertex-sdk": "^0.17.0",
+		"@anthropic-ai/vertex-sdk": "^0.19.0",
 		"@aws-sdk/client-bedrock-runtime": "^3.1047.0",
 		"@aws-sdk/credential-providers": "^3.1047.0",
 		"@google/genai": "^1.29.1",
@@ -55,7 +55,7 @@
 		"fzf": "^0.5.2",
 		"get-folder-size": "^5.0.0",
 		"global-agent": "^3.0.0",
-		"google-auth-library": "^9.15.1",
+		"google-auth-library": "^10.9.0",
 		"gray-matter": "^4.0.3",
 		"i18next": "^25.0.0",
 		"ignore": "^7.0.3",
@@ -1337,6 +1337,80 @@
 					"type": "boolean",
 					"default": false,
 					"description": "%settings.inlineCompletion.verboseLog.description%"
+				},
+				"njust-ai.sandbox.backend": {
+					"type": "string",
+					"scope": "machine",
+					"enum": [
+						"guarded-host",
+						"docker"
+					],
+					"default": "guarded-host",
+					"description": "Execution backend: 'guarded-host' runs commands on the host OS with safety layers; 'docker' runs commands inside a Docker sandbox container."
+				},
+				"njust-ai.sandbox.dockerImage": {
+					"type": "string",
+					"scope": "machine",
+					"default": "njust-ai/sandbox:latest",
+					"description": "Docker image to use for sandbox execution. Must be a valid image reference (e.g. 'njust-ai/sandbox:latest')."
+				},
+				"njust-ai.sandbox.networkMode": {
+					"type": "string",
+					"scope": "machine",
+					"enum": [
+						"none",
+						"bridge"
+					],
+					"default": "none",
+					"description": "Container network mode. 'none' disables all networking (most secure); 'bridge' allows outbound connections."
+				},
+				"njust-ai.sandbox.workspaceAccess": {
+					"type": "string",
+					"scope": "machine",
+					"enum": [
+						"read-only",
+						"read-write"
+					],
+					"default": "read-write",
+					"description": "Workspace mount access mode inside the sandbox container."
+				},
+				"njust-ai.sandbox.memoryMb": {
+					"type": "number",
+					"scope": "machine",
+					"default": 512,
+					"minimum": 64,
+					"maximum": 4096,
+					"description": "Memory limit in MB for the sandbox container. Range: 64–4096."
+				},
+				"njust-ai.sandbox.cpuLimit": {
+					"type": "number",
+					"scope": "machine",
+					"default": 1,
+					"minimum": 0.1,
+					"maximum": 8,
+					"description": "CPU limit (number of cores) for the sandbox container. Range: 0.1–8.0."
+				},
+				"njust-ai.sandbox.pidsLimit": {
+					"type": "number",
+					"scope": "machine",
+					"default": 256,
+					"minimum": 16,
+					"maximum": 4096,
+					"description": "Maximum number of processes (PIDs) allowed in the sandbox container. Range: 16–4096."
+				},
+				"njust-ai.sandbox.timeoutSeconds": {
+					"type": "number",
+					"scope": "machine",
+					"default": 120,
+					"minimum": 5,
+					"maximum": 3600,
+					"description": "Maximum command timeout in seconds. Commands requesting longer timeouts are capped to this value. Range: 5–3600."
+				},
+				"njust-ai.sandbox.taskScopedContainer": {
+					"type": "boolean",
+					"scope": "machine",
+					"default": true,
+					"description": "When true, the sandbox container is destroyed when the task ends. When false, the container persists across tasks (not recommended)."
 				}
 			}
 		}

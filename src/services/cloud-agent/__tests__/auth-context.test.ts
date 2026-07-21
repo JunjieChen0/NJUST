@@ -120,7 +120,7 @@ describe("executeDeferredToolCall auth enforcement", () => {
 		]
 
 		for (const call of tools) {
-			const result = await executeDeferredToolCall(cwd, call, ctx)
+			const result = await executeDeferredToolCall(cwd, call, ctx, { taskId: "test-task" })
 			expect(result.is_error).toBe(true)
 			expect(result.content).toContain("no authenticated Cloud Agent session")
 		}
@@ -135,7 +135,7 @@ describe("executeDeferredToolCall auth enforcement", () => {
 			arguments: { path: "test.txt" },
 		}
 
-		const result = await executeDeferredToolCall(cwd, call, ctx)
+		const result = await executeDeferredToolCall(cwd, call, ctx, { taskId: "test-task" })
 		expect(result.is_error).toBe(false)
 		expect(result.content).toBe("file content")
 	})
@@ -151,7 +151,7 @@ describe("executeDeferredToolCall auth enforcement", () => {
 			arguments: { path: "test.txt" },
 		}
 
-		await executeDeferredToolCall(cwd, call, ctx)
+		await executeDeferredToolCall(cwd, call, ctx, { taskId: "test-task" })
 		expect(mockExecReadFile).not.toHaveBeenCalled()
 	})
 
@@ -164,7 +164,7 @@ describe("executeDeferredToolCall auth enforcement", () => {
 			arguments: { path: "test.txt" },
 		}
 
-		const result = await executeDeferredToolCall(cwd, call, ctx)
+		const result = await executeDeferredToolCall(cwd, call, ctx, { taskId: "test-task" })
 		expect(result.is_error).toBe(true)
 		expect(result.content).toContain("Unknown tool")
 	})
@@ -178,7 +178,7 @@ describe("executeDeferredToolCall auth enforcement", () => {
 			arguments: { _arguments_parse_failed: true, _raw_arguments: "{invalid" },
 		}
 
-		const result = await executeDeferredToolCall(cwd, call, ctx)
+		const result = await executeDeferredToolCall(cwd, call, ctx, { taskId: "test-task" })
 		expect(result.is_error).toBe(true)
 		expect(result.content).toContain("Invalid JSON")
 	})
@@ -201,8 +201,8 @@ describe("AuthContext — concurrency isolation", () => {
 
 		// Run both concurrently
 		const [resultA, resultB] = await Promise.all([
-			executeDeferredToolCall(cwd, call, ctxA),
-			executeDeferredToolCall(cwd, call, ctxB),
+			executeDeferredToolCall(cwd, call, ctxA, { taskId: "test-task" }),
+			executeDeferredToolCall(cwd, call, ctxB, { taskId: "test-task" }),
 		])
 
 		expect(resultA.is_error).toBe(false)
@@ -227,8 +227,8 @@ describe("AuthContext — concurrency isolation", () => {
 		}
 
 		const [resultA, resultB] = await Promise.all([
-			executeDeferredToolCall(cwd, failCall, ctxA),
-			executeDeferredToolCall(cwd, okCall, ctxB),
+			executeDeferredToolCall(cwd, failCall, ctxA, { taskId: "test-task" }),
+			executeDeferredToolCall(cwd, okCall, ctxB, { taskId: "test-task" }),
 		])
 
 		expect(resultA.is_error).toBe(true)

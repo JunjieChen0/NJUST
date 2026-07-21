@@ -26,11 +26,25 @@ import {
 } from "./cangjieToolUtils"
 import { Package } from "../../shared/package"
 import { t } from "../../i18n"
+import { wrapAsError } from "../../shared/error-utils"
+import { logger } from "../../shared/logger"
 import type { CangjieLspClient } from "./CangjieLspClient"
 import { CangjieTemplateLibrary } from "./CangjieTemplateLibrary"
+import { SandboxExecutionService } from "../sandbox"
 import { CangjieProfiler } from "./CangjieProfiler"
 import { CangjieRefactoringProvider } from "./CangjieRefactoringProvider"
 import type { CangjieSymbolIndex } from "./CangjieSymbolIndex"
+
+let cangjieSandboxChannel: vscode.OutputChannel | undefined
+
+/** Lazy singleton OutputChannel for Cangjie sandbox execution output. */
+function getCangjieSandboxChannel(): vscode.OutputChannel {
+	if (!cangjieSandboxChannel) {
+		cangjieSandboxChannel = vscode.window.createOutputChannel("Cangjie Sandbox", { log: true })
+	}
+	cangjieSandboxChannel.clear()
+	return cangjieSandboxChannel
+}
 
 interface CjpmCommandDef {
 	id: string
@@ -46,9 +60,17 @@ const CJPM_COMMANDS: CjpmCommandDef[] = [
 	{ id: "njust-ai.cangjieClean", label: "Cangjie: Clean (cjpm clean)", cjpmArg: "clean" },
 ]
 
-function findCjpmRoot(): string | undefined {
+type CangjieExecutionTarget = "host-windows" | "host-posix" | "docker-linux"
+
+function findCjpmRoot(preferredUri?: vscode.Uri): string | undefined {
 	const folders = vscode.workspace.workspaceFolders
 	if (!folders) return undefined
+
+	const activeUri = preferredUri ?? vscode.window.activeTextEditor?.document.uri
+	const activeFolder = activeUri ? vscode.workspace.getWorkspaceFolder(activeUri) : undefined
+	if (activeFolder && fs.existsSync(path.join(activeFolder.uri.fsPath, "cjpm.toml"))) {
+		return activeFolder.uri.fsPath
+	}
 
 	for (const folder of folders) {
 		const tomlPath = path.join(folder.uri.fsPath, "cjpm.toml")
@@ -57,7 +79,7 @@ function findCjpmRoot(): string | undefined {
 		}
 	}
 
-	return folders[0]?.uri.fsPath
+	return undefined
 }
 
 async function reportCleanupResult(result: CleanupResult): Promise<void> {
@@ -309,36 +331,135 @@ async function runCangjieGenerateTestFile(
 	await vscode.window.showTextDocument(doc)
 }
 
-function runCjpmCommand(cjpmArg: string): void {
-	const cjpmPath = resolveCangjieToolPath("cjpm", "cangjieTools.cjpmPath")
-	if (!cjpmPath) {
-		void vscode.window
-			.showErrorMessage(t("errors.cangjie_lsp.cjpm_not_found"), t("buttons.cangjie_lsp.open_settings"))
-			.then((c) => {
-				if (c === t("buttons.cangjie_lsp.open_settings")) {
-					void vscode.commands.executeCommand(
-						"workbench.action.openSettings",
-						`${Package.name}.cangjieTools.cjpmPath`,
-					)
-				}
-			})
-		return
-	}
-
+async function runCjpmCommand(cjpmArg: string): Promise<void> {
 	const cwd = findCjpmRoot()
 	if (!cwd) {
-		vscode.window.showErrorMessage("No workspace folder open.")
+		vscode.window.showErrorMessage("No Cangjie project with cjpm.toml is open.")
 		return
 	}
 
-	const terminal = vscode.window.createTerminal({
-		name: `cjpm ${cjpmArg}`,
-		cwd,
-		env: buildCangjieToolEnv() as Record<string, string>,
-	})
-	terminal.show()
-	const cmd = process.platform === "win32" ? `& "${cjpmPath}" ${cjpmArg}` : `"${cjpmPath}" ${cjpmArg}`
-	terminal.sendText(cmd)
+	// ── Route through SandboxExecutionService (policy evaluation only) ───────
+	// Docker branch uses run() which handles full audit internally.
+	// Guarded-host branch uses terminal pipeline, so we audit separately.
+	const sandboxService = SandboxExecutionService.getInstance()
+	const sandboxExecId = SandboxExecutionService.generateExecutionId()
+	const resourceScopeId = `user:cangjie-command:${sandboxExecId}`
+	let outputChannel: vscode.OutputChannel | undefined
+
+	try {
+		const preflightRequest = {
+			executionId: sandboxExecId,
+			taskId: "cangjie-command",
+			resourceScopeId,
+			command: `cjpm ${cjpmArg}`,
+			workspacePath: cwd,
+			cwd,
+			timeoutMs: 120_000,
+			source: "user" as const,
+			onOutput: () => {},
+		}
+		const sandboxBackend = await sandboxService.evaluatePolicyOnly("user", preflightRequest)
+		const target: CangjieExecutionTarget =
+			sandboxBackend === "docker" ? "docker-linux" : process.platform === "win32" ? "host-windows" : "host-posix"
+
+		if (target === "docker-linux") {
+			let executionFailed = false
+			let executionError: unknown
+			let cleanupFailed = false
+			let cleanupError: unknown
+			try {
+				outputChannel = getCangjieSandboxChannel()
+				outputChannel.show()
+				const handle = await sandboxService.run({
+					...preflightRequest,
+					command: `/usr/local/bin/cjpm ${cjpmArg}`,
+					onOutput: (chunk: { text: string }) => outputChannel?.append(chunk.text),
+				})
+				outputChannel.appendLine(`\n[Exit code: ${handle.exitCode ?? 0}]`)
+			} catch (error) {
+				executionFailed = true
+				executionError = error
+			} finally {
+				try {
+					await sandboxService.disposeScope(resourceScopeId)
+				} catch (error) {
+					cleanupFailed = true
+					cleanupError = error
+				}
+			}
+			if (executionFailed && cleanupFailed) {
+				throw new AggregateError(
+					[executionError, cleanupError],
+					`Sandbox execution failed: ${wrapAsError(executionError).message}; scope cleanup failed: ${wrapAsError(cleanupError).message}`,
+				)
+			}
+			if (executionFailed) throw executionError
+			if (cleanupFailed) throw cleanupError
+			return
+		}
+
+		const cjpmPath = resolveCangjieToolPath("cjpm", "cangjieTools.cjpmPath")
+		if (!cjpmPath) {
+			void vscode.window
+				.showErrorMessage(t("errors.cangjie_lsp.cjpm_not_found"), t("buttons.cangjie_lsp.open_settings"))
+				.then((choice) => {
+					if (choice === t("buttons.cangjie_lsp.open_settings")) {
+						void vscode.commands.executeCommand(
+							"workbench.action.openSettings",
+							`${Package.name}.cangjieTools.cjpmPath`,
+						)
+					}
+				})
+			return
+		}
+
+		const cmd = target === "host-windows" ? `& "${cjpmPath}" ${cjpmArg}` : `"${cjpmPath}" ${cjpmArg}`
+		const request = { ...preflightRequest, command: cmd, timeoutMs: 0 }
+		await sandboxService.evaluateAndAuditExecution(request)
+		let stopTracking: (() => void) | undefined
+		try {
+			const terminal = vscode.window.createTerminal({
+				name: `cjpm ${cjpmArg}`,
+				cwd,
+				env: buildCangjieToolEnv() as Record<string, string>,
+			})
+			terminal.show()
+			stopTracking = sandboxService.trackExternalTerminalExecution(
+				sandboxExecId,
+				terminal,
+				sandboxService.getEffectiveTimeout(0, "user"),
+			)
+			terminal.sendText(cmd)
+		} catch (error) {
+			try {
+				stopTracking?.()
+			} catch (cleanupError) {
+				logger.debug("CangjieCommands", "Failed to stop terminal tracking after startup error", cleanupError)
+			}
+			try {
+				sandboxService.recordExecutionComplete(
+					sandboxExecId,
+					{
+						executionId: sandboxExecId,
+						backend: "guarded-host",
+						exitCode: undefined,
+						output: "",
+						cancelled: false,
+						timedOut: false,
+					},
+					wrapAsError(error),
+				)
+			} catch (auditError) {
+				logger.warn("CangjieCommands", "Failed to record terminal startup failure", auditError)
+			}
+			throw error
+		}
+	} catch (error) {
+		logger.debug("CangjieCommands", "Command execution failed", error)
+		const message = error instanceof Error ? error.message : String(error)
+		outputChannel?.appendLine(`\n[Sandbox execution failed: ${message}]`)
+		vscode.window.showErrorMessage(`Cangjie command failed: ${message}`)
+	}
 }
 
 export function registerCangjieCommands(
@@ -488,9 +609,10 @@ export function registerCangjieCommands(
 
 				if (deletableLegacy.length === 0) {
 					// All legacy files are outside workspace — cannot be deleted
-					const msg = nonWorkspaceLegacy > 0
-						? t("info.cangjie_lsp.legacy_all_outside_workspace", { count: nonWorkspaceLegacy })
-						: t("info.cangjie_lsp.no_tests_to_clean")
+					const msg =
+						nonWorkspaceLegacy > 0
+							? t("info.cangjie_lsp.legacy_all_outside_workspace", { count: nonWorkspaceLegacy })
+							: t("info.cangjie_lsp.no_tests_to_clean")
 					void vscode.window.showInformationMessage(msg)
 					return
 				}

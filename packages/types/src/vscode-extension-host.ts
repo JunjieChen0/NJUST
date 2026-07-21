@@ -20,6 +20,14 @@ import type { McpServer } from "./mcp.js"
 import type { ModelRecord, RouterModels } from "./model.js"
 import type { OpenAiCodexRateLimitInfo } from "./providers/openai-codex-rate-limits.js"
 import type { SkillMetadata } from "./skills.js"
+import {
+	SANDBOX_WEBVIEW_MESSAGE_TYPES,
+	type SandboxDockerStatus,
+	type SandboxExtensionMessage,
+	type SandboxSettingsUpdate,
+	type SandboxWebviewMessage,
+	sandboxWebviewMessageSchema,
+} from "./sandbox.js"
 
 export interface TaskMetricsSnapshot {
 	taskId: string
@@ -113,6 +121,7 @@ export interface ExtensionMessage {
 		| "transcriptionResult"
 		| "transcriptionError"
 		| "taskMetrics"
+		| SandboxExtensionMessage["type"]
 	text?: string
 	/** For fileContent: { path, content, error? } */
 	fileContent?: { path: string; content: string | null; error?: string }
@@ -374,6 +383,18 @@ export type ExtensionState = Pick<
 	inlineCompletionMaxLines?: number
 	inlineCompletionEnableCangjieEnhanced?: boolean
 	inlineCompletionTriggerCommand?: string
+
+	/** Mirrored from VS Code `njust-ai.sandbox.*` (workspace configuration). */
+	sandboxBackend?: SandboxSettingsUpdate["sandboxBackend"]
+	sandboxDockerImage?: SandboxSettingsUpdate["sandboxDockerImage"]
+	sandboxNetworkMode?: SandboxSettingsUpdate["sandboxNetworkMode"]
+	sandboxWorkspaceAccess?: SandboxSettingsUpdate["sandboxWorkspaceAccess"]
+	sandboxMemoryMb?: SandboxSettingsUpdate["sandboxMemoryMb"]
+	sandboxCpuLimit?: SandboxSettingsUpdate["sandboxCpuLimit"]
+	sandboxPidsLimit?: SandboxSettingsUpdate["sandboxPidsLimit"]
+	sandboxTimeoutSeconds?: SandboxSettingsUpdate["sandboxTimeoutSeconds"]
+	sandboxTaskScopedContainer?: SandboxSettingsUpdate["sandboxTaskScopedContainer"]
+	sandboxDockerStatus?: SandboxDockerStatus
 }
 
 export interface Command {
@@ -565,6 +586,7 @@ export interface WebviewMessage {
 		| "webviewError"
 		// OAuth state storage
 		| "openRouterOAuthState"
+		| SandboxWebviewMessage["type"]
 	text?: string
 	taskId?: string
 	editedMessageContent?: string
@@ -575,6 +597,8 @@ export interface WebviewMessage {
 	askResponse?: ClineAskResponse
 	apiConfiguration?: ProviderSettings
 	images?: string[]
+	/** Docker image for sandboxPullImage. */
+	image?: string
 	bool?: boolean
 	value?: number
 	stepIndex?: number
@@ -664,14 +688,15 @@ export interface WebviewMessage {
 		codebaseIndexVercelAiGatewayApiKey?: string
 		codebaseIndexOpenRouterApiKey?: string
 	}
-	updatedSettings?: NJUST_AISettings & {
-		cloudAgentServerUrl?: string
-		inlineCompletionEnabled?: boolean
-		inlineCompletionTriggerDelayMs?: number
-		inlineCompletionMaxLines?: number
-		inlineCompletionEnableCangjieEnhanced?: boolean
-		inlineCompletionTriggerCommand?: string
-	}
+	updatedSettings?: NJUST_AISettings &
+		Partial<SandboxSettingsUpdate> & {
+			cloudAgentServerUrl?: string
+			inlineCompletionEnabled?: boolean
+			inlineCompletionTriggerDelayMs?: number
+			inlineCompletionMaxLines?: number
+			inlineCompletionEnableCangjieEnhanced?: boolean
+			inlineCompletionTriggerCommand?: string
+		}
 	/** Task configuration applied via `createTask()` when starting a cloud task. */
 	taskConfiguration?: NJUST_AISettings
 	action?: string
@@ -864,6 +889,7 @@ export const WEBVIEW_MESSAGE_TYPES = [
 	"planAction",
 	"webviewError",
 	"openRouterOAuthState",
+	...SANDBOX_WEBVIEW_MESSAGE_TYPES,
 ] as const
 
 /**
@@ -874,16 +900,22 @@ export const webviewMessageTypeSchema = z.enum(WEBVIEW_MESSAGE_TYPES)
 /**
  * Runtime validator for incoming webview messages.
  *
- * Validates that `message.type` is a known value.  Uses `.passthrough()` so
- * individual handlers remain responsible for validating their own payload
- * shapes — this is the first line of defense against XSS-posted arbitrary
- * message types.
+ * Validates that `message.type` is known. Sandbox actions additionally use
+ * their strict discriminated schema; other handlers remain responsible for
+ * validating their own payload shapes.
  */
-export const webviewMessageSchema = z
+const sandboxWebviewMessageTypes = new Set<string>(SANDBOX_WEBVIEW_MESSAGE_TYPES)
+
+const nonSandboxWebviewMessageSchema = z
 	.object({
 		type: webviewMessageTypeSchema,
 	})
 	.passthrough()
+	.refine((message) => !sandboxWebviewMessageTypes.has(message.type), {
+		message: "Sandbox action messages require their validated payload",
+	})
+
+export const webviewMessageSchema = z.union([sandboxWebviewMessageSchema, nonSandboxWebviewMessageSchema])
 
 /**
  * Parse an untrusted webview message.  Returns the narrowed message on

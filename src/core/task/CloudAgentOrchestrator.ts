@@ -23,9 +23,15 @@ import { getAuditLogger } from "../../services/auditAccessor"
 import type { ICloudAgentHost } from "./interfaces/ICloudAgentHost"
 import { TaskAbortedError } from "./TaskErrors"
 import { t } from "../../i18n"
-import { createAuthContext, unauthenticatedContext, type AuthContext, type AuthTokenSource } from "../../services/cloud-agent/auth-context"
+import {
+	createAuthContext,
+	unauthenticatedContext,
+	type AuthContext,
+	type AuthTokenSource,
+} from "../../services/cloud-agent/auth-context"
 import { getDeviceToken } from "../../services/cloud-agent/deviceToken"
 import { DeferredLifecycleGuard } from "../../services/cloud-agent/DeferredLifecycleGuard"
+import { createTaskResourceScopeId } from "../../services/sandbox"
 
 export type { ICloudAgentHost } from "./interfaces/ICloudAgentHost"
 
@@ -341,15 +347,14 @@ export class CloudAgentOrchestrator {
 					}
 					continue
 				}
-				const result = await this.service.executeDeferredToolCall(
-					this.host.cwd,
-					call,
-					authContext,
-					behavior.allowedCommands,
-					behavior.deniedCommands,
-					this.host.rooIgnoreController,
-					this.host.rooProtectedController,
-				)
+				const result = await this.service.executeDeferredToolCall(this.host.cwd, call, authContext, {
+					taskId: this.host.taskId,
+					resourceScopeId: createTaskResourceScopeId(this.host.taskId, this.host.instanceId),
+					allowedCommands: behavior.allowedCommands,
+					deniedCommands: behavior.deniedCommands,
+					pathValidator: this.host.rooIgnoreController,
+					writeProtector: this.host.rooProtectedController,
+				})
 				toolResults.push(result)
 				lifecycleGuard.recordToolCompletion()
 				if (result.is_error) {
@@ -587,9 +592,7 @@ export class CloudAgentOrchestrator {
 				return "custom"
 			case "device-token":
 			default:
-				return profile.auth?.deviceTokenSource === "profile"
-					? "profile-device-token"
-					: "global-device-token"
+				return profile.auth?.deviceTokenSource === "profile" ? "profile-device-token" : "global-device-token"
 		}
 	}
 
@@ -615,8 +618,11 @@ export class CloudAgentOrchestrator {
 				// Global device token: check actual value from the token store
 				return getDeviceToken().trim().length > 0
 			case "custom":
-				return !!auth.customHeaders && Object.keys(auth.customHeaders).length > 0
-					&& Object.values(auth.customHeaders).some((v) => v.trim().length > 0)
+				return (
+					!!auth.customHeaders &&
+					Object.keys(auth.customHeaders).length > 0 &&
+					Object.values(auth.customHeaders).some((v) => v.trim().length > 0)
+				)
 			default:
 				return false
 		}

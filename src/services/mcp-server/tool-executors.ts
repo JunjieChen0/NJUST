@@ -2,21 +2,61 @@ import * as fs from "fs/promises"
 import * as fsSync from "fs"
 import * as path from "path"
 import * as crypto from "crypto"
-import * as childProcess from "child_process"
 import * as readline from "readline"
+import { StringDecoder } from "string_decoder"
 
 import { createDirectoriesForFile, fileExistsAtPath } from "../../utils/fs"
 import { regexSearchFiles } from "../../services/ripgrep"
 import { listFiles } from "../../services/glob/list-files"
 import { checkCommandSafety } from "../../core/tools/helpers/commandSafety"
-import { filterSensitiveEnv } from "../../utils/env"
 import { getCommandDecision } from "../../core/auto-approval"
 import { parseCommand } from "../../shared/parse-command"
 import { detectCangjieHome } from "../cangjie-lsp/cangjieToolUtils"
+import {
+	SandboxExecutionService,
+	PolicyDeniedError,
+	SandboxError,
+	CommandFailedError,
+	containsShellIoRedirection,
+} from "../sandbox"
 import type { IPathValidator, IWriteProtector } from "../cloud-agent/interfaces/IPathAccessController"
 import { logSecurityEvent } from "../../shared/security-audit"
 import type { ResourceLimitsService } from "./ResourceLimitsService"
 import { logger } from "../../shared/logger"
+import type { CommandExecutionHandle } from "../sandbox"
+import { resolveGitRepositoryLayoutForWrite } from "../sandbox/trustedGitCommand"
+
+const MAX_COMMAND_OUTPUT_BYTES = 100_000
+
+export function truncateUtf8(s: string, maxBytes: number): { text: string; truncated: boolean } {
+	if (Buffer.byteLength(s, "utf-8") <= maxBytes) return { text: s, truncated: false }
+	const buf = Buffer.from(s, "utf-8")
+	const decoder = new StringDecoder("utf8")
+	return { text: decoder.write(buf.subarray(0, maxBytes)), truncated: true }
+}
+
+export function formatCommandExecutionResult(
+	handle: CommandExecutionHandle,
+	maxOutputBytes = MAX_COMMAND_OUTPUT_BYTES,
+): string {
+	const hasSeparatedOutput = handle.stdout !== undefined || handle.stderr !== undefined
+	const rawStdout = hasSeparatedOutput ? (handle.stdout ?? "") : (handle.output ?? "")
+	const rawStderr = hasSeparatedOutput ? (handle.stderr ?? "") : ""
+
+	const { text: stdout, truncated: stdoutTrunc } = truncateUtf8(rawStdout, maxOutputBytes)
+	const { text: stderr, truncated: stderrTrunc } = truncateUtf8(rawStderr, maxOutputBytes)
+
+	const parts: string[] = [`Exit code: ${handle.exitCode ?? "unknown"}`]
+	if (stdout) parts.push(`\nSTDOUT:\n${stdout}`)
+	if (stderr) parts.push(`\nSTDERR:\n${stderr}`)
+	if (stdoutTrunc || stderrTrunc) {
+		parts.push(
+			`\n\n[Output truncated at ${maxOutputBytes / 1024}KB. Use a more specific command to reduce output.]`,
+		)
+	}
+
+	return parts.join("")
+}
 
 const MAX_READ_FILE_BYTES = 10 * 1024 * 1024
 const MAX_SCAN_BYTES = 50 * 1024 * 1024
@@ -145,6 +185,36 @@ async function ensureWithinWorkspace(cwd: string, relPath: string): Promise<stri
 	return target
 }
 
+function canonicalGitPathSegment(segment: string): string {
+	return segment
+		.replace(/[ .]+$/g, "")
+		.split(":", 1)[0]!
+		.toLowerCase()
+}
+
+function assertNoLexicalGitMetadataPath(requestedPath: string): void {
+	const segments = requestedPath.replace(/\\/g, "/").split("/")
+	if (segments.some((segment) => canonicalGitPathSegment(segment) === ".git")) {
+		throw new Error(`Git metadata is write-protected: ${requestedPath}`)
+	}
+}
+
+function isPathWithin(parent: string, child: string): boolean {
+	const normalizedParent = process.platform === "win32" ? parent.toLowerCase() : parent
+	const normalizedChild = process.platform === "win32" ? child.toLowerCase() : child
+	const relative = path.relative(normalizedParent, normalizedChild)
+	return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+}
+
+async function assertGitMetadataWriteAllowed(cwd: string, absPath: string, requestedPath: string): Promise<void> {
+	const workspacePath = await resolveRealPath(path.resolve(cwd))
+	const layout = await resolveGitRepositoryLayoutForWrite(workspacePath, absPath)
+	if (!layout) return
+	if (isPathWithin(layout.gitDirectory, absPath) || isPathWithin(layout.commonGitDirectory, absPath)) {
+		throw new Error(`Git metadata is write-protected: ${requestedPath}`)
+	}
+}
+
 export interface ReadFileParams {
 	path: string
 	start_line?: number
@@ -183,6 +253,7 @@ export async function execReadFile(
 	params: ReadFileParams,
 	resourceLimits?: ResourceLimitsService,
 ): Promise<string> {
+	assertNoLexicalGitMetadataPath(params.path)
 	const absPath = await ensureWithinWorkspace(cwd, params.path)
 
 	if (!(await fileExistsAtPath(absPath))) {
@@ -371,7 +442,9 @@ export async function execWriteFile(
 	writeProtector?: IWriteProtector,
 	resourceLimits?: ResourceLimitsService,
 ): Promise<string> {
+	assertNoLexicalGitMetadataPath(params.path)
 	const absPath = await ensureWithinWorkspace(cwd, params.path)
+	await assertGitMetadataWriteAllowed(cwd, absPath, params.path)
 	if (writeProtector && (await writeProtector.isWriteProtected(params.path))) {
 		throw new Error(`File is write-protected: ${params.path}`)
 	}
@@ -566,9 +639,16 @@ export interface ExecuteCommandParams {
 	timeout?: number
 }
 
+export interface ExecutionScope {
+	source: "mcp" | "cloud-agent"
+	taskId: string
+	resourceScopeId?: string
+}
+
 export async function execCommand(
 	workspaceCwd: string,
 	params: ExecuteCommandParams,
+	scope: ExecutionScope,
 	allowedCommands?: string[],
 	deniedCommands?: string[],
 ): Promise<string> {
@@ -592,6 +672,18 @@ export async function execCommand(
 		throw new Error(
 			`Command injection detected in MCP context: command substitution via $(), backticks, <(), >(), or null bytes is not allowed`,
 		)
+	}
+
+	// Remote, non-interactive commands must not redirect shell I/O. The cwd
+	// boundary cannot constrain a redirection target such as ../outside.txt.
+	if (containsShellIoRedirection(params.command)) {
+		logSecurityEvent({
+			action: "mcp.command.execute",
+			resource: params.command.slice(0, 200),
+			result: "denied",
+			reason: "shell_redirection_detected",
+		})
+		throw new Error(`Shell I/O redirection is not allowed in MCP or Cloud Agent context: ${params.command}`)
 	}
 
 	// Reject env variable injection: `env VAR=val cmd` can override PATH,
@@ -678,96 +770,44 @@ export async function execCommand(
 	}
 
 	const timeoutMs = Math.max(1, Math.min(300, params.timeout ?? 30)) * 1000
-	/** Hard cap on accumulated stdout/stderr to prevent memory exhaustion from runaway commands. */
-	const MAX_OUTPUT_BYTES = 100_000
 
-	return new Promise<string>((resolve, reject) => {
-		const isWindows = process.platform === "win32"
-		const shell = isWindows ? "cmd.exe" : "/bin/sh"
-		const shellArgs = isWindows ? ["/c", params.command] : ["-c", params.command]
+	// ── Route through SandboxExecutionService (policy + audit + backend selection) ──
+	const sandboxService = SandboxExecutionService.getInstance()
+	const sandboxExecId = SandboxExecutionService.generateExecutionId()
 
-		const proc = childProcess.spawn(shell, shellArgs, {
-			cwd: execCwd,
-			env: filterSensitiveEnv(),
-			stdio: ["ignore", "pipe", "pipe"],
-		})
+	const sandboxRequest: import("../sandbox").CommandExecutionRequest = {
+		executionId: sandboxExecId,
+		taskId: scope.taskId,
+		resourceScopeId: scope.resourceScopeId ?? scope.taskId,
+		command: params.command,
+		workspacePath: workspaceCwd,
+		cwd: execCwd,
+		timeoutMs,
+		source: scope.source,
+		onOutput: () => {},
+		audit: {
+			approvalResult: "auto-approved",
+			commandSafety: safetyCheck.riskLevel === "safe" ? "safe" : "unsafe",
+			interactive: false,
+			bypass: false,
+		},
+	}
 
-		let stdout = ""
-		let stderr = ""
-		let stdoutBytes = 0
-		let stderrBytes = 0
-		let outputTruncated = false
-		let settled = false
-
-		const appendWithLimit = (target: "stdout" | "stderr", chunk: string): void => {
-			const byteLen = Buffer.byteLength(chunk, "utf-8")
-			if (target === "stdout") {
-				if (stdoutBytes >= MAX_OUTPUT_BYTES) {
-					outputTruncated = true
-					return
-				}
-				if (stdoutBytes + byteLen > MAX_OUTPUT_BYTES) {
-					outputTruncated = true
-					stdout += chunk.slice(0, MAX_OUTPUT_BYTES - stdoutBytes)
-					stdoutBytes = MAX_OUTPUT_BYTES
-				} else {
-					stdout += chunk
-					stdoutBytes += byteLen
-				}
-			} else {
-				if (stderrBytes >= MAX_OUTPUT_BYTES) {
-					outputTruncated = true
-					return
-				}
-				if (stderrBytes + byteLen > MAX_OUTPUT_BYTES) {
-					outputTruncated = true
-					stderr += chunk.slice(0, MAX_OUTPUT_BYTES - stderrBytes)
-					stderrBytes = MAX_OUTPUT_BYTES
-				} else {
-					stderr += chunk
-					stderrBytes += byteLen
-				}
-			}
+	try {
+		const handle = await sandboxService.run(sandboxRequest)
+		return formatCommandExecutionResult(handle)
+	} catch (error: unknown) {
+		if (error instanceof PolicyDeniedError) {
+			throw new Error(`Sandbox policy denied command: ${error.reason}`)
 		}
-
-		proc.stdout.on("data", (data: Buffer) => {
-			appendWithLimit("stdout", data.toString())
-		})
-		proc.stderr.on("data", (data: Buffer) => {
-			appendWithLimit("stderr", data.toString())
-		})
-
-		const timer = setTimeout(() => {
-			if (settled) return
-			settled = true
-			proc.kill("SIGTERM")
-			reject(new Error(`Command timed out after ${Math.round(timeoutMs / 1000)}s`))
-		}, timeoutMs)
-
-		proc.on("close", (code) => {
-			clearTimeout(timer)
-			if (settled) return
-			settled = true
-			const truncNote = outputTruncated
-				? `\n\n[Output truncated at ${MAX_OUTPUT_BYTES / 1024}KB. Use a more specific command to reduce output.]`
-				: ""
-			const output = [
-				`Exit code: ${code ?? "unknown"}`,
-				stdout ? `\nSTDOUT:\n${stdout}` : "",
-				stderr ? `\nSTDERR:\n${stderr}` : "",
-				truncNote,
-			].join("")
-
-			resolve(output)
-		})
-
-		proc.on("error", (err) => {
-			clearTimeout(timer)
-			if (settled) return
-			settled = true
-			reject(new Error(`Failed to execute command: ${err.message}`))
-		})
-	})
+		if (error instanceof CommandFailedError) {
+			throw new Error(`Sandbox command blocked: ${error.stderr}`)
+		}
+		if (error instanceof SandboxError) {
+			throw new Error(`Sandbox execution failed (${error.kind}): ${error.message}`)
+		}
+		throw new Error(`Failed to execute command: ${error instanceof Error ? error.message : String(error)}`)
+	}
 }
 
 export interface ApplyDiffParams {
@@ -781,7 +821,9 @@ export async function execApplyDiff(
 	writeProtector?: IWriteProtector,
 	resourceLimits?: ResourceLimitsService,
 ): Promise<string> {
+	assertNoLexicalGitMetadataPath(params.path)
 	const absPath = await ensureWithinWorkspace(cwd, params.path)
+	await assertGitMetadataWriteAllowed(cwd, absPath, params.path)
 	if (writeProtector && (await writeProtector.isWriteProtected(params.path))) {
 		throw new Error(`File is write-protected: ${params.path}`)
 	}

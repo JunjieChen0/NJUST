@@ -37,7 +37,9 @@ function createSanitizedGit(baseDir: string): SimpleGit {
 		// Skip all GIT_ environment variables that could interfere with checkpoint operations.
 		// This includes GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_CONFIG_COUNT, etc.
 		// Using a prefix match ensures we catch all git-related vars (matching test behavior).
-		if (key.startsWith("GIT_") || key === "EDITOR") {
+		// PAGER is also stripped: simple-git's safety plugin rejects it (allowUnsafePager),
+		// and a pager is meaningless for programmatic git output capture.
+		if (key.startsWith("GIT_") || key === "EDITOR" || key === "PAGER") {
 			removedVars.push(`${key}=${value}`)
 			continue
 		}

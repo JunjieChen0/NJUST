@@ -35,6 +35,7 @@
 		"notifications": "Notifications",
 		"contextManagement": "Context",
 		"terminal": "Terminal",
+		"sandbox": "Sandbox",
 		"inlineCompletion": "Code Completion",
 		"slashCommands": "Slash Commands",
 		"prompts": "Prompts",
@@ -1060,6 +1061,91 @@
 			"label": "Manual trigger (reference)",
 			"description": "Default shortcut label for documentation. Change the real keybinding in Keyboard Shortcuts.",
 			"shortcutHint": "Open <ShortcutLink>keyboard shortcuts</ShortcutLink> to customize the manual trigger command."
+		}
+	},
+	"sandbox": {
+		"title": "Sandbox",
+		"backend": {
+			"label": "Execution Backend",
+			"description": "Choose where agent commands run.",
+			"guardedHost": "Guarded Host (default)",
+			"docker": "Docker Sandbox",
+			"dockerUnavailable": "Docker is unavailable. Commands are denied until Docker is running; host fallback is disabled."
+		},
+		"dockerStatus": {
+			"label": "Docker Status",
+			"available": "Docker is available and running",
+			"daemonNotRunning": "Docker daemon is not running. Start Docker Desktop.",
+			"notInstalled": "Docker CLI not found. Install Docker Desktop.",
+			"checking": "Checking Docker availability...",
+			"unknown": "Docker status unknown"
+		},
+		"dockerImage": {
+			"label": "Docker Image",
+			"description": "Image reference used for sandbox containers.",
+			"placeholder": "njust-ai/sandbox:latest"
+		},
+		"networkMode": {
+			"label": "Network Mode",
+			"description": "Disable networking or use standard Docker bridge networking.",
+			"none": "None (no network)",
+			"bridge": "Bridge"
+		},
+		"workspaceAccess": {
+			"label": "Workspace Access",
+			"readWrite": "Read-Write",
+			"readOnly": "Read-Only"
+		},
+		"limits": {
+			"memory": {
+				"label": "Memory Limit (MB)",
+				"description": "Range: {{min}}-{{max}} MB. Default: {{default}} MB."
+			},
+			"cpu": {
+				"label": "CPU Limit (cores)",
+				"description": "Range: {{min}}-{{max}}. Default: {{default}}."
+			},
+			"pids": {
+				"label": "PID Limit",
+				"description": "Maximum processes: {{min}}-{{max}}. Default: {{default}}."
+			},
+			"timeout": {
+				"label": "Maximum Timeout (seconds)",
+				"description": "Commands requesting longer timeouts are capped. Range: {{min}}-{{max}} seconds. Default: {{default}}."
+			}
+		},
+		"taskScoped": {
+			"label": "Destroy container when task ends",
+			"description": "When disabled, the container is shared by tasks in this workspace."
+		},
+		"security": {
+			"title": "Security Constraints (always enforced)",
+			"readOnlyRoot": "Read-only root filesystem",
+			"dropCapabilities": "All Linux capabilities dropped",
+			"noNewPrivileges": "No new privileges",
+			"nonRoot": "Non-root user (1000:1000)",
+			"noDockerSocket": "No Docker socket mount",
+			"noPrivilegedMode": "No privileged mode",
+			"noHostNamespaces": "No host network, PID, or IPC namespaces",
+			"noHostEnvironment": "Host environment variables are not inherited",
+			"noHostFallback": "Host fallback is disabled"
+		},
+		"actions": {
+			"pull": "Pull Image",
+			"checkDocker": "Check Docker",
+			"cleanupStale": "Cleanup Stale Containers"
+		},
+		"timeouts": {
+			"test": "Docker check timed out. Try again.",
+			"cleanup": "Container cleanup timed out. Try again.",
+			"pull": "Image pull timed out. Check Docker and try again."
+		},
+		"validation": {
+			"settingsInvalid": "Sandbox settings contain invalid values.",
+			"imageInvalid": "Enter a valid, permitted Docker image reference.",
+			"numberRequired": "Enter a finite number.",
+			"integerRequired": "Enter a whole number.",
+			"range": "Enter a value from {{min}} to {{max}}."
 		}
 	},
 	"webSearch": {

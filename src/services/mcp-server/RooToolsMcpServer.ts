@@ -17,7 +17,9 @@ import {
 import { getErrorMessage } from "../../shared/error-utils"
 import { logSecurityEvent } from "../../shared/security-audit"
 import { logger } from "../../shared/logger"
-import type { RooProtectedController } from "../../core/protect/RooProtectedController"
+import { RooProtectedController } from "../../core/protect/RooProtectedController"
+import { RooIgnoreController } from "../../core/ignore/RooIgnoreController"
+import type { IPathValidator, IWriteProtector } from "../cloud-agent/interfaces/IPathAccessController"
 import { createPerRequestResourceLimits } from "./ResourceLimitsService"
 
 // ── Token-bucket rate limiter (no external deps) ──────────────────────────
@@ -106,7 +108,8 @@ interface RooToolsMcpServerOptions {
 	authToken?: string
 	allowedCommands?: string[]
 	deniedCommands?: string[]
-	protectedController?: RooProtectedController
+	pathValidator?: IPathValidator
+	protectedController?: IWriteProtector
 }
 
 interface SessionMetadata {
@@ -130,14 +133,21 @@ const IDLE_TTL_MS = 30 * 60 * 1000
 const ABSOLUTE_TTL_MS = 4 * 60 * 60 * 1000
 const GRACE_PERIOD_MS = 30 * 1000 // 30 seconds grace for in-flight requests
 const RECLAMATION_INTERVAL_MS = 5 * 60 * 1000
+const SANDBOX_CLEANUP_RETRY_DELAYS_MS = [1_000, 5_000, 30_000] as const
 
 export class RooToolsMcpServer {
 	private httpServer: http.Server | null = null
 	private transports = new Map<string, SessionEntry>()
 	private options: RooToolsMcpServerOptions
+	private pathValidator: IPathValidator
+	private protectedController: IWriteProtector
+	private ownedPathValidator: RooIgnoreController | undefined
+	private ownedProtectedController: RooProtectedController | undefined
+	private pathValidatorInitialized = false
 	private readonly globalLimiter = new RateLimiter(60, 10)
 	private readonly perIpLimiter = new PerIpRateLimiter(30, 5)
 	private reclamationTimer: ReturnType<typeof setInterval> | null = null
+	private stopping = false
 	/** Atomic slot reservation: counts initialize requests in-flight before transport is registered */
 	private pendingSlots = 0
 	private pendingSlotsByIp = new Map<string, number>()
@@ -147,12 +157,77 @@ export class RooToolsMcpServer {
 	private metricsSessionsRejected = 0
 	private metricsSessionsExpired = 0
 
+	// ── Sandbox cleanup tracking (idempotent per session) ─────────────────
+	private readonly sandboxCleanupFlights = new Map<string, Promise<void>>()
+	private readonly pendingSandboxCleanupSessions = new Set<string>()
+	private readonly sandboxCleanupRetryAttempts = new Map<string, number>()
+	private readonly sandboxCleanupRetryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
 	constructor(options: RooToolsMcpServerOptions) {
 		this.options = options
+		if (options.pathValidator) {
+			this.pathValidator = options.pathValidator
+		} else {
+			this.ownedPathValidator = new RooIgnoreController(options.workspacePath)
+			this.pathValidator = this.ownedPathValidator
+		}
+		if (options.protectedController) {
+			this.protectedController = options.protectedController
+		} else {
+			this.ownedProtectedController = new RooProtectedController(options.workspacePath)
+			this.protectedController = this.ownedProtectedController
+		}
 	}
 
-	updateWorkspacePath(newPath: string): void {
+	async updateWorkspacePath(newPath: string): Promise<void> {
+		if (newPath === this.options.workspacePath) return
+
+		let nextPathValidator: RooIgnoreController | undefined
+		try {
+			if (this.ownedPathValidator) {
+				nextPathValidator = new RooIgnoreController(newPath)
+				await nextPathValidator.initialize()
+			}
+		} catch (error) {
+			nextPathValidator?.dispose()
+			throw error
+		}
+
+		const previousPathValidator = this.ownedPathValidator
+		const nextProtectedController = this.ownedProtectedController ? new RooProtectedController(newPath) : undefined
+
 		this.options.workspacePath = newPath
+		if (nextPathValidator) {
+			this.ownedPathValidator = nextPathValidator
+			this.pathValidator = nextPathValidator
+		}
+		if (nextProtectedController) {
+			this.ownedProtectedController = nextProtectedController
+			this.protectedController = nextProtectedController
+		}
+		previousPathValidator?.dispose()
+		this.pathValidatorInitialized = Boolean(nextPathValidator)
+	}
+
+	private async initializeAccessControllers(): Promise<void> {
+		if (this.ownedPathValidator && !this.pathValidatorInitialized) {
+			await this.ownedPathValidator.initialize()
+			this.pathValidatorInitialized = true
+		}
+	}
+
+	private accessDenied(filePath: string): { content: [{ type: "text"; text: string }]; isError: true } {
+		return {
+			content: [{ type: "text" as const, text: `Access denied by .rooignore: ${filePath}` }],
+			isError: true,
+		}
+	}
+
+	private writeProtected(filePath: string): { content: [{ type: "text"; text: string }]; isError: true } {
+		return {
+			content: [{ type: "text" as const, text: `Write protected: ${filePath}` }],
+			isError: true,
+		}
 	}
 
 	/** Return current session metrics for monitoring. */
@@ -176,7 +251,7 @@ export class RooToolsMcpServer {
 		return this.options.workspacePath
 	}
 
-	private createMcpServer(): McpServer {
+	private createMcpServer(getSessionId: () => string | undefined): McpServer {
 		const server = new McpServer({ name: "njust-ai-tools", version: "1.0.0" }, { capabilities: { tools: {} } })
 
 		server.tool(
@@ -190,6 +265,9 @@ export class RooToolsMcpServer {
 			async (params) => {
 				const resourceLimits = createPerRequestResourceLimits()
 				try {
+					if (!this.pathValidator.validateAccess(params.path)) {
+						return this.accessDenied(params.path)
+					}
 					const result = await execReadFile(this.cwd, params, resourceLimits)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: unknown) {
@@ -210,7 +288,13 @@ export class RooToolsMcpServer {
 			async (params) => {
 				const resourceLimits = createPerRequestResourceLimits()
 				try {
-					const result = await execWriteFile(this.cwd, params, this.options.protectedController, resourceLimits)
+					if (!this.pathValidator.validateAccess(params.path)) {
+						return this.accessDenied(params.path)
+					}
+					if (await this.protectedController.isWriteProtected(params.path)) {
+						return this.writeProtected(params.path)
+					}
+					const result = await execWriteFile(this.cwd, params, this.protectedController, resourceLimits)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: unknown) {
 					return { content: [{ type: "text" as const, text: `Error: ${getErrorMessage(e)}` }], isError: true }
@@ -230,7 +314,10 @@ export class RooToolsMcpServer {
 			async (params) => {
 				const resourceLimits = createPerRequestResourceLimits()
 				try {
-					const result = await execListFiles(this.cwd, params, undefined, resourceLimits)
+					if (!this.pathValidator.validateAccess(params.path)) {
+						return this.accessDenied(params.path)
+					}
+					const result = await execListFiles(this.cwd, params, this.pathValidator, resourceLimits)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: unknown) {
 					return { content: [{ type: "text" as const, text: `Error: ${getErrorMessage(e)}` }], isError: true }
@@ -251,7 +338,10 @@ export class RooToolsMcpServer {
 			async (params) => {
 				const resourceLimits = createPerRequestResourceLimits()
 				try {
-					const result = await execSearchFiles(this.cwd, params, undefined, resourceLimits)
+					if (!this.pathValidator.validateAccess(params.path)) {
+						return this.accessDenied(params.path)
+					}
+					const result = await execSearchFiles(this.cwd, params, this.pathValidator, resourceLimits)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: unknown) {
 					return { content: [{ type: "text" as const, text: `Error: ${getErrorMessage(e)}` }], isError: true }
@@ -270,10 +360,26 @@ export class RooToolsMcpServer {
 				timeout: z.number().optional().describe("Timeout in seconds (default: 30)"),
 			},
 			async (params) => {
+				const sessionId = getSessionId()
+				if (!sessionId) {
+					return {
+						content: [{ type: "text" as const, text: "Error: MCP session not initialized" }],
+						isError: true,
+					}
+				}
 				try {
+					const blockedPath = this.pathValidator.validateCommand?.(params.command)
+					if (blockedPath) {
+						return this.accessDenied(blockedPath)
+					}
 					const result = await execCommand(
 						this.cwd,
 						params,
+						{
+							source: "mcp",
+							taskId: `mcp:${sessionId}`,
+							resourceScopeId: `mcp:${sessionId}`,
+						},
 						this.options.allowedCommands,
 						this.options.deniedCommands,
 					)
@@ -294,7 +400,13 @@ export class RooToolsMcpServer {
 			async (params) => {
 				const resourceLimits = createPerRequestResourceLimits()
 				try {
-					const result = await execApplyDiff(this.cwd, params, this.options.protectedController, resourceLimits)
+					if (!this.pathValidator.validateAccess(params.path)) {
+						return this.accessDenied(params.path)
+					}
+					if (await this.protectedController.isWriteProtected(params.path)) {
+						return this.writeProtected(params.path)
+					}
+					const result = await execApplyDiff(this.cwd, params, this.protectedController, resourceLimits)
 					return { content: [{ type: "text" as const, text: result }] }
 				} catch (e: unknown) {
 					return { content: [{ type: "text" as const, text: `Error: ${getErrorMessage(e)}` }], isError: true }
@@ -314,12 +426,28 @@ export class RooToolsMcpServer {
 
 	async start(): Promise<void> {
 		const { port, bindAddress, authToken } = this.options
-
 		if (!this.isLocalOnly() && !authToken) {
 			throw new Error(
 				"Security: authToken is required when binding to a non-localhost address. " +
 					"Set njust-ai.mcpServer.authToken in your settings before exposing the MCP server to the network.",
 			)
+		}
+
+		// Rebuild owned controllers if they were disposed during a previous stop().
+		if (!this.ownedPathValidator && !this.options.pathValidator) {
+			this.ownedPathValidator = new RooIgnoreController(this.options.workspacePath)
+			this.pathValidator = this.ownedPathValidator
+		}
+		if (!this.ownedProtectedController && !this.options.protectedController) {
+			this.ownedProtectedController = new RooProtectedController(this.options.workspacePath)
+			this.protectedController = this.ownedProtectedController
+		}
+
+		await this.initializeAccessControllers()
+		this.stopping = false
+		for (const sessionId of this.pendingSandboxCleanupSessions) {
+			this.sandboxCleanupRetryAttempts.delete(sessionId)
+			this.scheduleSandboxCleanupRetry(sessionId)
 		}
 
 		this.httpServer = http.createServer(async (req, res) => {
@@ -328,6 +456,12 @@ export class RooToolsMcpServer {
 			res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 			res.setHeader("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, Authorization")
 			res.setHeader("Access-Control-Expose-Headers", "mcp-session-id")
+
+			if (this.stopping) {
+				res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "1" })
+				res.end(JSON.stringify({ error: "MCP server is stopping" }))
+				return
+			}
 
 			if (req.method === "OPTIONS") {
 				res.writeHead(204)
@@ -405,7 +539,11 @@ export class RooToolsMcpServer {
 					this.reclaimExpiredSessions()
 				}, RECLAMATION_INTERVAL_MS)
 				// Allow the timer to not prevent process exit
-				if (this.reclamationTimer && typeof this.reclamationTimer === "object" && "unref" in this.reclamationTimer) {
+				if (
+					this.reclamationTimer &&
+					typeof this.reclamationTimer === "object" &&
+					"unref" in this.reclamationTimer
+				) {
 					this.reclamationTimer.unref()
 				}
 				resolve()
@@ -415,27 +553,61 @@ export class RooToolsMcpServer {
 	}
 
 	async stop(): Promise<void> {
-		if (this.reclamationTimer) {
-			clearInterval(this.reclamationTimer)
-			this.reclamationTimer = null
-		}
-		this.perIpLimiter.dispose()
+		this.stopping = true
+		try {
+			if (this.reclamationTimer) {
+				clearInterval(this.reclamationTimer)
+				this.reclamationTimer = null
+			}
+			for (const timer of this.sandboxCleanupRetryTimers.values()) clearTimeout(timer)
+			this.sandboxCleanupRetryTimers.clear()
+			this.perIpLimiter.dispose()
 
-		const closePromises: Promise<void>[] = []
-		for (const [sessionId, entry] of this.transports) {
-			closePromises.push(
-				entry.transport.close().catch((err) => {
-					logger.debug("McpServer", `Transport close failed during stop for session ${sessionId}:`, err)
-				}),
+			const sessionIds = Array.from(new Set([...this.transports.keys(), ...this.pendingSandboxCleanupSessions]))
+			// Register cleanup before closing transports so onclose observes and
+			// reuses the same in-flight Promise instead of starting a second cleanup.
+			const scheduledCleanup = sessionIds.map((sessionId) => this.cleanupSandboxSession(sessionId))
+			const cleanupResultsPromise = Promise.allSettled([
+				...new Set([...this.sandboxCleanupFlights.values(), ...scheduledCleanup]),
+			])
+			const closePromises: Promise<void>[] = []
+			for (const [sessionId, entry] of this.transports) {
+				closePromises.push(
+					entry.transport.close().catch((err) => {
+						logger.debug("McpServer", `Transport close failed during stop for session ${sessionId}:`, err)
+					}),
+				)
+			}
+			await Promise.all(closePromises)
+			this.transports.clear()
+
+			await cleanupResultsPromise
+			const retryResults = await Promise.allSettled(
+				Array.from(this.pendingSandboxCleanupSessions).map((sessionId) =>
+					this.cleanupSandboxSession(sessionId),
+				),
 			)
-		}
-		await Promise.all(closePromises)
-		this.transports.clear()
 
-		if (this.httpServer) {
-			return new Promise<void>((resolve) => {
-				this.httpServer!.close(() => resolve())
-			})
+			if (this.httpServer) {
+				const server = this.httpServer
+				this.httpServer = null
+				await new Promise<void>((resolve) => {
+					server.close(() => resolve())
+				})
+			}
+
+			const cleanupFailures = retryResults
+				.filter((result): result is PromiseRejectedResult => result.status === "rejected")
+				.map((result) => result.reason)
+			if (cleanupFailures.length === 1) throw cleanupFailures[0]
+			if (cleanupFailures.length > 1) {
+				throw new AggregateError(cleanupFailures, "Failed to clean up MCP sandbox sessions")
+			}
+		} finally {
+			this.ownedPathValidator?.dispose()
+			this.ownedPathValidator = undefined
+			this.ownedProtectedController = undefined
+			this.pathValidatorInitialized = false
 		}
 	}
 
@@ -495,6 +667,72 @@ export class RooToolsMcpServer {
 		return count
 	}
 
+	private cleanupSandboxSession(sessionId: string): Promise<void> {
+		const sandboxTaskId = `mcp:${sessionId}`
+		const existing = this.sandboxCleanupFlights.get(sandboxTaskId)
+		if (existing) return existing
+
+		this.pendingSandboxCleanupSessions.add(sessionId)
+		const cleanup = import("../sandbox")
+			.then(({ SandboxExecutionService }) => SandboxExecutionService.getInstance().disposeTask(sandboxTaskId))
+			.then(() => {
+				this.pendingSandboxCleanupSessions.delete(sessionId)
+				this.clearSandboxCleanupRetry(sessionId)
+			})
+			.finally(() => {
+				this.sandboxCleanupFlights.delete(sandboxTaskId)
+			})
+
+		this.sandboxCleanupFlights.set(sandboxTaskId, cleanup)
+		return cleanup
+	}
+
+	private scheduleSandboxSessionCleanup(sessionId: string): void {
+		void this.cleanupSandboxSession(sessionId).catch((error) => {
+			logger.warn("McpSession", "Sandbox cleanup failed; scheduling retry", { sessionId, error })
+			this.scheduleSandboxCleanupRetry(sessionId)
+		})
+	}
+
+	private scheduleSandboxCleanupRetry(sessionId: string): void {
+		if (
+			this.stopping ||
+			!this.pendingSandboxCleanupSessions.has(sessionId) ||
+			this.sandboxCleanupRetryTimers.has(sessionId)
+		) {
+			return
+		}
+
+		const attempt = this.sandboxCleanupRetryAttempts.get(sessionId) ?? 0
+		const delayMs = SANDBOX_CLEANUP_RETRY_DELAYS_MS[attempt]
+		if (delayMs === undefined) {
+			logger.warn("McpSession", "Sandbox cleanup retry limit reached", { sessionId, attempts: attempt })
+			return
+		}
+
+		this.sandboxCleanupRetryAttempts.set(sessionId, attempt + 1)
+		const timer = setTimeout(() => {
+			this.sandboxCleanupRetryTimers.delete(sessionId)
+			void this.cleanupSandboxSession(sessionId).catch((error) => {
+				logger.warn("McpSession", "Sandbox cleanup retry failed", {
+					sessionId,
+					attempt: attempt + 1,
+					error,
+				})
+				this.scheduleSandboxCleanupRetry(sessionId)
+			})
+		}, delayMs)
+		timer.unref?.()
+		this.sandboxCleanupRetryTimers.set(sessionId, timer)
+	}
+
+	private clearSandboxCleanupRetry(sessionId: string): void {
+		const timer = this.sandboxCleanupRetryTimers.get(sessionId)
+		if (timer) clearTimeout(timer)
+		this.sandboxCleanupRetryTimers.delete(sessionId)
+		this.sandboxCleanupRetryAttempts.delete(sessionId)
+	}
+
 	private reclaimExpiredSessions(): void {
 		const now = Date.now()
 		const toClose: string[] = []
@@ -519,7 +757,10 @@ export class RooToolsMcpServer {
 					// Enter grace period: mark as closing but wait for in-flight requests
 					entry.closing = true
 					entry.graceDeadline = now + GRACE_PERIOD_MS
-					logger.debug("McpSession", `Session ${sid} expired but has ${entry.requestsInFlight} in-flight request(s), entering grace period`)
+					logger.debug(
+						"McpSession",
+						`Session ${sid} expired but has ${entry.requestsInFlight} in-flight request(s), entering grace period`,
+					)
 				} else {
 					toClose.push(sid)
 				}
@@ -531,22 +772,23 @@ export class RooToolsMcpServer {
 			const entry = this.transports.get(sid)
 			if (entry) {
 				this.metricsSessionsExpired++
-				const reason = (Date.now() - entry.metadata.createdAt) > ABSOLUTE_TTL_MS
-					? "absolute_ttl"
-					: "idle_ttl"
+				const reason = Date.now() - entry.metadata.createdAt > ABSOLUTE_TTL_MS ? "absolute_ttl" : "idle_ttl"
 				logSecurityEvent({
 					action: "mcp.session.expire",
 					resource: sid,
 					result: "allowed",
 					reason,
 				})
-				entry.transport.close()
+				entry.transport
+					.close()
 					.then(() => {
 						this.transports.delete(sid)
+						this.scheduleSandboxSessionCleanup(sid)
 					})
 					.catch((err) => {
 						logger.debug("McpSession", `Transport close failed for session ${sid}:`, err)
 						this.transports.delete(sid)
+						this.scheduleSandboxSessionCleanup(sid)
 					})
 			}
 		}
@@ -567,6 +809,7 @@ export class RooToolsMcpServer {
 					logger.debug("McpSession", `Transport close failed during force-delete for ${sid}:`, err)
 				})
 				this.transports.delete(sid)
+				this.scheduleSandboxSessionCleanup(sid)
 			}
 		}
 	}
@@ -600,6 +843,11 @@ export class RooToolsMcpServer {
 		}
 
 		if (!sessionId && isInitializeRequest(body)) {
+			if (this.stopping) {
+				res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "1" })
+				res.end(JSON.stringify({ error: "MCP server is stopping" }))
+				return
+			}
 			const remoteIp = this.getRemoteIp(req)
 
 			// Reserve slot atomically before creating transport
@@ -662,6 +910,15 @@ export class RooToolsMcpServer {
 				onsessioninitialized: (sid) => {
 					// Convert pending slot to formal entry
 					releasePendingSlot()
+					if (this.stopping) {
+						void transport.close().catch((error) => {
+							logger.debug("McpSession", "Failed to close session initialized during stop", {
+								sessionId: sid,
+								error,
+							})
+						})
+						return
+					}
 					this.metricsSessionsCreated++
 					this.transports.set(sid, {
 						transport,
@@ -682,11 +939,12 @@ export class RooToolsMcpServer {
 				const sid = transport.sessionId
 				if (sid) {
 					this.transports.delete(sid)
+					this.scheduleSandboxSessionCleanup(sid)
 				}
 			}
 
 			try {
-				const mcpServer = this.createMcpServer()
+				const mcpServer = this.createMcpServer(() => transport.sessionId)
 				await mcpServer.connect(transport)
 				await transport.handleRequest(req, res, body)
 			} catch (err) {

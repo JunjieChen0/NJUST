@@ -34,6 +34,8 @@ AGENTS.local.md
 
 # Docs - ignore all except examples, adr, baseline, runbooks, compose
 docs/*
+!docs/sandbox.md
+!docs/docker-sandbox-plan.md
 !docs/examples/
 !docs/examples/**
 !docs/adr/

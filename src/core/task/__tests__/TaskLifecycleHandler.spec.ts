@@ -10,6 +10,7 @@ const {
 	transitionTaskFilesToDetachedMock,
 	releaseTerminalsForTaskMock,
 	outputCleanupMock,
+	disposeScopeMock,
 } = vi.hoisted(() => ({
 	appendFileMock: vi.fn(),
 	getTaskDirectoryPathMock: vi.fn(),
@@ -20,6 +21,7 @@ const {
 	transitionTaskFilesToDetachedMock: vi.fn(),
 	releaseTerminalsForTaskMock: vi.fn(),
 	outputCleanupMock: vi.fn(),
+	disposeScopeMock: vi.fn(),
 }))
 
 vi.mock("fs", async (importOriginal) => {
@@ -86,6 +88,13 @@ vi.mock("../../../integrations/terminal/OutputInterceptor", () => ({
 	OutputInterceptor: {
 		cleanup: outputCleanupMock,
 	},
+}))
+
+vi.mock("../../../services/sandbox", () => ({
+	SandboxExecutionService: {
+		getInstance: () => ({ disposeScope: disposeScopeMock }),
+	},
+	createTaskResourceScopeId: (taskId: string, instanceId: string) => `task:${taskId}:${instanceId}`,
 }))
 
 import { TaskLifecycleHandler } from "../TaskLifecycleHandler"
@@ -161,6 +170,7 @@ describe("TaskLifecycleHandler", () => {
 		getTaskDirectoryPathMock.mockResolvedValue("D:\\storage\\tasks\\task-1")
 		appendFileMock.mockResolvedValue(undefined)
 		outputCleanupMock.mockResolvedValue(undefined)
+		disposeScopeMock.mockResolvedValue(undefined)
 	})
 
 	it("starts default-mode tasks through the cloud agent loop", async () => {
@@ -235,7 +245,48 @@ describe("TaskLifecycleHandler", () => {
 		expect(host.emitFinalTokenUsageUpdate).toHaveBeenCalled()
 		expect(host.emit).toHaveBeenCalledWith(expect.any(String))
 		expect(host.saveClineMessages).toHaveBeenCalled()
+		expect(disposeScopeMock).toHaveBeenCalledWith("task:task-1:instance-1")
 		expect(host.dispose).toHaveBeenCalled()
+	})
+
+	it("waits for sandbox cleanup before emitting abort and disposing", async () => {
+		let resolveCleanup: (() => void) | undefined
+		disposeScopeMock.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					resolveCleanup = resolve
+				}),
+		)
+		const host = createHost()
+		const handler = new TaskLifecycleHandler(host)
+
+		const aborting = handler.abortTask()
+		await vi.waitFor(() => expect(disposeScopeMock).toHaveBeenCalled())
+		expect(host.emit).not.toHaveBeenCalled()
+		expect(host.dispose).not.toHaveBeenCalled()
+
+		resolveCleanup?.()
+		await aborting
+		expect(host.emit).toHaveBeenCalledWith(expect.any(String))
+		expect(host.dispose).toHaveBeenCalled()
+	})
+
+	it("emits abort and disposes even when sandbox cleanup fails", async () => {
+		disposeScopeMock.mockRejectedValueOnce(new Error("sandbox cleanup failed")).mockResolvedValueOnce(undefined)
+		const host = createHost()
+		const handler = new TaskLifecycleHandler(host)
+
+		// abortTask resolves (does not reject) even when cleanup fails
+		await expect(handler.abortTask()).resolves.toBeUndefined()
+		// TaskAborted is always emitted regardless of cleanup outcome
+		expect(host.emit).toHaveBeenCalledWith(expect.any(String))
+		expect(host.dispose).toHaveBeenCalledOnce()
+
+		// Second call also succeeds (cleanup retry resolves)
+		await expect(handler.abortTask()).resolves.toBeUndefined()
+		expect(disposeScopeMock).toHaveBeenCalledTimes(2)
+		expect(host.emit).toHaveBeenCalledTimes(2)
+		expect(host.dispose).toHaveBeenCalledTimes(2)
 	})
 
 	it("continues abort cleanup when save and dispose throw", async () => {
@@ -268,6 +319,7 @@ describe("TaskLifecycleHandler", () => {
 		expect(host.messageQueueService.removeListener).toHaveBeenCalledWith("stateChanged", expect.any(Function))
 		expect(host.messageQueueService.dispose).toHaveBeenCalled()
 		expect(host.removeAllListeners).toHaveBeenCalled()
+		await vi.waitFor(() => expect(disposeScopeMock).toHaveBeenCalledTimes(1))
 		await vi.waitFor(() => expect(releaseTerminalsForTaskMock).toHaveBeenCalledWith("task-1"))
 		expect(host.rooIgnoreController).toBeUndefined()
 		expect(host.toolExecution.dispose).toHaveBeenCalled()
