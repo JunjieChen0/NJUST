@@ -53,19 +53,21 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 		const normalizedCommand = normalizeDotSlashCommandForWindowsShell(command, shellPath)
 		this.command = normalizedCommand
 
-		// Security: block commands with dangerous shell metacharacters that could
-		// bypass higher-level approval checks (BashCommandAnalyzer, PermissionRuleEngine).
-		const DANGEROUS_SHELL_CHARS = /[;&|]|\$\(|`|\$\{/
-		if (DANGEROUS_SHELL_CHARS.test(normalizedCommand)) {
+		// Security: block command substitution which allows nested execution that
+		// bypasses higher-level approval (BashCommandAnalyzer, PermissionRuleEngine).
+		// Shell chaining (;, &, |) is allowed here — approved local commands commonly
+		// use && and pipes. Remote-source chaining is blocked in GuardedHostRunner.
+		const COMMAND_SUBSTITUTION = /\$\(|`|\$\{/
+		if (COMMAND_SUBSTITUTION.test(normalizedCommand)) {
 			logger.error(
 				"ExecaTerminalProcess",
-				"Command blocked: contains dangerous shell metacharacters:",
+				"Command blocked: contains command substitution operators:",
 				normalizedCommand,
 			)
 			this.emit(
 				"error",
 				new Error(
-					"Command blocked for security: contains shell chaining or substitution operators. Please use simple commands only.",
+					"Command blocked for security: contains command substitution operators ($(), ``, ${}). Please use simple commands only.",
 				),
 			)
 			return
