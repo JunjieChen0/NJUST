@@ -404,7 +404,10 @@ async function hasGitMetadataMarker(workspacePath: string, cwd: string): Promise
 			await fs.lstat(dotGitPath)
 			return true
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+			const code = (error as NodeJS.ErrnoException).code
+			// ENOENT: no .git here. ENOTDIR: `current` is a file, not a directory,
+			// so it cannot contain a .git entry — treat both as "no marker found".
+			if (code !== "ENOENT" && code !== "ENOTDIR") throw error
 		}
 		if (current === realWorkspacePath) return false
 		const parent = path.dirname(current)

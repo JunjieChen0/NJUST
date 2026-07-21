@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { execFile } from "child_process"
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "fs/promises"
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import * as path from "path"
 import { promisify } from "util"
@@ -156,11 +156,16 @@ describe("validateGitRepositoryContainment", () => {
 		const workspacePath = path.join(tempDir, "workspace")
 		await mkdir(path.join(workspacePath, ".git", "objects"), { recursive: true })
 
+		// resolveGitRepositoryLayout uses fs.realpath internally, so expected
+		// paths must also be realpath-resolved (macOS: /tmp -> /private/tmp).
+		const realWorkspace = await realpath(workspacePath)
+		const realTempDir = await realpath(tempDir)
+
 		await expect(validateGitRepositoryContainment(workspacePath, workspacePath)).resolves.toEqual({
-			repositoryRoot: workspacePath,
-			gitDirectory: path.join(workspacePath, ".git"),
-			commonGitDirectory: path.join(workspacePath, ".git"),
-			ceilingDirectory: tempDir,
+			repositoryRoot: realWorkspace,
+			gitDirectory: path.join(realWorkspace, ".git"),
+			commonGitDirectory: path.join(realWorkspace, ".git"),
+			ceilingDirectory: realTempDir,
 		})
 	})
 
@@ -183,11 +188,14 @@ describe("validateGitRepositoryContainment", () => {
 		await mkdir(path.join(metadataPath, "objects"), { recursive: true })
 		await writeFile(path.join(workspacePath, ".git"), "gitdir: git-metadata\n")
 
+		const realWorkspace = await realpath(workspacePath)
+		const realMetadata = await realpath(metadataPath)
+
 		await expect(validateGitRepositoryContainment(workspacePath, workspacePath)).resolves.toEqual(
 			expect.objectContaining({
-				repositoryRoot: workspacePath,
-				gitDirectory: metadataPath,
-				commonGitDirectory: metadataPath,
+				repositoryRoot: realWorkspace,
+				gitDirectory: realMetadata,
+				commonGitDirectory: realMetadata,
 			}),
 		)
 	})

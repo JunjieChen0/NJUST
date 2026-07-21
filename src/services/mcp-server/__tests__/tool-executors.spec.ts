@@ -459,7 +459,10 @@ describe("Git metadata write protection", () => {
 							diff: "<<<<<<< SEARCH\n[core]\n=======\n[core]\nworktree = ../../outside\n>>>>>>> REPLACE",
 						})
 
-			await expect(action).rejects.toThrow("Git metadata is write-protected")
+			// On Windows, junction resolution may fail validation entirely rather
+			// than resolving the layout and detecting the path overlap. Both are
+			// correct security outcomes — the write is denied either way.
+			await expect(action).rejects.toThrow(/Git metadata (is write-protected|could not be validated safely)/)
 		},
 	)
 
