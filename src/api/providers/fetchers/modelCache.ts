@@ -252,8 +252,8 @@ export function initializeModelCacheRefresh(): void {
 
 		// Refresh each provider in background (fire and forget)
 		for (const { options } of publicProviders) {
-			refreshModels(options).catch(() => {
-				// Silent fail - old cache remains available
+			refreshModels(options).catch((err) => {
+				logger.debug("ModelCache", "background refresh", err)
 			})
 
 			// Small delay between refreshes to avoid API rate limits

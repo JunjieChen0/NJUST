@@ -8,6 +8,9 @@ import { resolveMatlabRuntime } from "../matlab/matlabToolUtils"
 import { Package } from "../../shared/package"
 import { resolveLatexmkExecutable, resolvePdflatexExecutable } from "../latex/latexResolve"
 import { t } from "../../i18n"
+import { SandboxExecutionService } from "../sandbox"
+import { wrapAsError } from "../../shared/error-utils"
+import { logger } from "../../shared/logger"
 
 interface RunConfig {
 	command: string
@@ -15,7 +18,9 @@ interface RunConfig {
 	env?: Record<string, string>
 }
 
-const isWin = process.platform === "win32"
+export type RunExecutionTarget = "host-windows" | "host-posix" | "docker-linux"
+
+const hostExecutionTarget: RunExecutionTarget = process.platform === "win32" ? "host-windows" : "host-posix"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -45,6 +50,33 @@ function quotePath(p: string): string {
 	// Escape double quotes and backticks to prevent breaking out of the quoted string.
 	const escaped = p.replace(/"/g, '\\"').replace(/`/g, "\\`")
 	return `"${escaped}"`
+}
+
+/**
+ * Convert a host path to the path visible to the selected execution target.
+ * Docker mounts the selected workspace at /workspace and cannot access files
+ * outside that mount.
+ */
+export function toExecutionPath(hostPath: string, workspacePath: string, target: RunExecutionTarget): string {
+	if (target !== "docker-linux") return hostPath
+
+	const pathApi = /^[a-zA-Z]:[\\/]/.test(workspacePath) || workspacePath.startsWith("\\\\") ? path.win32 : path.posix
+	if (!pathApi.isAbsolute(workspacePath) || !pathApi.isAbsolute(hostPath)) {
+		throw new Error("Docker execution requires absolute workspace and file paths.")
+	}
+
+	const resolvedWorkspace = pathApi.resolve(workspacePath)
+	const resolvedHostPath = pathApi.resolve(hostPath)
+	const relative = pathApi.relative(resolvedWorkspace, resolvedHostPath)
+	if (relative === ".." || relative.startsWith(`..${pathApi.sep}`) || pathApi.isAbsolute(relative)) {
+		throw new Error(`Cannot run a file outside the active workspace in Docker: ${hostPath}`)
+	}
+
+	return relative ? `/workspace/${relative.replace(/\\/g, "/")}` : "/workspace"
+}
+
+function commandPath(hostPath: string, workspacePath: string, target: RunExecutionTarget): string {
+	return toExecutionPath(hostPath, workspacePath, target)
 }
 
 /**
@@ -85,23 +117,24 @@ function listSourceFiles(dir: string, extensions: string[]): string[] {
 	}
 }
 
-function exeName(base: string): string {
-	return isWin ? `${base}.exe` : `./${base}`
+function exeName(base: string, target: RunExecutionTarget): string {
+	return target === "host-windows" ? `${base}.exe` : `./${base}`
 }
 
 // ---------------------------------------------------------------------------
 // Per-language run config builders
 // ---------------------------------------------------------------------------
 
-function buildPythonConfig(filePath: string): RunConfig {
+function buildPythonConfig(filePath: string, workDir: string, target: RunExecutionTarget): RunConfig {
 	const fileDir = path.dirname(filePath)
+	const executableFilePath = commandPath(filePath, workDir, target)
 
 	const pyprojectRoot = findProjectRoot(fileDir, ["pyproject.toml"])
 	if (pyprojectRoot) {
 		if (fs.existsSync(path.join(pyprojectRoot, "poetry.lock"))) {
-			return { command: `poetry run python ${quotePath(filePath)}`, cwd: pyprojectRoot }
+			return { command: `poetry run python ${quotePath(executableFilePath)}`, cwd: pyprojectRoot }
 		}
-		return { command: `python ${quotePath(filePath)}`, cwd: pyprojectRoot }
+		return { command: `python ${quotePath(executableFilePath)}`, cwd: pyprojectRoot }
 	}
 
 	if (fs.existsSync(path.join(fileDir, "__main__.py"))) {
@@ -110,10 +143,10 @@ function buildPythonConfig(filePath: string): RunConfig {
 		return { command: `python -m ${pkgName}`, cwd: pkgDir }
 	}
 
-	return { command: `python ${quotePath(filePath)}` }
+	return { command: `python ${quotePath(executableFilePath)}` }
 }
 
-function buildJavaScriptConfig(filePath: string): RunConfig {
+function buildJavaScriptConfig(filePath: string, workDir: string, target: RunExecutionTarget): RunConfig {
 	const fileDir = path.dirname(filePath)
 	const pkgRoot = findProjectRoot(fileDir, ["package.json"])
 
@@ -131,10 +164,10 @@ function buildJavaScriptConfig(filePath: string): RunConfig {
 		}
 	}
 
-	return { command: `node ${quotePath(filePath)}` }
+	return { command: `node ${quotePath(commandPath(filePath, workDir, target))}` }
 }
 
-function buildTypeScriptConfig(filePath: string): RunConfig {
+function buildTypeScriptConfig(filePath: string, workDir: string, target: RunExecutionTarget): RunConfig {
 	const fileDir = path.dirname(filePath)
 	const pkgRoot = findProjectRoot(fileDir, ["package.json"])
 
@@ -152,10 +185,10 @@ function buildTypeScriptConfig(filePath: string): RunConfig {
 		}
 	}
 
-	return { command: `npx tsx ${quotePath(filePath)}` }
+	return { command: `npx tsx ${quotePath(commandPath(filePath, workDir, target))}` }
 }
 
-function buildCConfig(filePath: string): RunConfig {
+function buildCConfig(filePath: string, workDir: string, target: RunExecutionTarget): RunConfig {
 	const fileDir = path.dirname(filePath)
 
 	const cmakeRoot = findProjectRoot(fileDir, ["CMakeLists.txt"])
@@ -163,9 +196,9 @@ function buildCConfig(filePath: string): RunConfig {
 		const bd = path.join(cmakeRoot, "build")
 		return {
 			command: chain(
-				`cmake -S ${quotePath(cmakeRoot)} -B ${quotePath(bd)}`,
-				`cmake --build ${quotePath(bd)}`,
-				`cmake --build ${quotePath(bd)} --target run`,
+				`cmake -S ${quotePath(commandPath(cmakeRoot, workDir, target))} -B ${quotePath(commandPath(bd, workDir, target))}`,
+				`cmake --build ${quotePath(commandPath(bd, workDir, target))}`,
+				`cmake --build ${quotePath(commandPath(bd, workDir, target))} --target run`,
 			),
 			cwd: cmakeRoot,
 		}
@@ -180,17 +213,17 @@ function buildCConfig(filePath: string): RunConfig {
 	const cFiles = listSourceFiles(fileDir, [".c"])
 	const cFilesQuoted = cFiles.map(quotePath)
 	if (cFiles.length > 1) {
-		const out = exeName(base)
+		const out = exeName(base, target)
 		return { command: chain(`gcc ${cFilesQuoted.join(" ")} -o ${quotePath(out)}`, quotePath(out)), cwd: fileDir }
 	}
-	const out = exeName(base)
+	const out = exeName(base, target)
 	return {
 		command: chain(`gcc ${quotePath(path.basename(filePath))} -o ${quotePath(out)}`, quotePath(out)),
 		cwd: fileDir,
 	}
 }
 
-function buildCppConfig(filePath: string): RunConfig {
+function buildCppConfig(filePath: string, workDir: string, target: RunExecutionTarget): RunConfig {
 	const fileDir = path.dirname(filePath)
 
 	const cmakeRoot = findProjectRoot(fileDir, ["CMakeLists.txt"])
@@ -198,9 +231,9 @@ function buildCppConfig(filePath: string): RunConfig {
 		const bd = path.join(cmakeRoot, "build")
 		return {
 			command: chain(
-				`cmake -S ${quotePath(cmakeRoot)} -B ${quotePath(bd)}`,
-				`cmake --build ${quotePath(bd)}`,
-				`cmake --build ${quotePath(bd)} --target run`,
+				`cmake -S ${quotePath(commandPath(cmakeRoot, workDir, target))} -B ${quotePath(commandPath(bd, workDir, target))}`,
+				`cmake --build ${quotePath(commandPath(bd, workDir, target))}`,
+				`cmake --build ${quotePath(commandPath(bd, workDir, target))} --target run`,
 			),
 			cwd: cmakeRoot,
 		}
@@ -215,32 +248,34 @@ function buildCppConfig(filePath: string): RunConfig {
 	const cppFiles = listSourceFiles(fileDir, [".cpp", ".cc", ".cxx"])
 	const cppFilesQuoted = cppFiles.map(quotePath)
 	if (cppFiles.length > 1) {
-		const out = exeName(base)
+		const out = exeName(base, target)
 		return {
 			command: chain(`g++ ${cppFilesQuoted.join(" ")} -o ${quotePath(out)}`, quotePath(out)),
 			cwd: fileDir,
 		}
 	}
-	const out = exeName(base)
+	const out = exeName(base, target)
 	return {
 		command: chain(`g++ ${quotePath(path.basename(filePath))} -o ${quotePath(out)}`, quotePath(out)),
 		cwd: fileDir,
 	}
 }
 
-function buildJavaConfig(filePath: string): RunConfig {
+function buildJavaConfig(filePath: string, _workDir: string, target: RunExecutionTarget): RunConfig {
 	const fileDir = path.dirname(filePath)
 
 	const mavenRoot = findProjectRoot(fileDir, ["pom.xml"])
 	if (mavenRoot) {
-		const mvn = isWin ? "mvn.cmd" : "mvn"
+		const mvn = target === "host-windows" ? "mvn.cmd" : "mvn"
 		return { command: chain(`${mvn} compile`, `${mvn} exec:java`), cwd: mavenRoot }
 	}
 
 	const gradleRoot = findProjectRoot(fileDir, ["build.gradle", "build.gradle.kts"])
 	if (gradleRoot) {
-		const wrapper = isWin ? "gradlew.bat" : "./gradlew"
-		const cmd = fs.existsSync(path.join(gradleRoot, isWin ? "gradlew.bat" : "gradlew")) ? wrapper : "gradle"
+		const wrapper = target === "host-windows" ? "gradlew.bat" : "./gradlew"
+		const cmd = fs.existsSync(path.join(gradleRoot, target === "host-windows" ? "gradlew.bat" : "gradlew"))
+			? wrapper
+			: "gradle"
 		return { command: `${cmd} run`, cwd: gradleRoot }
 	}
 
@@ -257,7 +292,7 @@ function buildJavaConfig(filePath: string): RunConfig {
 	}
 }
 
-function buildGoConfig(filePath: string): RunConfig {
+function buildGoConfig(filePath: string, workDir: string, target: RunExecutionTarget): RunConfig {
 	const fileDir = path.dirname(filePath)
 
 	const goModRoot = findProjectRoot(fileDir, ["go.mod"])
@@ -271,10 +306,10 @@ function buildGoConfig(filePath: string): RunConfig {
 		return { command: "go run .", cwd: fileDir }
 	}
 
-	return { command: `go run ${quotePath(filePath)}` }
+	return { command: `go run ${quotePath(commandPath(filePath, workDir, target))}` }
 }
 
-function buildRustConfig(filePath: string): RunConfig {
+function buildRustConfig(filePath: string, workDir: string, target: RunExecutionTarget): RunConfig {
 	const fileDir = path.dirname(filePath)
 
 	const cargoRoot = findProjectRoot(fileDir, ["Cargo.toml"])
@@ -283,11 +318,20 @@ function buildRustConfig(filePath: string): RunConfig {
 	}
 
 	const base = path.basename(filePath, ".rs")
-	const out = exeName(base)
-	return { command: chain(`rustc ${quotePath(filePath)} -o ${quotePath(out)}`, quotePath(out)), cwd: fileDir }
+	const out = exeName(base, target)
+	return {
+		command: chain(
+			`rustc ${quotePath(commandPath(filePath, workDir, target))} -o ${quotePath(out)}`,
+			quotePath(out),
+		),
+		cwd: fileDir,
+	}
 }
 
-function buildMatlabConfig(filePath: string, _workDir: string): RunConfig | undefined {
+function buildMatlabConfig(filePath: string, _workDir: string, target: RunExecutionTarget): RunConfig | undefined {
+	if (target === "docker-linux") {
+		throw new Error("MATLAB Run Code is not supported by the Docker sandbox.")
+	}
 	const ext = path.extname(filePath).toLowerCase()
 	if (ext === ".mlx") {
 		void vscode.window.showWarningMessage(t("errors.run_code.matlab_live_script_unsupported"))
@@ -316,30 +360,36 @@ function buildMatlabConfig(filePath: string, _workDir: string): RunConfig | unde
 	return c
 }
 
-function buildCangjieConfig(filePath: string): RunConfig {
+function buildCangjieConfig(filePath: string, _workDir: string, target: RunExecutionTarget): RunConfig {
 	const fileDir = path.dirname(filePath)
-	const env = buildCangjieToolEnv()
 
 	const cjpmRoot = findProjectRoot(fileDir, ["cjpm.toml"])
 	if (cjpmRoot) {
+		if (target === "docker-linux") {
+			return { command: "/usr/local/bin/cjpm run", cwd: cjpmRoot }
+		}
+
+		const env = buildCangjieToolEnv()
 		const cjpm = resolveCangjieToolPath("cjpm", "cangjieTools.cjpmPath") || "cjpm"
-		const cmd = isWin ? `& ${quotePath(cjpm)} run` : `${quotePath(cjpm)} run`
+		const cmd = target === "host-windows" ? `& ${quotePath(cjpm)} run` : `${quotePath(cjpm)} run`
 		return { command: cmd, cwd: cjpmRoot, env }
 	}
 
-	const cjc = resolveCangjieToolPath("cjc", CJC_CONFIG_KEY) || "cjc"
+	const cjc =
+		target === "docker-linux" ? "/usr/local/bin/cjc" : resolveCangjieToolPath("cjc", CJC_CONFIG_KEY) || "cjc"
+	const env = target === "docker-linux" ? undefined : buildCangjieToolEnv()
 	const base = path.basename(filePath, ".cj")
 	const cjFiles = listSourceFiles(fileDir, [".cj"])
 	const cjFilesQuoted = cjFiles.map(quotePath)
 	if (cjFiles.length > 1) {
-		const out = exeName(base)
+		const out = exeName(base, target)
 		return {
 			command: chain(`${quotePath(cjc)} ${cjFilesQuoted.join(" ")} -o ${quotePath(out)}`, quotePath(out)),
 			cwd: fileDir,
 			env,
 		}
 	}
-	const out = exeName(base)
+	const out = exeName(base, target)
 	return {
 		command: chain(`${quotePath(cjc)} ${quotePath(path.basename(filePath))} -o ${quotePath(out)}`, quotePath(out)),
 		cwd: fileDir,
@@ -347,13 +397,15 @@ function buildCangjieConfig(filePath: string): RunConfig {
 	}
 }
 
-function buildKotlinConfig(filePath: string): RunConfig {
+function buildKotlinConfig(filePath: string, _workDir: string, target: RunExecutionTarget): RunConfig {
 	const fileDir = path.dirname(filePath)
 
 	const gradleRoot = findProjectRoot(fileDir, ["build.gradle", "build.gradle.kts"])
 	if (gradleRoot) {
-		const wrapper = isWin ? "gradlew.bat" : "./gradlew"
-		const cmd = fs.existsSync(path.join(gradleRoot, isWin ? "gradlew.bat" : "gradlew")) ? wrapper : "gradle"
+		const wrapper = target === "host-windows" ? "gradlew.bat" : "./gradlew"
+		const cmd = fs.existsSync(path.join(gradleRoot, target === "host-windows" ? "gradlew.bat" : "gradlew"))
+			? wrapper
+			: "gradle"
 		return { command: `${cmd} run`, cwd: gradleRoot }
 	}
 
@@ -379,13 +431,13 @@ function buildKotlinConfig(filePath: string): RunConfig {
 	}
 }
 
-function buildDartConfig(filePath: string): RunConfig {
+function buildDartConfig(filePath: string, workDir: string, target: RunExecutionTarget): RunConfig {
 	const fileDir = path.dirname(filePath)
 	const pubRoot = findProjectRoot(fileDir, ["pubspec.yaml"])
-	return { command: `dart run ${quotePath(filePath)}`, cwd: pubRoot || fileDir }
+	return { command: `dart run ${quotePath(commandPath(filePath, workDir, target))}`, cwd: pubRoot || fileDir }
 }
 
-function buildSwiftConfig(filePath: string): RunConfig {
+function buildSwiftConfig(filePath: string, workDir: string, target: RunExecutionTarget): RunConfig {
 	const fileDir = path.dirname(filePath)
 
 	const spmRoot = findProjectRoot(fileDir, ["Package.swift"])
@@ -397,21 +449,25 @@ function buildSwiftConfig(filePath: string): RunConfig {
 	const swiftFilesQuoted = swiftFiles.map(quotePath)
 	if (swiftFiles.length > 1) {
 		const base = path.basename(filePath, ".swift")
-		const out = exeName(base)
+		const out = exeName(base, target)
 		return {
 			command: chain(`swiftc ${swiftFilesQuoted.join(" ")} -o ${quotePath(out)}`, quotePath(out)),
 			cwd: fileDir,
 		}
 	}
 
-	return { command: `swift ${quotePath(filePath)}` }
+	return { command: `swift ${quotePath(commandPath(filePath, workDir, target))}` }
 }
 
 /**
  * LaTeX: compile to PDF in the same directory as the .tex file (default tool output location).
  * Uses `njust-ai.latex.*` settings (same as command LaTeX: Compile local).
  */
-function buildLatexConfig(filePath: string, _workDir: string): RunConfig {
+function buildLatexConfig(filePath: string, _workDir: string, target: RunExecutionTarget): RunConfig {
+	if (target === "docker-linux") {
+		throw new Error("LaTeX Run Code is not supported by the Docker sandbox.")
+	}
+
 	const cwd = path.dirname(filePath)
 	const base = path.basename(filePath)
 	const cfg = vscode.workspace.getConfiguration(Package.name)
@@ -442,7 +498,16 @@ function buildLatexConfig(filePath: string, _workDir: string): RunConfig {
 // Language → builder mapping
 // ---------------------------------------------------------------------------
 
-type RunConfigBuilder = (filePath: string, workDir: string) => RunConfig | undefined
+type RunConfigBuilder = (filePath: string, workDir: string, target: RunExecutionTarget) => RunConfig | undefined
+
+function buildPowerShellConfig(filePath: string, workDir: string, target: RunExecutionTarget): RunConfig {
+	if (target === "docker-linux") {
+		throw new Error("PowerShell Run Code is not supported by the Docker sandbox.")
+	}
+	return {
+		command: `powershell -ExecutionPolicy Bypass -File ${quotePath(commandPath(filePath, workDir, target))}`,
+	}
+}
 
 const LANGUAGE_RUN_MAP: Record<string, RunConfigBuilder> = {
 	python: buildPythonConfig,
@@ -457,13 +522,13 @@ const LANGUAGE_RUN_MAP: Record<string, RunConfigBuilder> = {
 	kotlin: buildKotlinConfig,
 	dart: buildDartConfig,
 	swift: buildSwiftConfig,
-	ruby: (fp) => ({ command: `ruby ${quotePath(fp)}` }),
-	php: (fp) => ({ command: `php ${quotePath(fp)}` }),
-	shellscript: (fp) => ({ command: `bash ${quotePath(fp)}` }),
-	powershell: (fp) => ({ command: `powershell -ExecutionPolicy Bypass -File ${quotePath(fp)}` }),
-	lua: (fp) => ({ command: `lua ${quotePath(fp)}` }),
-	perl: (fp) => ({ command: `perl ${quotePath(fp)}` }),
-	r: (fp) => ({ command: `Rscript ${quotePath(fp)}` }),
+	ruby: (fp, workDir, target) => ({ command: `ruby ${quotePath(commandPath(fp, workDir, target))}` }),
+	php: (fp, workDir, target) => ({ command: `php ${quotePath(commandPath(fp, workDir, target))}` }),
+	shellscript: (fp, workDir, target) => ({ command: `bash ${quotePath(commandPath(fp, workDir, target))}` }),
+	powershell: buildPowerShellConfig,
+	lua: (fp, workDir, target) => ({ command: `lua ${quotePath(commandPath(fp, workDir, target))}` }),
+	perl: (fp, workDir, target) => ({ command: `perl ${quotePath(commandPath(fp, workDir, target))}` }),
+	r: (fp, workDir, target) => ({ command: `Rscript ${quotePath(commandPath(fp, workDir, target))}` }),
 	matlab: buildMatlabConfig,
 	latex: buildLatexConfig,
 	tex: buildLatexConfig,
@@ -556,33 +621,130 @@ export async function runActiveEditorCode(outputChannel: vscode.OutputChannel): 
 	}
 
 	const filePath = document.fileName
-	const workDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || path.dirname(filePath)
-	let config: RunConfig | undefined
+	const activeFolder = document.uri ? vscode.workspace.getWorkspaceFolder(document.uri) : undefined
+	const workDir = activeFolder?.uri.fsPath || path.dirname(filePath)
+	const sandboxService = SandboxExecutionService.getInstance()
+	const sandboxExecId = SandboxExecutionService.generateExecutionId()
+	const resourceScopeId = `user:run-code:${sandboxExecId}`
+
 	try {
-		config = builder(filePath, workDir)
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error)
-		vscode.window.showErrorMessage(`Run Code failed: ${message}`)
-		return
-	}
-	if (!config) {
-		if (language !== "matlab") {
-			vscode.window.showWarningMessage("Failed to generate run command for this file.")
+		const sandboxBackend = await sandboxService.evaluatePolicyOnly("user", {
+			executionId: sandboxExecId,
+			taskId: "run-code",
+			resourceScopeId,
+			command: `Run Code (${language}): ${path.basename(filePath)}`,
+			workspacePath: workDir,
+			cwd: path.dirname(filePath),
+			timeoutMs: 120_000,
+			source: "user",
+			onOutput: () => {},
+		})
+		const target: RunExecutionTarget = sandboxBackend === "docker" ? "docker-linux" : hostExecutionTarget
+		const config = builder(filePath, workDir, target)
+		if (!config) {
+			if (language !== "matlab") {
+				vscode.window.showWarningMessage("Failed to generate run command for this file.")
+			}
+			return
 		}
-		return
+
+		const hostCwd = config.cwd || workDir
+		// For Docker targets, convert host path to container path explicitly.
+		// toExecutionPath validates the path is within workspace AND returns the mapped path.
+		const cwd = target === "docker-linux" ? toExecutionPath(hostCwd, workDir, target) : hostCwd
+
+		const request = {
+			executionId: sandboxExecId,
+			taskId: "run-code",
+			resourceScopeId,
+			command: config.command,
+			workspacePath: workDir,
+			cwd,
+			timeoutMs: sandboxBackend === "docker" ? 120_000 : 0,
+			source: "user" as const,
+			environment: config.env,
+			onOutput: (chunk: { text: string }) => {
+				outputChannel.append(chunk.text)
+			},
+		}
+
+		outputChannel.appendLine(`[Run Code] Language: ${language}, CWD: ${cwd}, Command: ${config.command}`)
+
+		// ── Route through SandboxExecutionService ────────────────────────────────
+		if (sandboxBackend === "docker") {
+			let executionFailed = false
+			let executionError: unknown
+			let cleanupFailed = false
+			let cleanupError: unknown
+			try {
+				const handle = await sandboxService.run(request)
+				outputChannel.appendLine(`\n[Run Code] Exit code: ${handle.exitCode ?? "unknown"}`)
+			} catch (error) {
+				executionFailed = true
+				executionError = error
+			} finally {
+				try {
+					await sandboxService.disposeScope(resourceScopeId)
+				} catch (error) {
+					cleanupFailed = true
+					cleanupError = error
+				}
+			}
+			if (executionFailed && cleanupFailed) {
+				throw new AggregateError(
+					[executionError, cleanupError],
+					`Sandbox execution failed: ${wrapAsError(executionError).message}; scope cleanup failed: ${wrapAsError(cleanupError).message}`,
+				)
+			}
+			if (executionFailed) throw executionError
+			if (cleanupFailed) throw cleanupError
+			return
+		}
+
+		await sandboxService.evaluateAndAuditExecution(request)
+		let stopTracking: (() => void) | undefined
+		try {
+			const terminal = vscode.window.createTerminal({
+				name: `Run: ${path.basename(filePath)}`,
+				cwd,
+				env: config.env,
+				shellPath: target === "host-windows" && config.command.includes("&&") ? "cmd.exe" : undefined,
+			})
+			terminal.show()
+			stopTracking = sandboxService.trackExternalTerminalExecution(
+				sandboxExecId,
+				terminal,
+				sandboxService.getEffectiveTimeout(0, "user"),
+			)
+			terminal.sendText(config.command)
+		} catch (error) {
+			try {
+				stopTracking?.()
+			} catch (cleanupError) {
+				logger.debug("RunCode", "Failed to stop terminal tracking after startup error", cleanupError)
+			}
+			try {
+				sandboxService.recordExecutionComplete(
+					sandboxExecId,
+					{
+						executionId: sandboxExecId,
+						backend: "guarded-host",
+						exitCode: undefined,
+						output: "",
+						cancelled: false,
+						timedOut: false,
+					},
+					wrapAsError(error),
+				)
+			} catch (auditError) {
+				logger.warn("RunCode", "Failed to record terminal startup failure", auditError)
+			}
+			throw error
+		}
+	} catch (error) {
+		logger.debug("RunCode", "Execution failed", error)
+		const message = error instanceof Error ? error.message : String(error)
+		outputChannel.appendLine(`[Run Code] Error: ${message}`)
+		vscode.window.showErrorMessage(`Run Code failed: ${message}`)
 	}
-
-	const cwd = config.cwd || workDir
-	const needsCmd = isWin && config.command.includes("&&")
-
-	outputChannel.appendLine(`[Run Code] Language: ${language}, CWD: ${cwd}, Command: ${config.command}`)
-
-	const terminal = vscode.window.createTerminal({
-		name: `Run: ${path.basename(filePath)}`,
-		cwd,
-		env: config.env,
-		shellPath: needsCmd ? "cmd.exe" : undefined,
-	})
-	terminal.show()
-	terminal.sendText(config.command)
 }

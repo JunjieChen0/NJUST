@@ -62,6 +62,10 @@ describe("Task dispose method", () => {
 		if (task && !task.abort) {
 			task.dispose()
 		}
+		// Restore spies AFTER dispose so any console.error triggered during
+		// cleanup still hits the mock, not the real console (which would race
+		// with vitest worker teardown and cause EnvironmentTeardownError).
+		vi.restoreAllMocks()
 	})
 
 	it("marks isDisposed and removes listeners", () => {
@@ -84,7 +88,6 @@ describe("Task dispose method", () => {
 		const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(function () {})
 		expect(() => task.dispose()).not.toThrow()
 		expect(consoleErrorSpy).toHaveBeenCalled()
-		consoleErrorSpy.mockRestore()
 	})
 
 	it("sets isDisposed flag during dispose", () => {

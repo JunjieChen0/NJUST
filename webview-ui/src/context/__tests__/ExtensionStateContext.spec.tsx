@@ -12,6 +12,7 @@ import {
 	type ExtensionState,
 	type ClineMessage,
 	DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
+	DEFAULT_SANDBOX_SETTINGS,
 } from "@njust-ai/types"
 
 import { ExtensionStateContextProvider, useExtensionState, mergeExtensionState } from "../ExtensionStateContext"
@@ -54,6 +55,15 @@ const ApiConfigTestComponent = () => {
 	)
 }
 
+const SandboxStateTestComponent = () => {
+	const { sandboxBackend, sandboxDockerImage, sandboxDockerStatus } = useExtensionState()
+	return (
+		<div data-testid="sandbox-state">
+			{JSON.stringify({ sandboxBackend, sandboxDockerImage, sandboxDockerStatus })}
+		</div>
+	)
+}
+
 describe("ExtensionStateContext", () => {
 	it("initializes with empty allowedCommands array", () => {
 		render(
@@ -83,6 +93,20 @@ describe("ExtensionStateContext", () => {
 		)
 
 		expect(JSON.parse(screen.getByTestId("show-rooignored-files").textContent!)).toBe(true)
+	})
+
+	it("initializes sandbox state from the shared defaults", () => {
+		render(
+			<ExtensionStateContextProvider>
+				<SandboxStateTestComponent />
+			</ExtensionStateContextProvider>,
+		)
+
+		expect(JSON.parse(screen.getByTestId("sandbox-state").textContent!)).toEqual({
+			sandboxBackend: DEFAULT_SANDBOX_SETTINGS.backend,
+			sandboxDockerImage: DEFAULT_SANDBOX_SETTINGS.dockerImage,
+			sandboxDockerStatus: "unknown",
+		})
 	})
 
 	it("updates showRooIgnoredFiles through setShowRooIgnoredFiles", () => {

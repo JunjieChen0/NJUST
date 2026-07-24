@@ -10,6 +10,7 @@ import type { HistoryItem } from "@njust-ai/types"
 
 import { TaskHistoryStore } from "../TaskHistoryStore"
 import { GlobalFileNames } from "../../../shared/globalFileNames"
+import { logger } from "../../../shared/logger"
 
 vi.mock("../../../utils/storage", () => ({
 	getStorageBasePath: vi.fn().mockImplementation((defaultPath: string) => defaultPath),
@@ -53,8 +54,14 @@ describe("TaskHistoryStore", () => {
 
 	describe("initialize()", () => {
 		it("initializes from empty state (no index, no task dirs)", async () => {
+			const debugSpy = vi.spyOn(logger, "debug")
+
 			await store.initialize()
+
+			expect(debugSpy).not.toHaveBeenCalledWith("TaskHistoryStore", "WAL marker check failed", expect.anything())
 			expect(store.getAll()).toEqual([])
+
+			debugSpy.mockRestore()
 		})
 
 		it("initializes from existing index file", async () => {

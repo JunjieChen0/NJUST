@@ -59,10 +59,14 @@ describe("execCommand security boundaries", () => {
 			await fs.mkdir(outsideDir, { recursive: true })
 
 			await expect(
-				execCommand(workspaceCwd, {
-					command: "echo test",
-					cwd: outsideDir,
-				}),
+				execCommand(
+					workspaceCwd,
+					{
+						command: "echo test",
+						cwd: outsideDir,
+					},
+					{ source: "mcp", taskId: "test" },
+				),
 			).rejects.toThrow("Path escapes workspace boundary")
 		})
 
@@ -70,10 +74,14 @@ describe("execCommand security boundaries", () => {
 			await setupDirs()
 
 			await expect(
-				execCommand(workspaceCwd, {
-					command: "echo test",
-					cwd: "../../outside",
-				}),
+				execCommand(
+					workspaceCwd,
+					{
+						command: "echo test",
+						cwd: "../../outside",
+					},
+					{ source: "mcp", taskId: "test" },
+				),
 			).rejects.toThrow("Path escapes workspace boundary")
 		})
 
@@ -82,12 +90,32 @@ describe("execCommand security boundaries", () => {
 			const subDir = path.join(workspaceCwd, "subdir")
 			await fs.mkdir(subDir, { recursive: true })
 
-			const result = await execCommand(workspaceCwd, {
-				command: "echo test",
-				cwd: "subdir",
-			})
+			const result = await execCommand(
+				workspaceCwd,
+				{
+					command: "echo test",
+					cwd: "subdir",
+				},
+				{ source: "mcp", taskId: "test" },
+			)
 
 			expect(result).toContain("Exit code:")
+		})
+	})
+
+	describe("shell redirection enforcement", () => {
+		it.each([
+			"git show HEAD > ../outside.txt",
+			"git diff > C:/Users/Public/out.txt",
+			"git log > /tmp/out",
+			"git status 2> ../error.txt",
+			"git log < ../input.txt",
+		])("rejects remote I/O redirection before execution: %s", async (command) => {
+			await setupDirs()
+
+			await expect(
+				execCommand(workspaceCwd, { command }, { source: "mcp", taskId: "test" }, ["*"]),
+			).rejects.toThrow("Shell I/O redirection is not allowed")
 		})
 	})
 
@@ -95,15 +123,23 @@ describe("execCommand security boundaries", () => {
 		it("rejects command not in allowed list", async () => {
 			await setupDirs()
 
-			await expect(execCommand(workspaceCwd, { command: "npm install" }, ["git", "echo"])).rejects.toThrow(
-				"Command requires explicit approval",
-			)
+			await expect(
+				execCommand(workspaceCwd, { command: "npm install" }, { source: "mcp", taskId: "test" }, [
+					"git",
+					"echo",
+				]),
+			).rejects.toThrow("Command requires explicit approval")
 		})
 
 		it("allows command in allowed list", async () => {
 			await setupDirs()
 
-			const result = await execCommand(workspaceCwd, { command: "echo test" }, ["git", "echo"])
+			const result = await execCommand(
+				workspaceCwd,
+				{ command: "echo test" },
+				{ source: "mcp", taskId: "test" },
+				["git", "echo"],
+			)
 
 			expect(result).toContain("Exit code:")
 		})
@@ -111,7 +147,12 @@ describe("execCommand security boundaries", () => {
 		it("allows any command when wildcard is present", async () => {
 			await setupDirs()
 
-			const result = await execCommand(workspaceCwd, { command: "node -e \"console.log('wildcard')\"" }, ["*"])
+			const result = await execCommand(
+				workspaceCwd,
+				{ command: "node -e \"console.log('wildcard')\"" },
+				{ source: "mcp", taskId: "test" },
+				["*"],
+			)
 
 			expect(result).toContain("Exit code:")
 		})
@@ -119,7 +160,12 @@ describe("execCommand security boundaries", () => {
 		it("matches command by base name", async () => {
 			await setupDirs()
 
-			const result = await execCommand(workspaceCwd, { command: "echo test" }, ["echo"])
+			const result = await execCommand(
+				workspaceCwd,
+				{ command: "echo test" },
+				{ source: "mcp", taskId: "test" },
+				["echo"],
+			)
 
 			expect(result).toContain("Exit code:")
 		})
@@ -128,7 +174,13 @@ describe("execCommand security boundaries", () => {
 			await setupDirs()
 
 			await expect(
-				execCommand(workspaceCwd, { command: "git status && rm file" }, ["git"], ["rm"]),
+				execCommand(
+					workspaceCwd,
+					{ command: "git status && rm file" },
+					{ source: "mcp", taskId: "test" },
+					["git"],
+					["rm"],
+				),
 			).rejects.toThrow("Command denied by policy")
 		})
 	})
@@ -137,17 +189,17 @@ describe("execCommand security boundaries", () => {
 		it("rejects command in denied list", async () => {
 			await setupDirs()
 
-			await expect(execCommand(workspaceCwd, { command: "rm -rf /" }, ["*"], ["rm"])).rejects.toThrow(
-				"Command denied by policy",
-			)
+			await expect(
+				execCommand(workspaceCwd, { command: "rm -rf /" }, { source: "mcp", taskId: "test" }, ["*"], ["rm"]),
+			).rejects.toThrow("Command denied by policy")
 		})
 
 		it("deniedCommands checked after allowedCommands", async () => {
 			await setupDirs()
 
-			await expect(execCommand(workspaceCwd, { command: "rm file" }, ["rm"], ["rm"])).rejects.toThrow(
-				"Command denied by policy",
-			)
+			await expect(
+				execCommand(workspaceCwd, { command: "rm file" }, { source: "mcp", taskId: "test" }, ["rm"], ["rm"]),
+			).rejects.toThrow("Command denied by policy")
 		})
 	})
 })
@@ -331,6 +383,148 @@ describe("symlink escape prevention", () => {
 	})
 })
 
+describe("Git metadata write protection", () => {
+	let tempDir: string
+	let workspaceCwd: string
+
+	async function setupDirs() {
+		tempDir = await mkdtemp(path.join(tmpdir(), "test-git-metadata-"))
+		workspaceCwd = path.join(tempDir, "workspace")
+		await fs.mkdir(workspaceCwd, { recursive: true })
+	}
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true }).catch(() => {})
+	})
+
+	it.each([
+		".git/config",
+		"nested/.git/config",
+		"nested/.GIT/hooks/pre-commit",
+		".git./config",
+		".git /config",
+		".git:metadata",
+	])("rejects write_file without an injected protector: %s", async (targetPath) => {
+		await setupDirs()
+
+		await expect(execWriteFile(workspaceCwd, { path: targetPath, content: "unsafe" })).rejects.toThrow(
+			"Git metadata is write-protected",
+		)
+	})
+
+	it("rejects apply_diff before checking whether the Git metadata file exists", async () => {
+		await setupDirs()
+
+		await expect(
+			execApplyDiff(workspaceCwd, {
+				path: ".git/config",
+				diff: "<<<<<<< SEARCH\nold\n=======\nnew\n>>>>>>> REPLACE",
+			}),
+		).rejects.toThrow("Git metadata is write-protected")
+	})
+
+	it("rejects a lexical .git path before resolving a symlink outside the workspace", async () => {
+		await setupDirs()
+		const outsideMetadata = path.join(tempDir, "outside-metadata")
+		await fs.mkdir(outsideMetadata, { recursive: true })
+		await fs.symlink(
+			outsideMetadata,
+			path.join(workspaceCwd, ".git"),
+			process.platform === "win32" ? "junction" : "dir",
+		)
+
+		await expect(execWriteFile(workspaceCwd, { path: ".git/config", content: "unsafe" })).rejects.toThrow(
+			"Git metadata is write-protected",
+		)
+	})
+
+	it.each(["write_file", "apply_diff"] as const)(
+		"rejects %s through the real target of a contained .git symlink",
+		async (operation) => {
+			await setupDirs()
+			const metadataPath = path.join(workspaceCwd, "git-metadata")
+			await fs.mkdir(metadataPath, { recursive: true })
+			await fs.writeFile(path.join(metadataPath, "config"), "[core]\n")
+			await fs.symlink(
+				metadataPath,
+				path.join(workspaceCwd, ".git"),
+				process.platform === "win32" ? "junction" : "dir",
+			)
+
+			const action =
+				operation === "write_file"
+					? execWriteFile(workspaceCwd, { path: "git-metadata/config", content: "unsafe" })
+					: execApplyDiff(workspaceCwd, {
+							path: "git-metadata/config",
+							diff: "<<<<<<< SEARCH\n[core]\n=======\n[core]\nworktree = ../../outside\n>>>>>>> REPLACE",
+						})
+
+			// On Windows, junction resolution may fail validation entirely rather
+			// than resolving the layout and detecting the path overlap. Both are
+			// correct security outcomes — the write is denied either way.
+			await expect(action).rejects.toThrow(/Git metadata (is write-protected|could not be validated safely)/)
+		},
+	)
+
+	it("rejects writes through the real target of a contained .git pointer", async () => {
+		await setupDirs()
+		const metadataPath = path.join(workspaceCwd, "git-metadata")
+		await fs.mkdir(metadataPath, { recursive: true })
+		await fs.writeFile(path.join(workspaceCwd, ".git"), "gitdir: git-metadata\n")
+
+		await expect(execWriteFile(workspaceCwd, { path: "git-metadata/config", content: "unsafe" })).rejects.toThrow(
+			"Git metadata is write-protected",
+		)
+	})
+
+	it("rejects writes through the real target of commondir", async () => {
+		await setupDirs()
+		const gitDirectory = path.join(workspaceCwd, "worktree-metadata")
+		const commonDirectory = path.join(workspaceCwd, "common-metadata")
+		await fs.mkdir(gitDirectory, { recursive: true })
+		await fs.mkdir(commonDirectory, { recursive: true })
+		await fs.writeFile(path.join(workspaceCwd, ".git"), "gitdir: worktree-metadata\n")
+		await fs.writeFile(path.join(gitDirectory, "commondir"), "../common-metadata\n")
+
+		await expect(
+			execWriteFile(workspaceCwd, { path: "common-metadata/config", content: "unsafe" }),
+		).rejects.toThrow("Git metadata is write-protected")
+	})
+
+	it("rejects writes through metadata of a nested repository", async () => {
+		await setupDirs()
+		const nestedRoot = path.join(workspaceCwd, "nested")
+		const nestedMetadata = path.join(nestedRoot, "git-metadata")
+		await fs.mkdir(nestedRoot, { recursive: true })
+		await fs.mkdir(nestedMetadata, { recursive: true })
+		await fs.writeFile(path.join(nestedRoot, ".git"), "gitdir: git-metadata\n")
+		await fs.writeFile(path.join(nestedMetadata, "config"), "[core]\n")
+
+		await expect(
+			execWriteFile(workspaceCwd, { path: "nested/git-metadata/config", content: "unsafe" }),
+		).rejects.toThrow("Git metadata is write-protected")
+	})
+
+	it("denies writes when a repository marker is malformed", async () => {
+		await setupDirs()
+		await fs.writeFile(path.join(workspaceCwd, ".git"), "not a gitdir pointer\n")
+
+		await expect(execWriteFile(workspaceCwd, { path: "notes.txt", content: "unsafe" })).rejects.toThrow(
+			"Git metadata could not be validated safely; write denied",
+		)
+	})
+
+	it("denies writes when repository config is malformed", async () => {
+		await setupDirs()
+		await fs.mkdir(path.join(workspaceCwd, ".git"), { recursive: true })
+		await fs.writeFile(path.join(workspaceCwd, ".git", "config"), "this is not a valid config entry\n")
+
+		await expect(execWriteFile(workspaceCwd, { path: "notes.txt", content: "unsafe" })).rejects.toThrow(
+			"Git metadata could not be validated safely; write denied",
+		)
+	})
+})
+
 describe("COMMAND_CHAIN_RE regex security", () => {
 	// Duplicate the regex for direct testing (same pattern as tool-executors.ts)
 	const RE = /(?:^|\s)(?:&&|\|\||[;&|])(?:\s|$)|[\r\n]/
@@ -368,9 +562,9 @@ describe("COMMAND_CHAIN_RE regex security", () => {
 		try {
 			const wc = path.join(tempDir, "workspace")
 			await fs.mkdir(wc, { recursive: true })
-			await expect(execCommand(wc, { command: "echo a && echo b" })).rejects.toThrow(
-				"Command contains shell chaining operators",
-			)
+			await expect(
+				execCommand(wc, { command: "echo a && echo b" }, { source: "mcp", taskId: "test" }),
+			).rejects.toThrow("Command contains shell chaining operators")
 		} finally {
 			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
 		}
@@ -381,9 +575,9 @@ describe("COMMAND_CHAIN_RE regex security", () => {
 		try {
 			const wc = path.join(tempDir, "workspace")
 			await fs.mkdir(wc, { recursive: true })
-			await expect(execCommand(wc, { command: "echo a || echo b" })).rejects.toThrow(
-				"Command contains shell chaining operators",
-			)
+			await expect(
+				execCommand(wc, { command: "echo a || echo b" }, { source: "mcp", taskId: "test" }),
+			).rejects.toThrow("Command contains shell chaining operators")
 		} finally {
 			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
 		}
@@ -394,9 +588,9 @@ describe("COMMAND_CHAIN_RE regex security", () => {
 		try {
 			const wc = path.join(tempDir, "workspace")
 			await fs.mkdir(wc, { recursive: true })
-			await expect(execCommand(wc, { command: "echo a ; echo b" })).rejects.toThrow(
-				"Command contains shell chaining operators",
-			)
+			await expect(
+				execCommand(wc, { command: "echo a ; echo b" }, { source: "mcp", taskId: "test" }),
+			).rejects.toThrow("Command contains shell chaining operators")
 		} finally {
 			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
 		}
@@ -407,9 +601,9 @@ describe("COMMAND_CHAIN_RE regex security", () => {
 		try {
 			const wc = path.join(tempDir, "workspace")
 			await fs.mkdir(wc, { recursive: true })
-			await expect(execCommand(wc, { command: "echo a | wc" })).rejects.toThrow(
-				"Command contains shell chaining operators",
-			)
+			await expect(
+				execCommand(wc, { command: "echo a | wc" }, { source: "mcp", taskId: "test" }),
+			).rejects.toThrow("Command contains shell chaining operators")
 		} finally {
 			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
 		}
@@ -420,9 +614,9 @@ describe("COMMAND_CHAIN_RE regex security", () => {
 		try {
 			const wc = path.join(tempDir, "workspace")
 			await fs.mkdir(wc, { recursive: true })
-			await expect(execCommand(wc, { command: "echo a\necho b" })).rejects.toThrow(
-				"Command contains shell chaining operators",
-			)
+			await expect(
+				execCommand(wc, { command: "echo a\necho b" }, { source: "mcp", taskId: "test" }),
+			).rejects.toThrow("Command contains shell chaining operators")
 		} finally {
 			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
 		}
@@ -433,7 +627,9 @@ describe("COMMAND_CHAIN_RE regex security", () => {
 		try {
 			const wc = path.join(tempDir, "workspace")
 			await fs.mkdir(wc, { recursive: true })
-			await expect(execCommand(wc, { command: "echo a\necho b" }, ["echo"])).rejects.toThrow()
+			await expect(
+				execCommand(wc, { command: "echo a\necho b" }, { source: "mcp", taskId: "test" }, ["echo"]),
+			).rejects.toThrow()
 		} finally {
 			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
 		}
@@ -469,9 +665,9 @@ describe("COMMAND_INJECTION_RE — unconditional $(subshell) / backtick rejectio
 		try {
 			const wc = path.join(tempDir, "workspace")
 			await fs.mkdir(wc, { recursive: true })
-			await expect(execCommand(wc, { command: "cjpm --version $(echo pwned)" })).rejects.toThrow(
-				"Command injection detected in MCP context",
-			)
+			await expect(
+				execCommand(wc, { command: "cjpm --version $(echo pwned)" }, { source: "mcp", taskId: "test" }),
+			).rejects.toThrow("Command injection detected in MCP context")
 		} finally {
 			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
 		}
@@ -482,9 +678,9 @@ describe("COMMAND_INJECTION_RE — unconditional $(subshell) / backtick rejectio
 		try {
 			const wc = path.join(tempDir, "workspace")
 			await fs.mkdir(wc, { recursive: true })
-			await expect(execCommand(wc, { command: "echo `whoami`" })).rejects.toThrow(
-				"Command injection detected in MCP context",
-			)
+			await expect(
+				execCommand(wc, { command: "echo `whoami`" }, { source: "mcp", taskId: "test" }),
+			).rejects.toThrow("Command injection detected in MCP context")
 		} finally {
 			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
 		}
@@ -495,9 +691,9 @@ describe("COMMAND_INJECTION_RE — unconditional $(subshell) / backtick rejectio
 		try {
 			const wc = path.join(tempDir, "workspace")
 			await fs.mkdir(wc, { recursive: true })
-			await expect(execCommand(wc, { command: "/opt/cangjie/bin/cjpm build $(id)" })).rejects.toThrow(
-				"Command injection detected in MCP context",
-			)
+			await expect(
+				execCommand(wc, { command: "/opt/cangjie/bin/cjpm build $(id)" }, { source: "mcp", taskId: "test" }),
+			).rejects.toThrow("Command injection detected in MCP context")
 		} finally {
 			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
 		}
@@ -508,9 +704,9 @@ describe("COMMAND_INJECTION_RE — unconditional $(subshell) / backtick rejectio
 		try {
 			const wc = path.join(tempDir, "workspace")
 			await fs.mkdir(wc, { recursive: true })
-			await expect(execCommand(wc, { command: "cjpm build $(id)" }, ["cjpm", "echo"])).rejects.toThrow(
-				"Command injection detected in MCP context",
-			)
+			await expect(
+				execCommand(wc, { command: "cjpm build $(id)" }, { source: "mcp", taskId: "test" }, ["cjpm", "echo"]),
+			).rejects.toThrow("Command injection detected in MCP context")
 		} finally {
 			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
 		}
@@ -521,9 +717,9 @@ describe("COMMAND_INJECTION_RE — unconditional $(subshell) / backtick rejectio
 		try {
 			const wc = path.join(tempDir, "workspace")
 			await fs.mkdir(wc, { recursive: true })
-			await expect(execCommand(wc, { command: "npm --version $(whoami)" }, ["*"])).rejects.toThrow(
-				"Command injection detected in MCP context",
-			)
+			await expect(
+				execCommand(wc, { command: "npm --version $(whoami)" }, { source: "mcp", taskId: "test" }, ["*"]),
+			).rejects.toThrow("Command injection detected in MCP context")
 		} finally {
 			await rm(tempDir, { recursive: true, force: true }).catch(() => {})
 		}

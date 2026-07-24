@@ -3,6 +3,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
 
 const mockPid = 12345
+const mockOutput = vitest.hoisted(() => ({ chunks: ["test output\n"] as Array<string | Uint8Array> }))
 
 vitest.mock("execa", () => {
 	const mockKill = vitest.fn()
@@ -11,7 +12,9 @@ vitest.mock("execa", () => {
 			pid: mockPid,
 			iterable: (_opts: any) =>
 				(async function* () {
-					yield "test output\n"
+					for (const chunk of mockOutput.chunks) {
+						yield chunk
+					}
 				})(),
 			kill: mockKill,
 		})
@@ -35,6 +38,7 @@ describe("ExecaTerminalProcess", () => {
 	let originalEnv: NodeJS.ProcessEnv
 
 	beforeEach(() => {
+		mockOutput.chunks = ["test output\n"]
 		originalEnv = { ...process.env }
 		BaseTerminal.setExecaShellPath(undefined)
 		mockTerminal = {
@@ -69,6 +73,8 @@ describe("ExecaTerminalProcess", () => {
 					shell: true,
 					cwd: "/test/cwd",
 					all: true,
+					extendEnv: false,
+					buffer: false,
 					env: expect.objectContaining({
 						LANG: "en_US.UTF-8",
 						LC_ALL: "en_US.UTF-8",
@@ -84,6 +90,19 @@ describe("ExecaTerminalProcess", () => {
 			const execaMock = vitest.mocked(execa)
 			const calledOptions = execaMock.mock.calls[0][0] as any
 			expect(calledOptions.env.EXISTING_VAR).toBe("existing")
+		})
+
+		it("should omit sensitive and dangerous environment variables", async () => {
+			process.env.EXECA_SENTINEL_TOKEN = "secret"
+			process.env.NODE_OPTIONS = "--inspect"
+			terminalProcess = new ExecaTerminalProcess(mockTerminal)
+
+			await terminalProcess.run("echo test")
+
+			const execaMock = vitest.mocked(execa)
+			const calledOptions = execaMock.mock.calls[0][0] as any
+			expect(calledOptions.env).not.toHaveProperty("EXECA_SENTINEL_TOKEN")
+			expect(calledOptions.env).not.toHaveProperty("NODE_OPTIONS")
 		})
 
 		it("should override existing LANG and LC_ALL values", async () => {
@@ -167,6 +186,17 @@ describe("ExecaTerminalProcess", () => {
 			expect(spy).toHaveBeenCalledWith("test output\n")
 		})
 
+		it("should decode UTF-8 characters split across chunks", async () => {
+			const encoded = Buffer.from("你\n", "utf8")
+			mockOutput.chunks = [encoded.subarray(0, 2), encoded.subarray(2)]
+			const spy = vitest.fn()
+			terminalProcess.on("completed", spy)
+
+			await terminalProcess.run("echo test")
+
+			expect(spy).toHaveBeenCalledWith("你\n")
+		})
+
 		it("should set and clear active stream", async () => {
 			await terminalProcess.run("echo test")
 			expect(mockTerminal.setActiveStream).toHaveBeenCalledWith(expect.any(Object), mockPid)
@@ -177,19 +207,6 @@ describe("ExecaTerminalProcess", () => {
 			await terminalProcess.run("cjpm build 2>&1")
 
 			expect(terminalProcess.command).toBe("cjpm build")
-		})
-
-		it("should still block shell chaining after stderr redirect normalization", async () => {
-			const spy = vitest.fn()
-			terminalProcess.on("error", spy)
-
-			await terminalProcess.run("echo a && echo b")
-
-			expect(spy).toHaveBeenCalledWith(
-				expect.objectContaining({
-					message: expect.stringContaining("contains shell chaining"),
-				}),
-			)
 		})
 	})
 

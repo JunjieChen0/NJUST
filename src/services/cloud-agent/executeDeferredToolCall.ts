@@ -9,6 +9,7 @@ import {
 import type { DeferredToolCall, DeferredToolResult } from "./types"
 import { getErrorMessage } from "../../shared/error-utils"
 import type { IPathValidator, IWriteProtector } from "./interfaces/IPathAccessController"
+import { checkToolExecutionAuth, type AuthContext } from "./auth-context"
 
 function expectString(args: Record<string, unknown>, key: string): string {
 	const val = args[key]
@@ -49,15 +50,31 @@ function expectOptionalBoolean(args: Record<string, unknown>, key: string): bool
  * Execute a single deferred tool call locally and return an MCP-shaped result.
  * Unknown tools yield an is_error result rather than throwing.
  */
+export interface DeferredToolExecutionOptions {
+	taskId: string
+	resourceScopeId?: string
+	allowedCommands?: string[]
+	deniedCommands?: string[]
+	pathValidator?: IPathValidator
+	writeProtector?: IWriteProtector
+}
+
 export async function executeDeferredToolCall(
 	cwd: string,
 	call: DeferredToolCall,
-	allowedCommands?: string[],
-	deniedCommands?: string[],
-	pathValidator?: IPathValidator,
-	writeProtector?: IWriteProtector,
+	authContext: AuthContext,
+	options: DeferredToolExecutionOptions,
 ): Promise<DeferredToolResult> {
 	try {
+		const authCheck = checkToolExecutionAuth(authContext)
+		if (!authCheck.allowed) {
+			return {
+				call_id: call.call_id,
+				content: authCheck.reason ?? "Tool execution denied: authentication required.",
+				is_error: true,
+			}
+		}
+
 		const args = call.arguments
 		if (args._arguments_parse_failed === true) {
 			const raw = typeof args._raw_arguments === "string" ? args._raw_arguments : ""
@@ -71,6 +88,8 @@ export async function executeDeferredToolCall(
 		let content: string
 
 		// Helper to check path access (replaces allowRooIgnorePathAccess)
+		const { pathValidator, writeProtector, allowedCommands, deniedCommands } = options
+
 		const isPathAccessAllowed = (validator: IPathValidator | undefined, filePath: string): boolean => {
 			return !validator || validator.validateAccess(filePath)
 		}
@@ -199,6 +218,11 @@ export async function executeDeferredToolCall(
 						command,
 						cwd: expectOptionalString(args, "cwd"),
 						timeout: expectOptionalNumber(args, "timeout"),
+					},
+					{
+						source: "cloud-agent",
+						taskId: options.taskId,
+						resourceScopeId: options.resourceScopeId,
 					},
 					allowedCommands,
 					deniedCommands,

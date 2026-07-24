@@ -1,5 +1,6 @@
 import { z } from "zod"
-import { guardedFetch } from "../../../core/security/networkGuard"
+import { guardedFetch } from "@njust-ai/core/security"
+import { logger } from "../../../shared/logger"
 import { t } from "../../../i18n"
 
 const apiErrorResponseSchema = z
@@ -134,8 +135,8 @@ export async function generateImageWithProvider(options: ImageGenerationOptions)
 						message: errorJson.error.message,
 					})
 				}
-			} catch {
-				// intentionally ignored: error response body parse failure, use default message
+			} catch (err) {
+				logger.debug("ImageGeneration", "parse error response", err)
 			}
 			return {
 				success: false,
@@ -267,8 +268,8 @@ export async function generateImageWithImagesApi(options: ImagesApiOptions): Pro
 						message: errorJson.error.message,
 					})
 				}
-			} catch {
-				// intentionally ignored: error response body parse failure, use default message
+			} catch (err) {
+				logger.debug("ImageGeneration", "parse error response", err)
 			}
 			return {
 				success: false,

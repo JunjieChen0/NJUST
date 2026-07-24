@@ -22,6 +22,9 @@ import {
 
 import { CreateRun } from "@/lib/schemas"
 import { redisClient } from "@/lib/server/redis"
+import { requireAdminForAction } from "@/lib/server/admin-auth"
+import { logAuditEvent } from "@/lib/server/audit"
+import { validateRunId, validateDescription, MAX_BATCH_DELETE_COUNT } from "@/lib/server/validation"
 
 // Storage base path for eval logs
 const EVALS_STORAGE_PATH = "/tmp/evals/runs"
@@ -36,111 +39,181 @@ export async function createRun({
 	executionMethod = "vscode",
 	...values
 }: CreateRun) {
-	const run = await _createRun({
-		...values,
-		timeout,
-		executionMethod,
-		socketPath: "", // TODO: Get rid of this.
-	})
+	await requireAdminForAction()
 
-	if (suite === "partial") {
-		for (const path of exercises) {
-			const [language, exercise] = path.split("/")
+	let run: Awaited<ReturnType<typeof _createRun>>
+	try {
+		run = await _createRun({
+			...values,
+			timeout,
+			executionMethod,
+			socketPath: "", // TODO: Get rid of this.
+		})
 
-			if (!language || !exercise) {
-				throw new Error("Invalid exercise path: " + path)
-			}
+		if (suite === "partial") {
+			for (const path of exercises) {
+				const [language, exercise] = path.split("/")
 
-			// Create multiple tasks for each iteration
-			for (let iteration = 1; iteration <= iterations; iteration++) {
-				await createTask({
-					...values,
-					runId: run.id,
-					language: language as ExerciseLanguage,
-					exercise,
-					iteration,
-				})
-			}
-		}
-	} else {
-		for (const language of exerciseLanguages) {
-			const languageExercises = await getExercisesForLanguage(EVALS_REPO_PATH, language)
+				if (!language || !exercise) {
+					throw new Error("Invalid exercise path: " + path)
+				}
 
-			// Create tasks for all iterations of each exercise
-			const tasksToCreate: Array<{ language: ExerciseLanguage; exercise: string; iteration: number }> = []
-			for (const exercise of languageExercises) {
+				// Create multiple tasks for each iteration
 				for (let iteration = 1; iteration <= iterations; iteration++) {
-					tasksToCreate.push({ language, exercise, iteration })
+					await createTask({
+						...values,
+						runId: run.id,
+						language: language as ExerciseLanguage,
+						exercise,
+						iteration,
+					})
 				}
 			}
-
-			await pMap(
-				tasksToCreate,
-				({ language, exercise, iteration }) => createTask({ runId: run.id, language, exercise, iteration }),
-				{ concurrency: 10 },
-			)
-		}
-	}
-
-	revalidatePath("/runs")
-
-	try {
-		const isRunningInDocker = fs.existsSync("/.dockerenv")
-
-		// Validate run.id to prevent command injection (must be done before any string interpolation)
-		const runId = Number(run.id)
-		if (!Number.isInteger(runId) || runId <= 0) {
-			throw new Error(`Invalid run.id: expected positive integer, got ${String(run.id)}`)
-		}
-
-		const dockerArgs = [
-			`--name evals-controller-${runId}`,
-			"--rm",
-			"--network evals_default",
-			"-v /var/run/docker.sock:/var/run/docker.sock",
-			"-v /tmp/evals:/var/log/evals",
-			"-e HOST_EXECUTION_METHOD=docker",
-		]
-
-		const cliArgs = ["--filter", "@njust-ai/evals", "cli", "--runId", String(runId)]
-
-		let childProcess
-		if (isRunningInDocker) {
-			// Use spawn argument array instead of sh -c to prevent command injection
-			const dockerRunArgs = [...dockerArgs, "evals-runner", "pnpm", ...cliArgs]
-			console.log("spawn -> docker run", dockerRunArgs.join(" "))
-			childProcess = spawn("docker", ["run", ...dockerRunArgs], {
-				detached: true,
-				stdio: ["ignore", "pipe", "pipe"],
-			})
 		} else {
-			console.log("spawn -> pnpm", cliArgs.join(" "))
-			childProcess = spawn("pnpm", cliArgs, {
-				detached: true,
-				stdio: ["ignore", "pipe", "pipe"],
+			for (const language of exerciseLanguages) {
+				const languageExercises = await getExercisesForLanguage(EVALS_REPO_PATH, language)
+
+				// Create tasks for all iterations of each exercise
+				const tasksToCreate: Array<{ language: ExerciseLanguage; exercise: string; iteration: number }> = []
+				for (const exercise of languageExercises) {
+					for (let iteration = 1; iteration <= iterations; iteration++) {
+						tasksToCreate.push({ language, exercise, iteration })
+					}
+				}
+
+				await pMap(
+					tasksToCreate,
+					({ language, exercise, iteration }) => createTask({ runId: run.id, language, exercise, iteration }),
+					{ concurrency: 10 },
+				)
+			}
+		}
+
+		revalidatePath("/runs")
+
+		try {
+			const isRunningInDocker = fs.existsSync("/.dockerenv")
+
+			// Validate run.id to prevent command injection (must be done before any string interpolation)
+			const runId = Number(run.id)
+			if (!Number.isInteger(runId) || runId <= 0) {
+				throw new Error(`Invalid run.id: expected positive integer, got ${String(run.id)}`)
+			}
+
+			// Each option and value must be a separate argv element for spawn()
+			const proxyAuthToken = process.env.PROXY_AUTH_TOKEN
+			const dockerArgs = [
+				"--name",
+				`evals-controller-${runId}`,
+				"--rm",
+				"--network",
+				"evals_default",
+				"-e",
+				`DOCKER_HOST=tcp://docker-proxy:2375`,
+				"-v",
+				"/tmp/evals:/var/log/evals",
+				"-e",
+				"HOST_EXECUTION_METHOD=docker",
+				"--memory",
+				"512m",
+				"--memory-swap",
+				"1g",
+				"--pids-limit",
+				"200",
+				"--cpus",
+				"1",
+			]
+
+			// Pass PROXY_AUTH_TOKEN to the controller (inherit from environment, not in argv)
+			if (proxyAuthToken) {
+				dockerArgs.push("-e", "PROXY_AUTH_TOKEN")
+			}
+
+			const cliArgs = ["--filter", "@njust-ai/evals", "cli", "--runId", String(runId)]
+
+			let childProcess
+			if (isRunningInDocker) {
+				// Use spawn argument array instead of sh -c to prevent command injection
+				const dockerRunArgs = [...dockerArgs, "evals-runner", "pnpm", ...cliArgs]
+				// Sanitize log output: mask sensitive env values
+				const sanitizedArgs = dockerRunArgs.map((arg) =>
+					arg.includes("PROXY_AUTH_TOKEN") ? "PROXY_AUTH_TOKEN=***" : arg,
+				)
+				console.log("spawn -> docker run", sanitizedArgs.join(" "))
+				childProcess = spawn("docker", ["run", ...dockerRunArgs], {
+					detached: true,
+					stdio: ["ignore", "pipe", "pipe"],
+				})
+			} else {
+				console.log("spawn -> pnpm", cliArgs.join(" "))
+				childProcess = spawn("pnpm", cliArgs, {
+					detached: true,
+					stdio: ["ignore", "pipe", "pipe"],
+				})
+			}
+
+			const logStream = fs.createWriteStream("/tmp/Njust-AI-evals.log", { flags: "a" })
+
+			if (childProcess.stdout) {
+				childProcess.stdout.pipe(logStream)
+			}
+
+			if (childProcess.stderr) {
+				childProcess.stderr.pipe(logStream)
+			}
+
+			// Handle async errors and non-zero exit
+			childProcess.on("error", (err) => {
+				console.error("Controller process error:", err)
+				logAuditEvent({
+					action: "run.controller.failed",
+					resource: String(run.id),
+					result: "failed",
+					reason: `spawn error: ${err.message.slice(0, 200)}`,
+				})
 			})
+
+			childProcess.on("exit", (code) => {
+				if (code !== null && code !== 0) {
+					console.error(`Controller process exited with code ${code}`)
+					logAuditEvent({
+						action: "run.controller.failed",
+						resource: String(run.id),
+						result: "failed",
+						reason: `controller exited with code ${code}`,
+					})
+				}
+			})
+
+			childProcess.unref()
+		} catch (error) {
+			console.error("Failed to spawn controller process:", error)
+			throw error
 		}
 
-		const logStream = fs.createWriteStream("/tmp/Njust-AI-evals.log", { flags: "a" })
+		logAuditEvent({
+			action: "run.create.requested",
+			resource: String(run.id),
+			result: "allowed",
+			reason: `suite=${suite}, executionMethod=${executionMethod}`,
+		})
 
-		if (childProcess.stdout) {
-			childProcess.stdout.pipe(logStream)
-		}
-
-		if (childProcess.stderr) {
-			childProcess.stderr.pipe(logStream)
-		}
-
-		childProcess.unref()
+		return run
 	} catch (error) {
-		console.error(error)
+		logAuditEvent({
+			action: "run.create",
+			result: "failed",
+			reason: error instanceof Error ? error.message.slice(0, 200) : "Unknown error",
+		})
+		throw error
 	}
-
-	return run
 }
 
 export async function deleteRun(runId: number) {
-	await _deleteRun(runId)
+	await requireAdminForAction()
+	const id = validateRunId(runId)
+	await _deleteRun(id)
+	logAuditEvent({ action: "run.delete", resource: String(id), result: "allowed" })
 	revalidatePath("/runs")
 }
 
@@ -162,10 +235,13 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
  * - Task runners: evals-task-{runId}-{taskId}.{attempt}
  */
 export async function killRun(runId: number): Promise<KillRunResult> {
+	await requireAdminForAction()
+	const id = validateRunId(runId)
+
 	const killedContainers: string[] = []
 	const errors: string[] = []
-	const controllerPattern = `evals-controller-${runId}`
-	const taskPattern = `evals-task-${runId}-`
+	const controllerPattern = `evals-controller-${id}`
+	const taskPattern = `evals-task-${id}-`
 
 	try {
 		// Step 1: Kill the controller first
@@ -216,8 +292,8 @@ export async function killRun(runId: number): Promise<KillRunResult> {
 		// Step 4: Clear Redis state
 		try {
 			const redis = await redisClient()
-			const heartbeatKey = `heartbeat:${runId}`
-			const runnersKey = `runners:${runId}`
+			const heartbeatKey = `heartbeat:${id}`
+			const runnersKey = `runners:${id}`
 
 			await redis.del(heartbeatKey)
 			await redis.del(runnersKey)
@@ -231,8 +307,17 @@ export async function killRun(runId: number): Promise<KillRunResult> {
 		errors.push("Unexpected error while killing containers")
 	}
 
-	revalidatePath(`/runs/${runId}`)
+	revalidatePath(`/runs/${id}`)
 	revalidatePath("/runs")
+
+	// Record audit with actual result
+	const auditResult = errors.length > 0 ? (killedContainers.length > 0 ? "partial" : "failed") : "allowed"
+	logAuditEvent({
+		action: "run.kill",
+		resource: String(id),
+		result: auditResult,
+		reason: errors.length > 0 ? errors.join("; ").slice(0, 500) : undefined,
+	})
 
 	return {
 		success: killedContainers.length > 0 || errors.length === 0,
@@ -253,6 +338,7 @@ export type DeleteIncompleteRunsResult = {
  * Removes both database records and storage folders.
  */
 export async function deleteIncompleteRuns(): Promise<DeleteIncompleteRunsResult> {
+	await requireAdminForAction()
 	const storageErrors: string[] = []
 
 	// Get all incomplete runs
@@ -266,6 +352,10 @@ export async function deleteIncompleteRuns(): Promise<DeleteIncompleteRunsResult
 			deletedRunIds: [],
 			storageErrors: [],
 		}
+	}
+
+	if (runIds.length > MAX_BATCH_DELETE_COUNT) {
+		throw new Error(`Batch delete limit exceeded: ${runIds.length} runs (max ${MAX_BATCH_DELETE_COUNT})`)
 	}
 
 	// Delete storage folders for each run
@@ -297,6 +387,13 @@ export async function deleteIncompleteRuns(): Promise<DeleteIncompleteRunsResult
 
 	revalidatePath("/runs")
 
+	logAuditEvent({
+		action: "runs.delete_incomplete",
+		resource: runIds.join(","),
+		result: storageErrors.length > 0 ? "partial" : "allowed",
+		reason: storageErrors.length > 0 ? `${storageErrors.length} storage error(s)` : undefined,
+	})
+
 	return {
 		success: true,
 		deletedCount: runIds.length,
@@ -309,6 +406,7 @@ export async function deleteIncompleteRuns(): Promise<DeleteIncompleteRunsResult
  * Get count of incomplete runs (for UI display)
  */
 export async function getIncompleteRunsCount(): Promise<number> {
+	await requireAdminForAction()
 	const incompleteRuns = await _getIncompleteRuns()
 	return incompleteRuns.length
 }
@@ -318,6 +416,7 @@ export async function getIncompleteRunsCount(): Promise<number> {
  * Removes both database records and storage folders.
  */
 export async function deleteOldRuns(): Promise<DeleteIncompleteRunsResult> {
+	await requireAdminForAction()
 	const storageErrors: string[] = []
 
 	// Get all runs older than 30 days
@@ -334,6 +433,10 @@ export async function deleteOldRuns(): Promise<DeleteIncompleteRunsResult> {
 			deletedRunIds: [],
 			storageErrors: [],
 		}
+	}
+
+	if (runIds.length > MAX_BATCH_DELETE_COUNT) {
+		throw new Error(`Batch delete limit exceeded: ${runIds.length} runs (max ${MAX_BATCH_DELETE_COUNT})`)
 	}
 
 	// Delete storage folders for each run
@@ -365,6 +468,13 @@ export async function deleteOldRuns(): Promise<DeleteIncompleteRunsResult> {
 
 	revalidatePath("/runs")
 
+	logAuditEvent({
+		action: "runs.delete_old",
+		resource: runIds.join(","),
+		result: storageErrors.length > 0 ? "partial" : "allowed",
+		reason: storageErrors.length > 0 ? `${storageErrors.length} storage error(s)` : undefined,
+	})
+
 	return {
 		success: true,
 		deletedCount: runIds.length,
@@ -377,13 +487,19 @@ export async function deleteOldRuns(): Promise<DeleteIncompleteRunsResult> {
  * Update the description of a run.
  */
 export async function updateRunDescription(runId: number, description: string | null): Promise<{ success: boolean }> {
+	await requireAdminForAction()
+	const id = validateRunId(runId)
+	const desc = validateDescription(description)
+
 	try {
-		await _updateRun(runId, { description })
+		await _updateRun(id, { description: desc })
 		revalidatePath("/runs")
-		revalidatePath(`/runs/${runId}`)
+		revalidatePath(`/runs/${id}`)
+		logAuditEvent({ action: "run.update_description", resource: String(id), result: "allowed" })
 		return { success: true }
 	} catch (error) {
 		console.error("Failed to update run description:", error)
+		logAuditEvent({ action: "run.update_description", resource: String(id), result: "failed" })
 		return { success: false }
 	}
 }

@@ -34,6 +34,8 @@ AGENTS.local.md
 
 # Docs - ignore all except examples, adr, baseline, runbooks, compose
 docs/*
+!docs/sandbox.md
+!docs/docker-sandbox-plan.md
 !docs/examples/
 !docs/examples/**
 !docs/adr/
@@ -59,7 +61,7 @@ docs/*
 *.crt
 
 # Logging
-logs
+/logs/
 *.log
 
 # Vite development
@@ -116,6 +118,14 @@ devflow/
 .agents/
 .opencode/
 .reasonix/
+
+# Local caches (machine-specific, must not be versioned)
+.cache/
+.trae/
+
+# AI planning canvas artifacts
+*.canvas.tsx
+*.canvas.status.json
 
 # Copied skills folder
 skill/

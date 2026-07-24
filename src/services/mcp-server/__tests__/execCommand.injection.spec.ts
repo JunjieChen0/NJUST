@@ -25,34 +25,40 @@ describe("execCommand injection — 实际函数调用 + 目标精确载荷", ()
 
 	it("目标载荷: cjpm --version $(touch /tmp/poc) → 返回错误", async () => {
 		await setup()
-		await expect(execCommand(workspaceCwd, { command: "cjpm --version $(touch /tmp/poc)" })).rejects.toThrow(
-			"Command injection detected in MCP context",
-		)
+		await expect(
+			execCommand(
+				workspaceCwd,
+				{ command: "cjpm --version $(touch /tmp/poc)" },
+				{ source: "mcp", taskId: "test" },
+			),
+		).rejects.toThrow("Command injection detected in MCP context")
 	}, 10000)
 
 	it("即使 cjpm 在 allowedCommands 中, $() 仍被拒绝", async () => {
 		await setup()
-		await expect(execCommand(workspaceCwd, { command: "cjpm build $(id)" }, ["cjpm"])).rejects.toThrow(
-			"Command injection detected in MCP context",
-		)
+		await expect(
+			execCommand(workspaceCwd, { command: "cjpm build $(id)" }, { source: "mcp", taskId: "test" }, ["cjpm"]),
+		).rejects.toThrow("Command injection detected in MCP context")
 	}, 10000)
 
 	it("即使 wildcard * 允许所有命令, $() 仍被拒绝", async () => {
 		await setup()
-		await expect(execCommand(workspaceCwd, { command: "npm --version $(whoami)" }, ["*"])).rejects.toThrow(
-			"Command injection detected in MCP context",
-		)
+		await expect(
+			execCommand(workspaceCwd, { command: "npm --version $(whoami)" }, { source: "mcp", taskId: "test" }, ["*"]),
+		).rejects.toThrow("Command injection detected in MCP context")
 	}, 10000)
 
 	it("反引号注入: echo `whoami` → 返回错误", async () => {
 		await setup()
-		await expect(execCommand(workspaceCwd, { command: "echo `whoami`" })).rejects.toThrow(
-			"Command injection detected in MCP context",
-		)
+		await expect(
+			execCommand(workspaceCwd, { command: "echo `whoami`" }, { source: "mcp", taskId: "test" }),
+		).rejects.toThrow("Command injection detected in MCP context")
 	}, 10000)
 
 	it("对照: 安全命令 echo test 应正常执行", async () => {
 		await setup()
-		await expect(execCommand(workspaceCwd, { command: "echo test" })).resolves.toContain("Exit code:")
+		await expect(
+			execCommand(workspaceCwd, { command: "echo test" }, { source: "mcp", taskId: "test" }),
+		).resolves.toContain("Exit code:")
 	}, 10000)
 })

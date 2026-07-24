@@ -23,8 +23,7 @@ import { getErrorMessage } from "../../shared/error-utils"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { logger } from "../../shared/logger"
 
-// eslint-disable-next-line @typescript-eslint/require-await
-export async function openMention(cwd: string, mention?: string): Promise<void> {
+export function openMention(cwd: string, mention?: string): void {
 	if (!mention) {
 		return
 	}

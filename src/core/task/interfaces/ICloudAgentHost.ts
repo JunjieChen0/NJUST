@@ -6,6 +6,7 @@ import type { RooProtectedController } from "../../protect/RooProtectedControlle
 
 export interface ICloudAgentHost {
 	readonly taskId: string
+	readonly instanceId: string
 	readonly cwd: string
 	readonly abort: boolean
 	readonly rooIgnoreController?: RooIgnoreController

@@ -1,6 +1,7 @@
 import { type FireworksModelId, fireworksDefaultModelId, fireworksModels } from "@njust-ai/core/providers"
 
 import type { ApiHandlerOptions } from "../../shared/api"
+import { PROVIDER_BASE_URLS, API_PATHS } from "../../shared/provider-endpoints"
 
 import { BaseOpenAiCompatibleProvider } from "./base-openai-compatible-provider"
 
@@ -9,7 +10,7 @@ export class FireworksHandler extends BaseOpenAiCompatibleProvider<FireworksMode
 		super({
 			...options,
 			providerName: "Fireworks",
-			baseURL: "https://api.fireworks.ai/inference/v1",
+			baseURL: `${PROVIDER_BASE_URLS.fireworks}${API_PATHS.fireworksInference}`,
 			apiKey: options.fireworksApiKey,
 			defaultProviderModelId: fireworksDefaultModelId,
 			providerModels: fireworksModels,

@@ -245,8 +245,7 @@ export class CustomModesManager {
 		}
 	}
 
-	// eslint-disable-next-line @typescript-eslint/require-await
-	private async mergeCustomModes(projectModes: ModeConfig[], globalModes: ModeConfig[]): Promise<ModeConfig[]> {
+	private mergeCustomModes(projectModes: ModeConfig[], globalModes: ModeConfig[]): ModeConfig[] {
 		const slugs = new Set<string>()
 		const merged: ModeConfig[] = []
 

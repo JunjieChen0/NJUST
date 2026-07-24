@@ -1,6 +1,7 @@
 import { type SambaNovaModelId, sambaNovaDefaultModelId, sambaNovaModels } from "@njust-ai/core/providers"
 
 import type { ApiHandlerOptions } from "../../shared/api"
+import { PROVIDER_BASE_URLS, API_PATHS } from "../../shared/provider-endpoints"
 
 import { BaseOpenAiCompatibleProvider } from "./base-openai-compatible-provider"
 
@@ -9,7 +10,7 @@ export class SambaNovaHandler extends BaseOpenAiCompatibleProvider<SambaNovaMode
 		super({
 			...options,
 			providerName: "SambaNova",
-			baseURL: "https://api.sambanova.ai/v1",
+			baseURL: `${PROVIDER_BASE_URLS.sambanova}${API_PATHS.openaiVersion}`,
 			apiKey: options.sambaNovaApiKey,
 			defaultProviderModelId: sambaNovaDefaultModelId,
 			providerModels: sambaNovaModels,

@@ -685,7 +685,11 @@ export class TaskHistoryStore {
 			await fs.access(walPath)
 			return true
 		} catch (err) {
-			logger.debug("TaskHistoryStore", "WAL marker check failed", err)
+			// A missing marker is the normal clean-start state. Keep diagnostics for
+			// other filesystem failures without turning ENOENT into noisy log output.
+			if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+				logger.debug("TaskHistoryStore", "WAL marker check failed", err)
+			}
 			return false
 		}
 	}

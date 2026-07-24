@@ -11,7 +11,7 @@ import {
 	CLOUD_AGENT_DEFERRED_MAX_ITERATIONS,
 	CLOUD_AGENT_DEFERRED_SESSION_RECOVERY_MAX,
 } from "./deferredConstants"
-import { executeDeferredToolCall } from "./executeDeferredToolCall"
+import { executeDeferredToolCall, type DeferredToolExecutionOptions } from "./executeDeferredToolCall"
 import { getProfileStorageService } from "./ProfileStorageService"
 import { parseWorkspaceOps, type ParseWorkspaceOpsResult } from "./parseWorkspaceOps"
 import type {
@@ -27,6 +27,7 @@ import type {
 import type { CloudAgentProfile } from "./types/profile"
 import type { IPathValidator, IWriteProtector } from "./interfaces/IPathAccessController"
 import type { ICloudAgentClient, ICloudAgentService } from "./interfaces/ICloudAgentService"
+import type { AuthContext } from "./auth-context"
 
 /**
  * Thin adapter that exposes only the methods core/task needs.
@@ -92,12 +93,10 @@ export class CloudAgentService implements ICloudAgentService {
 	executeDeferredToolCall(
 		cwd: string,
 		call: DeferredToolCall,
-		allowedCommands?: string[],
-		deniedCommands?: string[],
-		pathValidator?: IPathValidator,
-		writeProtector?: IWriteProtector,
+		authContext: AuthContext,
+		options: DeferredToolExecutionOptions,
 	): Promise<DeferredToolResult> {
-		return executeDeferredToolCall(cwd, call, allowedCommands, deniedCommands, pathValidator, writeProtector)
+		return executeDeferredToolCall(cwd, call, authContext, options)
 	}
 
 	buildCloudWorkspaceOpToolMessage(

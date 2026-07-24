@@ -1,5 +1,6 @@
 import type { DynamicModelRecord, ListModelsOptions } from "../modelTypes"
 import { safeFetch, readBodyWithLimit, DEFAULT_MAX_BODY_BYTES } from "./safeFetch"
+import { PROVIDER_BASE_URLS, API_PATHS } from "../../../shared/provider-endpoints"
 
 export async function fetchAnthropicModels(options: ListModelsOptions = {}): Promise<DynamicModelRecord> {
 	const apiKey = options.apiKey ?? process.env.ANTHROPIC_API_KEY
@@ -7,7 +8,7 @@ export async function fetchAnthropicModels(options: ListModelsOptions = {}): Pro
 		throw new Error("Missing Anthropic API key")
 	}
 
-	const baseUrl = options.baseUrl || "https://api.anthropic.com/v1"
+	const baseUrl = options.baseUrl || `${PROVIDER_BASE_URLS.anthropic}${API_PATHS.anthropicVersion}`
 
 	const res = await safeFetch(
 		`${baseUrl.replace(/\/$/, "")}/models`,

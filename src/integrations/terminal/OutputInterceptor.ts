@@ -4,6 +4,7 @@ import * as path from "path"
 import { TerminalOutputPreviewSize, TERMINAL_PREVIEW_BYTES, PersistedCommandOutput } from "@njust-ai/types"
 
 import { StreamingSecretRedactor } from "../../utils/StreamingSecretRedactor"
+import { logger } from "../../shared/logger"
 
 /**
  * Configuration options for creating an OutputInterceptor instance.
@@ -432,13 +433,13 @@ export class OutputInterceptor {
 			const files = await fs.promises.readdir(storageDir)
 			for (const file of files) {
 				if (file.startsWith("cmd-")) {
-					await fs.promises.unlink(path.join(storageDir, file)).catch(() => {
-						/* best-effort cleanup */
+					await fs.promises.unlink(path.join(storageDir, file)).catch((err) => {
+						logger.debug("OutputInterceptor", "cleanup unlink", err)
 					})
 				}
 			}
-		} catch {
-			// intentionally ignored: directory doesn't exist, nothing to clean
+		} catch (err) {
+			logger.debug("OutputInterceptor", "cleanup readdir", err)
 		}
 	}
 
@@ -464,13 +465,13 @@ export class OutputInterceptor {
 			for (const file of files) {
 				const match = file.match(/^cmd-(\d+)\.txt$/)
 				if (match && !executionIds.has(match[1]!)) {
-					await fs.promises.unlink(path.join(storageDir, file)).catch(() => {
-						/* best-effort cleanup */
+					await fs.promises.unlink(path.join(storageDir, file)).catch((err) => {
+						logger.debug("OutputInterceptor", "cleanupByIds unlink", err)
 					})
 				}
 			}
-		} catch {
-			// intentionally ignored: directory doesn't exist, nothing to clean
+		} catch (err) {
+			logger.debug("OutputInterceptor", "cleanupByIds readdir", err)
 		}
 	}
 }

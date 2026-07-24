@@ -2,6 +2,8 @@ import * as fs from "fs"
 import * as fsPromises from "fs/promises"
 import * as path from "path"
 
+import { logger } from "../shared/logger"
+
 /**
  * Result of resolving a target path against a workspace base directory.
  *
@@ -161,8 +163,8 @@ async function realpathBestEffortAsync(target: string): Promise<string> {
 		// as if the path could not be resolved and fall through to the
 		// walk-up behaviour. Production fs.realpath always returns a string.
 		if (typeof r === "string") return r
-	} catch {
-		// fall through
+	} catch (err) {
+		logger.debug("resolveWithinWorkspace", "realpath failed", err)
 	}
 
 	let current = target

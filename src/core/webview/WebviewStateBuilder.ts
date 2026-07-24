@@ -37,6 +37,7 @@ import type { TaskHistoryStore } from "../task-persistence/TaskHistoryStore"
 import type { SettingsManager } from "./SettingsManager"
 import type { IMcpHubService } from "../../services/mcp/interfaces/IMcpHubService"
 import type { Task } from "../task/Task"
+import { SandboxExecutionService } from "../../services/sandbox"
 
 export type ClineProviderState = Omit<
 	ExtensionState,
@@ -236,6 +237,30 @@ export async function getState(host: IWebviewStateHost): Promise<ClineProviderSt
 		imageGenerationProvider: stateValues.imageGenerationProvider,
 		openRouterImageApiKey: stateValues.openRouterImageApiKey,
 		openRouterImageGenerationSelectedModel: stateValues.openRouterImageGenerationSelectedModel,
+		// Sandbox settings: read from VS Code configuration
+		sandboxBackend: vscode.workspace.getConfiguration("njust-ai.sandbox").get("backend", "guarded-host"),
+		sandboxDockerImage: vscode.workspace
+			.getConfiguration("njust-ai.sandbox")
+			.get("dockerImage", "njust-ai/sandbox:latest"),
+		sandboxNetworkMode: vscode.workspace.getConfiguration("njust-ai.sandbox").get("networkMode", "none"),
+		sandboxWorkspaceAccess: vscode.workspace
+			.getConfiguration("njust-ai.sandbox")
+			.get("workspaceAccess", "read-write"),
+		sandboxMemoryMb: vscode.workspace.getConfiguration("njust-ai.sandbox").get("memoryMb", 512),
+		sandboxCpuLimit: vscode.workspace.getConfiguration("njust-ai.sandbox").get("cpuLimit", 1.0),
+		sandboxPidsLimit: vscode.workspace.getConfiguration("njust-ai.sandbox").get("pidsLimit", 256),
+		sandboxTimeoutSeconds: vscode.workspace.getConfiguration("njust-ai.sandbox").get("timeoutSeconds", 120),
+		sandboxTaskScopedContainer: vscode.workspace
+			.getConfiguration("njust-ai.sandbox")
+			.get("taskScopedContainer", true),
+		// Docker availability status from sandbox service
+		sandboxDockerStatus: (() => {
+			try {
+				return SandboxExecutionService.getInstance().getDockerStatus()
+			} catch {
+				return "unknown" as const
+			}
+		})(),
 	} as ClineProviderState
 }
 

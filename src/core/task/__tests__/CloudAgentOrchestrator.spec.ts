@@ -29,6 +29,7 @@ vi.mock("fs", async (importOriginal) => {
 function createMockHost(overrides: Partial<ICloudAgentHost> = {}): ICloudAgentHost {
 	return {
 		taskId: "test-task-id",
+		instanceId: "test-instance-id",
 		cwd: "/test/workspace",
 		abort: false,
 		rooIgnoreController: undefined,
@@ -475,10 +476,13 @@ describe("CloudAgentOrchestrator", () => {
 			expect(executeDeferredToolCall).toHaveBeenCalledWith(
 				"/test/workspace",
 				{ call_id: "c1", tool: "read_file", arguments: { path: "a.ts" } },
-				[],
-				[],
-				undefined,
-				undefined,
+				expect.objectContaining({ authenticated: true, profileId: "test-profile" }),
+				expect.objectContaining({
+					taskId: "test-task-id",
+					resourceScopeId: "task:test-task-id:test-instance-id",
+					allowedCommands: [],
+					deniedCommands: [],
+				}),
 			)
 			expect(mockClientInstance.deferredResume).toHaveBeenCalledWith("run-1", "test-task-id", [
 				{ call_id: "c1", content: "file content", is_error: false },
@@ -510,10 +514,13 @@ describe("CloudAgentOrchestrator", () => {
 			expect(executeDeferredToolCall).toHaveBeenCalledWith(
 				"/test/workspace",
 				{ call_id: "c1", tool: "write_file", arguments: { path: "a.ts", content: "x" } },
-				[],
-				[],
-				undefined,
-				undefined,
+				expect.objectContaining({ authenticated: true, profileId: "test-profile" }),
+				expect.objectContaining({
+					taskId: "test-task-id",
+					resourceScopeId: "task:test-task-id:test-instance-id",
+					allowedCommands: [],
+					deniedCommands: [],
+				}),
 			)
 		})
 

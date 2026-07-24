@@ -3,6 +3,8 @@ import {
 	type GlobalState,
 	type Language,
 	type ModelRecord,
+	type SandboxDockerStatus,
+	type SandboxExtensionMessage,
 	type WebviewMessage,
 	ExperimentId,
 	TelemetryEventName,
@@ -28,6 +30,25 @@ import { clearOpenAiCodexAuthCache } from "../WebviewStateBuilder"
 import { confirmBypassTransition } from "../bypassGuard"
 
 const ALLOWED_VSCODE_SETTINGS = new Set(["terminal.integrated.inheritEnv"])
+
+const SANDBOX_CONFIG_SECTION = "njust-ai.sandbox"
+const SANDBOX_SETTING_KEYS = {
+	sandboxBackend: "backend",
+	sandboxDockerImage: "dockerImage",
+	sandboxNetworkMode: "networkMode",
+	sandboxWorkspaceAccess: "workspaceAccess",
+	sandboxMemoryMb: "memoryMb",
+	sandboxCpuLimit: "cpuLimit",
+	sandboxPidsLimit: "pidsLimit",
+	sandboxTimeoutSeconds: "timeoutSeconds",
+	sandboxTaskScopedContainer: "taskScopedContainer",
+} as const
+
+type SandboxSettingKey = keyof typeof SANDBOX_SETTING_KEYS
+
+function isSandboxSettingKey(key: string): key is SandboxSettingKey {
+	return Object.prototype.hasOwnProperty.call(SANDBOX_SETTING_KEYS, key)
+}
 
 export function registerSettingsHandlers(router: MessageRouter): void {
 	router.register("updateSettings", handleUpdateSettings)
@@ -66,13 +87,29 @@ export function registerSettingsHandlers(router: MessageRouter): void {
 	router.register("cloudAgentDeleteProfile", handleCloudAgentDeleteProfile)
 	router.register("cloudAgentSetActiveProfile", handleCloudAgentSetActiveProfile)
 	router.register("openRouterOAuthState", handleOpenRouterOAuthState)
+	// Sandbox action handlers
+	router.register("sandboxTest", handleSandboxTest)
+	router.register("sandboxCleanup", handleSandboxCleanup)
+	router.register("sandboxPullImage", handleSandboxPullImage)
 }
 
 async function handleUpdateSettings(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
 	const { provider, getGlobalState } = context
 	if (!message.updatedSettings) return
 
+	let sandboxSettingsChanged = false
+	try {
+		sandboxSettingsChanged = await persistSandboxSettings(message.updatedSettings)
+	} catch (error) {
+		logger.warn("SettingsMessageHandler", "Failed to save sandbox settings", error)
+		vscode.window.showErrorMessage(`Failed to save sandbox settings: ${getErrorMessage(error)}`)
+		// Do NOT return — continue saving non-sandbox settings.
+		// Sandbox settings retain their previous values.
+	}
+
 	for (const [key, value] of Object.entries(message.updatedSettings)) {
+		if (isSandboxSettingKey(key)) continue
+
 		let newValue = value
 
 		if (key === "language") {
@@ -191,8 +228,16 @@ async function handleUpdateSettings(context: MessageHandlerContext, message: Web
 				.update("inlineCompletion.triggerCommand", s, vscode.ConfigurationTarget.Global)
 			continue
 		}
-
 		await provider.contextProxy.setValue(key as keyof GlobalState, newValue)
+	}
+
+	if (sandboxSettingsChanged) {
+		try {
+			const { SandboxExecutionService } = await import("../../../services/sandbox")
+			await SandboxExecutionService.getInstance().refreshDockerBackend()
+		} catch (error) {
+			logger.warn("SettingsMessageHandler", "Failed to refresh Docker after settings update", error)
+		}
 	}
 
 	// Explicit exit from Force Bypass (alwaysAllowAll → false): skip the bypass
@@ -220,6 +265,41 @@ async function handleUpdateSettings(context: MessageHandlerContext, message: Web
 	}
 
 	await provider.postStateToWebview()
+}
+
+async function persistSandboxSettings(
+	updatedSettings: NonNullable<WebviewMessage["updatedSettings"]>,
+): Promise<boolean> {
+	const requestedEntries = (Object.keys(SANDBOX_SETTING_KEYS) as SandboxSettingKey[]).filter(
+		(key) => updatedSettings[key] !== undefined,
+	)
+	if (requestedEntries.length === 0) return false
+
+	const { DEFAULT_SETTINGS, buildValidatedSettings } = await import("../../../services/sandbox")
+	const config = vscode.workspace.getConfiguration(SANDBOX_CONFIG_SECTION)
+	const raw: Record<string, unknown> = {
+		backend: config.get("backend", DEFAULT_SETTINGS.backend),
+		dockerImage: config.get("dockerImage", DEFAULT_SETTINGS.dockerImage),
+		networkMode: config.get("networkMode", DEFAULT_SETTINGS.networkMode),
+		workspaceAccess: config.get("workspaceAccess", DEFAULT_SETTINGS.workspaceAccess),
+		memoryMb: config.get("memoryMb", DEFAULT_SETTINGS.memoryMb),
+		cpuLimit: config.get("cpuLimit", DEFAULT_SETTINGS.cpuLimit),
+		pidsLimit: config.get("pidsLimit", DEFAULT_SETTINGS.pidsLimit),
+		timeoutSeconds: config.get("timeoutSeconds", DEFAULT_SETTINGS.timeoutSeconds),
+		taskScopedContainer: config.get("taskScopedContainer", DEFAULT_SETTINGS.taskScopedContainer),
+	}
+
+	for (const stateKey of requestedEntries) {
+		raw[SANDBOX_SETTING_KEYS[stateKey]] = updatedSettings[stateKey]
+	}
+
+	const validated = buildValidatedSettings(raw)
+	for (const stateKey of requestedEntries) {
+		const configKey = SANDBOX_SETTING_KEYS[stateKey]
+		await config.update(configKey, validated[configKey], vscode.ConfigurationTarget.Global)
+	}
+
+	return true
 }
 
 async function handleUpdateCloudAgentSettings(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
@@ -949,4 +1029,124 @@ function handleOpenRouterOAuthState(context: MessageHandlerContext, message: Web
 			"Received openRouterOAuthState with empty/missing state or invalid provider field",
 		)
 	}
+}
+
+// ─── Sandbox Action Handlers ─────────────────────────────────────────────
+
+function getSandboxRequestId(message: WebviewMessage): string | undefined {
+	if (typeof message.requestId !== "string" || message.requestId.length === 0) {
+		logger.warn("SettingsMessageHandler", `Rejected ${message.type} without a requestId`)
+		return undefined
+	}
+	return message.requestId
+}
+
+async function handleSandboxTest(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
+	const { provider } = context
+	const requestId = getSandboxRequestId(message)
+	if (!requestId) return
+
+	let status: SandboxDockerStatus
+	try {
+		const { SandboxExecutionService } = await import("../../../services/sandbox")
+		status = await SandboxExecutionService.getInstance().refreshDockerBackend()
+	} catch (error) {
+		logger.warn("SettingsMessageHandler", "Docker detection failed", error)
+		await provider.postMessageToWebview({
+			type: "sandboxTestResult",
+			requestId,
+			payload: {
+				success: false,
+				status: "unknown",
+				message: `Docker detection failed: ${getErrorMessage(error)}`,
+			},
+		} satisfies SandboxExtensionMessage)
+		return
+	}
+
+	const statusMessage =
+		status === "available"
+			? "Docker is available and running"
+			: status === "daemon-not-running"
+				? "Docker daemon is not running. Start Docker Desktop."
+				: status === "not-installed"
+					? "Docker CLI not found. Install Docker Desktop."
+					: "Docker status is unavailable"
+	await provider.postMessageToWebview({
+		type: "sandboxTestResult",
+		requestId,
+		payload: { success: status === "available", status, message: statusMessage },
+	} satisfies SandboxExtensionMessage)
+}
+
+async function handleSandboxCleanup(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
+	const { provider } = context
+	const requestId = getSandboxRequestId(message)
+	if (!requestId) return
+
+	let count: number
+	try {
+		const { SandboxExecutionService } = await import("../../../services/sandbox")
+		count = await SandboxExecutionService.getInstance().cleanupStaleContainers()
+	} catch (error) {
+		logger.warn("SettingsMessageHandler", "Sandbox cleanup failed", error)
+		await provider.postMessageToWebview({
+			type: "sandboxCleanupResult",
+			requestId,
+			payload: { success: false, message: `Cleanup failed: ${getErrorMessage(error)}` },
+		} satisfies SandboxExtensionMessage)
+		return
+	}
+
+	await provider.postMessageToWebview({
+		type: "sandboxCleanupResult",
+		requestId,
+		payload: { success: true, count, message: `Cleaned up ${count} stale container(s)` },
+	} satisfies SandboxExtensionMessage)
+}
+
+async function handleSandboxPullImage(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
+	const { provider } = context
+	const requestId = getSandboxRequestId(message)
+	if (!requestId) return
+
+	const image = typeof message.image === "string" ? message.image : ""
+	let progressQueue: Promise<void> = Promise.resolve()
+	let pullError: unknown
+	try {
+		const { SandboxExecutionService, validateDockerImage } = await import("../../../services/sandbox")
+		validateDockerImage(image)
+		await SandboxExecutionService.getInstance().pullImage(image, (line: string) => {
+			progressQueue = progressQueue
+				.then(() =>
+					provider.postMessageToWebview({
+						type: "sandboxPullProgress",
+						requestId,
+						payload: { image, line },
+					} satisfies SandboxExtensionMessage),
+				)
+				.catch((error) => {
+					logger.debug("SettingsMessageHandler", "Failed to post sandbox pull progress", error)
+				})
+		})
+	} catch (error) {
+		pullError = error
+	}
+
+	await progressQueue
+	if (pullError) {
+		logger.warn("SettingsMessageHandler", "Sandbox image pull failed", pullError)
+		await provider.postMessageToWebview({
+			type: "sandboxPullComplete",
+			requestId,
+			payload: { success: false, image, message: `Pull failed: ${getErrorMessage(pullError)}` },
+		} satisfies SandboxExtensionMessage)
+		return
+	}
+
+	await provider.postMessageToWebview({
+		type: "sandboxPullComplete",
+		requestId,
+		payload: { success: true, image, message: `Successfully pulled ${image}` },
+	} satisfies SandboxExtensionMessage)
 }

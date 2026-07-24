@@ -34,6 +34,7 @@
 		"notifications": "通知",
 		"contextManagement": "上下文",
 		"terminal": "终端",
+		"sandbox": "沙箱",
 		"inlineCompletion": "代码补全",
 		"slashCommands": "斜杠命令",
 		"prompts": "提示词",
@@ -1060,6 +1061,91 @@
 			"label": "手动触发（说明）",
 			"description": "默认快捷键的文字说明；实际按键请在「键盘快捷方式」中修改。",
 			"shortcutHint": "打开 <ShortcutLink>键盘快捷方式</ShortcutLink> 可自定义手动触发命令。"
+		}
+	},
+	"sandbox": {
+		"title": "沙箱",
+		"backend": {
+			"label": "执行后端",
+			"description": "选择代理命令的运行位置。",
+			"guardedHost": "受保护的宿主机（默认）",
+			"docker": "Docker 沙箱",
+			"dockerUnavailable": "Docker 不可用。在 Docker 恢复运行前，命令将被拒绝；不会回退到宿主机。"
+		},
+		"dockerStatus": {
+			"label": "Docker 状态",
+			"available": "Docker 可用且正在运行",
+			"daemonNotRunning": "Docker 守护进程未运行。请启动 Docker Desktop。",
+			"notInstalled": "未找到 Docker CLI。请安装 Docker Desktop。",
+			"checking": "正在检查 Docker 可用性……",
+			"unknown": "Docker 状态未知"
+		},
+		"dockerImage": {
+			"label": "Docker 镜像",
+			"description": "沙箱容器使用的镜像引用。",
+			"placeholder": "njust-ai/sandbox:latest"
+		},
+		"networkMode": {
+			"label": "网络模式",
+			"description": "禁用网络，或使用标准 Docker bridge 网络。",
+			"none": "无网络",
+			"bridge": "Bridge"
+		},
+		"workspaceAccess": {
+			"label": "工作区访问权限",
+			"readWrite": "读写",
+			"readOnly": "只读"
+		},
+		"limits": {
+			"memory": {
+				"label": "内存限制（MB）",
+				"description": "范围：{{min}}-{{max}} MB。默认：{{default}} MB。"
+			},
+			"cpu": {
+				"label": "CPU 限制（核）",
+				"description": "范围：{{min}}-{{max}}。默认：{{default}}。"
+			},
+			"pids": {
+				"label": "PID 限制",
+				"description": "最大进程数：{{min}}-{{max}}。默认：{{default}}。"
+			},
+			"timeout": {
+				"label": "最大超时（秒）",
+				"description": "超过限制的命令超时会被截断。范围：{{min}}-{{max}} 秒。默认：{{default}}。"
+			}
+		},
+		"taskScoped": {
+			"label": "任务结束时销毁容器",
+			"description": "禁用后，同一工作区中的任务将共享容器。"
+		},
+		"security": {
+			"title": "始终强制执行的安全约束",
+			"readOnlyRoot": "只读根文件系统",
+			"dropCapabilities": "移除全部 Linux capabilities",
+			"noNewPrivileges": "禁止获取新权限",
+			"nonRoot": "非 root 用户（1000:1000）",
+			"noDockerSocket": "不挂载 Docker socket",
+			"noPrivilegedMode": "禁止 privileged 模式",
+			"noHostNamespaces": "不使用宿主机网络、PID 或 IPC 命名空间",
+			"noHostEnvironment": "不继承宿主机环境变量",
+			"noHostFallback": "禁止回退到宿主机"
+		},
+		"actions": {
+			"pull": "拉取镜像",
+			"checkDocker": "检查 Docker",
+			"cleanupStale": "清理陈旧容器"
+		},
+		"timeouts": {
+			"test": "Docker 检查超时，请重试。",
+			"cleanup": "容器清理超时，请重试。",
+			"pull": "镜像拉取超时，请检查 Docker 后重试。"
+		},
+		"validation": {
+			"settingsInvalid": "沙箱设置包含无效值。",
+			"imageInvalid": "请输入有效且允许使用的 Docker 镜像引用。",
+			"numberRequired": "请输入有限数值。",
+			"integerRequired": "请输入整数。",
+			"range": "请输入 {{min}} 到 {{max}} 之间的值。"
 		}
 	},
 	"webSearch": {

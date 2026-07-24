@@ -30,6 +30,7 @@ import {
 	GraduationCap,
 	Search,
 	TextCursor,
+	Shield,
 } from "lucide-react"
 
 import {
@@ -38,7 +39,10 @@ import {
 	type ExperimentId,
 	type TelemetrySetting,
 	DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
+	DEFAULT_SANDBOX_SETTINGS,
 	ImageGenerationProvider,
+	sandboxSettingsSchema,
+	type SandboxSettings as SandboxConfiguration,
 } from "@njust-ai/types"
 
 import { vscode } from "@src/utils/vscode"
@@ -84,6 +88,7 @@ import { SkillsSettings } from "./SkillsSettings"
 import { UISettings } from "./UISettings"
 import ModesView from "../modes/ModesView"
 import McpView from "../mcp/McpView"
+import { SandboxSettings } from "./SandboxSettings"
 import { SettingsSearch } from "./SettingsSearch"
 import { useSearchIndexRegistry, SearchIndexProvider } from "./useSettingsSearch"
 
@@ -107,6 +112,7 @@ export const sectionNames = [
 	"notifications",
 	"contextManagement",
 	"terminal",
+	"sandbox",
 	"inlineCompletion",
 	"webSearch",
 	"modes",
@@ -222,7 +228,29 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 		telemetrySetting,
 		enhancementApiConfigId,
 		mode,
+		sandboxBackend = DEFAULT_SANDBOX_SETTINGS.backend,
+		sandboxDockerImage = DEFAULT_SANDBOX_SETTINGS.dockerImage,
+		sandboxNetworkMode = DEFAULT_SANDBOX_SETTINGS.networkMode,
+		sandboxWorkspaceAccess = DEFAULT_SANDBOX_SETTINGS.workspaceAccess,
+		sandboxMemoryMb = DEFAULT_SANDBOX_SETTINGS.memoryMb,
+		sandboxCpuLimit = DEFAULT_SANDBOX_SETTINGS.cpuLimit,
+		sandboxPidsLimit = DEFAULT_SANDBOX_SETTINGS.pidsLimit,
+		sandboxTimeoutSeconds = DEFAULT_SANDBOX_SETTINGS.timeoutSeconds,
+		sandboxTaskScopedContainer = DEFAULT_SANDBOX_SETTINGS.taskScopedContainer,
+		sandboxDockerStatus = "unknown",
 	} = cachedState
+
+	const sandboxSettings: SandboxConfiguration = {
+		backend: sandboxBackend,
+		dockerImage: sandboxDockerImage,
+		networkMode: sandboxNetworkMode,
+		workspaceAccess: sandboxWorkspaceAccess,
+		memoryMb: sandboxMemoryMb,
+		cpuLimit: sandboxCpuLimit,
+		pidsLimit: sandboxPidsLimit,
+		timeoutSeconds: sandboxTimeoutSeconds,
+		taskScopedContainer: sandboxTaskScopedContainer,
+	}
 
 	const apiConfiguration = useMemo(() => cachedState.apiConfiguration ?? {}, [cachedState.apiConfiguration])
 
@@ -375,7 +403,10 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 		})
 	}, [])
 
-	const isSettingValid = !errorMessage
+	const sandboxSettingsValid = sandboxSettingsSchema.safeParse(sandboxSettings).success
+	const sandboxErrorMessage = sandboxSettingsValid ? undefined : t("settings:sandbox.validation.settingsInvalid")
+	const validationErrorMessage = errorMessage ?? sandboxErrorMessage
+	const isSettingValid = !validationErrorMessage
 
 	const handleSubmit = () => {
 		if (isSettingValid) {
@@ -454,6 +485,15 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 					inlineCompletionTriggerCommand: inlineCompletionTriggerCommand ?? "alt+\\",
 					telemetrySetting: telemetrySetting ?? "unset",
 					enhancementApiConfigId: enhancementApiConfigId ?? "",
+					sandboxBackend: sandboxSettings.backend,
+					sandboxDockerImage: sandboxSettings.dockerImage,
+					sandboxNetworkMode: sandboxSettings.networkMode,
+					sandboxWorkspaceAccess: sandboxSettings.workspaceAccess,
+					sandboxMemoryMb: sandboxSettings.memoryMb,
+					sandboxCpuLimit: sandboxSettings.cpuLimit,
+					sandboxPidsLimit: sandboxSettings.pidsLimit,
+					sandboxTimeoutSeconds: sandboxSettings.timeoutSeconds,
+					sandboxTaskScopedContainer: sandboxSettings.taskScopedContainer,
 				},
 			})
 
@@ -549,6 +589,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 			{ id: "notifications", icon: Bell },
 			{ id: "contextManagement", icon: Database },
 			{ id: "terminal", icon: SquareTerminal },
+			{ id: "sandbox", icon: Shield },
 			{ id: "inlineCompletion", icon: TextCursor },
 			{ id: "webSearch", icon: Search },
 			{ id: "prompts", icon: MessageSquare },
@@ -684,7 +725,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 					<StandardTooltip
 						content={
 							!isSettingValid
-								? errorMessage
+								? validationErrorMessage
 								: isChangeDetected
 									? t("settings:header.saveButtonTooltip")
 									: t("settings:header.nothingChangedTooltip")
@@ -902,6 +943,15 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 								terminalZshOhMy={terminalZshOhMy}
 								terminalZshP10k={terminalZshP10k}
 								terminalZdotdir={terminalZdotdir}
+								setCachedStateField={setCachedStateField}
+							/>
+						)}
+
+						{/* Sandbox Section */}
+						{renderTab === "sandbox" && (
+							<SandboxSettings
+								settings={sandboxSettings}
+								initialDockerStatus={sandboxDockerStatus}
 								setCachedStateField={setCachedStateField}
 							/>
 						)}

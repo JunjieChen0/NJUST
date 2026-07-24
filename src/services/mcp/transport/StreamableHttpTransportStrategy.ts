@@ -40,8 +40,8 @@ export class StreamableHttpTransportStrategy implements ITransportStrategy {
 						isToolCall = messages.some(
 							(m: { method?: string }) => typeof m?.method === "string" && m.method === "tools/call",
 						)
-					} catch {
-						// Non-JSON body (e.g. an SSE handshake) — treat as non-tool-call.
+					} catch (err) {
+						logger.debug("StreamableHttpTransport", "parse request body", err)
 					}
 				}
 				const timeoutMs = isToolCall ? 120_000 : 15_000

@@ -1,6 +1,7 @@
 import type { ProviderName } from "@njust-ai/types"
 import type { DynamicModelRecord, ListModelsOptions } from "../modelTypes"
 import { safeFetch, readBodyWithLimit, DEFAULT_MAX_BODY_BYTES, joinUrl } from "./safeFetch"
+import { PROVIDER_BASE_URLS, API_PATHS } from "../../../shared/provider-endpoints"
 
 interface ProviderConfig {
 	apiKeyEnv: string
@@ -13,73 +14,73 @@ const configs: Partial<Record<ProviderName, ProviderConfig>> = {
 	openai: {
 		apiKeyEnv: "OPENAI_API_KEY",
 		baseUrlEnv: "OPENAI_BASE_URL",
-		defaultBaseUrl: "https://api.openai.com/v1",
+		defaultBaseUrl: `${PROVIDER_BASE_URLS.openai}${API_PATHS.openaiVersion}`,
 		path: "/models",
 	},
 	mistral: {
 		apiKeyEnv: "MISTRAL_API_KEY",
 		baseUrlEnv: "MISTRAL_BASE_URL",
-		defaultBaseUrl: "https://api.mistral.ai/v1",
+		defaultBaseUrl: `${PROVIDER_BASE_URLS.mistral}${API_PATHS.openaiVersion}`,
 		path: "/models",
 	},
 	xai: {
 		apiKeyEnv: "XAI_API_KEY",
 		baseUrlEnv: "XAI_BASE_URL",
-		defaultBaseUrl: "https://api.x.ai/v1",
+		defaultBaseUrl: `${PROVIDER_BASE_URLS.xai}${API_PATHS.openaiVersion}`,
 		path: "/models",
 	},
 	qwen: {
 		apiKeyEnv: "QWEN_API_KEY",
 		baseUrlEnv: "QWEN_BASE_URL",
-		defaultBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+		defaultBaseUrl: `${PROVIDER_BASE_URLS.qwen}${API_PATHS.qwenCompatible}`,
 		path: "/models",
 	},
 	moonshot: {
 		apiKeyEnv: "MOONSHOT_API_KEY",
 		baseUrlEnv: "MOONSHOT_BASE_URL",
-		defaultBaseUrl: "https://api.moonshot.ai/v1",
+		defaultBaseUrl: `${PROVIDER_BASE_URLS.moonshot}${API_PATHS.openaiVersion}`,
 		path: "/models",
 	},
 	glm: {
 		apiKeyEnv: "GLM_API_KEY",
 		baseUrlEnv: "GLM_BASE_URL",
-		defaultBaseUrl: "https://open.bigmodel.cn/api/paas/v4",
+		defaultBaseUrl: `${PROVIDER_BASE_URLS.glm}${API_PATHS.glmVersion}`,
 		path: "/models",
 	},
 	minimax: {
 		apiKeyEnv: "MINIMAX_API_KEY",
 		baseUrlEnv: "MINIMAX_BASE_URL",
-		defaultBaseUrl: "https://api.minimax.io/v1",
+		defaultBaseUrl: `${PROVIDER_BASE_URLS.minimax}${API_PATHS.openaiVersion}`,
 		path: "/models",
 	},
 	deepseek: {
 		apiKeyEnv: "DEEPSEEK_API_KEY",
 		baseUrlEnv: "DEEPSEEK_BASE_URL",
-		defaultBaseUrl: "https://api.deepseek.com",
+		defaultBaseUrl: PROVIDER_BASE_URLS.deepseek,
 		path: "/models",
 	},
 	"openai-native": {
 		apiKeyEnv: "OPENAI_NATIVE_API_KEY",
 		baseUrlEnv: "OPENAI_NATIVE_BASE_URL",
-		defaultBaseUrl: "https://api.openai.com/v1",
+		defaultBaseUrl: `${PROVIDER_BASE_URLS.openai}${API_PATHS.openaiVersion}`,
 		path: "/models",
 	},
 	fireworks: {
 		apiKeyEnv: "FIREWORKS_API_KEY",
 		baseUrlEnv: "FIREWORKS_BASE_URL",
-		defaultBaseUrl: "https://api.fireworks.ai/inference/v1",
+		defaultBaseUrl: `${PROVIDER_BASE_URLS.fireworks}${API_PATHS.fireworksInference}`,
 		path: "/models",
 	},
 	sambanova: {
 		apiKeyEnv: "SAMBANOVA_API_KEY",
 		baseUrlEnv: "SAMBANOVA_BASE_URL",
-		defaultBaseUrl: "https://api.sambanova.ai/v1",
+		defaultBaseUrl: `${PROVIDER_BASE_URLS.sambanova}${API_PATHS.openaiVersion}`,
 		path: "/models",
 	},
 	baseten: {
 		apiKeyEnv: "BASETEN_API_KEY",
 		baseUrlEnv: "BASETEN_BASE_URL",
-		defaultBaseUrl: "https://inference.baseten.co/v1",
+		defaultBaseUrl: `${PROVIDER_BASE_URLS.baseten}${API_PATHS.openaiVersion}`,
 		path: "/models",
 	},
 	doubao: {

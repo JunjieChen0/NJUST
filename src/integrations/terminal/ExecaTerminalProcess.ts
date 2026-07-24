@@ -1,5 +1,6 @@
 import { execa, ExecaError } from "execa"
 import process from "process"
+import { StringDecoder } from "string_decoder"
 
 import { logger } from "../../shared/logger"
 import { getProcessTree } from "../../utils/processTree"
@@ -8,10 +9,17 @@ import type { RooTerminal } from "./types"
 import { BaseTerminal } from "./BaseTerminal"
 import { BaseTerminalProcess } from "./BaseTerminalProcess"
 import { normalizeDotSlashCommandForWindowsShell } from "../../utils/hostShellCommand"
-import { filterSensitiveEnv } from "../../utils/env"
+import { filterSensitiveEnv, mergeSafeEnv } from "../../utils/env"
 import { getErrorMessage } from "../../shared/error-utils"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
+
+function buildExecutionEnvironment(): Record<string, string | undefined> {
+	const environment = mergeSafeEnv({}, filterSensitiveEnv(), "ExecaTerminalProcess environment")
+	environment.LANG = "en_US.UTF-8"
+	environment.LC_ALL = "en_US.UTF-8"
+	return environment
+}
 
 export class ExecaTerminalProcess extends BaseTerminalProcess {
 	private terminalRef: WeakRef<RooTerminal>
@@ -47,19 +55,21 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 		)
 		this.command = normalizedCommand
 
-		// Security: block commands with dangerous shell metacharacters that could
-		// bypass higher-level approval checks (BashCommandAnalyzer, PermissionRuleEngine).
-		const DANGEROUS_SHELL_CHARS = /[;&|]|\$\(|`|\$\{/
-		if (DANGEROUS_SHELL_CHARS.test(normalizedCommand)) {
+		// Security: block command substitution which allows nested execution that
+		// bypasses higher-level approval (BashCommandAnalyzer, PermissionRuleEngine).
+		// Shell chaining (;, &, |) is allowed here — approved local commands commonly
+		// use && and pipes. Remote-source chaining is blocked in GuardedHostRunner.
+		const COMMAND_SUBSTITUTION = /\$\(|`|\$\{/
+		if (COMMAND_SUBSTITUTION.test(normalizedCommand)) {
 			logger.error(
 				"ExecaTerminalProcess",
-				"Command blocked: contains dangerous shell metacharacters:",
+				"Command blocked: contains command substitution operators:",
 				normalizedCommand,
 			)
 			this.emit(
 				"error",
 				new Error(
-					"Command blocked for security: contains shell chaining or substitution operators. Please use simple commands only.",
+					"Command blocked for security: contains command substitution operators ($(), ``, ${}). Please use simple commands only.",
 				),
 			)
 			return
@@ -74,11 +84,9 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 				all: true,
 				// Ignore stdin to ensure non-interactive mode and prevent hanging
 				stdin: "ignore",
-				env: filterSensitiveEnv({
-					// Ensure UTF-8 encoding for Ruby, CocoaPods, etc.
-					LANG: "en_US.UTF-8",
-					LC_ALL: "en_US.UTF-8",
-				}),
+				env: buildExecutionEnvironment(),
+				extendEnv: false,
+				buffer: false,
 			})`${normalizedCommand}`
 
 			this.pid = this.subprocess.pid
@@ -103,11 +111,20 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 			}
 
 			const rawStream = this.subprocess.iterable({ from: "all", preserveNewlines: true })
+			const decoder = new StringDecoder("utf8")
 
 			// Wrap the stream to ensure all chunks are strings (execa can return Uint8Array)
 			const stream = (async function* () {
 				for await (const chunk of rawStream) {
-					yield typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)
+					const text = decoder.write(Buffer.from(chunk))
+					if (text.length > 0) {
+						yield text
+					}
+				}
+
+				const remainder = decoder.end()
+				if (remainder.length > 0) {
+					yield remainder
 				}
 			})()
 
@@ -139,8 +156,12 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 					timeoutId = setTimeout(() => {
 						try {
 							this.subprocess?.kill("SIGKILL")
-						} catch {
-							// intentionally ignored: SIGKILL may fail if process already exited
+						} catch (error) {
+							logger.debug(
+								"ExecaTerminalProcess",
+								"[ExecaTerminalProcess#run] SIGKILL failed; process may have already exited",
+								error,
+							)
 						}
 
 						resolve()
@@ -211,8 +232,12 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 					const timer = setTimeout(() => {
 						try {
 							this.subprocess?.kill("SIGKILL")
-						} catch {
-							// intentionally ignored: process may have already exited
+						} catch (error) {
+							logger.debug(
+								"ExecaTerminalProcess",
+								"[ExecaTerminalProcess#abort] delayed subprocess SIGKILL failed",
+								error,
+							)
 						}
 					}, 5_000)
 					timer.unref() // Don't block Node.js exit
@@ -231,8 +256,12 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 					const timer = setTimeout(() => {
 						try {
 							process.kill(this.pid!, "SIGKILL")
-						} catch {
-							// intentionally ignored: process may have already exited
+						} catch (error) {
+							logger.debug(
+								"ExecaTerminalProcess",
+								`[ExecaTerminalProcess#abort] delayed process SIGKILL failed for ${this.pid}`,
+								error,
+							)
 						}
 					}, 5_000)
 					timer.unref()
@@ -247,7 +276,10 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 
 		// If PID update is in progress, wait for it before killing
 		if (this.pidUpdatePromise) {
-			this.pidUpdatePromise.then(performKill).catch(() => performKill())
+			this.pidUpdatePromise.then(performKill).catch((error) => {
+				logger.debug("ExecaTerminalProcess", "[ExecaTerminalProcess#abort] PID update failed", error)
+				performKill()
+			})
 		} else {
 			performKill()
 		}

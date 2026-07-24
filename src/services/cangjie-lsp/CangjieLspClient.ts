@@ -11,6 +11,7 @@ import {
 } from "vscode-languageclient/node"
 import { Package } from "../../shared/package"
 import { getErrorMessage } from "../../shared/error-utils"
+import { logger } from "../../shared/logger"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
 import { t } from "../../i18n"
@@ -389,8 +390,8 @@ export class CangjieLspClient {
 			}
 			this.extensionOutputChannel.appendLine("[CangjieLSP] Configuration changed, restarting server...")
 			this.configRestartChain = this.configRestartChain
-				.catch(() => {
-					/* keep chain alive after error */
+				.catch((err) => {
+					logger.debug("CangjieLspClient", "config restart chain", err)
 				})
 				.then(async () => {
 					await this.stop()
@@ -547,8 +548,8 @@ export class CangjieLspClient {
 									)
 								}
 							})
-							.catch(() => {
-								/* best-effort perf logging */
+							.catch((err) => {
+								logger.debug("CangjieLspClient", "completion perf logging", err)
 							})
 					}
 					return result
@@ -566,8 +567,8 @@ export class CangjieLspClient {
 									)
 								}
 							})
-							.catch(() => {
-								/* best-effort perf logging */
+							.catch((err) => {
+								logger.debug("CangjieLspClient", "hover perf logging", err)
 							})
 					}
 					return result

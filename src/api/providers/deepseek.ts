@@ -10,6 +10,7 @@ import {
 } from "@njust-ai/core/providers"
 
 import { shouldUseReasoningBudget, type ApiHandlerOptions } from "../../shared/api"
+import { PROVIDER_BASE_URLS } from "../../shared/provider-endpoints"
 
 import { ApiStream, ApiStreamUsageChunk } from "../transform/stream"
 import { getModelParams } from "../transform/model-params"
@@ -35,7 +36,7 @@ export class DeepSeekHandler extends OpenAiHandler {
 			...options,
 			openAiApiKey: apiKey,
 			openAiModelId: options.apiModelId ?? deepSeekDefaultModelId,
-			openAiBaseUrl: options.deepSeekBaseUrl || "https://api.deepseek.com",
+			openAiBaseUrl: options.deepSeekBaseUrl || PROVIDER_BASE_URLS.deepseek,
 			openAiStreamingEnabled: true,
 			includeMaxTokens: true,
 		})

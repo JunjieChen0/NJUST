@@ -1,16 +1,34 @@
 import { vi, describe, it, expect, beforeEach } from "vitest"
-import type { WebviewMessage } from "@njust-ai/types"
+import { sandboxExtensionMessageSchema, type WebviewMessage } from "@njust-ai/types"
+
+const vscodeMocks = vi.hoisted(() => ({
+	getConfiguration: vi.fn(),
+	updateConfiguration: vi.fn(),
+	inspectConfiguration: vi.fn(),
+	showErrorMessage: vi.fn(),
+}))
+
+const sandboxMocks = vi.hoisted(() => ({
+	buildValidatedSettings: vi.fn(),
+	validateDockerImage: vi.fn(),
+	getInstance: vi.fn(),
+	refreshDockerBackend: vi.fn(),
+	cleanupStaleContainers: vi.fn(),
+	pullImage: vi.fn(),
+}))
+
+const loggerMocks = vi.hoisted(() => ({
+	warn: vi.fn(),
+	debug: vi.fn(),
+}))
 
 vi.mock("vscode", () => ({
-	window: { showErrorMessage: vi.fn(), showInformationMessage: vi.fn() },
+	window: { showErrorMessage: vscodeMocks.showErrorMessage, showInformationMessage: vi.fn() },
 	workspace: {
-		getConfiguration: vi.fn().mockReturnValue({
-			get: vi.fn().mockReturnValue(undefined),
-			update: vi.fn(),
-		}),
+		getConfiguration: vscodeMocks.getConfiguration,
 		workspaceFolders: [{ uri: { fsPath: "/mock/workspace" } }],
 	},
-	ConfigurationTarget: { Global: 1 },
+	ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
 	Uri: {
 		file: vi.fn(function (p: string) {
 			return {
@@ -57,11 +75,74 @@ vi.mock("../../config/importExport", () => ({
 	importSettingsWithFeedback: vi.fn(),
 	exportSettings: vi.fn(),
 }))
+vi.mock("../../../../shared/logger", () => ({
+	logger: {
+		error: vi.fn(),
+		info: vi.fn(),
+		warn: loggerMocks.warn,
+		debug: loggerMocks.debug,
+	},
+}))
+vi.mock("../../../../services/sandbox", () => ({
+	DEFAULT_SETTINGS: {
+		backend: "guarded-host",
+		dockerImage: "njust-ai/sandbox:latest",
+		networkMode: "none",
+		workspaceAccess: "read-write",
+		memoryMb: 512,
+		cpuLimit: 1,
+		pidsLimit: 256,
+		timeoutSeconds: 120,
+		taskScopedContainer: true,
+		allowFallbackToHost: false,
+	},
+	buildValidatedSettings: sandboxMocks.buildValidatedSettings,
+	validateDockerImage: sandboxMocks.validateDockerImage,
+	SandboxExecutionService: { getInstance: sandboxMocks.getInstance },
+}))
 
 import { registerSettingsHandlers } from "../../handlers/settingsMessageHandler"
 import { MessageRouter } from "../../handlers/MessageRouter"
 import { createMockContext } from "./helpers"
 import { confirmBypassTransition } from "../../bypassGuard"
+
+const defaultSandboxConfig: Record<string, unknown> = {
+	backend: "guarded-host",
+	dockerImage: "njust-ai/sandbox:latest",
+	networkMode: "none",
+	workspaceAccess: "read-write",
+	memoryMb: 512,
+	cpuLimit: 1,
+	pidsLimit: 256,
+	timeoutSeconds: 120,
+	taskScopedContainer: true,
+}
+
+let sandboxConfig = { ...defaultSandboxConfig }
+
+beforeEach(() => {
+	sandboxConfig = { ...defaultSandboxConfig }
+	vscodeMocks.updateConfiguration.mockResolvedValue(undefined)
+	vscodeMocks.getConfiguration.mockImplementation(() => ({
+		get: (key: string, fallback: unknown) => sandboxConfig[key] ?? fallback,
+		inspect: vscodeMocks.inspectConfiguration,
+		update: vscodeMocks.updateConfiguration,
+	}))
+	vscodeMocks.inspectConfiguration.mockReturnValue(undefined)
+	sandboxMocks.buildValidatedSettings.mockImplementation((raw) => ({
+		...raw,
+		allowFallbackToHost: false,
+	}))
+	sandboxMocks.validateDockerImage.mockImplementation(() => undefined)
+	sandboxMocks.getInstance.mockReturnValue({
+		refreshDockerBackend: sandboxMocks.refreshDockerBackend,
+		cleanupStaleContainers: sandboxMocks.cleanupStaleContainers,
+		pullImage: sandboxMocks.pullImage,
+	})
+	sandboxMocks.refreshDockerBackend.mockResolvedValue("available")
+	sandboxMocks.cleanupStaleContainers.mockResolvedValue(0)
+	sandboxMocks.pullImage.mockResolvedValue(undefined)
+})
 
 describe("settingsMessageHandler", () => {
 	let router: MessageRouter
@@ -289,5 +370,176 @@ describe("settingsMessageHandler — P0 bypass-exit guard", () => {
 		} as any)
 
 		expect(confirmBypassTransition).toHaveBeenCalledOnce()
+	})
+})
+
+describe("settingsMessageHandler - sandbox", () => {
+	let router: MessageRouter
+	let context: ReturnType<typeof createMockContext>
+
+	beforeEach(() => {
+		vi.clearAllMocks()
+		router = new MessageRouter()
+		context = createMockContext()
+		registerSettingsHandlers(router)
+	})
+
+	it("validates the merged sandbox snapshot before writing and refreshes Docker once", async () => {
+		await router.route(context, {
+			type: "updateSettings",
+			updatedSettings: {
+				sandboxNetworkMode: "bridge",
+				sandboxMemoryMb: 1024,
+			},
+		} as WebviewMessage)
+
+		expect(sandboxMocks.buildValidatedSettings).toHaveBeenCalledWith({
+			...defaultSandboxConfig,
+			networkMode: "bridge",
+			memoryMb: 1024,
+		})
+		expect(vscodeMocks.updateConfiguration).toHaveBeenCalledTimes(2)
+		expect(vscodeMocks.updateConfiguration).toHaveBeenCalledWith("networkMode", "bridge", 1)
+		expect(vscodeMocks.updateConfiguration).toHaveBeenCalledWith("memoryMb", 1024, 1)
+		expect(context.provider.contextProxy.setValue).not.toHaveBeenCalled()
+		expect(sandboxMocks.refreshDockerBackend).toHaveBeenCalledOnce()
+	})
+
+	it("writes sandbox fields globally even when legacy workspace overrides exist", async () => {
+		vscodeMocks.inspectConfiguration.mockImplementation((key: string) => {
+			if (key === "networkMode") {
+				return { workspaceFolderValue: "none", workspaceValue: "bridge", globalValue: "none" }
+			}
+			if (key === "memoryMb") {
+				return { workspaceValue: 512, globalValue: 256 }
+			}
+			return undefined
+		})
+
+		await router.route(context, {
+			type: "updateSettings",
+			updatedSettings: {
+				sandboxNetworkMode: "bridge",
+				sandboxMemoryMb: 1024,
+			},
+		} as WebviewMessage)
+
+		expect(vscodeMocks.updateConfiguration).toHaveBeenCalledWith("networkMode", "bridge", 1)
+		expect(vscodeMocks.updateConfiguration).toHaveBeenCalledWith("memoryMb", 1024, 1)
+		expect(vscodeMocks.inspectConfiguration).not.toHaveBeenCalled()
+	})
+
+	it("writes no sandbox fields when any value is invalid", async () => {
+		sandboxMocks.buildValidatedSettings.mockImplementationOnce(() => {
+			throw new Error("memoryMb is out of range")
+		})
+
+		await router.route(context, {
+			type: "updateSettings",
+			updatedSettings: {
+				sandboxDockerImage: "njust-ai/sandbox:latest",
+				sandboxMemoryMb: 0,
+			},
+		} as WebviewMessage)
+
+		expect(vscodeMocks.updateConfiguration).not.toHaveBeenCalled()
+		expect(sandboxMocks.refreshDockerBackend).not.toHaveBeenCalled()
+		expect(vscodeMocks.showErrorMessage).toHaveBeenCalledOnce()
+		expect(context.provider.postStateToWebview).toHaveBeenCalledOnce()
+	})
+
+	it("returns a correlated Docker status result", async () => {
+		await router.route(context, { type: "sandboxTest", requestId: "test-1" } as WebviewMessage)
+
+		const response = vi.mocked(context.provider.postMessageToWebview).mock.calls[0][0]
+		expect(sandboxExtensionMessageSchema.safeParse(response).success).toBe(true)
+		expect(response).toEqual({
+			type: "sandboxTestResult",
+			requestId: "test-1",
+			payload: {
+				success: true,
+				status: "available",
+				message: "Docker is available and running",
+			},
+		})
+	})
+
+	it("does not report a fake cleanup count when cleanup fails", async () => {
+		sandboxMocks.cleanupStaleContainers.mockRejectedValueOnce(new Error("daemon unavailable"))
+
+		await router.route(context, { type: "sandboxCleanup", requestId: "cleanup-1" } as WebviewMessage)
+
+		const response = vi.mocked(context.provider.postMessageToWebview).mock.calls[0][0]
+		expect(sandboxExtensionMessageSchema.safeParse(response).success).toBe(true)
+		expect(response).toEqual({
+			type: "sandboxCleanupResult",
+			requestId: "cleanup-1",
+			payload: { success: false, message: "Cleanup failed: daemon unavailable" },
+		})
+		expect(response.payload).not.toHaveProperty("count")
+	})
+
+	it("validates and pulls the requested image with correlated progress", async () => {
+		sandboxMocks.pullImage.mockImplementationOnce(async (_image, onProgress) => {
+			onProgress("layer 1")
+			onProgress("layer 2")
+		})
+
+		await router.route(context, {
+			type: "sandboxPullImage",
+			requestId: "pull-1",
+			image: "node:20-alpine",
+		} as WebviewMessage)
+
+		expect(sandboxMocks.validateDockerImage).toHaveBeenCalledWith("node:20-alpine")
+		expect(sandboxMocks.pullImage).toHaveBeenCalledWith("node:20-alpine", expect.any(Function))
+		const responses = vi.mocked(context.provider.postMessageToWebview).mock.calls.map(([value]) => value)
+		expect(responses.every((response) => sandboxExtensionMessageSchema.safeParse(response).success)).toBe(true)
+		expect(responses).toEqual([
+			{
+				type: "sandboxPullProgress",
+				requestId: "pull-1",
+				payload: { image: "node:20-alpine", line: "layer 1" },
+			},
+			{
+				type: "sandboxPullProgress",
+				requestId: "pull-1",
+				payload: { image: "node:20-alpine", line: "layer 2" },
+			},
+			{
+				type: "sandboxPullComplete",
+				requestId: "pull-1",
+				payload: {
+					success: true,
+					image: "node:20-alpine",
+					message: "Successfully pulled node:20-alpine",
+				},
+			},
+		])
+	})
+
+	it("defensively rejects an invalid image before invoking the service", async () => {
+		sandboxMocks.validateDockerImage.mockImplementationOnce(() => {
+			throw new Error("invalid image")
+		})
+
+		await router.route(context, {
+			type: "sandboxPullImage",
+			requestId: "pull-2",
+			image: "invalid image",
+		} as WebviewMessage)
+
+		expect(sandboxMocks.pullImage).not.toHaveBeenCalled()
+		const response = vi.mocked(context.provider.postMessageToWebview).mock.calls[0][0]
+		expect(sandboxExtensionMessageSchema.safeParse(response).success).toBe(true)
+		expect(response).toEqual({
+			type: "sandboxPullComplete",
+			requestId: "pull-2",
+			payload: {
+				success: false,
+				image: "invalid image",
+				message: "Pull failed: invalid image",
+			},
+		})
 	})
 })

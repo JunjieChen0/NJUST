@@ -71,7 +71,7 @@ describe("SSEStream", () => {
 		expect(response.headers.get("Content-Type")).toBe("text/event-stream")
 		expect(response.headers.get("Connection")).toBe("keep-alive")
 		expect(response.headers.get("Cache-Control")).toBe("no-cache, no-transform")
-		expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*")
+		expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull()
 	})
 
 	it("should format data correctly for SSE", async () => {

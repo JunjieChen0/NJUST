@@ -17,6 +17,7 @@ import {
 	RouterModels,
 	ORGANIZATION_ALLOW_ALL,
 	DEFAULT_CHECKPOINT_TIMEOUT_SECONDS,
+	DEFAULT_SANDBOX_SETTINGS,
 	ALWAYS_ALLOW_ALL_MODES,
 } from "@njust-ai/types"
 
@@ -296,6 +297,16 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		inlineCompletionMaxLines: 10,
 		inlineCompletionEnableCangjieEnhanced: true,
 		inlineCompletionTriggerCommand: "alt+\\",
+		sandboxBackend: DEFAULT_SANDBOX_SETTINGS.backend,
+		sandboxDockerImage: DEFAULT_SANDBOX_SETTINGS.dockerImage,
+		sandboxNetworkMode: DEFAULT_SANDBOX_SETTINGS.networkMode,
+		sandboxWorkspaceAccess: DEFAULT_SANDBOX_SETTINGS.workspaceAccess,
+		sandboxMemoryMb: DEFAULT_SANDBOX_SETTINGS.memoryMb,
+		sandboxCpuLimit: DEFAULT_SANDBOX_SETTINGS.cpuLimit,
+		sandboxPidsLimit: DEFAULT_SANDBOX_SETTINGS.pidsLimit,
+		sandboxTimeoutSeconds: DEFAULT_SANDBOX_SETTINGS.timeoutSeconds,
+		sandboxTaskScopedContainer: DEFAULT_SANDBOX_SETTINGS.taskScopedContainer,
+		sandboxDockerStatus: "unknown",
 	})
 
 	const [didHydrateState, setDidHydrateState] = useState(false)

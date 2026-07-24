@@ -961,10 +961,11 @@ describe("Cline", () => {
 			})
 
 			it("should stop auto retries when unattended max attempts is reached", async () => {
-				const [cline, task] = Task.create({
+				const cline = new Task({
 					provider: mockProvider,
 					apiConfiguration: mockApiConfig,
 					task: "test task",
+					startTask: false,
 				})
 
 				// Replace wrapped API with plain mock so Task-level retry is tested
@@ -1010,7 +1011,6 @@ describe("Cline", () => {
 				await expect(iterator.next()).rejects.toThrow("Unattended retry limit reached")
 
 				await cline.abortTask(true)
-				await task.catch(() => {})
 			})
 
 			it("should not apply retry delay twice", async () => {
@@ -1142,10 +1142,11 @@ describe("Cline", () => {
 
 			describe("processUserContentMentions", () => {
 				it("should process mentions in USER-MESSAGE tags", async () => {
-					const [cline, task] = Task.create({
+					const cline = new Task({
 						provider: mockProvider,
 						apiConfiguration: mockApiConfig,
 						task: "test task",
+						startTask: false,
 					})
 
 					const userContent = [
@@ -1212,7 +1213,6 @@ describe("Cline", () => {
 					)
 
 					await cline.abortTask(true)
-					await task.catch(() => {})
 				})
 			})
 		})

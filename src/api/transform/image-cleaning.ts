@@ -1,9 +1,17 @@
-import { ApiMessage } from "../../core/task-persistence/apiMessages"
+import type { Anthropic } from "@anthropic-ai/sdk"
 
 import { ApiHandler } from "../types"
 
+/**
+ * Message type compatible with ApiMessage from core/task-persistence.
+ * Defined locally to avoid api -> core reverse dependency.
+ * Uses Anthropic.MessageParam as the base since all ApiMessage extensions
+ * are optional fields.
+ */
+type MessageWithContent = Anthropic.MessageParam
+
 /* Removes image blocks from messages if they are not supported by the Api Handler */
-export function maybeRemoveImageBlocks(messages: ApiMessage[], apiHandler: ApiHandler): ApiMessage[] {
+export function maybeRemoveImageBlocks(messages: MessageWithContent[], apiHandler: ApiHandler): MessageWithContent[] {
 	// Check model capability ONCE instead of for every message
 	const supportsImages = apiHandler.getModel().info.supportsImages
 

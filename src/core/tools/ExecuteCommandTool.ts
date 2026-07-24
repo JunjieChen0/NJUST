@@ -19,7 +19,12 @@ import { ToolUse, ToolResponse } from "../../shared/tools"
 import { formatResponse } from "../prompts/responses"
 import { buildCangjieExecuteCommandErrorAppendix } from "../prompts/sections/cangjie-context"
 import { unescapeHtmlEntities } from "../../utils/text-normalization"
-import { ExitCodeDetails, RooTerminalCallbacks, RooTerminalProcess } from "../../integrations/terminal/types"
+import {
+	ExitCodeDetails,
+	RooTerminalCallbacks,
+	RooTerminalProcess,
+	RooTerminalProcessResultPromise,
+} from "../../integrations/terminal/types"
 import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"
 import { Terminal } from "../../integrations/terminal/Terminal"
 import { OutputInterceptor } from "../../integrations/terminal/OutputInterceptor"
@@ -36,6 +41,13 @@ import { checkCommandSafety } from "./helpers/commandSafety"
 import { logger } from "../../shared/logger"
 import { TIMING } from "../../shared/constants"
 import { resolveWithinWorkspaceAsync } from "../../utils/resolveWithinWorkspace"
+import {
+	SandboxExecutionService,
+	SandboxError,
+	createTaskResourceScopeId,
+	type CommandAuditContext,
+	type CommandExecutionRequest,
+} from "../../services/sandbox"
 
 /** Uses {@link checkCommandSafety} so high-risk detection stays aligned with permission classifiers. */
 function _isHighRiskShellCommand(command: string): boolean {
@@ -310,6 +322,12 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 				terminalShellIntegrationDisabled,
 				commandExecutionTimeout,
 				agentTimeout,
+				audit: {
+					approvalResult: isBypassMode && !requiresConfirmationEvenInBypass ? "bypass" : "approved",
+					commandSafety: safetyCheck.riskLevel === "safe" ? "safe" : "unsafe",
+					interactive: !isBypassMode || requiresConfirmationEvenInBypass,
+					bypass: isBypassMode && !requiresConfirmationEvenInBypass,
+				},
 			}
 
 			try {
@@ -329,6 +347,9 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 
 				pushToolResult(result)
 			} catch (error: UnsafeAny) {
+				if (!(error instanceof ShellIntegrationError)) {
+					throw error
+				}
 				const status: CommandExecutionStatus = { executionId, status: "fallback" }
 				void provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
 				await task.say("shell_integration_warning")
@@ -336,28 +357,24 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 				// Invalidate pending ask from first execution to prevent race condition
 				task.supersedePendingAsk()
 
-				if (error instanceof ShellIntegrationError) {
-					const [rejected, result] = await executeCommandInTerminal(task, {
-						...options,
-						terminalShellIntegrationDisabled: true,
-					})
+				const [rejected, result] = await executeCommandInTerminal(task, {
+					...options,
+					terminalShellIntegrationDisabled: true,
+				})
 
-					if (rejected) {
-						task.didRejectTool = true
-					}
-
-					if (task.taskMode === "cangjie") {
-						task.cangjieRuntimePolicy.noteBuildResult(
-							canonicalCommand,
-							isSuccessfulCommandResult(result, rejected),
-							String(result),
-						)
-					}
-
-					pushToolResult(result)
-				} else {
-					pushToolResult(`Command failed to execute in terminal due to a shell integration error.`)
+				if (rejected) {
+					task.didRejectTool = true
 				}
+
+				if (task.taskMode === "cangjie") {
+					task.cangjieRuntimePolicy.noteBuildResult(
+						canonicalCommand,
+						!rejected && !/^Command execution failed/i.test(String(result)),
+						String(result),
+					)
+				}
+
+				pushToolResult(result)
 			}
 
 			return
@@ -380,6 +397,7 @@ export type ExecuteCommandOptions = {
 	terminalShellIntegrationDisabled?: boolean
 	commandExecutionTimeout?: number
 	agentTimeout?: number
+	audit?: CommandAuditContext
 }
 
 export async function executeCommandInTerminal(
@@ -391,10 +409,9 @@ export async function executeCommandInTerminal(
 		terminalShellIntegrationDisabled = true,
 		commandExecutionTimeout = 0,
 		agentTimeout = 0,
+		audit,
 	}: ExecuteCommandOptions,
 ): Promise<[boolean, ToolResponse]> {
-	// Convert milliseconds back to seconds for display purposes.
-	const commandExecutionTimeoutSeconds = commandExecutionTimeout / 1000
 	let workingDir: string
 
 	if (!customCwd) {
@@ -526,6 +543,9 @@ export async function executeCommandInTerminal(
 	// The callback is async but Terminal/ExecaTerminal don't await it, so we track completion
 	// explicitly to ensure persistedResult is set before we use it.
 	let resolveOnCompleted: (() => void) | undefined
+	// Assigned only after runCommand returns so a synchronous callback cannot access uninitialized timeout state.
+	// eslint-disable-next-line prefer-const
+	let onBackgroundProcessCompleted: (() => void) | undefined
 	const onCompletedPromise = new Promise<void>((resolve) => {
 		resolveOnCompleted = resolve
 	})
@@ -590,6 +610,7 @@ export async function executeCommandInTerminal(
 				await queueCommandOutputMessage(result, false, true)
 				completed = true
 			} finally {
+				onBackgroundProcessCompleted?.()
 				// Signal that onCompleted has finished, so the main code can safely use persistedResult
 				resolveOnCompleted?.()
 			}
@@ -612,20 +633,267 @@ export async function executeCommandInTerminal(
 		}
 	}
 
-	const terminal = await TerminalRegistry.getOrCreateTerminal(workingDir, task.taskId, terminalProvider, {
-		exactCwd: requireExactCwd,
-	})
+	// ── Route through SandboxExecutionService ──────────────────────────────
+	const sandboxService = SandboxExecutionService.getInstance()
+	const sandboxExecId = SandboxExecutionService.generateExecutionId()
+	const sandboxRequest: CommandExecutionRequest = {
+		executionId: sandboxExecId,
+		taskId: task.taskId,
+		resourceScopeId: createTaskResourceScopeId(task.taskId, task.instanceId),
+		command: resolvedCommand,
+		workspacePath: task.cwd,
+		cwd: workingDir,
+		timeoutMs: commandExecutionTimeout,
+		source: "local",
+		onOutput: () => {},
+		audit,
+	}
+	const sandboxBackend = await sandboxService.evaluatePolicyOnly("local", sandboxRequest)
 
-	if (terminal instanceof Terminal) {
-		terminal.terminal.show(true)
+	// ── Docker backend: execute in sandbox container ──────────────────────
+	if (sandboxBackend === "docker") {
+		let lastRetrievedIndex = 0
+		const dockerProcess = {
+			command: resolvedCommand,
+			isHot: true,
+			run: async () => {},
+			continue: () => {},
+			abort: () => {
+				void sandboxService.cancel(sandboxExecId).catch((error) => {
+					logger.warn("ExecuteCommandTool", "Failed to cancel Docker execution", error)
+				})
+			},
+			hasUnretrievedOutput: () => accumulatedOutput.length > lastRetrievedIndex,
+			getUnretrievedOutput: () => {
+				const output = accumulatedOutput.slice(lastRetrievedIndex)
+				lastRetrievedIndex = accumulatedOutput.length
+				return output
+			},
+			trimRetrievedOutput: () => {
+				if (lastRetrievedIndex >= accumulatedOutput.length) {
+					accumulatedOutput = ""
+					lastRetrievedIndex = 0
+				}
+			},
+		} as unknown as RooTerminalProcess
+		task.terminalProcess = dockerProcess
 
-		// Update the working directory in case the terminal we asked for has
-		// a different working directory so that the model will know where the
-		// command actually executed.
-		workingDir = terminal.getCurrentWorkingDirectory()
+		const appendDockerOutput = (text: string): void => {
+			accumulatedOutput += text
+			if (accumulatedOutput.length > maxAccumulatedOutputSize) {
+				accumulatedOutput = accumulatedOutput.slice(-maxAccumulatedOutputSize)
+				lastRetrievedIndex = Math.min(lastRetrievedIndex, accumulatedOutput.length)
+			}
+			interceptor?.write(text)
+			latestCompressedOutput = Terminal.compressTerminalOutput(accumulatedOutput)
+			const status: CommandExecutionStatus = {
+				executionId,
+				status: "output",
+				output: latestCompressedOutput,
+			}
+			void provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
+			schedulePartialCommandOutputUpdate()
+		}
+
+		const finalizeDockerOutput = async (finalOutput: string): Promise<void> => {
+			clearTimeout(pendingCommandOutputEmitTimer)
+			pendingCommandOutputEmitTimer = undefined
+			if (interceptor && !persistedResult) {
+				try {
+					persistedResult = await interceptor.finalize()
+				} catch (error) {
+					logger.warn("ExecuteCommandTool", "Failed to finalize Docker command output", error)
+				}
+			}
+			result = Terminal.compressTerminalOutput(finalOutput || accumulatedOutput)
+			latestCompressedOutput = result
+			await commandOutputSayChain
+			await queueCommandOutputMessage(result, false, true)
+			completed = true
+		}
+
+		const startedStatus: CommandExecutionStatus = {
+			executionId,
+			status: "started",
+			pid: undefined,
+			command: resolvedCommand,
+		}
+		void provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(startedStatus) })
+
+		const completion = sandboxService
+			.run({
+				...sandboxRequest,
+				onOutput: (chunk) => appendDockerOutput(chunk.text),
+			})
+			.then(async (handle): Promise<[boolean, ToolResponse]> => {
+				dockerProcess.isHot = false
+				exitDetails = { exitCode: handle.exitCode }
+				await finalizeDockerOutput(handle.output)
+				const exitedStatus: CommandExecutionStatus = {
+					executionId,
+					status: "exited",
+					exitCode: handle.exitCode,
+				}
+				void provider?.postMessageToWebview({
+					type: "commandExecutionStatus",
+					text: JSON.stringify(exitedStatus),
+				})
+
+				const currentWorkingDir = workingDir.toPosix()
+				if (persistedResult?.truncated) {
+					return [false, formatPersistedOutput(persistedResult, exitDetails, currentWorkingDir)]
+				}
+
+				let formattedResult =
+					`Command executed in Docker sandbox within working directory '${currentWorkingDir}'. ` +
+					`${formatExitStatus(exitDetails)}\nOutput:\n${result}`
+				if (handle.truncated) {
+					formattedResult += "\n[Output truncated at the sandbox capture limit.]"
+				}
+				if (handle.exitCode !== undefined && handle.exitCode !== 0 && /\b(cjpm|cjc)\b/i.test(resolvedCommand)) {
+					const extensionPath = task.providerRef.deref()?.context.extensionPath
+					const appendix = await buildCangjieExecuteCommandErrorAppendix(result, task.cwd, extensionPath)
+					if (appendix) formattedResult += appendix
+				}
+				return [false, formattedResult]
+			})
+			.catch(async (error: unknown): Promise<[boolean, ToolResponse]> => {
+				dockerProcess.isHot = false
+				await finalizeDockerOutput(accumulatedOutput)
+				const errorMessage = error instanceof Error ? error.message : String(error)
+				if (error instanceof SandboxError && error.kind === "CommandTimeout") {
+					const timeoutMs = sandboxService.getEffectiveTimeout(commandExecutionTimeout, "local")
+					const status: CommandExecutionStatus = { executionId, status: "timeout" }
+					void provider?.postMessageToWebview({
+						type: "commandExecutionStatus",
+						text: JSON.stringify(status),
+					})
+					await task.say("error", t("common:errors:command_timeout", { seconds: timeoutMs / 1000 }))
+					task.didToolFailInCurrentTurn = true
+					return [
+						false,
+						`The command was terminated after exceeding the ${timeoutMs / 1000}s sandbox hard timeout. Do not try to re-run the command.`,
+					]
+				}
+				if (error instanceof SandboxError && error.kind === "CommandCancelled") {
+					return [false, `Docker sandbox command was cancelled.\nOutput:\n${result}`]
+				}
+				task.didToolFailInCurrentTurn = true
+				logger.warn("ExecuteCommandTool", "Docker sandbox execution failed", error)
+				return [false, `Sandbox execution failed: ${errorMessage}\nOutput:\n${result}`]
+			})
+			.finally(() => {
+				if (task.terminalProcess === dockerProcess) task.terminalProcess = undefined
+			})
+
+		if (agentTimeout <= 0) return completion
+
+		let backgroundTimer: ReturnType<typeof setTimeout> | undefined
+		const foreground = await Promise.race([
+			completion.then((response) => ({ kind: "complete" as const, response })),
+			new Promise<{ kind: "background" }>((resolve) => {
+				backgroundTimer = setTimeout(() => resolve({ kind: "background" }), agentTimeout)
+			}),
+		])
+		if (foreground.kind === "complete") {
+			clearTimeout(backgroundTimer)
+			return foreground.response
+		}
+
+		runInBackground = true
+		task.supersedePendingAsk()
+
+		// Client-side hard timeout for Docker background execution.
+		// sandboxService.run() has its own internal timeout, but if the Docker CLI
+		// hangs (e.g., daemon unresponsive), the internal timeout won't fire.
+		const dockerHardCapMs = commandExecutionTimeout > 0 ? commandExecutionTimeout : 120_000
+		const hardKillTimer = setTimeout(() => {
+			logger.warn("ExecuteCommandTool", `Docker background command hard-killed after ${dockerHardCapMs}ms`)
+			void sandboxService.disposeScope(sandboxRequest.resourceScopeId ?? sandboxRequest.taskId).catch((err) => {
+				logger.debug("ExecuteCommandTool", "Failed to dispose Docker scope on hard timeout", err)
+			})
+			const status: CommandExecutionStatus = { executionId, status: "timeout" }
+			void provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
+		}, dockerHardCapMs)
+		hardKillTimer.unref()
+		void completion.finally(() => clearTimeout(hardKillTimer))
+
+		return [
+			false,
+			[
+				`Command is still running in the Docker sandbox from '${workingDir.toPosix()}'.`,
+				latestCompressedOutput ? `Here's the output so far:\n${latestCompressedOutput}\n` : "\n",
+				"You will be updated on the command status and new output in the future.",
+			].join("\n"),
+		]
 	}
 
-	const process = terminal.runCommand(resolvedCommand, callbacks)
+	// ── Guarded-host backend: use existing terminal pipeline ───────────────
+	// Apply sandbox timeout cap to terminal timeouts.
+	// Agent timeout 0 stays 0 (no background transition).
+	// Command timeout 0 stays 0 (no user-configured hard kill).
+	// Sandbox cap only applies when user has set a positive command timeout;
+	// timeout=0 means "no limit" — respect user intent, no hidden cap.
+	const cappedCommandTimeout =
+		commandExecutionTimeout > 0 ? sandboxService.getEffectiveTimeout(commandExecutionTimeout, "local") : 0
+	const backgroundTimeout = agentTimeout
+	const sandboxCapMs = cappedCommandTimeout
+
+	sandboxService.evaluateAndAuditExecution({ ...sandboxRequest, timeoutMs: cappedCommandTimeout || 0 })
+
+	let terminal: Awaited<ReturnType<typeof TerminalRegistry.getOrCreateTerminal>>
+	let process: RooTerminalProcessResultPromise
+	let startedProcess: RooTerminalProcessResultPromise | undefined
+	let unregisterScopedProcess: (() => void) | undefined
+	try {
+		terminal = requireExactCwd
+			? await TerminalRegistry.getOrCreateTerminal(workingDir, task.taskId, terminalProvider, { exactCwd: true })
+			: await TerminalRegistry.getOrCreateTerminal(workingDir, task.taskId, terminalProvider)
+
+		if (terminal instanceof Terminal) {
+			terminal.terminal.show(true)
+
+			// Update the working directory in case the terminal we asked for has
+			// a different working directory so that the model will know where the
+			// command actually executed.
+			workingDir = terminal.getCurrentWorkingDirectory()
+		}
+
+		process = terminal.runCommand(resolvedCommand, callbacks)
+		startedProcess = process
+		unregisterScopedProcess = sandboxService.registerExternalProcess(
+			sandboxRequest.resourceScopeId ?? sandboxRequest.taskId,
+			process,
+		)
+	} catch (error) {
+		try {
+			unregisterScopedProcess?.()
+		} catch (cleanupError) {
+			logger.debug("ExecuteCommandTool", "Failed to unregister terminal after startup error", cleanupError)
+		}
+		try {
+			startedProcess?.abort()
+		} catch (abortError) {
+			logger.debug("ExecuteCommandTool", "Failed to abort terminal after startup error", abortError)
+		}
+		try {
+			sandboxService.recordExecutionComplete(
+				sandboxExecId,
+				{
+					executionId: sandboxExecId,
+					backend: sandboxBackend,
+					exitCode: undefined,
+					output: "",
+					cancelled: false,
+					timedOut: false,
+				},
+				wrapAsError(error),
+			)
+		} catch (auditError) {
+			logger.warn("ExecuteCommandTool", "Failed to record terminal startup failure", auditError)
+		}
+		throw error
+	}
 	task.terminalProcess = process
 
 	// Track command execution for persistent shell session metrics
@@ -633,20 +901,71 @@ export async function executeCommandInTerminal(
 		;(terminal as Record<string, UnsafeAny>).commandCount++
 	}
 
-	// Dual-timeout logic:
+	// Triple-timeout logic:
 	// - Agent timeout: transitions the command to background (continues running)
 	// - User timeout: aborts the command (kills it)
-	// Both timers run independently — the user timeout remains active as a safety net
-	// even after the agent timeout moves the command to the background.
+	// - Sandbox cap: independent hard kill that survives agent background transition
+	// Agent and user timers are optional (0 = disabled). Sandbox cap always applies.
 	let agentTimeoutId: NodeJS.Timeout | undefined
 	let userTimeoutId: NodeJS.Timeout | undefined
+	let sandboxCapTimeoutId: NodeJS.Timeout | undefined
 	let isUserTimedOut = false
+	let timedOutBy: "user" | "sandbox" | undefined
+	let sandboxAuditCompleted = false
+
+	const recordSandboxCompletion = (error?: Error): void => {
+		if (sandboxAuditCompleted) return
+		sandboxAuditCompleted = true
+		try {
+			sandboxService.recordExecutionComplete(
+				sandboxExecId,
+				{
+					executionId: sandboxExecId,
+					backend: sandboxBackend,
+					exitCode: exitDetails?.exitCode,
+					output: "",
+					cancelled: false,
+					timedOut: isUserTimedOut,
+				},
+				error,
+			)
+		} catch (auditError) {
+			logger.warn("ExecuteCommandTool", "Failed to record terminal completion", auditError)
+		}
+	}
+
+	const handleBackgroundHardTimeout = (kind: "user" | "sandbox", timeoutMs: number): void => {
+		isUserTimedOut = true
+		timedOutBy = kind
+		process.abort()
+		if (!runInBackground) return
+
+		clearTimeout(kind === "user" ? sandboxCapTimeoutId : userTimeoutId)
+		const status: CommandExecutionStatus = { executionId, status: "timeout" }
+		void provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
+		void task
+			.say("error", t("common:errors:command_timeout", { seconds: timeoutMs / 1000 }))
+			.catch((error) => logger.warn("ExecuteCommandTool", "Failed to publish background timeout", error))
+		task.didToolFailInCurrentTurn = true
+		recordSandboxCompletion()
+		if (task.terminalProcess === process) task.terminalProcess = undefined
+	}
+
+	onBackgroundProcessCompleted = () => {
+		if (!runInBackground) return
+		clearTimeout(userTimeoutId)
+		clearTimeout(sandboxCapTimeoutId)
+		recordSandboxCompletion()
+		if (task.terminalProcess === process) {
+			task.terminalProcess = undefined
+		}
+	}
 
 	try {
 		const racers: Promise<void>[] = [process]
 
 		// Agent timeout: transition to background (command keeps running)
-		if (agentTimeout > 0) {
+		if (backgroundTimeout > 0) {
 			racers.push(
 				new Promise<void>((resolve) => {
 					agentTimeoutId = setTimeout(() => {
@@ -654,20 +973,31 @@ export async function executeCommandInTerminal(
 						process.continue()
 						task.supersedePendingAsk()
 						resolve()
-					}, agentTimeout)
+					}, backgroundTimeout)
 				}),
 			)
 		}
 
 		// User timeout: abort the command (existing behavior)
-		if (commandExecutionTimeout > 0) {
+		if (cappedCommandTimeout > 0) {
 			racers.push(
 				new Promise<void>((_, reject) => {
 					userTimeoutId = setTimeout(() => {
-						isUserTimedOut = true
-						task.terminalProcess?.abort()
-						reject(new Error(`Command execution timed out after ${commandExecutionTimeout}ms`))
-					}, commandExecutionTimeout)
+						handleBackgroundHardTimeout("user", cappedCommandTimeout)
+						reject(new Error(`Command execution timed out after ${cappedCommandTimeout}ms`))
+					}, cappedCommandTimeout)
+				}),
+			)
+		}
+
+		// Sandbox cap: independent hard kill, not cleared by agent background
+		if (sandboxCapMs > 0) {
+			racers.push(
+				new Promise<void>((_, reject) => {
+					sandboxCapTimeoutId = setTimeout(() => {
+						handleBackgroundHardTimeout("sandbox", sandboxCapMs)
+						reject(new Error(`Command execution timed out after sandbox cap of ${sandboxCapMs}ms`))
+					}, sandboxCapMs)
 				}),
 			)
 		}
@@ -675,23 +1005,36 @@ export async function executeCommandInTerminal(
 		await Promise.race(racers)
 	} catch (error) {
 		if (isUserTimedOut) {
+			const timeoutMs = timedOutBy === "sandbox" ? sandboxCapMs : cappedCommandTimeout
+			const timeoutSeconds = timeoutMs / 1000
 			const status: CommandExecutionStatus = { executionId, status: "timeout" }
 			void provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
-			await task.say("error", t("common:errors:command_timeout", { seconds: commandExecutionTimeoutSeconds }))
+			await task.say("error", t("common:errors:command_timeout", { seconds: timeoutSeconds }))
 			task.didToolFailInCurrentTurn = true
 			task.terminalProcess = undefined
 
 			return [
 				false,
-				`The command was terminated after exceeding a user-configured ${commandExecutionTimeoutSeconds}s timeout. Do not try to re-run the command.`,
+				`The command was terminated after exceeding the ${timeoutSeconds}s ${timedOutBy === "sandbox" ? "sandbox" : "user-configured"} timeout. Do not try to re-run the command.`,
 			]
 		}
+		recordSandboxCompletion(wrapAsError(error))
 		throw error
 	} finally {
 		clearTimeout(agentTimeoutId)
-		clearTimeout(userTimeoutId)
+		// Only clear hard-kill timers if the process actually ended (not backgrounded)
+		if (!runInBackground) {
+			clearTimeout(userTimeoutId)
+			clearTimeout(sandboxCapTimeoutId)
+		} else {
+			// User and sandbox hard timeouts remain active after backgrounding.
+			// sandboxCapTimeoutId intentionally NOT cleared — it will kill the process at cap
+		}
 		clearTimeout(pendingCommandOutputEmitTimer)
-		task.terminalProcess = undefined
+		if (!runInBackground) {
+			task.terminalProcess = undefined
+			recordSandboxCompletion()
+		}
 	}
 
 	if (shellIntegrationError) {

@@ -1,1 +1,1 @@
-export { assertSafeOutboundUrl, guardedFetch, assertPublicIp } from "@njust-ai/core/security"
+export { assertSafeOutboundUrl, guardedFetch, assertPublicIp, assertHeadersSafe } from "@njust-ai/core/security"

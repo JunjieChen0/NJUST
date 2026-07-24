@@ -4,6 +4,7 @@ import OpenAI from "openai"
 import { type XAIModelId, xaiDefaultModelId, xaiModels } from "@njust-ai/core/providers"
 
 import type { ApiHandlerOptions } from "../../shared/api"
+import { PROVIDER_BASE_URLS, API_PATHS } from "../../shared/provider-endpoints"
 
 import { ApiStream } from "../transform/stream"
 import { convertToOpenAiMessages } from "../transform/openai-format"
@@ -30,7 +31,7 @@ export class XAIHandler extends BaseProvider implements SingleCompletionHandler 
 		const apiKey = requireApiKey(this.options.xaiApiKey, "xAI")
 
 		this.client = new OpenAI({
-			baseURL: "https://api.x.ai/v1",
+			baseURL: `${PROVIDER_BASE_URLS.xai}${API_PATHS.openaiVersion}`,
 			apiKey: apiKey,
 			defaultHeaders: DEFAULT_HEADERS,
 			timeout: getApiRequestTimeout(),

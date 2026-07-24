@@ -15,6 +15,8 @@
  * smaller, so the default cap is 5 MB rather than 50 MB.
  */
 
+import { logger } from "../../../shared/logger"
+
 /** Default request timeout for model-list fetches (ms). */
 export const DEFAULT_FETCH_TIMEOUT_MS = 10_000
 
@@ -57,7 +59,7 @@ export async function readBodyWithLimit(resp: Response, maxBytes: number): Promi
 			totalBytes += value.byteLength
 			if (totalBytes > maxBytes) {
 				// Cancel the stream to stop receiving further chunks
-				await reader.cancel().catch(() => {})
+				await reader.cancel().catch((err) => logger.debug("SafeFetch", "cancel reader on size limit", err))
 				throw new Error(`Response body exceeds size limit (${(maxBytes / 1024 / 1024).toFixed(1)} MB)`)
 			}
 
@@ -214,9 +216,9 @@ export async function safeFetch(
 				// CDN/HTML error page into memory). Cancel the stream when
 				// available; otherwise best-effort drain.
 				if (response.body && typeof response.body.cancel === "function") {
-					await response.body.cancel().catch(() => {})
+					await response.body.cancel().catch((err) => logger.debug("SafeFetch", "cancel body on retry", err))
 				} else {
-					await response.text().catch(() => {})
+					await response.text().catch((err) => logger.debug("SafeFetch", "drain body on retry", err))
 				}
 				lastError = new Error(`Transient HTTP ${response.status}`)
 				await sleep(1000 * Math.pow(2, attempt) + Math.random() * 500)

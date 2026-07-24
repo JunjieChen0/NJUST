@@ -145,7 +145,7 @@ describe("ClineProviderTaskManagement", () => {
 				parentTask: undefined,
 				abortReason: undefined,
 				cancelCurrentRequest: vi.fn(),
-				abortTask: vi.fn(),
+				abortTask: vi.fn().mockResolvedValue(undefined),
 				abandoned: false,
 				isStreaming: false,
 				didFinishAbortingStream: true,

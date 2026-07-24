@@ -1,8 +1,10 @@
 import { findRun } from "@njust-ai/evals"
 
 import { Run } from "./run"
+import { requireAdminForPage } from "@/lib/server/admin-auth"
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+	await requireAdminForPage()
 	const { id } = await params
 	const run = await findRun(Number(id))
 
