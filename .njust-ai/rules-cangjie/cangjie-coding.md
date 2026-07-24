@@ -107,13 +107,13 @@ import std.collection.*
 
 // HashMap
 let map = HashMap<String, Int64>()
-map.put("alice", 1)
+map.add("alice", 1)
 let v = map.get("alice") ?? 0
 for ((k, v) in map) { println("${k} -> ${v}") }
 
 // ArrayList
 let list = ArrayList<String>()
-list.append("a")
+list.add("a")
 for (item in list) { println(item) }
 ```
 
@@ -131,18 +131,18 @@ match (value) {
 
 ## 3. 易错点速查
 
-| 错误类型 | 常见原因 | 解决方案 |
-|----------|----------|----------|
-| 未找到符号 | 缺少 import 或包依赖 | 检查 import 和 cjpm.toml 依赖 |
-| 类型不匹配 | 赋值或传参类型错误 | 检查类型声明和转换 |
-| 循环依赖 | 包之间互相引用 | `cjpm check` 查看，重构拆分 |
-| let 变量赋值 | 尝试修改不可变变量 | 改用 `var` |
-| mut 函数限制 | let 变量调用 mut 函数 | 改用 `var` 声明变量 |
-| 递归结构体 | struct 直接或间接自引用 | 改用 class 或 Option 包装 |
-| redef/override 混淆 | open 方法误用 redef | open → override，非 open → redef |
-| sealed 类限制 | 跨模块继承 sealed class | 仅在定义模块内继承 |
-| init 顺序错误 | super() 未在子类 init 首行 | 子类 init 第一步调用 super() |
-| Lambda 类型推断 | 复杂 Lambda 缺少标注 | 显式标注参数和返回类型 |
+| 错误类型            | 常见原因                   | 解决方案                         |
+| ------------------- | -------------------------- | -------------------------------- |
+| 未找到符号          | 缺少 import 或包依赖       | 检查 import 和 cjpm.toml 依赖    |
+| 类型不匹配          | 赋值或传参类型错误         | 检查类型声明和转换               |
+| 循环依赖            | 包之间互相引用             | `cjpm check` 查看，重构拆分      |
+| let 变量赋值        | 尝试修改不可变变量         | 改用 `var`                       |
+| mut 函数限制        | let 变量调用 mut 函数      | 改用 `var` 声明变量              |
+| 递归结构体          | struct 直接或间接自引用    | 改用 class 或 Option 包装        |
+| redef/override 混淆 | open 方法误用 redef        | open → override，非 open → redef |
+| sealed 类限制       | 跨模块继承 sealed class    | 仅在定义模块内继承               |
+| init 顺序错误       | super() 未在子类 init 首行 | 子类 init 第一步调用 super()     |
+| Lambda 类型推断     | 复杂 Lambda 缺少标注       | 显式标注参数和返回类型           |
 
 ---
 

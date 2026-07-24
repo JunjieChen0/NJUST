@@ -22,6 +22,13 @@ const {
 	mockProbeCangjieToolchain,
 	mockWriteFileSync,
 	mockMkdirSync,
+	mockReadCangjieEvalTraceSummary,
+	mockFormatCangjieEvalTraceSummaryMarkdown,
+	mockGetCangjieGlobalEvalTracePath,
+	mockGetCangjieWorkspaceEvalTracePath,
+	mockParseCjpmToml,
+	mockBuildCompactProjectOverviewSection,
+	mockBuildProjectPackageValidationSection,
 } = vi.hoisted(() => ({
 	mockExistsSync: vi.fn(),
 	mockRegisterCommand: vi.fn().mockReturnValue({ dispose: vi.fn() }),
@@ -44,6 +51,13 @@ const {
 	mockProbeCangjieToolchain: vi.fn().mockResolvedValue([]),
 	mockWriteFileSync: vi.fn(),
 	mockMkdirSync: vi.fn(),
+	mockReadCangjieEvalTraceSummary: vi.fn(),
+	mockFormatCangjieEvalTraceSummaryMarkdown: vi.fn().mockReturnValue("trace summary"),
+	mockGetCangjieGlobalEvalTracePath: vi.fn().mockResolvedValue("/global/cangjie-eval-trace.jsonl"),
+	mockGetCangjieWorkspaceEvalTracePath: vi.fn((cwd: string) => `${cwd}/.njust-ai/cangjie-eval-trace.jsonl`),
+	mockParseCjpmToml: vi.fn(),
+	mockBuildCompactProjectOverviewSection: vi.fn(),
+	mockBuildProjectPackageValidationSection: vi.fn(),
 }))
 
 vi.mock("vscode", () => ({
@@ -176,6 +190,9 @@ vi.mock("../../../core/prompts/sections/learnedFixesStorage", () => ({
 
 vi.mock("../../../core/prompts/sections/cangjie-context", () => ({
 	invalidateCangjieContextSectionCache: vi.fn(),
+	parseCjpmToml: mockParseCjpmToml,
+	buildCompactProjectOverviewSection: mockBuildCompactProjectOverviewSection,
+	buildProjectPackageValidationSection: mockBuildProjectPackageValidationSection,
 }))
 
 vi.mock("../../../i18n", () => ({
@@ -187,7 +204,7 @@ vi.mock("../../../shared/package", () => ({
 }))
 
 vi.mock("@njust-ai/types", () => ({
-	NJUST_AI_CONFIG_DIR: ".njust-ai",
+	NJUST_AI_CONFIG_DIR: ".njust_ai",
 	TelemetryEventName: { CANGJIE_LSP_ERROR: "cangjie_lsp_error" },
 }))
 
@@ -201,6 +218,13 @@ vi.mock("../../../shared/logger", () => ({
 
 vi.mock("../../../shared/error-utils", () => ({
 	getErrorMessage: (e: unknown) => String(e),
+}))
+
+vi.mock("../../CangjieEvalTraceLogger", () => ({
+	readCangjieEvalTraceSummary: mockReadCangjieEvalTraceSummary,
+	formatCangjieEvalTraceSummaryMarkdown: mockFormatCangjieEvalTraceSummaryMarkdown,
+	getCangjieGlobalEvalTracePath: mockGetCangjieGlobalEvalTracePath,
+	getCangjieWorkspaceEvalTracePath: mockGetCangjieWorkspaceEvalTracePath,
 }))
 
 vi.mock("child_process", () => ({
@@ -219,6 +243,7 @@ describe("cangjieCommands", () => {
 		const subscriptions: any[] = []
 		mockContext = {
 			subscriptions,
+			globalStorageUri: { fsPath: "/global-storage" },
 			globalState: {
 				get: vi.fn(),
 				update: vi.fn(),
@@ -229,9 +254,31 @@ describe("cangjieCommands", () => {
 		}
 		mockCreateOutputChannel.mockReturnValue({
 			appendLine: vi.fn(),
+			clear: vi.fn(),
 			dispose: vi.fn(),
 			show: vi.fn(),
 		})
+		mockReadCangjieEvalTraceSummary.mockResolvedValue({
+			totalEntries: 1,
+			validEntries: 1,
+			corruptEntries: 0,
+			verdictCounts: { passed: 1, blocked: 0, failed: 0, inconclusive: 0, unknown: 0 },
+			latestVerdict: "passed",
+			latestVerdictStreak: 1,
+			recentBlockReasonCodes: [],
+			latestInjectedContextLabels: [],
+		})
+		mockParseCjpmToml.mockResolvedValue({
+			name: "web",
+			version: "1.0.0",
+			outputType: "dynamic",
+			isWorkspace: false,
+			srcDir: "src",
+		})
+		mockBuildCompactProjectOverviewSection.mockResolvedValue(
+			"## 当前项目概览（紧凑）\n项目: web (dynamic) v1.0.0\n目录: src/",
+		)
+		mockBuildProjectPackageValidationSection.mockResolvedValue("Package declaration validation: OK")
 		mockCreateTerminal.mockReturnValue({
 			show: vi.fn(),
 			sendText: vi.fn(),
@@ -240,6 +287,110 @@ describe("cangjieCommands", () => {
 
 	it("registerCangjieCommands is a function", () => {
 		expect(typeof registerCangjieCommands).toBe("function")
+	})
+
+	it("registers the Cangjie project initialization wizard", () => {
+		registerCangjieCommands(mockContext, mockLspClient)
+
+		const registeredIds = mockRegisterCommand.mock.calls.map((c: any) => c[0])
+		expect(registeredIds).toContain("njust-ai.cangjieInitializeProject")
+	})
+
+	it("initializes a new Cangjie project with validated wizard inputs", async () => {
+		mockExistsSync.mockReturnValue(false)
+		mockShowInputBox.mockResolvedValue("demo_app")
+		mockShowQuickPick.mockResolvedValue({ label: "executable", projectType: "executable" })
+		mockShowWarningMessage.mockResolvedValue("Initialize")
+		mockResolveCangjieToolPath.mockReturnValue("C:\\sdk\\cjpm.exe")
+		registerCangjieCommands(mockContext, mockLspClient)
+		const command = mockRegisterCommand.mock.calls.find((c: any) => c[0] === "njust-ai.cangjieInitializeProject")
+
+		await command[1]()
+		const terminal = mockCreateTerminal.mock.results.at(-1)?.value
+
+		expect(mockShowInputBox).toHaveBeenCalledWith(expect.objectContaining({ prompt: "Cangjie package name" }))
+		expect(mockShowQuickPick).toHaveBeenCalledWith(
+			expect.arrayContaining([
+				expect.objectContaining({ projectType: "executable" }),
+				expect.objectContaining({ projectType: "static" }),
+				expect.objectContaining({ projectType: "dynamic" }),
+			]),
+			expect.any(Object),
+		)
+		expect(mockCreateTerminal).toHaveBeenLastCalledWith(expect.objectContaining({ name: "cjpm init", cwd: "/ws" }))
+		expect(terminal.sendText).toHaveBeenCalledWith(
+			expect.stringContaining('init --name "demo_app" --type=executable'),
+		)
+	})
+
+	it("cancels project initialization before resolving the toolchain", async () => {
+		mockExistsSync.mockReturnValue(false)
+		mockShowInputBox.mockResolvedValue("demo_app")
+		mockShowQuickPick.mockResolvedValue({ label: "dynamic", projectType: "dynamic" })
+		mockShowWarningMessage.mockResolvedValue("Cancel")
+		registerCangjieCommands(mockContext, mockLspClient)
+		const command = mockRegisterCommand.mock.calls.find((c: any) => c[0] === "njust-ai.cangjieInitializeProject")
+
+		await command[1]()
+
+		expect(mockShowWarningMessage).toHaveBeenCalledWith(
+			'Initialize Cangjie project "demo_app" as dynamic in /ws?',
+			"Initialize",
+			"Cancel",
+		)
+		expect(mockResolveCangjieToolPath).not.toHaveBeenCalled()
+		expect(mockCreateTerminal).not.toHaveBeenCalled()
+	})
+
+	it("opens the cjpm path setting when initialization cannot find the toolchain", async () => {
+		mockExistsSync.mockReturnValue(false)
+		mockShowInputBox.mockResolvedValue("demo_app")
+		mockShowQuickPick.mockResolvedValue({ label: "static", projectType: "static" })
+		mockShowWarningMessage.mockResolvedValue("Initialize")
+		mockResolveCangjieToolPath.mockReturnValue(undefined)
+		mockShowErrorMessage.mockResolvedValue("buttons.cangjie_lsp.open_settings")
+		registerCangjieCommands(mockContext, mockLspClient)
+		const command = mockRegisterCommand.mock.calls.find((c: any) => c[0] === "njust-ai.cangjieInitializeProject")
+
+		await command[1]()
+		await Promise.resolve()
+
+		expect(mockShowErrorMessage).toHaveBeenCalledWith(
+			"errors.cangjie_lsp.cjpm_not_found",
+			"buttons.cangjie_lsp.open_settings",
+		)
+		expect(mockExecuteCommand).toHaveBeenCalledWith(
+			"workbench.action.openSettings",
+			"njust-ai.cangjieTools.cjpmPath",
+		)
+		expect(mockCreateTerminal).not.toHaveBeenCalled()
+	})
+
+	it("does not initialize an existing Cangjie project", async () => {
+		mockExistsSync.mockReturnValue(true)
+		registerCangjieCommands(mockContext, mockLspClient)
+		const command = mockRegisterCommand.mock.calls.find((c: any) => c[0] === "njust-ai.cangjieInitializeProject")
+
+		await command[1]()
+
+		expect(mockShowInformationMessage).toHaveBeenCalledWith(
+			"This workspace already contains cjpm.toml; initialization was skipped.",
+		)
+		expect(mockShowInputBox).not.toHaveBeenCalled()
+		expect(mockCreateTerminal).not.toHaveBeenCalled()
+	})
+
+	it("rejects an invalid Cangjie package name before opening a terminal", async () => {
+		mockExistsSync.mockReturnValue(false)
+		mockShowInputBox.mockResolvedValue("bad-name")
+		registerCangjieCommands(mockContext, mockLspClient)
+		const command = mockRegisterCommand.mock.calls.find((c: any) => c[0] === "njust-ai.cangjieInitializeProject")
+
+		await command[1]()
+
+		expect(mockShowErrorMessage).toHaveBeenCalledWith("Invalid Cangjie package name.")
+		expect(mockShowQuickPick).not.toHaveBeenCalled()
+		expect(mockCreateTerminal).not.toHaveBeenCalled()
 	})
 
 	it("registers CJPM commands (build, run, test, check, clean)", () => {
@@ -258,6 +409,99 @@ describe("cangjieCommands", () => {
 
 		const registeredIds = mockRegisterCommand.mock.calls.map((c: any) => c[0])
 		expect(registeredIds).toContain("njust-ai.cangjieVerifySdk")
+	})
+
+	it("registers eval trace summary command", () => {
+		registerCangjieCommands(mockContext, mockLspClient)
+
+		const registeredIds = mockRegisterCommand.mock.calls.map((c: any) => c[0])
+		expect(registeredIds).toContain("njust-ai.cangjieViewEvalTrace")
+	})
+
+	it("registers project structure summary command", () => {
+		registerCangjieCommands(mockContext, mockLspClient)
+
+		const registeredIds = mockRegisterCommand.mock.calls.map((c: any) => c[0])
+		expect(registeredIds).toContain("njust-ai.cangjieViewProjectStructure")
+	})
+
+	it("shows the parsed Cangjie project structure", async () => {
+		registerCangjieCommands(mockContext, mockLspClient)
+		const command = mockRegisterCommand.mock.calls.find((c: any) => c[0] === "njust-ai.cangjieViewProjectStructure")
+
+		await command[1]()
+		const channel = mockCreateOutputChannel.mock.results.at(-1)?.value
+
+		expect(mockParseCjpmToml).toHaveBeenCalledWith("/ws")
+		expect(mockBuildCompactProjectOverviewSection).toHaveBeenCalledWith(
+			"/ws",
+			expect.objectContaining({ name: "web", srcDir: "src" }),
+			null,
+			null,
+		)
+		expect(mockCreateOutputChannel).toHaveBeenLastCalledWith("Cangjie Project Structure")
+		expect(mockBuildProjectPackageValidationSection).toHaveBeenCalledWith(
+			"/ws",
+			expect.objectContaining({ name: "web", srcDir: "src" }),
+		)
+		expect(channel.appendLine).toHaveBeenCalledWith("Cangjie project structure:")
+		expect(channel.appendLine).toHaveBeenCalledWith("Root: /ws")
+		expect(channel.appendLine).toHaveBeenCalledWith(expect.stringContaining("项目: web"))
+		expect(channel.appendLine).toHaveBeenCalledWith("Package declaration validation: OK")
+		expect(channel.show).toHaveBeenCalledWith(true)
+	})
+
+	it("reports an invalid Cangjie project structure", async () => {
+		mockParseCjpmToml.mockResolvedValue(null)
+		registerCangjieCommands(mockContext, mockLspClient)
+		const command = mockRegisterCommand.mock.calls.find((c: any) => c[0] === "njust-ai.cangjieViewProjectStructure")
+
+		await command[1]()
+
+		expect(mockShowErrorMessage).toHaveBeenCalledWith("No valid cjpm.toml found in the current workspace.")
+		expect(mockBuildCompactProjectOverviewSection).not.toHaveBeenCalled()
+		expect(mockBuildProjectPackageValidationSection).not.toHaveBeenCalled()
+	})
+
+	it("shows the workspace eval trace summary", async () => {
+		registerCangjieCommands(mockContext, mockLspClient)
+		const command = mockRegisterCommand.mock.calls.find((c: any) => c[0] === "njust-ai.cangjieViewEvalTrace")
+
+		await command[1]()
+		const channel = mockCreateOutputChannel.mock.results.at(-1)?.value
+
+		expect(mockCreateOutputChannel).toHaveBeenLastCalledWith("Cangjie Eval Trace")
+		expect(mockGetCangjieWorkspaceEvalTracePath).toHaveBeenCalledWith("/ws")
+		expect(mockGetCangjieGlobalEvalTracePath).toHaveBeenCalledWith("/global-storage")
+		expect(mockReadCangjieEvalTraceSummary).toHaveBeenNthCalledWith(
+			1,
+			expect.stringMatching(/[\\/]\.njust-ai[\\/]cangjie-eval-trace\.jsonl$/),
+		)
+		expect(mockReadCangjieEvalTraceSummary).toHaveBeenNthCalledWith(2, "/global/cangjie-eval-trace.jsonl")
+		expect(mockFormatCangjieEvalTraceSummaryMarkdown).toHaveBeenCalledTimes(2)
+		expect(channel.appendLine).toHaveBeenCalledWith("Workspace eval summary:")
+		expect(channel.appendLine).toHaveBeenCalledWith("Global roadmap eval summary:")
+		expect(channel.show).toHaveBeenCalledWith(true)
+	})
+
+	it("reports when the workspace eval trace is empty", async () => {
+		mockReadCangjieEvalTraceSummary.mockResolvedValue({
+			totalEntries: 0,
+			validEntries: 0,
+			corruptEntries: 0,
+			verdictCounts: { passed: 0, blocked: 0, failed: 0, inconclusive: 0, unknown: 0 },
+			latestVerdictStreak: 0,
+			recentBlockReasonCodes: [],
+			latestInjectedContextLabels: [],
+		})
+		registerCangjieCommands(mockContext, mockLspClient)
+		const command = mockRegisterCommand.mock.calls.find((c: any) => c[0] === "njust-ai.cangjieViewEvalTrace")
+
+		await command[1]()
+
+		expect(mockShowInformationMessage).toHaveBeenCalledWith(
+			"No Cangjie eval trace entries found in this workspace.",
+		)
 	})
 
 	it("registers generate test file command", () => {

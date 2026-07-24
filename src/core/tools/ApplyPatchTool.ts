@@ -46,6 +46,21 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		return lowerPath.endsWith(".cj") || lowerPath.endsWith(".toml")
 	}
 
+	private async isCangjieSourceWrite(absolutePath: string, task: Task): Promise<boolean> {
+		return (
+			absolutePath.toLowerCase().endsWith(".cj") &&
+			(task.taskMode === "cangjie" || (await task.cangjieRuntimePolicy.hasCjpmProject()))
+		)
+	}
+
+	private async isCangjieBuildAffectingWrite(absolutePath: string, task: Task): Promise<boolean> {
+		const lowerPath = absolutePath.toLowerCase()
+		return (
+			(lowerPath.endsWith(".cj") || lowerPath.endsWith(".toml")) &&
+			(task.taskMode === "cangjie" || (await task.cangjieRuntimePolicy.hasCjpmProject()))
+		)
+	}
+
 	override interruptBehavior(): "cancel" | "block" {
 		return "block"
 	}
@@ -205,7 +220,17 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		}
 
 		const newContent = change.newContent || ""
-		if (task.taskMode === "cangjie") {
+		const isCangjieSourceWrite = await this.isCangjieSourceWrite(absolutePath, task)
+		const isCangjieBuildAffectingWrite = await this.isCangjieBuildAffectingWrite(absolutePath, task)
+		if (isCangjieBuildAffectingWrite) {
+			const stagnantRepairError = task.cangjieRuntimePolicy.getStagnantRepairWriteBlockReason(relPath)
+			if (stagnantRepairError) {
+				task.recordToolError("apply_patch", stagnantRepairError)
+				pushToolResult(formatResponse.toolError(stagnantRepairError))
+				return
+			}
+		}
+		if (task.taskMode === "cangjie" || isCangjieSourceWrite) {
 			const structureError = await task.cangjieRuntimePolicy.validateProjectStructureForWrite(relPath, newContent)
 			if (structureError) {
 				task.recordToolError("apply_patch", structureError)
@@ -214,7 +239,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			}
 		}
 		let cangjiePostWriteWarnings = ""
-		if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+		if (isCangjieSourceWrite) {
 			const initError = await task.cangjieRuntimePolicy.ensureProjectInitializedForWrite(relPath)
 			if (initError) {
 				task.recordToolError("apply_patch", initError)
@@ -249,7 +274,8 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			if (missingEvidence.length > 0) {
 				const errorMsg =
 					`Missing bundled corpus evidence for newly introduced stdlib modules: ${missingEvidence.join(", ")}. ` +
-					`Use search_files or read_file against the bundled CangjieCorpus before editing this code.`
+					`Preloaded prompt snippets and built-in signature hints do not count as evidence. ` +
+					`Use search_files/read_file against the bundled CangjieCorpus, or LSP hover/definition, before editing this code.`
 				task.recordToolError("apply_patch", errorMsg)
 				pushToolResult(formatResponse.toolError(errorMsg))
 				return
@@ -315,10 +341,10 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			await task.diffViewProvider.saveChanges(diagnosticsEnabled, writeDelayMs)
 		}
 
-		// Track file edit operation
-		await task.fileContextTracker.trackFileContext(relPath, "njust_ai_edited" as RecordSource)
 		task.didEditFile = true
 		task.cangjieRuntimePolicy.noteWriteApplied(relPath, undefined, newContent)
+		// Record the build-affecting write before auxiliary indexing, which may time out.
+		await task.fileContextTracker.trackFileContext(relPath, "njust_ai_edited" as RecordSource)
 
 		const message = await task.diffViewProvider.pushToolWriteResult(task, task.cwd, true)
 		pushToolResult(message + cangjiePostWriteWarnings)
@@ -345,6 +371,15 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				),
 			)
 			return
+		}
+
+		if (task.taskMode === "cangjie") {
+			const deletionError = task.cangjieRuntimePolicy.getSourceDeletionBlockReason(relPath)
+			if (deletionError) {
+				task.recordToolError("apply_patch", deletionError)
+				pushToolResult(formatResponse.toolError(deletionError))
+				return
+			}
 		}
 
 		// Check if file exists
@@ -433,7 +468,17 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 		const newContent = change.newContent || ""
 		const targetRelPath = change.movePath ?? relPath
 		const targetAbsolutePath = path.resolve(task.cwd, targetRelPath)
-		if (task.taskMode === "cangjie") {
+		const isCangjieSourceWrite = await this.isCangjieSourceWrite(targetAbsolutePath, task)
+		const isCangjieBuildAffectingWrite = await this.isCangjieBuildAffectingWrite(targetAbsolutePath, task)
+		if (isCangjieBuildAffectingWrite) {
+			const stagnantRepairError = task.cangjieRuntimePolicy.getStagnantRepairWriteBlockReason(targetRelPath)
+			if (stagnantRepairError) {
+				task.recordToolError("apply_patch", stagnantRepairError)
+				pushToolResult(formatResponse.toolError(stagnantRepairError))
+				return
+			}
+		}
+		if (task.taskMode === "cangjie" || isCangjieSourceWrite) {
 			const structureError = await task.cangjieRuntimePolicy.validateProjectStructureForWrite(
 				targetRelPath,
 				newContent,
@@ -445,7 +490,7 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			}
 		}
 		let cangjiePostWriteWarnings = ""
-		if (targetAbsolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+		if (isCangjieSourceWrite) {
 			const initError = await task.cangjieRuntimePolicy.ensureProjectInitializedForWrite(targetRelPath)
 			if (initError) {
 				task.recordToolError("apply_patch", initError)
@@ -480,7 +525,8 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			if (missingEvidence.length > 0) {
 				const errorMsg =
 					`Missing bundled corpus evidence for newly introduced stdlib modules: ${missingEvidence.join(", ")}. ` +
-					`Use search_files or read_file against the bundled CangjieCorpus before editing this code.`
+					`Preloaded prompt snippets and built-in signature hints do not count as evidence. ` +
+					`Use search_files/read_file against the bundled CangjieCorpus, or LSP hover/definition, before editing this code.`
 				task.recordToolError("apply_patch", errorMsg)
 				pushToolResult(formatResponse.toolError(errorMsg))
 				return
@@ -610,8 +656,6 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 					TelemetryEventName.UTILITY_ERROR,
 				)
 			}
-
-			await task.fileContextTracker.trackFileContext(change.movePath, "njust_ai_edited" as RecordSource)
 		} else {
 			// Save changes to the same file
 			if (isPreventFocusDisruptionEnabled) {
@@ -619,8 +663,6 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			} else {
 				await task.diffViewProvider.saveChanges(diagnosticsEnabled, writeDelayMs)
 			}
-
-			await task.fileContextTracker.trackFileContext(relPath, "njust_ai_edited" as RecordSource)
 		}
 
 		task.didEditFile = true
@@ -628,6 +670,8 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 			task.cangjieRuntimePolicy.notePathDeleted(relPath)
 		}
 		task.cangjieRuntimePolicy.noteWriteApplied(targetRelPath, originalContent, newContent)
+		// Record the build-affecting write before auxiliary indexing, which may time out.
+		await task.fileContextTracker.trackFileContext(targetRelPath, "njust_ai_edited" as RecordSource)
 
 		const message = await task.diffViewProvider.pushToolWriteResult(task, task.cwd, false)
 		pushToolResult(message + cangjiePostWriteWarnings)

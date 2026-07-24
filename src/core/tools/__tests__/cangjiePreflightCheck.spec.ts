@@ -16,11 +16,11 @@ import {
 
 describe("inferPackageFromPath", () => {
 	it("infers nested package from src-relative path", () => {
-		expect(inferPackageFromPath("src/foo/bar/baz.cj", "/repo", "root")).toBe("foo.bar")
+		expect(inferPackageFromPath("src/foo/bar/baz.cj", "/repo", "root")).toBe("root.foo.bar")
 	})
 
 	it("handles windows path separators", () => {
-		expect(inferPackageFromPath("src\\foo\\bar.cj", "/repo", "root")).toBe("foo")
+		expect(inferPackageFromPath("src\\foo\\bar.cj", "/repo", "root")).toBe("root.foo")
 	})
 
 	it("uses root package for files directly under src", () => {
@@ -48,7 +48,7 @@ describe("extractStdImports", () => {
 describe("cangjiePreflightCheck", () => {
 	it("passes matching package and explicit Int64 main", () => {
 		const result = cangjiePreflightCheck(
-			"package foo.bar\nfunc main(): Int64 { return 0 }",
+			"package root.foo.bar\nfunc main(): Int64 { return 0 }",
 			"src/foo/bar/main.cj",
 			"/repo",
 			"root",
@@ -62,22 +62,44 @@ describe("cangjiePreflightCheck", () => {
 
 		expect(result.pass).toBe(false)
 		expect(result.errors[0]).toContain('"wrong"')
-		expect(result.errors[0]).toContain('"foo"')
+		expect(result.errors[0]).toContain('"root.foo"')
 	})
 
-	it("warns when main lacks explicit return type", () => {
+	it("allows main without an explicit return type", () => {
 		const result = cangjiePreflightCheck("func main() { return 0 }", "src/main.cj", "/repo", "root")
 
 		expect(result.pass).toBe(true)
-		expect(result.warnings[0]).toContain("main()")
+		expect(result.warnings).toEqual([])
 	})
 
-	it("errors when main return type is not Int64", () => {
+	it("allows Unit and integer main return types", () => {
 		const result = cangjiePreflightCheck("func main(): Unit {}", "src/main.cj", "/repo", "root")
+		const intResult = cangjiePreflightCheck("func main(): UInt32 { return 0 }", "src/main.cj", "/repo", "root")
+
+		expect(result.pass).toBe(true)
+		expect(intResult.pass).toBe(true)
+	})
+
+	it("errors when main return type is neither Unit nor an integer", () => {
+		const result = cangjiePreflightCheck('func main(): String { return "" }', "src/main.cj", "/repo", "root")
 
 		expect(result.pass).toBe(false)
-		expect(result.errors[0]).toContain("Int64")
-		expect(result.errors[0]).toContain("Unit")
+		expect(result.errors[0]).toContain("Unit or an integer type")
+		expect(result.errors[0]).toContain("String")
+	})
+
+	it("allows Array<String> main arguments and rejects other parameter types", () => {
+		const valid = cangjiePreflightCheck("func main(args: Array<String>): Unit {}", "src/main.cj", "/repo", "root")
+		const invalid = cangjiePreflightCheck(
+			"func main(args: Array<Int8>): Int64 { return 0 }",
+			"src/main.cj",
+			"/repo",
+			"root",
+		)
+
+		expect(valid.pass).toBe(true)
+		expect(invalid.pass).toBe(false)
+		expect(invalid.errors[0]).toContain("Array<String>")
 	})
 
 	it("errors on direct struct self-reference", () => {

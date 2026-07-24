@@ -54,6 +54,7 @@ export const DIAGNOSTIC_CODE_TEMPLATES: Array<{ categories: string[]; template: 
 			"- `let x = value` - 不可变绑定，不能重新赋值，不能调用 mut 方法\n" +
 			"- `var x = value` - 可变绑定，可重新赋值，可调用 mut 方法\n" +
 			"- `mut func foo()` - 修改 struct 自身字段的方法，调用者必须是 var 绑定\n" +
+			"- Do not apply this generic mut/let rule to HashMap.add unless the HashMap API signature or a compiler diagnostic explicitly says `mut func add`.\n" +
 			"- **修复**: 将 `let obj = Struct()` 改为 `var obj = Struct()` 后再调用 `obj.mutMethod()`\n",
 	},
 	{

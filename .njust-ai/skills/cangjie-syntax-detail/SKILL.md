@@ -26,6 +26,7 @@ main(): Int64 {
 ```
 
 规则:
+
 - 每个 .cj 文件必须有 `package` 声明
 - `main()` 函数签名固定为 `main(): Int64`
 - `main()` 必须在包的某个文件中定义一次
@@ -56,6 +57,7 @@ let (first, _, last) = (1, 2, 3)  // _ 忽略元素
 ```
 
 规则:
+
 - `let` 绑定后不能重新赋值
 - `var` 可重新赋值，但类型不变
 - `const` 值必须是编译期可求值的字面量或常量表达式
@@ -199,11 +201,12 @@ let p3 = Point.origin()       // 静态方法调用
 ```
 
 struct 规则:
+
 - 值类型，赋值时拷贝
 - 不支持继承（不能用 `<:` 继承其他 struct 或 class）
 - 可以实现 interface（用 `<:` 语法）
 - 不能包含自身类型的成员（递归成员）
-- mut 方法只能在 var 绑定上调用
+- mut 方法只能在 var 绑定上调用；不要把这条通用规则套用到 HashMap.add，除非 API 签名或编译器诊断明确显示 `mut func add`
 - 所有成员必须在 init 中初始化
 
 ---
@@ -258,6 +261,7 @@ class Failure <: Result { let error: String }
 ```
 
 class 规则:
+
 - 引用类型，赋值时引用
 - 单继承 `<:`, 可同时实现多个 interface
 - `open` 方法可被 override, 非 open 不可重写
@@ -302,6 +306,7 @@ class Score <: Stringifiable & Comparable<Score> {
 ```
 
 interface 规则:
+
 - 不能有成员变量
 - 方法可以有默认实现
 - 一个类型可以实现多个接口（`<: A & B & C`）
@@ -345,6 +350,7 @@ let r: Result<String, String> = Result.Ok("success")
 ```
 
 enum 规则:
+
 - 构造器名首字母大写
 - 构造器之间用 `|` 分隔或换行
 - 可以有方法和属性
@@ -401,7 +407,7 @@ if (let Some(v) = opt) {
 class Stack<T> {
     private var items = ArrayList<T>()
 
-    public func push(item: T): Unit { items.append(item) }
+    public func push(item: T): Unit { items.add(item) }
     public func pop(): ?T {
         if (items.size == 0) { return None }
         let last = items[items.size - 1]
@@ -473,6 +479,7 @@ extend Array<T> where T <: Comparable<T> {
 ```
 
 extend 规则:
+
 - 不能添加存储属性（成员变量）
 - 可以添加方法、计算属性、接口实现
 - 扩展的方法与原始方法同等优先级
@@ -492,10 +499,10 @@ let len = arr.size              // 长度
 
 // ArrayList (动态数组)
 var list = ArrayList<String>()
-list.append("a")
-list.append("b")
-list.insert(0, "first")
-list.remove(1)
+list.add("a")
+list.add("b")
+list.add("first", at: 0)
+list.remove(at: 1)
 let item = list[0]
 
 // HashMap
@@ -533,7 +540,7 @@ for (i in 0..10) {
     let f = spawn {
         compute(i)
     }
-    futures.append(f)
+    futures.add(f)
 }
 for (f in futures) {
     println(f.get())
@@ -588,6 +595,7 @@ struct CPoint {
 ```
 
 FFI 规则:
+
 - `foreign func` 声明外部 C 函数
 - 调用 foreign 函数必须在 `unsafe` 块内
 - 使用 `CString`/`CPointer`/`VArray` 等 FFI 类型

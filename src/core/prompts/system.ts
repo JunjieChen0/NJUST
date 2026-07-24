@@ -282,6 +282,7 @@ async function generatePromptImpl(cfg: SystemPromptConfig): Promise<SystemPrompt
 		settings?.cangjieContextIntensity,
 		settings?.cangjieRecentBuildRootCauses,
 		settings?.cangjieRepairDirective,
+		settings?.cangjieDelegatedAgentTypes,
 	)
 	const multiFileContextSection = cangjieContextSection ? "" : getMultiFileContextSection(cwd)
 
@@ -366,7 +367,7 @@ HOW TO USE:
 		{ name: "webSearchSection", text: webSearchText, priority: 2, required: false },
 		{ name: "modesSection", text: modesText, priority: 3, required: false },
 		{ name: "skillsSection", text: skillsText, priority: 2, required: false },
-		{ name: "cangjieContext", text: cangjieText, priority: 1, required: false },
+		{ name: "cangjieContext", text: cangjieText, priority: 1, required: mode === "cangjie" },
 		{ name: "multiFileContext", text: multiFileText, priority: 1, required: false },
 		{ name: "rulesSection", text: rulesText, priority: 4, required: false },
 		{ name: "systemInfo", text: systemInfoText, priority: 0, required: true },

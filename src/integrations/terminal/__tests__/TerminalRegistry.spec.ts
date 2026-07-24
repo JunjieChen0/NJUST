@@ -16,6 +16,8 @@ describe("TerminalRegistry", () => {
 	let mockCreateTerminal: any
 
 	beforeEach(() => {
+		;(TerminalRegistry as any).terminals = []
+		;(TerminalRegistry as any).nextTerminalId = 1
 		mockCreateTerminal = vi.spyOn(vscode.window, "createTerminal").mockImplementation(
 			(..._args: any[]) =>
 				({
@@ -126,6 +128,30 @@ describe("TerminalRegistry", () => {
 			} finally {
 				Terminal.setTerminalZshP10k(false)
 			}
+		})
+	})
+
+	describe("getOrCreateTerminal", () => {
+		it("reuses a task terminal with a different cwd by default", async () => {
+			const existingTerminal = TerminalRegistry.createTerminal("/home/user/Desktop", "execa")
+			existingTerminal.taskId = "task-1"
+
+			const terminal = await TerminalRegistry.getOrCreateTerminal("/test/workspace", "task-1", "execa")
+
+			expect(terminal).toBe(existingTerminal)
+			expect(terminal.getCurrentWorkingDirectory()).toBe("/home/user/Desktop")
+		})
+
+		it("does not reuse a task terminal with a different cwd when exactCwd is required", async () => {
+			const existingTerminal = TerminalRegistry.createTerminal("/home/user/Desktop", "execa")
+			existingTerminal.taskId = "task-1"
+
+			const terminal = await TerminalRegistry.getOrCreateTerminal("/test/workspace", "task-1", "execa", {
+				exactCwd: true,
+			})
+
+			expect(terminal).not.toBe(existingTerminal)
+			expect(terminal.getCurrentWorkingDirectory()).toBe("/test/workspace")
 		})
 	})
 })

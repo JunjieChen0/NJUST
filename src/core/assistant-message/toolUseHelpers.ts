@@ -136,6 +136,15 @@ export async function validateToolUseBlock(
 				.map((tool) => resolveToolAlias(tool))
 		: undefined
 	try {
+		const merged = mergeToolParamsForValidation(block)
+		const agentStageError = cline.cangjieRuntimePolicy?.validateAgentStageToolUse?.(
+			block.name,
+			merged,
+			Boolean(cline.parentTaskId || cline.allowedTools || allowedTools),
+		)
+		if (agentStageError) {
+			throw new Error(agentStageError)
+		}
 		const toolRequirements =
 			disabledTools?.reduce(
 				(acc: Record<string, boolean>, tool: string) => {
@@ -151,13 +160,12 @@ export async function validateToolUseBlock(
 			mode ?? defaultModeSlug,
 			customModes ?? [],
 			toolRequirements,
-			mergeToolParamsForValidation(block),
+			merged,
 			stateExperiments as Record<string, boolean> | undefined,
 			includedTools,
 			allowedTools,
 		)
 		if (!block.partial) {
-			const merged = mergeToolParamsForValidation(block)
 			const paramCheck = validateToolParams(block.name, merged)
 			if (!paramCheck.valid) {
 				throw new Error(paramCheck.error!)
@@ -165,6 +173,11 @@ export async function validateToolUseBlock(
 		}
 	} catch (error) {
 		cline.consecutiveMistakeCount++
+		try {
+			cline.recordToolError(block.name as ToolName, getErrorMessage(error))
+		} catch (recordError) {
+			logger.debug("ToolUse", "recordToolError failed", recordError)
+		}
 		const errorContent = formatResponse.toolError(getErrorMessage(error))
 		cline.pushToolResultToUserContent({
 			type: "tool_result",

@@ -108,8 +108,11 @@ function createTask(overrides: Record<string, any> = {}) {
 		didEditFile: false,
 		cangjieSearchHistory: new Set(),
 		cangjieRuntimePolicy: {
+			hasCjpmProject: vi.fn().mockResolvedValue(false),
 			validateProjectStructureForWrite: vi.fn().mockResolvedValue(undefined),
 			ensureProjectInitializedForWrite: vi.fn().mockResolvedValue(undefined),
+			getStagnantRepairWriteBlockReason: vi.fn().mockReturnValue(null),
+			getSourceDeletionBlockReason: vi.fn().mockReturnValue(null),
 			getMissingImportEvidence: vi.fn().mockReturnValue([]),
 			noteWriteApplied: vi.fn(),
 			notePathDeleted: vi.fn(),
@@ -352,6 +355,49 @@ describe("ApplyPatchTool", () => {
 			)
 		})
 
+		it("fails in cjpm projects outside cangjie mode if missing bundle corpus evidence is found", async () => {
+			parsePatchMock.mockReturnValueOnce({ hunks: [{}] })
+			processAllHunksMock.mockResolvedValueOnce([
+				{ type: "add", path: "src/main.cj", newContent: "package demo\nimport std.fs.*\n" },
+			])
+			fileExistsAtPathMock.mockResolvedValueOnce(false)
+			const task = createTask()
+			task.cangjieRuntimePolicy.hasCjpmProject.mockResolvedValue(true)
+			task.cangjieRuntimePolicy.getMissingImportEvidence.mockReturnValueOnce(["std.fs"])
+			const callbacks = createCallbacks()
+
+			await tool.execute({ patch: "patch" }, task, callbacks)
+
+			expect(task.recordToolError).toHaveBeenCalledWith(
+				"apply_patch",
+				expect.stringContaining("Preloaded prompt snippets"),
+			)
+			expect(callbacks.pushToolResult).toHaveBeenCalledWith(
+				expect.stringContaining("Missing bundled corpus evidence"),
+			)
+			expect(task.didEditFile).toBe(false)
+		})
+
+		it("fails in cjpm projects when stagnant repair requires fresh evidence before more patch writes", async () => {
+			parsePatchMock.mockReturnValueOnce({ hunks: [{}] })
+			processAllHunksMock.mockResolvedValueOnce([
+				{ type: "add", path: "src/main.cj", newContent: "package demo\nmain(): Int64 { return 0 }\n" },
+			])
+			fileExistsAtPathMock.mockResolvedValueOnce(false)
+			const task = createTask()
+			task.cangjieRuntimePolicy.hasCjpmProject.mockResolvedValue(true)
+			task.cangjieRuntimePolicy.getStagnantRepairWriteBlockReason.mockReturnValueOnce(
+				"Cangjie repair is stagnant",
+			)
+			const callbacks = createCallbacks()
+
+			await tool.execute({ patch: "patch" }, task, callbacks)
+
+			expect(task.recordToolError).toHaveBeenCalledWith("apply_patch", "Cangjie repair is stagnant")
+			expect(callbacks.pushToolResult).toHaveBeenCalledWith(expect.stringContaining("Cangjie repair is stagnant"))
+			expect(task.didEditFile).toBe(false)
+		})
+
 		it("successfully adds file after approval (without preventFocusDisruption)", async () => {
 			parsePatchMock.mockReturnValueOnce({ hunks: [{}] })
 			processAllHunksMock.mockResolvedValueOnce([{ type: "add", path: "src/main.cj", newContent: "abc" }])
@@ -381,6 +427,22 @@ describe("ApplyPatchTool", () => {
 			expect(task.diffViewProvider.open).not.toHaveBeenCalled()
 			expect(task.diffViewProvider.saveDirectly).toHaveBeenCalledWith("src/main.cj", "abc", true, true, 200)
 			expect(callbacks.pushToolResult).toHaveBeenCalledWith("applied patch output")
+		})
+
+		it("records a saved Cangjie write before context tracking fails", async () => {
+			parsePatchMock.mockReturnValueOnce({ hunks: [{}] })
+			processAllHunksMock.mockResolvedValueOnce([{ type: "add", path: "src/main.cj", newContent: "abc" }])
+			fileExistsAtPathMock.mockResolvedValueOnce(false)
+			const task = createTask()
+			const callbacks = createCallbacks()
+			task.fileContextTracker.trackFileContext.mockRejectedValueOnce(new Error("tracking timeout"))
+
+			await tool.execute({ patch: "patch" }, task, callbacks)
+
+			expect(task.cangjieRuntimePolicy.noteWriteApplied).toHaveBeenCalledWith("src/main.cj", undefined, "abc")
+			expect(task.cangjieRuntimePolicy.noteWriteApplied.mock.invocationCallOrder[0]).toBeLessThan(
+				task.fileContextTracker.trackFileContext.mock.invocationCallOrder[0],
+			)
 		})
 
 		it("reverts changes if user rejects approval", async () => {
@@ -425,6 +487,25 @@ describe("ApplyPatchTool", () => {
 
 			expect(task.recordToolError).toHaveBeenCalledWith("apply_patch")
 			expect(task.say).toHaveBeenCalledWith("error", expect.stringContaining("File not found"))
+		})
+
+		it("blocks Cangjie source deletion without an explicit user request", async () => {
+			parsePatchMock.mockReturnValueOnce({ hunks: [{}] })
+			processAllHunksMock.mockResolvedValueOnce([{ type: "delete", path: "src/foo/bar.cj" }])
+			const task = createTask({ taskMode: "cangjie" })
+			task.cangjieRuntimePolicy.getSourceDeletionBlockReason.mockReturnValueOnce(
+				"Cangjie source deletion blocked for src/foo/bar.cj",
+			)
+			const callbacks = createCallbacks()
+
+			await tool.execute({ patch: "patch" }, task, callbacks)
+
+			expect(fs.unlink).not.toHaveBeenCalled()
+			expect(task.recordToolError).toHaveBeenCalledWith(
+				"apply_patch",
+				expect.stringContaining("source deletion blocked"),
+			)
+			expect(callbacks.pushToolResult).toHaveBeenCalledWith(expect.stringContaining("source deletion blocked"))
 		})
 
 		it("successfully deletes file on approval", async () => {

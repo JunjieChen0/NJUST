@@ -500,6 +500,31 @@ describe("Cline", () => {
 	})
 
 	describe("constructor", () => {
+		it("stores delegated tool permissions as an immutable lookup set", () => {
+			const cline = new Task({
+				provider: mockProvider,
+				apiConfiguration: mockApiConfig,
+				task: "test task",
+				startTask: false,
+				allowedTools: ["read_file", "execute_command"],
+			})
+
+			expect(cline.allowedTools).toEqual(new Set(["read_file", "execute_command"]))
+			expect(cline.allowedTools?.has("write_to_file")).toBe(false)
+		})
+
+		it("stores the delegated agent type for stage-specific lifecycle rules", () => {
+			const cline = new Task({
+				provider: mockProvider,
+				apiConfiguration: mockApiConfig,
+				task: "test task",
+				startTask: false,
+				agentType: "CangjieImplement",
+			})
+
+			expect(cline.agentType).toBe("CangjieImplement")
+		})
+
 		it("should always have diff strategy defined", async () => {
 			const cline = new Task({
 				provider: mockProvider,

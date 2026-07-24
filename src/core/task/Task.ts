@@ -136,6 +136,10 @@ export interface TaskOptions extends CreateTaskOptions {
 	workspacePath?: string
 	/** Capability-scoped tool whitelist for this task (used for delegated child tasks). */
 	allowedTools?: string[]
+	/** Explicit mode for newly delegated tasks, available synchronously during construction. */
+	taskMode?: string
+	/** Specialized delegated-agent type, used for stage-specific lifecycle rules. */
+	agentType?: string
 	/** Optional trace id used to stitch parent/child task observability spans. */
 	parentTraceId?: string
 	/** Initial status for the task's history item (e.g., "active" for child tasks) */
@@ -159,6 +163,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	readonly taskNumber: number
 	readonly workspacePath: string
 	readonly allowedTools?: ReadonlySet<string>
+	readonly agentType?: string
 	readonly parentTraceId?: string
 
 	/** Forked context summary injected by parent when isolationLevel is "forked" */
@@ -236,6 +241,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	abortReason?: ClineApiReqCancelReason
 	isInitialized = false
 	isPaused: boolean = false
+	private activeTaskLoopCount = 0
+	private readonly taskLoopIdleResolvers = new Set<() => void>()
 
 	// API
 	apiConfiguration: ProviderSettings
@@ -532,6 +539,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		initialTodos,
 		workspacePath,
 		initialStatus,
+		allowedTools,
+		taskMode,
+		agentType,
 	}: TaskOptions) {
 		super()
 
@@ -568,6 +578,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.rootTaskId = historyItem ? historyItem.rootTaskId : rootTask?.taskId
 		this.parentTaskId = historyItem ? historyItem.parentTaskId : parentTask?.taskId
 		this.childTaskId = undefined
+		this.agentType = agentType
 
 		this.metadata = {
 			task: historyItem ? historyItem.task : task,
@@ -585,6 +596,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.rooProtectedController = new RooProtectedController(this.cwd)
 		this.fileContextTracker = new FileContextTracker(host, this.taskId)
 		this.cangjieRuntimePolicy = new CangjieRuntimePolicy(this.cwd)
+		for (const delegatedAgentType of historyItem?.delegatedAgentTypes ?? []) {
+			this.cangjieRuntimePolicy.noteAgentDelegation(delegatedAgentType)
+		}
 
 		this.rooIgnoreController.initialize().catch((error) => {
 			logger.error("Task", "Failed to initialize RooIgnoreController:", error)
@@ -610,19 +624,20 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.parentTask = parentTask
 		this.taskNumber = taskNumber
 		this.initialStatus = initialStatus
-		this.requestBuilder = new TaskRequestBuilder(this)
-		this.streamProcessor = new TaskStreamProcessor(this)
-		this.errorRecovery = new ErrorRecoveryHandler(this)
-		if (parentTask) {
-			this.requestBuilder.inheritCacheFromParent(parentTask)
-		}
-
+		this.allowedTools = allowedTools ? new Set(allowedTools) : undefined
 		this.modeHandler = new TaskModeHandler(this)
 
 		if (historyItem) {
 			this.modeHandler.initializeFromHistory(historyItem)
 		} else {
-			this.modeHandler.initializeAsync(host)
+			this.modeHandler.initializeAsync(host, taskMode)
+		}
+
+		this.requestBuilder = new TaskRequestBuilder(this)
+		this.streamProcessor = new TaskStreamProcessor(this)
+		this.errorRecovery = new ErrorRecoveryHandler(this)
+		if (parentTask) {
+			this.requestBuilder.inheritCacheFromParent(parentTask)
 		}
 
 		this.assistantMessageParser = undefined
@@ -1178,6 +1193,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	// Task Loop
 
 	private async initiateTaskLoop(userContent: Anthropic.Messages.ContentBlockParam[]): Promise<void> {
+		this.activeTaskLoopCount++
+
 		// Kicks off the checkpoints initialization process in the background.
 		void getCheckpointService(this).catch((error) => {
 			logger.warn("Task", "getCheckpointService failed", error)
@@ -1214,6 +1231,12 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				const didEndLoop = await this.recursivelyMakeClineRequests(nextUserContent, includeFileDetails)
 				includeFileDetails = false
 
+				// A delegated child owns progress until it completes. End this loop
+				// instead of turning the paused handoff into a no-tool retry.
+				if (this.isPaused) {
+					break
+				}
+
 				if (didEndLoop) {
 					// Only happens when max requests is hit and user denies
 					// resetting the count, or an unexpected error is caught.
@@ -1231,7 +1254,17 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		} finally {
 			// MemRL: persist episode (once) on task unwind — fallback for abort/error.
 			this.persistMemrlEpisode()
+			this.activeTaskLoopCount = Math.max(0, this.activeTaskLoopCount - 1)
+			if (this.activeTaskLoopCount === 0) {
+				for (const resolve of this.taskLoopIdleResolvers) resolve()
+				this.taskLoopIdleResolvers.clear()
+			}
 		}
+	}
+
+	public async waitForTaskLoopIdle(): Promise<void> {
+		if (this.activeTaskLoopCount === 0) return
+		await new Promise<void>((resolve) => this.taskLoopIdleResolvers.add(resolve))
 	}
 
 	public async recursivelyMakeClineRequests(

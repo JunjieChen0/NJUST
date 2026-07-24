@@ -2,7 +2,12 @@ import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs"
 import { NJUST_AI_CONFIG_DIR } from "@njust-ai/types"
-import { invalidateCangjieContextSectionCache } from "../../core/prompts/sections/cangjie-context"
+import {
+	buildCompactProjectOverviewSection,
+	buildProjectPackageValidationSection,
+	invalidateCangjieContextSectionCache,
+	parseCjpmToml,
+} from "../../core/prompts/sections/cangjie-context"
 import {
 	LEARNED_FIXES_FILE,
 	ensureLearnedFixesFile,
@@ -25,6 +30,12 @@ import { CangjieTemplateLibrary } from "./CangjieTemplateLibrary"
 import { CangjieProfiler } from "./CangjieProfiler"
 import { CangjieRefactoringProvider } from "./CangjieRefactoringProvider"
 import type { CangjieSymbolIndex } from "./CangjieSymbolIndex"
+import {
+	formatCangjieEvalTraceSummaryMarkdown,
+	getCangjieGlobalEvalTracePath,
+	getCangjieWorkspaceEvalTracePath,
+	readCangjieEvalTraceSummary,
+} from "../CangjieEvalTraceLogger"
 
 interface CjpmCommandDef {
 	id: string
@@ -39,6 +50,8 @@ const CJPM_COMMANDS: CjpmCommandDef[] = [
 	{ id: "njust-ai.cangjieCheck", label: "Cangjie: Check (cjpm check)", cjpmArg: "check" },
 	{ id: "njust-ai.cangjieClean", label: "Cangjie: Clean (cjpm clean)", cjpmArg: "clean" },
 ]
+
+const CANGJIE_PROJECT_TYPES = ["executable", "static", "dynamic"] as const
 
 function findCjpmRoot(): string | undefined {
 	const folders = vscode.workspace.workspaceFolders
@@ -313,12 +326,94 @@ function runCjpmCommand(cjpmArg: string): void {
 	terminal.sendText(cmd)
 }
 
+async function runCangjieInitializeProject(): Promise<void> {
+	const folder = vscode.workspace.workspaceFolders?.[0]
+	if (!folder) {
+		vscode.window.showErrorMessage("No workspace folder open.")
+		return
+	}
+
+	const cwd = folder.uri.fsPath
+	if (fs.existsSync(path.join(cwd, "cjpm.toml"))) {
+		vscode.window.showInformationMessage("This workspace already contains cjpm.toml; initialization was skipped.")
+		return
+	}
+
+	const name = await vscode.window.showInputBox({
+		prompt: "Cangjie package name",
+		placeHolder: "my_project",
+		validateInput: (value) =>
+			/^[A-Za-z_][A-Za-z0-9_]*$/.test(value.trim())
+				? undefined
+				: "Use letters, digits, and underscores; the first character cannot be a digit.",
+	})
+	if (!name) return
+	const normalizedName = name.trim()
+	if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(normalizedName)) {
+		vscode.window.showErrorMessage("Invalid Cangjie package name.")
+		return
+	}
+
+	type ProjectTypePick = vscode.QuickPickItem & { projectType: (typeof CANGJIE_PROJECT_TYPES)[number] }
+	const typePick = await vscode.window.showQuickPick<ProjectTypePick>(
+		CANGJIE_PROJECT_TYPES.map((projectType) => ({
+			label: projectType,
+			description:
+				projectType === "executable"
+					? "Runnable application"
+					: projectType === "static"
+						? "Static library"
+						: "Dynamic library",
+			projectType,
+		})),
+		{ placeHolder: "Select the Cangjie project output type" },
+	)
+	if (!typePick) return
+	const confirmation = await vscode.window.showWarningMessage(
+		`Initialize Cangjie project "${normalizedName}" as ${typePick.projectType} in ${cwd}?`,
+		"Initialize",
+		"Cancel",
+	)
+	if (confirmation !== "Initialize") return
+
+	const cjpmPath = resolveCangjieToolPath("cjpm", "cangjieTools.cjpmPath")
+	if (!cjpmPath) {
+		void vscode.window
+			.showErrorMessage(t("errors.cangjie_lsp.cjpm_not_found"), t("buttons.cangjie_lsp.open_settings"))
+			.then((choice) => {
+				if (choice === t("buttons.cangjie_lsp.open_settings")) {
+					void vscode.commands.executeCommand(
+						"workbench.action.openSettings",
+						`${Package.name}.cangjieTools.cjpmPath`,
+					)
+				}
+			})
+		return
+	}
+
+	const terminal = vscode.window.createTerminal({
+		name: "cjpm init",
+		cwd,
+		env: buildCangjieToolEnv() as Record<string, string>,
+	})
+	terminal.show()
+	const command =
+		process.platform === "win32"
+			? `& "${cjpmPath}" init --name "${normalizedName}" --type=${typePick.projectType}`
+			: `"${cjpmPath}" init --name "${normalizedName}" --type=${typePick.projectType}`
+	terminal.sendText(command)
+}
+
 export function registerCangjieCommands(
 	context: vscode.ExtensionContext,
 	lspClient: CangjieLspClient,
 	symbolIndex?: CangjieSymbolIndex,
 	getCurrentTaskId?: () => string | undefined,
 ): void {
+	context.subscriptions.push(
+		vscode.commands.registerCommand("njust-ai.cangjieInitializeProject", runCangjieInitializeProject),
+	)
+
 	context.subscriptions.push(
 		vscode.commands.registerCommand("njust-ai.cangjieVerifySdk", async () => {
 			const ch = vscode.window.createOutputChannel("Cangjie SDK Verify")
@@ -332,6 +427,70 @@ export function registerCangjieCommands(
 			} else {
 				void vscode.window.showInformationMessage(t("info.cangjie_lsp.toolchain_ok"))
 			}
+		}),
+	)
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand("njust-ai.cangjieViewEvalTrace", async () => {
+			const cwd = findCjpmRoot()
+			if (!cwd) {
+				vscode.window.showErrorMessage("No workspace folder open.")
+				return
+			}
+
+			const tracePath = getCangjieWorkspaceEvalTracePath(cwd)
+			const globalTracePath = await getCangjieGlobalEvalTracePath(context.globalStorageUri.fsPath)
+			const [summary, globalSummary] = await Promise.all([
+				readCangjieEvalTraceSummary(tracePath),
+				readCangjieEvalTraceSummary(globalTracePath),
+			])
+			const channel = vscode.window.createOutputChannel("Cangjie Eval Trace")
+			channel.clear()
+			channel.appendLine("Workspace eval summary:")
+			channel.appendLine(formatCangjieEvalTraceSummaryMarkdown(summary))
+			channel.appendLine(`- trace file: ${tracePath}`)
+			channel.appendLine("")
+			channel.appendLine("Global roadmap eval summary:")
+			channel.appendLine(formatCangjieEvalTraceSummaryMarkdown(globalSummary))
+			channel.appendLine(`- trace file: ${globalTracePath}`)
+			channel.show(true)
+
+			if (summary.totalEntries === 0) {
+				void vscode.window.showInformationMessage("No Cangjie eval trace entries found in this workspace.")
+			}
+		}),
+	)
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand("njust-ai.cangjieViewProjectStructure", async () => {
+			const cwd = findCjpmRoot()
+			if (!cwd) {
+				vscode.window.showErrorMessage("No workspace folder open.")
+				return
+			}
+
+			const projectInfo = await parseCjpmToml(cwd)
+			if (!projectInfo) {
+				vscode.window.showErrorMessage("No valid cjpm.toml found in the current workspace.")
+				return
+			}
+
+			const activeDocument = vscode.window.activeTextEditor?.document
+			const activePackage =
+				activeDocument?.languageId === "cangjie"
+					? (parseCangjiePackageDecl(activeDocument.getText()) ?? null)
+					: null
+			const activeFilePath = activeDocument?.languageId === "cangjie" ? activeDocument.uri.fsPath : null
+			const overview = await buildCompactProjectOverviewSection(cwd, projectInfo, activePackage, activeFilePath)
+			const packageValidation = await buildProjectPackageValidationSection(cwd, projectInfo)
+
+			const channel = vscode.window.createOutputChannel("Cangjie Project Structure")
+			channel.clear()
+			channel.appendLine("Cangjie project structure:")
+			channel.appendLine(`Root: ${cwd}`)
+			channel.appendLine(overview)
+			channel.appendLine(packageValidation)
+			channel.show(true)
 		}),
 	)
 

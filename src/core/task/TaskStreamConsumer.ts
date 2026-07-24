@@ -782,6 +782,13 @@ export async function finalizeStreamResponse(config: FinalizeConfig): Promise<Fi
 			`[TaskStreamConsumer][${requestProfileId}] pWaitFor userMessageContentReady – done (${(performance.now() - waitStartMs).toFixed(0)}ms)`,
 		)
 
+		// Delegation pauses the parent request loop. Check this before the
+		// no-tool retry logic so a child handoff cannot inject a synthetic
+		// reminder or enqueue another parent request while the child is active.
+		if (t.isPaused) {
+			return { action: "break" }
+		}
+
 		const didToolUse = t.assistantMessageContent.some(isAnyToolUse)
 
 		if (!didToolUse) {
@@ -832,7 +839,7 @@ export async function finalizeStreamResponse(config: FinalizeConfig): Promise<Fi
 			return { action: "done" }
 		}
 
-		if (t.userMessageContent.length > 0 || t.isPaused) {
+		if (t.userMessageContent.length > 0) {
 			stack.push({
 				userContent: [...t.userMessageContent],
 				includeFileDetails: false,

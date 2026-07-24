@@ -33,11 +33,11 @@ export class TaskModeHandler {
 		this._taskApiConfigReady = Promise.resolve()
 	}
 
-	initializeAsync(host: ITaskHost): void {
+	initializeAsync(host: ITaskHost, modeOverride?: string): void {
 		this._host = host
-		this._taskMode = undefined
+		this._taskMode = modeOverride
 		this._taskApiConfigName = undefined
-		this._taskModeReady = this.initializeTaskMode(host)
+		this._taskModeReady = modeOverride ? Promise.resolve() : this.initializeTaskMode(host)
 		this._taskApiConfigReady = this.initializeTaskApiConfigName(host)
 	}
 

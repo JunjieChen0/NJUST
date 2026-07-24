@@ -1090,6 +1090,8 @@ export class ClineProvider
 		mode: string
 		isolationLevel?: string
 		forkedContextSummary?: string
+		allowedTools?: string[]
+		agentType?: string
 	}): Promise<Task> {
 		return delegateParentAndOpenChildWithProvider(this, params)
 	}

@@ -73,6 +73,7 @@ export class TaskSubtaskHandler {
 		this.host.didFinishAbortingStream = false
 		this.host.isStreaming = false
 		this.host.isWaitingForFirstChunk = false
+		this.host.isPaused = false
 
 		this.host.skipPrevResponseIdOnce = true
 

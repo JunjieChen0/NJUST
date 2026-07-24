@@ -172,6 +172,25 @@ describe("ExecaTerminalProcess", () => {
 			expect(mockTerminal.setActiveStream).toHaveBeenCalledWith(expect.any(Object), mockPid)
 			expect(mockTerminal.setActiveStream).toHaveBeenLastCalledWith(undefined)
 		})
+
+		it("should normalize trailing stderr redirect because execa already captures all output", async () => {
+			await terminalProcess.run("cjpm build 2>&1")
+
+			expect(terminalProcess.command).toBe("cjpm build")
+		})
+
+		it("should still block shell chaining after stderr redirect normalization", async () => {
+			const spy = vitest.fn()
+			terminalProcess.on("error", spy)
+
+			await terminalProcess.run("echo a && echo b")
+
+			expect(spy).toHaveBeenCalledWith(
+				expect.objectContaining({
+					message: expect.stringContaining("contains shell chaining"),
+				}),
+			)
+		})
 	})
 
 	describe("trimRetrievedOutput", () => {

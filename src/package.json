@@ -319,6 +319,11 @@
 		},
 		"commands": [
 			{
+				"command": "njust-ai.cangjieInitializeProject",
+				"title": "Cangjie: Initialize Project",
+				"category": "Cangjie"
+			},
+			{
 				"command": "njust-ai.plusButtonClicked",
 				"title": "%command.newTask.title%",
 				"icon": "$(edit)"
@@ -457,6 +462,16 @@
 				"category": "Cangjie"
 			},
 			{
+				"command": "njust-ai.cangjieViewEvalTrace",
+				"title": "Cangjie: View Eval Trace Summary",
+				"category": "Cangjie"
+			},
+			{
+				"command": "njust-ai.cangjieViewProjectStructure",
+				"title": "Cangjie: View Project Structure",
+				"category": "Cangjie"
+			},
+			{
 				"command": "njust-ai.cangjieRestartLsp",
 				"title": "Cangjie: Restart Language Server",
 				"category": "Cangjie"
@@ -577,6 +592,10 @@
 			],
 			"commandPalette": [
 				{
+					"command": "njust-ai.cangjieInitializeProject",
+					"when": "workspaceFolderCount > 0"
+				},
+				{
 					"command": "njust-ai.latexCompile",
 					"when": "editorLangId == latex || editorLangId == tex"
 				},
@@ -599,6 +618,14 @@
 				{
 					"command": "njust-ai.cangjieClean",
 					"when": "editorLangId == cangjie"
+				},
+				{
+					"command": "njust-ai.cangjieViewEvalTrace",
+					"when": "workspaceFolderCount > 0"
+				},
+				{
+					"command": "njust-ai.cangjieViewProjectStructure",
+					"when": "workspaceFolderCount > 0"
 				},
 				{
 					"command": "njust-ai.cangjieViewLearnedFixes",

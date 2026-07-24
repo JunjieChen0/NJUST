@@ -169,8 +169,28 @@ export async function buildStdlibSignatureHintsSection(
 const CORPUS_EXTRA_SNIPPETS: { rel: string; keys: string[] }[] = [
 	{ rel: "extra/HashMap.md", keys: ["hashmap"] },
 	{ rel: "extra/HashSet.md", keys: ["hashset"] },
-	{ rel: "extra/Collection.md", keys: ["arraylist", "collection"] },
-	{ rel: "extra/Option.md", keys: ["option", "optional", "none", "some"] },
+	{ rel: "extra/ArrayList.md", keys: ["arraylist"] },
+	{ rel: "extra/Collection.md", keys: ["collection"] },
+	{ rel: "extra/File.md", keys: ["std.fs", "file.read", "readfrom", "read file", "file read", "读取文件", "读文件"] },
+	{ rel: "extra/Regex.md", keys: ["std.regex", "regex", "regexp", "regular expression", "正则"] },
+	{ rel: "extra/Time.md", keys: ["std.time", "datetime", "timezone", "monotime", "duration", "time parse", "时间"] },
+	{
+		rel: "extra/Process.md",
+		keys: [
+			"std.process",
+			"subprocess",
+			"processredirect",
+			"executewithoutput",
+			"execute command",
+			"run process",
+			"launch process",
+			"进程",
+		],
+	},
+	{
+		rel: "extra/Option.md",
+		keys: ["option", "optional", "none", "some", "getorthrow", "getordefault", "issome", "isnone"],
+	},
 	{ rel: "extra/Sorting.md", keys: ["sorting", " sort", "排序"] },
 	{ rel: "extra/String.md", keys: ["string", "substring", "runestring"] },
 	{ rel: "extra/Array.md", keys: ["varray", "array"] },
@@ -185,6 +205,49 @@ const CORPUS_EXTRA_SNIPPETS: { rel: string; keys: string[] }[] = [
 
 const CORPUS_EXTRA_MAX_FILES = 2
 const CORPUS_EXTRA_MAX_CHARS_PER_FILE = 1600
+
+const CORPUS_INTENT_REFERENCES: { title: string; rels: string[]; keys: string[] }[] = [
+	{
+		title: "File / std.fs",
+		rels: ["libs/std/fs/fs_samples/file_samples.md", "libs/std/fs/fs_package_api/fs_package_classes.md"],
+		keys: ["std.fs", "file.read", "readfrom", "read file", "file read", "读取文件", "读文件"],
+	},
+	{
+		title: "Regex / std.regex",
+		rels: ["libs/std/regex/regex_samples/regex_sample.md", "libs/std/regex/regex_package_overview.md"],
+		keys: ["std.regex", "regex", "regexp", "regular expression", "正则"],
+	},
+	{
+		title: "Time / std.time",
+		rels: [
+			"libs/std/time/time_samples/datetime_parse.md",
+			"libs/std/time/time_package_api/time_package_structs.md",
+		],
+		keys: ["std.time", "datetime", "timezone", "monotime", "duration", "time parse", "时间"],
+	},
+	{
+		title: "Process / std.process",
+		rels: [
+			"libs/std/process/process_samples/process_sample.md",
+			"libs/std/process/process_package_api/process_package_funcs.md",
+		],
+		keys: [
+			"std.process",
+			"subprocess",
+			"processredirect",
+			"executewithoutput",
+			"execute command",
+			"run process",
+			"launch process",
+			"进程",
+		],
+	},
+	{
+		title: "Option / std.core",
+		rels: ["libs/std/core/core_package_api/core_package_enums.md", "extra/Option.md"],
+		keys: ["std.core", "option", "optional", "none", "some", "getorthrow", "getordefault", "issome", "isnone"],
+	},
+]
 
 let corpusExtraLatinKeyRegex: Map<string, RegExp> | null = null
 
@@ -221,6 +284,7 @@ export async function buildCorpusExtraFewShotSection(
 	corpusRoot: string,
 	imports: string[],
 	diagnostics: vscode.Diagnostic[],
+	userHint?: string,
 ): Promise<string | null> {
 	try {
 		await fs.promises.access(corpusRoot)
@@ -238,6 +302,8 @@ export async function buildCorpusExtraFewShotSection(
 		imports.join(" ") +
 		" " +
 		diagnostics.map((d) => d.message).join(" ") +
+		" " +
+		(userHint ?? "") +
 		" " +
 		textChunks.join(" ")
 	).toLowerCase()
@@ -271,11 +337,30 @@ export async function buildCorpusExtraFewShotSection(
 		}
 	}
 
-	if (picked.length === 0) return null
+	const referenceHints: string[] = []
+	for (const { title, rels, keys } of CORPUS_INTENT_REFERENCES) {
+		if (!keys.some((k) => corpusExtraHaystackMatchesKey(hay, k, latinMap))) continue
+		const existing: string[] = []
+		for (const rel of rels) {
+			try {
+				await fs.promises.access(path.join(corpusRoot, rel))
+				existing.push(rel)
+			} catch {
+				/* skip missing corpus reference */
+			}
+		}
+		if (existing.length > 0) {
+			referenceHints.push(
+				`### 语料检索提示: ${title}\n优先读取: ${existing.map((rel) => `\`${rel}\``).join(", ")}`,
+			)
+		}
+	}
+
+	if (picked.length === 0 && referenceHints.length === 0) return null
 	return (
 		`## 语料库 extra/ 参考片段（意图匹配）\n\n` +
 		`编写特性前可对齐以下官方示例风格；完整内容请用 read_file 打开对应路径。\n\n` +
-		picked.join("\n\n---\n\n")
+		[...picked, ...referenceHints].join("\n\n---\n\n")
 	)
 }
 

@@ -43,6 +43,10 @@ describe("isToolAllowedForMode", () => {
 		expect(isToolAllowedForMode("attempt_completion", "markdown-editor", customModes)).toBe(true)
 	})
 
+	it("exposes the agent orchestration tool in Cangjie mode", () => {
+		expect(isToolAllowedForMode("agent", "cangjie", [])).toBe(true)
+	})
+
 	it("allows unrestricted tools", () => {
 		expect(isToolAllowedForMode("read_file", "markdown-editor", customModes)).toBe(true)
 	})

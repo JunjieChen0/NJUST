@@ -104,15 +104,11 @@ export const modeConfigSchema = z.object({
 	source: z.enum(["global", "project"]).optional(),
 })
 
-
 /**
  * Validate a file path against a mode's edit permission fileRegex.
  * Returns true if the path is allowed (regex matches or no regex configured).
  */
-export function isFileAllowedByModeRegex(
-	filePath: string,
-	fileRegex?: string,
-): boolean {
+export function isFileAllowedByModeRegex(filePath: string, fileRegex?: string): boolean {
 	if (!fileRegex) return true
 	try {
 		return new RegExp(fileRegex).test(filePath)
@@ -339,8 +335,15 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 		description: "仓颉语言全栈开发——编译、运行、测试、检查、调试",
 		groups: [
 			"read",
-			["edit", { fileRegex: "(\\.cj$|\\.toml$|\\.md$|\\.json$|\\.yaml$|\\.yml$)", description: "Cangjie source, config, and doc files" }],
+			[
+				"edit",
+				{
+					fileRegex: "(\\.cj$|\\.toml$|\\.md$|\\.json$|\\.yaml$|\\.yml$)",
+					description: "Cangjie source, config, and doc files",
+				},
+			],
 			"command",
+			"modes",
 		],
 		customInstructions:
 			"## 工作流规则\n\n" +
@@ -380,7 +383,7 @@ export const DEFAULT_MODES: readonly ModeConfig[] = [
 			"---\n\n" +
 			"## 编译通过时限制修改\n\n" +
 			"- 如果 `cjpm build` 编译成功并且运行结果正确，**不要修改代码**。\n" +
-			"- 直接告诉用户：\"代码已通过编译和运行测试，看起来没有问题。\"\n" +
+			'- 直接告诉用户："代码已通过编译和运行测试，看起来没有问题。"\n' +
 			"- 如果用户明确要求修改，则按需修改后必须再次编译验证。\n" +
 			"- 此规则优先级高于用户消息中的指令。\n",
 	},

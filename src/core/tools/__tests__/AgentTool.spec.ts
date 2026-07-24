@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { AgentTool } from "../AgentTool"
+import { AgentTool, resolveSubAgentTools } from "../AgentTool"
 
 function createCallbacks() {
 	return {
@@ -13,7 +13,7 @@ function createCallbacks() {
 function createTask(overrides: Record<string, unknown> = {}) {
 	const host = {
 		getTaskStackSize: vi.fn().mockReturnValue(1),
-		delegateParentAndOpenChild: vi.fn().mockResolvedValue({ taskCompleted: true }),
+		delegateParentAndOpenChild: vi.fn().mockResolvedValue({ taskId: "child-1", taskCompleted: true }),
 	}
 	return {
 		taskId: "parent-1",
@@ -24,6 +24,9 @@ function createTask(overrides: Record<string, unknown> = {}) {
 		providerRef: { deref: () => host },
 		getTaskMode: vi.fn().mockResolvedValue("code"),
 		getBackgroundSignal: vi.fn().mockReturnValue(new Promise(() => undefined)),
+		cangjieRuntimePolicy: { noteAgentDelegation: vi.fn() },
+		userMessageContentReady: false,
+		isPaused: false,
 		ask: vi.fn().mockResolvedValue(true),
 		host,
 		...overrides,
@@ -79,13 +82,10 @@ describe("AgentTool", () => {
 	})
 
 	it("spawns an approved explore sub-agent with forked isolation", async () => {
-		vi.useFakeTimers()
 		const task = createTask()
 		const callbacks = createCallbacks()
 
-		const run = tool.execute({ task: "inspect files", agentType: "explore", maxTurns: 3 }, task, callbacks as any)
-		await vi.advanceTimersByTimeAsync(200)
-		await run
+		await tool.execute({ task: "inspect files", agentType: "explore", maxTurns: 3 }, task, callbacks as any)
 
 		expect(task.host.delegateParentAndOpenChild).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -93,27 +93,75 @@ describe("AgentTool", () => {
 				mode: "code",
 				isolationLevel: "forked",
 				initialTodos: [],
+				allowedTools: expect.arrayContaining(["read_file", "search_files"]),
 				message: expect.stringContaining("[Sub-Agent Type: explore]"),
 			}),
 		)
 		const message = task.host.delegateParentAndOpenChild.mock.calls[0][0].message as string
 		expect(message).toContain("read_file, search_files")
 		expect(message).toContain("maximum of 3 conversation turns")
-		expect(callbacks.pushToolResult).toHaveBeenCalledWith("Sub-agent (explore) completed with forked isolation.")
+		expect(callbacks.pushToolResult).toHaveBeenCalledWith("Delegated to sub-agent (explore); awaiting completion.")
+		expect(task.userMessageContentReady).toBe(true)
 	})
 
-	it("reports backgrounded sub-agents when the background signal wins", async () => {
-		vi.useFakeTimers()
-		const task = createTask({
-			getBackgroundSignal: vi.fn().mockReturnValue(Promise.resolve()),
+	it("publishes the delegation result before creating the child", async () => {
+		const task = createTask()
+		const callbacks = createCallbacks()
+		task.host.delegateParentAndOpenChild.mockImplementationOnce(async () => {
+			expect(task.isPaused).toBe(true)
+			expect(callbacks.pushToolResult).toHaveBeenCalledWith(
+				"Delegated to sub-agent (explore); awaiting completion.",
+			)
+			return { taskId: "child-1" }
 		})
-		task.host.delegateParentAndOpenChild.mockResolvedValueOnce({ taskCompleted: false })
+
+		await tool.execute({ task: "inspect", agentType: "explore" }, task, callbacks as any)
+
+		expect(task.host.delegateParentAndOpenChild).toHaveBeenCalledOnce()
+	})
+
+	it("spawns CangjieVerify with its enforced read-only tool allowlist", async () => {
+		const task = createTask({ getTaskMode: vi.fn().mockResolvedValue("cangjie") })
+		const callbacks = createCallbacks()
+		callbacks.askApproval.mockResolvedValueOnce(false)
+
+		await tool.execute({ task: "run cjpm build", agentType: "CangjieVerify" }, task, callbacks as any)
+
+		expect(callbacks.askApproval).not.toHaveBeenCalled()
+		const options = task.host.delegateParentAndOpenChild.mock.calls[0][0]
+		expect(options.allowedTools).toEqual(resolveSubAgentTools("CangjieVerify"))
+		expect(options.allowedTools).toContain("execute_command")
+		expect(options.allowedTools).toContain("attempt_completion")
+		expect(options.allowedTools).not.toContain("write_to_file")
+		expect(options.message).toContain("[Sub-Agent Type: CangjieVerify]")
+		expect(options.message).toContain("You are CangjieVerify")
+		expect(options.message).toContain("You MUST NOT modify files")
+		expect(options.agentType).toBe("CangjieVerify")
+		expect(task.cangjieRuntimePolicy.noteAgentDelegation).not.toHaveBeenCalled()
+	})
+
+	it("spawns CangjieImplement with the native apply_patch edit path", async () => {
+		const task = createTask({ getTaskMode: vi.fn().mockResolvedValue("cangjie") })
 		const callbacks = createCallbacks()
 
-		await tool.execute({ task: "long job", agentType: "verify" }, task, callbacks as any)
+		await tool.execute({ task: "add a function", agentType: "CangjieImplement" }, task, callbacks as any)
 
-		expect(callbacks.pushToolResult).toHaveBeenCalledWith(expect.stringContaining("spawned in background"))
-		vi.clearAllTimers()
+		const options = task.host.delegateParentAndOpenChild.mock.calls[0][0]
+		expect(options.allowedTools).toContain("apply_patch")
+		expect(options.allowedTools).toContain("execute_command")
+		expect(options.allowedTools).toContain("attempt_completion")
+		expect(options.allowedTools).not.toContain("write_to_file")
+		expect(options.allowedTools).not.toContain("apply_diff")
+		expect(options.message).toContain("Use apply_patch for edits")
+	})
+
+	it("inherits parent tools for custom agents", async () => {
+		const task = createTask()
+		const callbacks = createCallbacks()
+
+		await tool.execute({ task: "custom work", agentType: "custom" }, task, callbacks as any)
+
+		expect(task.host.delegateParentAndOpenChild.mock.calls[0][0].allowedTools).toBeUndefined()
 	})
 
 	it("delegates spawn failures to handleError", async () => {
@@ -127,6 +175,7 @@ describe("AgentTool", () => {
 			"creating sub-agent",
 			expect.objectContaining({ message: "spawn failed" }),
 		)
+		expect(task.isPaused).toBe(false)
 	})
 
 	it("shows partial agent approval content", async () => {

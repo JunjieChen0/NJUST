@@ -3,12 +3,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
 
 import type { ToolUsage } from "@njust-ai/types"
+import fs from "fs/promises"
 import * as vscode from "vscode"
 
 import { Task } from "../../task/Task"
 import { formatResponse } from "../../prompts/responses"
 import { ToolUse, AskApproval, HandleError, PushToolResult } from "../../../shared/tools"
 import { unescapeHtmlEntities } from "../../../utils/text-normalization"
+import { TerminalRegistry } from "../../../integrations/terminal/TerminalRegistry"
 
 vitest.mock("@njust-ai/telemetry", () => ({
 	TelemetryService: {
@@ -56,6 +58,11 @@ vitest.mock("vscode", () => ({
 	workspace: {
 		getConfiguration: vitest.fn(),
 		saveAll: vitest.fn().mockResolvedValue(undefined),
+		workspaceFolders: undefined,
+	},
+	window: {
+		activeTextEditor: undefined,
+		visibleTextEditors: [],
 	},
 }))
 
@@ -73,7 +80,40 @@ vitest.mock("../../prompts/responses")
 
 // Import the module
 import * as executeCommandModule from "../ExecuteCommandTool"
-const { executeCommandTool } = executeCommandModule
+const { executeCommandTool, isSuccessfulCommandResult, validateCangjieImplementCommand } = executeCommandModule
+
+describe("validateCangjieImplementCommand", () => {
+	it("allows only a direct cjpm init command for CangjieImplement", () => {
+		expect(
+			validateCangjieImplementCommand("CangjieImplement", "cjpm init --name demo_app --type=executable"),
+		).toBeNull()
+		expect(validateCangjieImplementCommand("CangjieImplement", "cjpm build")).toContain("only one direct cjpm init")
+		expect(
+			validateCangjieImplementCommand(
+				"CangjieImplement",
+				"cd demo && cjpm init --name demo_app --type=executable",
+			),
+		).toContain("only one direct cjpm init")
+		expect(validateCangjieImplementCommand("CangjieVerify", "cjpm build")).toBeNull()
+	})
+})
+
+describe("isSuccessfulCommandResult", () => {
+	it("uses the terminal exit code as the authoritative result", () => {
+		expect(isSuccessfulCommandResult("Exit code: 0\nOutput:\ncjpm build success", false)).toBe(true)
+		expect(
+			isSuccessfulCommandResult(
+				"Command execution was not successful, inspect the cause and adjust as needed.\nExit code: 1\nOutput:\nError: cjpm build failed",
+				false,
+			),
+		).toBe(false)
+	})
+
+	it("recognizes a cjpm failure when an exit code is unavailable", () => {
+		expect(isSuccessfulCommandResult("Error: cjpm build failed", false)).toBe(false)
+		expect(isSuccessfulCommandResult("cjpm build success", true)).toBe(false)
+	})
+})
 
 describe("executeCommandTool", () => {
 	// Setup common test variables
@@ -87,6 +127,7 @@ describe("executeCommandTool", () => {
 	beforeEach(() => {
 		// Reset mocks
 		vitest.clearAllMocks()
+		;(fs.access as any).mockResolvedValue(undefined)
 
 		// executeCommandInTerminal is a local reference in ExecuteCommandTool.ts
 		// and cannot be mocked via spyOn. Tests that need it mocked should call
@@ -122,6 +163,12 @@ describe("executeCommandTool", () => {
 			},
 			lastMessageTs: Date.now(),
 			cwd: "/test/workspace",
+			taskMode: "default",
+			cangjieRuntimePolicy: {
+				hasCjpmProject: vitest.fn().mockResolvedValue(false),
+				validateCommandSurface: vitest.fn().mockReturnValue(null),
+				noteBuildResult: vitest.fn(),
+			},
 		}
 
 		mockAskApproval = vitest.fn().mockResolvedValue(true)
@@ -133,6 +180,9 @@ describe("executeCommandTool", () => {
 			get: vitest.fn().mockImplementation((key: string, defaultValue: any) => defaultValue),
 		}
 		;(vscode.workspace.getConfiguration as any).mockReturnValue(mockConfig)
+		;(vscode.workspace as any).workspaceFolders = undefined
+		;(vscode.window as any).activeTextEditor = undefined
+		;(vscode.window as any).visibleTextEditors = []
 
 		// Create a mock tool use object
 		mockToolUse = {
@@ -178,6 +228,25 @@ describe("executeCommandTool", () => {
 		})
 	})
 
+	describe("Cangjie toolchain command detection", () => {
+		it("detects toolchain commands with directory-switch prefixes", () => {
+			expect(executeCommandModule.isCangjieToolchainCommand("cjpm build")).toBe(true)
+			expect(
+				executeCommandModule.isCangjieToolchainCommand(
+					"cd /d D:\\cangjie\\Cangjie-Examples\\HTTP && cjpm build",
+				),
+			).toBe(true)
+			expect(
+				executeCommandModule.isCangjieToolchainCommand(
+					"d: && cd d:\\cangjie\\Cangjie-Examples\\HTTP && cjpm build 2>&1",
+				),
+			).toBe(true)
+			expect(executeCommandModule.isCangjieToolchainCommand("where.exe cjpm")).toBe(true)
+			expect(executeCommandModule.isCangjieToolchainCommand("echo cjpm build")).toBe(true)
+			expect(executeCommandModule.isCangjieToolchainCommand("npm test")).toBe(false)
+		})
+	})
+
 	// Now we can run these tests
 	describe("Basic functionality", () => {
 		it("should execute a command normally", async () => {
@@ -220,6 +289,178 @@ describe("executeCommandTool", () => {
 			expect(mockPushToolResult).toHaveBeenCalled()
 			const result = mockPushToolResult.mock.calls[0][0]
 			expect(result).toContain("/custom/path")
+		})
+
+		it("should run Cangjie toolchain commands from the workspace folder containing cjpm.toml", async () => {
+			mockCline.cwd = "/home/user/Desktop"
+			mockCline.taskMode = "cangjie"
+			mockCline.cangjieRuntimePolicy = {
+				validateCommandSurface: vitest.fn().mockReturnValue(null),
+				noteBuildResult: vitest.fn(),
+			}
+			;(vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: "/test/workspace" } }]
+			;(fs.access as any).mockImplementation((filePath: string) => {
+				const normalizedPath = filePath.replace(/\\/g, "/")
+				if (normalizedPath.endsWith("/home/user/Desktop/cjpm.toml")) {
+					return Promise.reject(new Error("missing"))
+				}
+				return Promise.resolve(undefined)
+			})
+
+			await executeCommandTool.execute({ command: "cjpm build 2>&1" }, mockCline as unknown as Task, {
+				askApproval: mockAskApproval as unknown as AskApproval,
+				handleError: mockHandleError as unknown as HandleError,
+				pushToolResult: mockPushToolResult as unknown as PushToolResult,
+			})
+
+			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(
+				"/test/workspace",
+				"test-task-id",
+				"execa",
+				{ exactCwd: true },
+			)
+			expect(mockCline.cangjieRuntimePolicy.noteBuildResult).toHaveBeenCalled()
+		})
+
+		it("should resolve Cangjie toolchain cwd from the active editor even outside Cangjie task mode", async () => {
+			mockCline.cwd = "C:\\Users\\Administrator\\Desktop"
+			;(vscode.window as any).activeTextEditor = {
+				document: { uri: { fsPath: "D:\\cangjie\\Cangjie-Examples\\HTTP\\src\\main.cj" } },
+			}
+			;(fs.access as any).mockImplementation((filePath: string) => {
+				const normalizedPath = filePath.replace(/\\/g, "/")
+				if (normalizedPath.endsWith("/Desktop/cjpm.toml")) {
+					return Promise.reject(new Error("missing"))
+				}
+				if (normalizedPath.endsWith("/Cangjie-Examples/HTTP/cjpm.toml")) {
+					return Promise.resolve(undefined)
+				}
+				if (normalizedPath.endsWith("/Cangjie-Examples/HTTP")) {
+					return Promise.resolve(undefined)
+				}
+				return Promise.reject(new Error("missing"))
+			})
+
+			await executeCommandTool.execute({ command: "cjpm build 2>&1" }, mockCline as unknown as Task, {
+				askApproval: mockAskApproval as unknown as AskApproval,
+				handleError: mockHandleError as unknown as HandleError,
+				pushToolResult: mockPushToolResult as unknown as PushToolResult,
+			})
+
+			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(
+				"D:\\cangjie\\Cangjie-Examples\\HTTP",
+				"test-task-id",
+				"execa",
+				{ exactCwd: true },
+			)
+		})
+
+		it("should force execa for Cangjie toolchain commands even when shell integration is enabled", async () => {
+			mockCline.providerRef.deref.mockReturnValue({
+				getState: vitest.fn().mockResolvedValue({
+					terminalOutputLineLimit: 500,
+					terminalOutputCharacterLimit: 100000,
+					terminalShellIntegrationDisabled: false,
+				}),
+				postMessageToWebview: vitest.fn(),
+				context: {
+					extensionPath: "/mock/extension",
+				},
+			})
+
+			await executeCommandTool.execute({ command: "cjpm check" }, mockCline as unknown as Task, {
+				askApproval: mockAskApproval as unknown as AskApproval,
+				handleError: mockHandleError as unknown as HandleError,
+				pushToolResult: mockPushToolResult as unknown as PushToolResult,
+			})
+
+			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(
+				"/test/workspace",
+				"test-task-id",
+				"execa",
+				{ exactCwd: true },
+			)
+		})
+
+		it("should reject PowerShell wrappers around Cangjie toolchain commands outside Cangjie task mode", async () => {
+			mockCline.taskMode = "default"
+			mockCline.cangjieRuntimePolicy.validateCommandSurface.mockReturnValue(
+				'Command rejected in Cangjie mode: "powershell -Command \\"cd d:\\cangjie\\Cangjie-Examples\\HTTP; cjpm build\\"". Allowed command categories: build/check: cjpm build, cjpm check, cjc.',
+			)
+
+			await executeCommandTool.execute(
+				{ command: 'powershell -Command "cd d:\\cangjie\\Cangjie-Examples\\HTTP; cjpm build"' },
+				mockCline as unknown as Task,
+				{
+					askApproval: mockAskApproval as unknown as AskApproval,
+					handleError: mockHandleError as unknown as HandleError,
+					pushToolResult: mockPushToolResult as unknown as PushToolResult,
+				},
+			)
+
+			expect(mockCline.cangjieRuntimePolicy.validateCommandSurface).toHaveBeenCalledWith(
+				'powershell -Command "cd d:\\cangjie\\Cangjie-Examples\\HTTP; cjpm build"',
+			)
+			expect(mockCline.recordToolError).toHaveBeenCalledWith(
+				"execute_command",
+				expect.stringContaining("Command rejected in Cangjie mode"),
+			)
+			expect(formatResponse.toolError).toHaveBeenCalledWith(
+				expect.stringContaining("Command rejected in Cangjie mode"),
+			)
+			expect(mockPushToolResult).toHaveBeenCalled()
+			expect(TerminalRegistry.getOrCreateTerminal).not.toHaveBeenCalled()
+		})
+
+		it("should reject Cangjie toolchain commands preceded by a directory switch", async () => {
+			mockCline.cwd = "C:\\Users\\Administrator\\Desktop"
+			mockCline.cangjieRuntimePolicy.validateCommandSurface.mockReturnValue(
+				'Command rejected in Cangjie mode: "cd /d D:\\cangjie\\Cangjie-Examples\\HTTP && cjpm build". Allowed command categories: build/check: cjpm build, cjpm check, cjc.',
+			)
+
+			await executeCommandTool.execute(
+				{ command: "cd /d D:\\cangjie\\Cangjie-Examples\\HTTP && cjpm build" },
+				mockCline as unknown as Task,
+				{
+					askApproval: mockAskApproval as unknown as AskApproval,
+					handleError: mockHandleError as unknown as HandleError,
+					pushToolResult: mockPushToolResult as unknown as PushToolResult,
+				},
+			)
+
+			expect(mockCline.cangjieRuntimePolicy.validateCommandSurface).toHaveBeenCalledWith(
+				"cd /d D:\\cangjie\\Cangjie-Examples\\HTTP && cjpm build",
+			)
+			expect(formatResponse.toolError).toHaveBeenCalledWith(
+				expect.stringContaining("Command rejected in Cangjie mode"),
+			)
+			expect(TerminalRegistry.getOrCreateTerminal).not.toHaveBeenCalled()
+		})
+
+		it("should preserve explicit cwd for Cangjie toolchain commands", async () => {
+			mockCline.taskMode = "cangjie"
+			mockCline.cangjieRuntimePolicy = {
+				validateCommandSurface: vitest.fn().mockReturnValue(null),
+				noteBuildResult: vitest.fn(),
+			}
+			;(vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: "/test/workspace" } }]
+
+			await executeCommandTool.execute(
+				{ command: "cjpm build 2>&1", cwd: "packages/http" },
+				mockCline as unknown as Task,
+				{
+					askApproval: mockAskApproval as unknown as AskApproval,
+					handleError: mockHandleError as unknown as HandleError,
+					pushToolResult: mockPushToolResult as unknown as PushToolResult,
+				},
+			)
+
+			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(
+				expect.stringContaining("packages"),
+				"test-task-id",
+				"execa",
+				{ exactCwd: false },
+			)
 		})
 	})
 

@@ -27,6 +27,54 @@ import type { Task } from "./Task"
 import { logger } from "../../shared/logger"
 import { TelemetryService } from "@njust-ai/telemetry"
 
+export function resolveLastUserMessageTextForCangjieHint(
+	history: ApiMessage[],
+	initialTask?: string,
+): string | undefined {
+	const normalizeUserText = (text: string): string | undefined => {
+		const trimmed = text.trim()
+		const wrappedUserMessage = trimmed.match(/\[USER-MESSAGE\]\s*([\s\S]*?)\s*\[END USER-MESSAGE\]/i)
+		if (wrappedUserMessage?.[1]?.trim()) return wrappedUserMessage[1].trim()
+
+		const isDelegationResult =
+			/^Subtask\s+\S+\s+completed\./i.test(trimmed) || trimmed.startsWith("[Forked Sub-task Result]")
+		const isEnvironmentDetails =
+			(trimmed.startsWith("<environment_details>") && trimmed.endsWith("</environment_details>")) ||
+			trimmed.startsWith("# Environment Details") ||
+			trimmed.startsWith("====\n# Environment Details")
+		const isAutomatedToolReminder =
+			trimmed.startsWith("[ERROR] You did not use a tool in your previous response!") ||
+			trimmed.startsWith("# Reminder: Instructions for Tool Use")
+
+		if (isDelegationResult || isEnvironmentDetails || isAutomatedToolReminder) return undefined
+		return trimmed || undefined
+	}
+
+	for (let i = history.length - 1; i >= 0; i--) {
+		const m = history[i] as ApiMessage
+		if (m.role !== "user") continue
+		const c = m.content
+		if (typeof c === "string") {
+			const normalized = normalizeUserText(c)
+			if (normalized) return normalized
+		}
+		if (Array.isArray(c)) {
+			const parts: string[] = []
+			for (const block of c) {
+				if (block && typeof block === "object" && (block as { type?: string }).type === "text") {
+					const t = (block as { text?: string }).text
+					if (typeof t === "string") {
+						const normalized = normalizeUserText(t)
+						if (normalized) parts.push(normalized)
+					}
+				}
+			}
+			if (parts.length > 0) return parts.join("\n")
+		}
+	}
+	return initialTask
+}
+
 /**
  * TaskRequestBuilder handles system prompt generation, prompt caching,
  * and context condensation logic extracted from Task.ts.
@@ -43,24 +91,7 @@ export class TaskRequestBuilder {
 
 	/** Last user message text for Ask/Architect 仓颉语料相关性检测（与缓存键一致）。 */
 	private getLastUserMessageTextForCangjieHint(): string | undefined {
-		const history = this.task.apiConversationHistory
-		for (let i = history.length - 1; i >= 0; i--) {
-			const m = history[i] as ApiMessage
-			if (m.role !== "user") continue
-			const c = m.content
-			if (typeof c === "string") return c
-			if (Array.isArray(c)) {
-				const parts: string[] = []
-				for (const block of c) {
-					if (block && typeof block === "object" && (block as { type?: string }).type === "text") {
-						const t = (block as { text?: string }).text
-						if (typeof t === "string") parts.push(t)
-					}
-				}
-				if (parts.length > 0) return parts.join("\n")
-			}
-		}
-		return undefined
+		return resolveLastUserMessageTextForCangjieHint(this.task.apiConversationHistory, this.task.metadata.task)
 	}
 
 	/**
@@ -145,6 +176,9 @@ export class TaskRequestBuilder {
 				.digest("hex")
 				.slice(0, 12)
 			const lastUserForCangjie = this.getLastUserMessageTextForCangjieHint()
+			if ((mode ?? defaultModeSlug) === "cangjie" && !this.task.parentTaskId && !this.task.allowedTools) {
+				this.task.cangjieRuntimePolicy.configureAgentRoute(lastUserForCangjie)
+			}
 			const staticKey = JSON.stringify({
 				cwd: this.task.cwd,
 				mode,
@@ -210,6 +244,7 @@ export class TaskRequestBuilder {
 					),
 					cangjieRecentBuildRootCauses: this.task.cangjieRuntimePolicy.getRecentBuildRootCauses(),
 					cangjieRepairDirective: this.task.cangjieRuntimePolicy.getRepairDirective(),
+					cangjieDelegatedAgentTypes: this.task.cangjieRuntimePolicy.getDelegatedAgentTypes(),
 					contextWindow: modelInfo?.contextWindow,
 					taskId: this.task.taskId,
 					turnIndex: Math.max(0, this.task.apiConversationHistory.length - 1),

@@ -230,6 +230,15 @@ describe("ClineProviderTaskManagement", () => {
 			expect(mockStack.push).toHaveBeenCalledTimes(1)
 			const pushedTask = (mockStack.push as any).mock.calls[0][0]
 			expect(pushedTask.taskId).toBe("mock-task")
+			expect(pushedTask.start).toHaveBeenCalledTimes(1)
+		})
+
+		it("does not start a delegated task when startTask is false", async () => {
+			const task = await taskManagement.createTaskInternal("delegated", [], { taskId: "parent" } as any, {
+				startTask: false,
+			})
+
+			expect(task.start).not.toHaveBeenCalled()
 		})
 	})
 })

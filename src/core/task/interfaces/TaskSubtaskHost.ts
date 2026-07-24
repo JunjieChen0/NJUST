@@ -23,6 +23,7 @@ export interface TaskSubtaskHost {
 	didFinishAbortingStream: boolean
 	isStreaming: boolean
 	isWaitingForFirstChunk: boolean
+	isPaused: boolean
 	skipPrevResponseIdOnce: boolean
 	isInitialized: boolean
 
