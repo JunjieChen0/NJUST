@@ -16,6 +16,14 @@ describe("CangjiePromptTemplates", () => {
 		expect(DIAGNOSTIC_CODE_TEMPLATES.length).toBeGreaterThan(0)
 	})
 
+	it("keeps generic mut/let guidance from being applied to HashMap.add", () => {
+		expect(
+			DIAGNOSTIC_CODE_TEMPLATES.some(({ template }) =>
+				template.includes("Do not apply this generic mut/let rule to HashMap.add"),
+			),
+		).toBe(true)
+	})
+
 	it("pushes a template when budget is sufficient", () => {
 		const parts: string[] = []
 

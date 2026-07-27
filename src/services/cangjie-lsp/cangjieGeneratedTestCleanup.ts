@@ -205,9 +205,9 @@ export function transitionTaskFilesToDetached(taskId: string): number {
 	return transitioned
 }
 
-export function transitionStaleRegistrationsToDetached(
-	shouldRetainTaskId: (id: string) => boolean,
-): { taskEntriesTransitioned: number } {
+export function transitionStaleRegistrationsToDetached(shouldRetainTaskId: (id: string) => boolean): {
+	taskEntriesTransitioned: number
+} {
 	let taskEntriesTransitioned = 0
 	for (const id of [...byTaskId.keys()]) {
 		if (shouldRetainTaskId(id)) continue
@@ -257,9 +257,7 @@ export function scanGeneratedFilesForCleanup(): ScanResult {
  * and will be permanently skipped during deletion.
  */
 export function reassociateLegacyFiles(workspaceRoots: string[]): ReassociateResult {
-	const normalizedRoots = workspaceRoots
-		.filter((r) => r.length > 0)
-		.map((r) => path.normalize(r))
+	const normalizedRoots = workspaceRoots.filter((r) => r.length > 0).map((r) => path.normalize(r))
 
 	let reassociated = 0
 	let outsideWorkspace = 0
@@ -347,9 +345,10 @@ export async function deleteConfirmedCangjieTestFiles(
 					action: "cangjie.test_file.delete",
 					resource: p,
 					result: "denied",
-					reason: rec.status === "legacy"
-						? "legacy_outside_workspace_permanently_skipped"
-						: "empty_workspace_root_fail_closed",
+					reason:
+						rec.status === "legacy"
+							? "legacy_outside_workspace_permanently_skipped"
+							: "empty_workspace_root_fail_closed",
 				})
 				result.skippedOutsideWorkspace.push(p)
 				continue

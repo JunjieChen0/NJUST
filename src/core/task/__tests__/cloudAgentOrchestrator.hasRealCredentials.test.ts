@@ -13,7 +13,9 @@ function hasRealCredentials(server: CloudAgentOrchestrator, profile: CloudAgentP
 	return (server as unknown as { hasRealCredentials: (p: CloudAgentProfile) => boolean }).hasRealCredentials(profile)
 }
 
-function createProfile(auth?: Partial<CloudAgentProfile["auth"]> & { type: CloudAgentProfile["auth"]["type"] }): CloudAgentProfile {
+function createProfile(
+	auth?: Partial<CloudAgentProfile["auth"]> & { type: CloudAgentProfile["auth"]["type"] },
+): CloudAgentProfile {
 	return {
 		id: "test-profile",
 		name: "Test Profile",

@@ -19,7 +19,10 @@ import { GlobalFileNames } from "../../shared/globalFileNames"
 import { downloadTask, getTaskFileName } from "../../integrations/misc/export-markdown"
 import { resolveDefaultSaveUri, saveLastExportPath } from "../../utils/export"
 import { ShadowCheckpointService } from "../../services/checkpoints/ShadowCheckpointService"
-import { transitionStaleRegistrationsToDetached, NO_TASK_KEY } from "../../services/cangjie-lsp/cangjieGeneratedTestCleanup"
+import {
+	transitionStaleRegistrationsToDetached,
+	NO_TASK_KEY,
+} from "../../services/cangjie-lsp/cangjieGeneratedTestCleanup"
 import { aggregateTaskCostsRecursive, type AggregatedCosts } from "./aggregateTaskCosts"
 import { logger } from "../../shared/logger"
 import { getErrorMessage } from "../../shared/error-utils"

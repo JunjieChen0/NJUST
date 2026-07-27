@@ -8,12 +8,7 @@
 
 import { describe, it, expect } from "vitest"
 
-import {
-	validateCreateContainer,
-	validateKillContainer,
-	isMethodAllowed,
-	DEFAULT_POLICY,
-} from "../policy"
+import { validateCreateContainer, validateKillContainer, isMethodAllowed, DEFAULT_POLICY } from "../policy"
 import type { DockerCreateContainerRequest, PolicyConfig } from "../types"
 
 describe("Docker Policy Engine", () => {
@@ -28,7 +23,7 @@ describe("Docker Policy Engine", () => {
 					NetworkMode: "evals_default",
 					Memory: 512 * 1024 * 1024,
 					PidsLimit: 200,
-					NanoCpus: 1e9
+					NanoCpus: 1e9,
 				},
 			}
 
@@ -256,7 +251,7 @@ describe("Docker Policy Engine", () => {
 					NetworkMode: "host",
 					Memory: 512 * 1024 * 1024,
 					PidsLimit: 200,
-					NanoCpus: 1e9
+					NanoCpus: 1e9,
 				},
 			}
 

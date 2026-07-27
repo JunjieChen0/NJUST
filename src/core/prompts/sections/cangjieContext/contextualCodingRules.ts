@@ -86,8 +86,11 @@ export function buildContextualCodingRules(
 	// Anti-patterns for let/var/mut when editing struct code
 	if (hasActiveCangjieFile) {
 		const antiPatterns =
+			"- Option: avoid unguarded `getOrThrow()` unless `Some` is already proven; prefer `??`, `getOrDefault({ => ... })`, or `match` to handle `None`.\n" +
+			'- Regex: prefer raw string patterns such as `#"\\d+"#` for backslash-heavy regex; do not rewrite them as ordinary escaped strings unless evidence requires it.\n' +
 			"### 常见反例\n" +
 			"- ❌ `let c = Counter(); c.inc()` — let 绑定的 struct 不能调用 mut 方法 → ✅ `var c = Counter()`\n" +
+			"- Do not apply the struct mut-method rule to HashMap.add unless the HashMap API signature or compiler diagnostic explicitly says `mut func add`.\n" +
 			"- ❌ `struct Node { let next: Node }` — struct 不能自引用 → ✅ `class Node { let next: ?Node = None }`\n" +
 			"- ❌ Option 直接 unwrap → ✅ 用 `??` 默认值或 match/if-let 安全解包\n"
 		if (budget >= antiPatterns.length) {

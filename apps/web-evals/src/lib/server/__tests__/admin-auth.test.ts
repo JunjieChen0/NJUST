@@ -74,9 +74,7 @@ describe("admin-auth", () => {
 			process.env.EVALS_ADMIN_SECRET = validSecret
 			const basicAuth = Buffer.from(`admin:wrong-secret`).toString("base64")
 			const { headers } = await import("next/headers")
-			vi.mocked(headers).mockResolvedValue(
-				new Headers({ authorization: `Basic ${basicAuth}` }) as never,
-			)
+			vi.mocked(headers).mockResolvedValue(new Headers({ authorization: `Basic ${basicAuth}` }) as never)
 
 			await expect(requireAdminForAction()).rejects.toThrow("Unauthorized")
 		})
@@ -85,9 +83,7 @@ describe("admin-auth", () => {
 			process.env.EVALS_ADMIN_SECRET = validSecret
 			const basicAuth = Buffer.from(`admin:${validSecret}`).toString("base64")
 			const { headers } = await import("next/headers")
-			vi.mocked(headers).mockResolvedValue(
-				new Headers({ authorization: `Basic ${basicAuth}` }) as never,
-			)
+			vi.mocked(headers).mockResolvedValue(new Headers({ authorization: `Basic ${basicAuth}` }) as never)
 
 			await expect(requireAdminForAction()).resolves.toBeUndefined()
 		})
@@ -97,9 +93,7 @@ describe("admin-auth", () => {
 			const longCredential = "x".repeat(300)
 			const basicAuth = Buffer.from(`admin:${longCredential}`).toString("base64")
 			const { headers } = await import("next/headers")
-			vi.mocked(headers).mockResolvedValue(
-				new Headers({ authorization: `Basic ${basicAuth}` }) as never,
-			)
+			vi.mocked(headers).mockResolvedValue(new Headers({ authorization: `Basic ${basicAuth}` }) as never)
 
 			await expect(requireAdminForAction()).rejects.toThrow("Unauthorized")
 		})
@@ -107,9 +101,7 @@ describe("admin-auth", () => {
 		it("does NOT accept x-evals-admin-secret header (removed)", async () => {
 			process.env.EVALS_ADMIN_SECRET = validSecret
 			const { headers } = await import("next/headers")
-			vi.mocked(headers).mockResolvedValue(
-				new Headers({ "x-evals-admin-secret": validSecret }) as never,
-			)
+			vi.mocked(headers).mockResolvedValue(new Headers({ "x-evals-admin-secret": validSecret }) as never)
 
 			await expect(requireAdminForAction()).rejects.toThrow("Unauthorized")
 		})
@@ -118,9 +110,7 @@ describe("admin-auth", () => {
 			process.env.EVALS_ADMIN_SECRET = validSecret
 			const { headers, cookies } = await import("next/headers")
 			vi.mocked(headers).mockResolvedValue(new Headers() as never)
-			vi.mocked(cookies).mockResolvedValue(
-				createMockCookies({ evals_admin_token: validSecret }) as never,
-			)
+			vi.mocked(cookies).mockResolvedValue(createMockCookies({ evals_admin_token: validSecret }) as never)
 
 			await expect(requireAdminForAction()).rejects.toThrow("Unauthorized")
 		})

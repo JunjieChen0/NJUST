@@ -35,6 +35,7 @@ function createHost(overrides: Partial<Record<keyof TaskSubtaskHost, unknown>> =
 		abort: true,
 		abandoned: true,
 		isStreaming: true,
+		isPaused: true,
 		idleAsk: {} as any,
 		resumableAsk: {} as any,
 		interactiveAsk: {} as any,
@@ -140,6 +141,7 @@ describe("TaskSubtaskHandler", () => {
 			expect(host.abort).toBe(false)
 			expect(host.abandoned).toBe(false)
 			expect(host.isStreaming).toBe(false)
+			expect(host.isPaused).toBe(false)
 			expect(host.idleAsk).toBeUndefined()
 			expect(host.resumableAsk).toBeUndefined()
 			expect(host.interactiveAsk).toBeUndefined()

@@ -57,7 +57,7 @@ export const SEARCH_GATE_EXEMPT_MODULES = new Set(["std.core", "std.console"])
 
 /**
  * Infer the expected `package` declaration from a file's relative path within a cjpm project.
- * For `src/foo/bar/baz.cj`, the expected package is `foo.bar` (relative to src/).
+ * For `src/foo/bar/baz.cj`, the expected package is `rootPackageName.foo.bar`.
  * For `src/main.cj` or `src/lib.cj`, the expected package is `rootPackageName` (from cjpm.toml).
  */
 export function inferPackageFromPath(relPath: string, _cwd: string, rootPackageName?: string): string | null {
@@ -70,8 +70,8 @@ export function inferPackageFromPath(relPath: string, _cwd: string, rootPackageN
 	if (parts.length <= 1) {
 		return rootPackageName ?? null
 	}
-	// Remove the filename, keep directory path as dotted package
-	return parts.slice(0, -1).join(".")
+	// Nested packages retain the cjpm root package prefix.
+	return [rootPackageName, ...parts.slice(0, -1)].filter(Boolean).join(".")
 }
 
 /**
@@ -123,12 +123,17 @@ export function cangjiePreflightCheck(
 	// 2. main() signature validation
 	const mainMatch = content.match(/\bmain\s*\(([^)]*)\)\s*(?::\s*(\w+))?/)
 	if (mainMatch) {
+		const parameters = mainMatch[1]!.trim()
 		const returnType = mainMatch[2]
-		if (returnType && returnType !== "Int64") {
-			errors.push(`main() 返回类型必须为 Int64，当前为 "${returnType}"。`)
+		const validParameters = parameters.length === 0 || /^\w+\s*:\s*Array\s*<\s*String\s*>$/.test(parameters)
+		const validReturnTypes = /^(?:Unit|U?Int(?:8|16|32|64|Native))$/
+		if (!validParameters) {
+			errors.push(
+				`main() parameters must be empty or a single Array<String> parameter; received "${parameters}".`,
+			)
 		}
-		if (!returnType) {
-			warnings.push(`main() 缺少显式返回类型声明，建议写为 main(): Int64`)
+		if (returnType && !validReturnTypes.test(returnType)) {
+			errors.push(`main() return type must be Unit or an integer type; received "${returnType}".`)
 		}
 	}
 

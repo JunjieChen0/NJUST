@@ -103,16 +103,25 @@ export async function createRun({
 			// Each option and value must be a separate argv element for spawn()
 			const proxyAuthToken = process.env.PROXY_AUTH_TOKEN
 			const dockerArgs = [
-				"--name", `evals-controller-${runId}`,
+				"--name",
+				`evals-controller-${runId}`,
 				"--rm",
-				"--network", "evals_default",
-				"-e", `DOCKER_HOST=tcp://docker-proxy:2375`,
-				"-v", "/tmp/evals:/var/log/evals",
-				"-e", "HOST_EXECUTION_METHOD=docker",
-				"--memory", "512m",
-				"--memory-swap", "1g",
-				"--pids-limit", "200",
-				"--cpus", "1"
+				"--network",
+				"evals_default",
+				"-e",
+				`DOCKER_HOST=tcp://docker-proxy:2375`,
+				"-v",
+				"/tmp/evals:/var/log/evals",
+				"-e",
+				"HOST_EXECUTION_METHOD=docker",
+				"--memory",
+				"512m",
+				"--memory-swap",
+				"1g",
+				"--pids-limit",
+				"200",
+				"--cpus",
+				"1",
 			]
 
 			// Pass PROXY_AUTH_TOKEN to the controller (inherit from environment, not in argv)
@@ -127,8 +136,8 @@ export async function createRun({
 				// Use spawn argument array instead of sh -c to prevent command injection
 				const dockerRunArgs = [...dockerArgs, "evals-runner", "pnpm", ...cliArgs]
 				// Sanitize log output: mask sensitive env values
-				const sanitizedArgs = dockerRunArgs.map(arg =>
-					arg.includes("PROXY_AUTH_TOKEN") ? "PROXY_AUTH_TOKEN=***" : arg
+				const sanitizedArgs = dockerRunArgs.map((arg) =>
+					arg.includes("PROXY_AUTH_TOKEN") ? "PROXY_AUTH_TOKEN=***" : arg,
 				)
 				console.log("spawn -> docker run", sanitizedArgs.join(" "))
 				childProcess = spawn("docker", ["run", ...dockerRunArgs], {
@@ -302,9 +311,7 @@ export async function killRun(runId: number): Promise<KillRunResult> {
 	revalidatePath("/runs")
 
 	// Record audit with actual result
-	const auditResult = errors.length > 0
-		? (killedContainers.length > 0 ? "partial" : "failed")
-		: "allowed"
+	const auditResult = errors.length > 0 ? (killedContainers.length > 0 ? "partial" : "failed") : "allowed"
 	logAuditEvent({
 		action: "run.kill",
 		resource: String(id),

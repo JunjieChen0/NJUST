@@ -76,10 +76,7 @@
 		},
 		"packages/{build,evals,telemetry,vscode-shim}": {
 			"project": ["src/**/*.ts"],
-			"ignore": [
-				"src/docker-policy-proxy/index.ts",
-				"src/docker-policy-proxy/main.ts"
-			]
+			"ignore": ["src/docker-policy-proxy/index.ts", "src/docker-policy-proxy/main.ts"]
 		},
 		"packages/config-typescript": {
 			"project": ["*.json"]

@@ -54,6 +54,74 @@ describe("History resume delegation - parent metadata transitions", () => {
 		vi.clearAllMocks()
 	})
 
+	it("reuses the paused parent already below the completed child", async () => {
+		const noteBuildResult = vi.fn()
+		const parent = {
+			taskId: "parent-1",
+			isPaused: true,
+			waitForTaskLoopIdle: vi.fn().mockResolvedValue(undefined),
+			overwriteClineMessages: vi.fn().mockResolvedValue(undefined),
+			overwriteApiConversationHistory: vi.fn().mockResolvedValue(undefined),
+			resumeAfterDelegation: vi.fn().mockImplementation(async function (this: { isPaused: boolean }) {
+				this.isPaused = false
+			}),
+			cangjieRuntimePolicy: { noteBuildResult },
+		}
+		const child = {
+			taskId: "child-1",
+			agentType: "CangjieVerify",
+			cangjieRuntimePolicy: {
+				getEvalRuntimeSnapshot: vi.fn().mockReturnValue({
+					recentBuildCommand: "cjpm build",
+					recentBuildSucceeded: false,
+					recentBuildFailed: true,
+				}),
+				getRecentBuildFailureOutput: vi.fn().mockReturnValue("error: type mismatch"),
+			},
+		}
+		let current: typeof parent | typeof child = child
+		const createTaskWithHistoryItem = vi.fn()
+		const getTaskWithId = vi.fn(async (id: string) => ({
+			historyItem:
+				id === "parent-1"
+					? { id, status: "delegated", awaitingChildId: "child-1", childIds: ["child-1"], task: "Parent" }
+					: { id, status: "active", task: "Child" },
+		}))
+		const provider = {
+			contextProxy: { globalStorageUri: { fsPath: "/tmp" } },
+			getTaskWithId,
+			emit: vi.fn(),
+			getCurrentTask: vi.fn(() => current as any),
+			createTaskWithHistoryItem,
+			updateTaskHistory: vi.fn().mockResolvedValue([]),
+			stack: {
+				pop: vi.fn(async () => {
+					current = parent
+				}),
+			},
+		} as unknown as IDelegationHost
+		vi.mocked(readTaskMessages).mockResolvedValue([])
+		vi.mocked(readApiMessages).mockResolvedValue([])
+
+		await reopenParentFromDelegationWithProvider(provider, {
+			parentTaskId: "parent-1",
+			childTaskId: "child-1",
+			completionResultSummary: "Child done",
+		})
+
+		expect(provider.stack.pop).toHaveBeenCalledTimes(1)
+		expect(createTaskWithHistoryItem).not.toHaveBeenCalled()
+		expect(parent.waitForTaskLoopIdle).toHaveBeenCalledTimes(1)
+		expect(parent.overwriteClineMessages).toHaveBeenCalled()
+		expect(parent.overwriteApiConversationHistory).toHaveBeenCalled()
+		expect(parent.resumeAfterDelegation).toHaveBeenCalledTimes(1)
+		expect(parent.waitForTaskLoopIdle.mock.invocationCallOrder[0]).toBeLessThan(
+			parent.resumeAfterDelegation.mock.invocationCallOrder[0],
+		)
+		expect(parent.isPaused).toBe(false)
+		expect(noteBuildResult).toHaveBeenCalledWith("cjpm build", false, "error: type mismatch")
+	})
+
 	it("reopenParentFromDelegation persists parent metadata (delegated → active) before reopen", async () => {
 		const providerEmit = vi.fn()
 		const getTaskWithId = vi.fn().mockResolvedValue({

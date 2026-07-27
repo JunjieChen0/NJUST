@@ -7,6 +7,10 @@ export type SubAgentType =
 	| "explore" // Code exploration: read-only tools, focused on search and understanding
 	| "implement" // Implementation: full write permissions
 	| "verify" // Verification: run tests and checks
+	| "CangjieExplore" // Cangjie project and corpus evidence collection
+	| "CangjieImplement" // Evidence-based Cangjie implementation
+	| "CangjieVerify" // Read-only Cangjie toolchain verification
+	| "CangjieRepair" // Small repairs driven by real Cangjie diagnostics
 	| "custom" // Custom: inherits parent tools
 
 export type IsolationLevel = "shared" | "forked"
@@ -37,6 +41,10 @@ export const AGENT_TYPE_TOOLS: Record<SubAgentType, string[]> = {
 	explore: ["read_file", "search_files", "list_files", "list_code_definition_names", "codebase_search"],
 	implement: ["read_file", "write_to_file", "apply_diff", "execute_command", "search_files"],
 	verify: ["read_file", "execute_command", "search_files", "list_files"],
+	CangjieExplore: ["read_file", "search_files", "list_files", "list_code_definition_names", "codebase_search"],
+	CangjieImplement: ["read_file", "apply_patch", "search_files", "list_files"],
+	CangjieVerify: ["read_file", "execute_command", "read_command_output", "search_files", "list_files"],
+	CangjieRepair: ["read_file", "apply_patch", "search_files", "list_files"],
 	custom: [], // inherits parent task tools
 }
 
@@ -45,6 +53,10 @@ export const AGENT_TYPE_CONTEXT_BUDGET: Record<SubAgentType, number> = {
 	explore: 32_000,
 	implement: 64_000,
 	verify: 32_000,
+	CangjieExplore: 32_000,
+	CangjieImplement: 64_000,
+	CangjieVerify: 32_000,
+	CangjieRepair: 64_000,
 	custom: 64_000,
 }
 

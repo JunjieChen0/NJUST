@@ -111,8 +111,6 @@ export class ResourceLimitsService {
 	}
 }
 
-export function createPerRequestResourceLimits(
-	config?: Partial<ResourceLimitsConfig>,
-): ResourceLimitsService {
+export function createPerRequestResourceLimits(config?: Partial<ResourceLimitsConfig>): ResourceLimitsService {
 	return new ResourceLimitsService(config)
 }

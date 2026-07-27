@@ -8,6 +8,22 @@ export {
 	clearPluginAgents,
 } from "./loadAgentsDir"
 export { getBuiltInAgent, BUILT_IN_AGENTS } from "./builtInAgents"
+export { buildCangjieAgentRoutingSection, routeCangjieAgentTask } from "./CangjieAgentRouter"
+export type { CangjieAgentRoute, CangjieAgentRouteKind, CangjieAgentStage } from "./CangjieAgentRouter"
+export {
+	CANGJIE_EVAL_CASES,
+	buildCangjieEvalReport,
+	createCangjieEvalRunRecordFromObservation,
+	evaluateCangjieObservationMarkdown,
+	evaluateCangjieObservations,
+	formatCangjieEvalBehavior,
+	formatCangjieEvalReportMarkdown,
+	getCangjieEvalCase,
+	parseCangjieEvalObservationMarkdown,
+	resolveCangjieEvalCaseId,
+	scoreCangjieEvalRun,
+	summarizeCangjieEvalCases,
+} from "./cangjieEvalCases"
 export type {
 	Plan,
 	PlanStep,
@@ -27,3 +43,19 @@ export type {
 	AgentPermissionMode,
 	AgentIsolation,
 } from "./types"
+export type {
+	CangjieEvalAgentExpectation,
+	CangjieEvalBehavior,
+	CangjieEvalCase,
+	CangjieEvalCategory,
+	CangjieEvalObservationInput,
+	CangjieEvalObservationResult,
+	CangjieEvalReport,
+	CangjieEvalReportFormatOptions,
+	CangjieEvalReportLanguage,
+	CangjieEvalRunRecord,
+	CangjieEvalRunScore,
+	CangjieEvalSummary,
+	CangjieEvalVerificationStatus,
+	CangjieEvalViolation,
+} from "./cangjieEvalCases"

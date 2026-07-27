@@ -121,13 +121,20 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 			return
 		}
 
+		const isCangjieSourceWrite =
+			absolutePath.toLowerCase().endsWith(".cj") &&
+			(task.taskMode === "cangjie" || (await task.cangjieRuntimePolicy.hasCjpmProject()))
+		const isCangjieBuildAffectingWrite =
+			(absolutePath.toLowerCase().endsWith(".cj") || absolutePath.toLowerCase().endsWith(".toml")) &&
+			(task.taskMode === "cangjie" || isCangjieSourceWrite || (await task.cangjieRuntimePolicy.hasCjpmProject()))
+
 		// Create parent directories early for new files to prevent ENOENT errors
 		// in subsequent operations (e.g., diffViewProvider.open, fs.readFile)
 		if (!fileExists) {
 			await createDirectoriesForFile(absolutePath)
 		}
 
-		if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+		if (isCangjieSourceWrite) {
 			const initError = await task.cangjieRuntimePolicy.ensureProjectInitializedForWrite(relPath)
 			if (initError) {
 				task.recordToolError("write_to_file", initError)
@@ -159,9 +166,19 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 			}
 		}
 
+		if (isCangjieBuildAffectingWrite) {
+			const stagnantRepairError = task.cangjieRuntimePolicy.getStagnantRepairWriteBlockReason(relPath)
+			if (stagnantRepairError) {
+				task.recordToolError("write_to_file", stagnantRepairError)
+				pushToolResult(formatResponse.toolError(stagnantRepairError))
+				await task.diffViewProvider.reset()
+				return
+			}
+		}
+
 		// Cangjie preflight check: validate .cj files before writing (only in Cangjie mode)
 		let cangjiePostWriteWarnings = ""
-		if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+		if (isCangjieSourceWrite) {
 			if (fileExists) {
 				try {
 					previousContent = await fs.readFile(absolutePath, "utf-8")
@@ -196,7 +213,8 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 			if (missingEvidence.length > 0) {
 				const errorMsg =
 					`Missing bundled corpus evidence for newly introduced stdlib modules: ${missingEvidence.join(", ")}. ` +
-					`Use search_files or read_file against the bundled CangjieCorpus before writing this code.`
+					`Preloaded prompt snippets and built-in signature hints do not count as evidence. ` +
+					`Use search_files/read_file against the bundled CangjieCorpus, or LSP hover/definition, before writing this code.`
 				task.recordToolError("write_to_file", errorMsg)
 				pushToolResult(formatResponse.toolError(errorMsg))
 				await task.diffViewProvider.reset()

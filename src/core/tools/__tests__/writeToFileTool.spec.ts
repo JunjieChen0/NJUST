@@ -143,9 +143,11 @@ describe("writeToFileTool", () => {
 			isWriteProtected: vi.fn().mockResolvedValue(false),
 		}
 		mockCline.cangjieRuntimePolicy = {
+			hasCjpmProject: vi.fn().mockResolvedValue(false),
 			noteWriteApplied: vi.fn(),
 			ensureProjectInitializedForWrite: vi.fn().mockResolvedValue(undefined),
 			validateProjectStructureForWrite: vi.fn().mockResolvedValue(undefined),
+			getStagnantRepairWriteBlockReason: vi.fn().mockReturnValue(null),
 			getMissingImportEvidence: vi.fn().mockReturnValue([]),
 		}
 		mockCline.diffViewProvider = {
@@ -383,6 +385,42 @@ describe("writeToFileTool", () => {
 			expect(mockCline.diffViewProvider.saveChanges).toHaveBeenCalled()
 			expect(mockCline.fileContextTracker.trackFileContext).toHaveBeenCalledWith(testFilePath, "njust_ai_edited")
 			expect(mockCline.didEditFile).toBe(true)
+		})
+
+		it("blocks unverified stdlib imports for .cj files in a cjpm project even outside cangjie mode", async () => {
+			mockedPathResolve.mockReturnValue("/src/main.cj")
+			mockCline.cangjieRuntimePolicy.hasCjpmProject.mockResolvedValue(true)
+			mockCline.cangjieRuntimePolicy.getMissingImportEvidence.mockReturnValue(["std.fs"])
+
+			const result = await executeWriteFileTool({
+				path: "src/main.cj",
+				content:
+					"package demo\nimport std.fs.*\npublic func readTextFile(path: String): String { return String.fromUtf8(File.readFrom(path)) }\n",
+			})
+
+			expect(result).toContain("Missing bundled corpus evidence")
+			expect(result).toContain("std.fs")
+			expect(result).toContain("Preloaded prompt snippets")
+			expect(mockCline.diffViewProvider.open).not.toHaveBeenCalled()
+			expect(mockCline.didEditFile).toBe(false)
+		})
+
+		it("blocks Cangjie writes when the repair loop is stagnant and no fresh evidence was gathered", async () => {
+			mockedPathResolve.mockReturnValue("/src/main.cj")
+			mockCline.cangjieRuntimePolicy.hasCjpmProject.mockResolvedValue(true)
+			mockCline.cangjieRuntimePolicy.getStagnantRepairWriteBlockReason.mockReturnValue(
+				"Cangjie repair is stagnant",
+			)
+
+			const result = await executeWriteFileTool({
+				path: "src/main.cj",
+				content: "package demo\nmain(): Int64 { return 0 }\n",
+			})
+
+			expect(result).toContain("Cangjie repair is stagnant")
+			expect(mockCline.recordToolError).toHaveBeenCalledWith("write_to_file", "Cangjie repair is stagnant")
+			expect(mockCline.diffViewProvider.open).not.toHaveBeenCalled()
+			expect(mockCline.didEditFile).toBe(false)
 		})
 
 		it("rejects files outside workspace boundary", async () => {

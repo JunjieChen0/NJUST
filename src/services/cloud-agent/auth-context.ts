@@ -33,10 +33,7 @@ export interface AuthCheckResult {
  * Only call this when the profile actually has a non-empty token/key;
  * otherwise use {@link unauthenticatedContext}.
  */
-export function createAuthContext(
-	profileId: string,
-	tokenSource: AuthTokenSource,
-): AuthContext {
+export function createAuthContext(profileId: string, tokenSource: AuthTokenSource): AuthContext {
 	return {
 		authenticated: true,
 		tokenSource,
@@ -56,7 +53,8 @@ export function checkToolExecutionAuth(authContext: AuthContext): AuthCheckResul
 	if (!authContext.authenticated) {
 		return {
 			allowed: false,
-			reason: "Tool execution denied: no authenticated Cloud Agent session. " +
+			reason:
+				"Tool execution denied: no authenticated Cloud Agent session. " +
 				"All deferred tool calls require a valid auth context (device token or API key).",
 		}
 	}

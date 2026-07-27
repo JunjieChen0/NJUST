@@ -91,6 +91,14 @@ export const BYPASS_PROTECTED_PATTERNS: RegExp[] = [
 	/:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}/,
 ]
 
+export function isSuccessfulCommandResult(result: unknown, rejected: boolean): boolean {
+	if (rejected) return false
+	const text = String(result)
+	const exitCodeMatch = text.match(/Exit code:\s*(-?\d+)/i)
+	if (exitCodeMatch) return Number(exitCodeMatch[1]) === 0
+	return !/(?:^Command execution failed|Command execution was not successful|\bcjpm\s+build\s+failed\b)/im.test(text)
+}
+
 import { NamedError } from "@njust-ai/core/shared"
 
 class ShellIntegrationError extends NamedError {}
@@ -102,6 +110,26 @@ interface ExecuteCommandParams {
 }
 
 const MIN_CLI_TIMEOUT_MS = TIMING.MIN_CLI_TIMEOUT_MS
+const CANGJIE_TOOLCHAIN_SEGMENT_RE = /^\s*(?:cjpm|cjc|cjlint|cjfmt|cjdb|cjprof)\b/i
+const CANGJIE_TOOLCHAIN_COMMAND_RE = /\b(?:cjpm|cjc|cjlint|cjfmt|cjdb|cjprof)\b/i
+
+export function isCangjieToolchainCommand(command: string): boolean {
+	const segments = command
+		.split(/&&|\|\||;|\|/)
+		.map((segment) => segment.trim())
+		.filter(Boolean)
+
+	return (
+		segments.some((segment) => CANGJIE_TOOLCHAIN_SEGMENT_RE.test(segment)) ||
+		CANGJIE_TOOLCHAIN_COMMAND_RE.test(command)
+	)
+}
+
+export function validateCangjieImplementCommand(agentType: string | undefined, command: string): string | null {
+	if (agentType !== "CangjieImplement") return null
+	if (/^\s*cjpm\s+init(?:\s|$)/i.test(command) && !/[;&|]/.test(command)) return null
+	return "CangjieImplement may execute only one direct cjpm init command. Delegate build/check/lint verification to CangjieVerify."
+}
 
 export function resolveAgentTimeoutMs(timeoutSeconds: number | null | undefined): number {
 	const requestedAgentTimeout = typeof timeoutSeconds === "number" && timeoutSeconds > 0 ? timeoutSeconds * 1000 : 0
@@ -142,7 +170,14 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 			const canonicalCommand = unescapeHtmlEntities(command)
 			await reportProgress?.({ icon: "terminal", text: "Preparing command execution" })
 
-			if (task.taskMode === "cangjie") {
+			const implementCommandError = validateCangjieImplementCommand(task.agentType, canonicalCommand)
+			if (implementCommandError) {
+				task.recordToolError("execute_command", implementCommandError)
+				pushToolResult(formatResponse.toolError(implementCommandError))
+				return
+			}
+
+			if (task.taskMode === "cangjie" || isCangjieToolchainCommand(canonicalCommand)) {
 				const cangjieCommandError = task.cangjieRuntimePolicy.validateCommandSurface(canonicalCommand)
 				if (cangjieCommandError) {
 					task.recordToolError("execute_command", cangjieCommandError)
@@ -253,7 +288,10 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 			const provider = await task.providerRef.deref()
 			const providerState = await provider?.getState()
 
-			const { terminalShellIntegrationDisabled = true } = providerState ?? {}
+			const { terminalShellIntegrationDisabled: configuredTerminalShellIntegrationDisabled = true } =
+				providerState ?? {}
+			const terminalShellIntegrationDisabled =
+				configuredTerminalShellIntegrationDisabled || isCangjieToolchainCommand(canonicalCommand)
 
 			// Get command execution timeout from VSCode configuration (in seconds)
 			const commandExecutionTimeoutSeconds = vscode.workspace
@@ -302,7 +340,7 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 				if (task.taskMode === "cangjie") {
 					task.cangjieRuntimePolicy.noteBuildResult(
 						canonicalCommand,
-						!rejected && !/^Command execution failed/i.test(String(result)),
+						isSuccessfulCommandResult(result, rejected),
 						String(result),
 					)
 				}
@@ -398,6 +436,12 @@ export async function executeCommandInTerminal(
 			return [false, `Working directory '${customCwd}' is rejected: ${cwdResolution.reason}`]
 		}
 		workingDir = cwdResolution.resolved
+	}
+
+	const requireExactCwd = !customCwd && isCangjieToolchainCommand(command)
+
+	if (requireExactCwd) {
+		workingDir = await resolveCangjieToolchainWorkingDir(workingDir)
 	}
 
 	try {
@@ -802,7 +846,9 @@ export async function executeCommandInTerminal(
 	let startedProcess: RooTerminalProcessResultPromise | undefined
 	let unregisterScopedProcess: (() => void) | undefined
 	try {
-		terminal = await TerminalRegistry.getOrCreateTerminal(workingDir, task.taskId, terminalProvider)
+		terminal = requireExactCwd
+			? await TerminalRegistry.getOrCreateTerminal(workingDir, task.taskId, terminalProvider, { exactCwd: true })
+			: await TerminalRegistry.getOrCreateTerminal(workingDir, task.taskId, terminalProvider)
 
 		if (terminal instanceof Terminal) {
 			terminal.terminal.show(true)
@@ -1079,6 +1125,62 @@ export async function executeCommandInTerminal(
 				"You will be updated on the terminal status and new output in the future.",
 			].join("\n"),
 		]
+	}
+}
+
+async function resolveCangjieToolchainWorkingDir(defaultCwd: string): Promise<string> {
+	if (await pathExists(path.join(defaultCwd, "cjpm.toml"))) {
+		return defaultCwd
+	}
+
+	for (const candidateDir of getVisibleCangjieCandidateDirs()) {
+		const projectDir = await findNearestCjpmProjectDir(candidateDir)
+		if (projectDir) {
+			return projectDir
+		}
+	}
+
+	for (const folder of vscode.workspace.workspaceFolders ?? []) {
+		const folderPath = folder.uri.fsPath
+		if (await pathExists(path.join(folderPath, "cjpm.toml"))) {
+			return folderPath
+		}
+	}
+
+	return defaultCwd
+}
+
+function getVisibleCangjieCandidateDirs(): string[] {
+	const filePaths = [
+		vscode.window.activeTextEditor?.document.uri.fsPath,
+		...(vscode.window.visibleTextEditors ?? []).map((editor) => editor.document.uri.fsPath),
+	].filter((filePath): filePath is string => Boolean(filePath))
+
+	return [...new Set(filePaths.map((filePath) => path.dirname(filePath)))]
+}
+
+async function findNearestCjpmProjectDir(startDir: string): Promise<string | undefined> {
+	let currentDir = startDir
+
+	while (true) {
+		if (await pathExists(path.join(currentDir, "cjpm.toml"))) {
+			return currentDir
+		}
+
+		const parentDir = path.dirname(currentDir)
+		if (parentDir === currentDir) {
+			return undefined
+		}
+		currentDir = parentDir
+	}
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+	try {
+		await fs.access(filePath)
+		return true
+	} catch {
+		return false
 	}
 }
 

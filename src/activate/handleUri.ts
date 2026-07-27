@@ -48,16 +48,12 @@ function validatePendingState(
 	const pendingState = handler.pendingOAuthState
 
 	if (!pendingState || !returnedState) {
-		vscode.window.showErrorMessage(
-			`${providerLabel} OAuth authentication rejected: missing CSRF state parameter.`,
-		)
+		vscode.window.showErrorMessage(`${providerLabel} OAuth authentication rejected: missing CSRF state parameter.`)
 		return null
 	}
 
 	if (pendingState.provider !== expectedProvider) {
-		vscode.window.showErrorMessage(
-			`${providerLabel} OAuth rejected: state was issued for a different provider.`,
-		)
+		vscode.window.showErrorMessage(`${providerLabel} OAuth rejected: state was issued for a different provider.`)
 		return null
 	}
 

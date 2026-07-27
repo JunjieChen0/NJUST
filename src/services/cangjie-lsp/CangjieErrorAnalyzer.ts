@@ -245,8 +245,9 @@ export const CJC_ERROR_PATTERNS: CjcErrorPattern[] = [
 		pattern: /(?:mut function|mut.*let|let.*mut)/i,
 		category: "mut 函数限制",
 		docPaths: ["manual/source_zh_cn/struct/mut.md"],
-		suggestion: "let 绑定的 struct 变量不能调用 mut 函数，改用 var 声明",
-		fixDirective: "将 `let` 改为 `var` 以允许调用 mut 方法",
+		suggestion:
+			"let 绑定的 struct 变量不能调用 mut 函数，改用 var 声明。不要把这条通用规则套用到 HashMap.add，除非诊断或 API 签名明确显示 mut func add。",
+		fixDirective: "将 `let` 改为 `var` 以允许调用 mut 方法；HashMap.add 需要单独依据 API 签名或编译器诊断判断。",
 		diagnosticCodes: ["E0596"],
 	},
 	{

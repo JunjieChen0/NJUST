@@ -268,9 +268,7 @@ export async function downloadAndVerify(
 
 	const contentLength = Number(response.headers.get("content-length") ?? 0)
 	if (contentLength > 0 && contentLength !== expectedSize) {
-		throw new Error(
-			`Content-Length mismatch: expected ${expectedSize}, got ${contentLength}`,
-		)
+		throw new Error(`Content-Length mismatch: expected ${expectedSize}, got ${contentLength}`)
 	}
 
 	const tarballPath = path.join(destDir, "njust-ai-cli.tar.gz")
@@ -304,17 +302,13 @@ export async function downloadAndVerify(
 
 	if (totalBytes !== expectedSize) {
 		await fs.unlink(tarballPath).catch(() => {})
-		throw new Error(
-			`File size mismatch: expected ${expectedSize}, got ${totalBytes}`,
-		)
+		throw new Error(`File size mismatch: expected ${expectedSize}, got ${totalBytes}`)
 	}
 
 	const actualSha256 = await computeSha256(tarballPath)
 	if (actualSha256 !== expectedSha256) {
 		await fs.unlink(tarballPath).catch(() => {})
-		throw new Error(
-			`Checksum mismatch: expected ${expectedSha256}, got ${actualSha256}`,
-		)
+		throw new Error(`Checksum mismatch: expected ${expectedSha256}, got ${actualSha256}`)
 	}
 
 	return tarballPath
@@ -411,11 +405,7 @@ async function verifyStagingIntegrity(stagingDir: string): Promise<void> {
  * @returns The backup directory path (if one was created), so the caller can
  *          delete it after health verification, or restore it on failure.
  */
-export async function atomicSwap(
-	sourceDir: string,
-	installDir: string,
-	npmInstall: boolean,
-): Promise<string | null> {
+export async function atomicSwap(sourceDir: string, installDir: string, npmInstall: boolean): Promise<string | null> {
 	const backupDir = `${installDir}.backup.${Date.now()}`
 
 	try {
@@ -493,7 +483,8 @@ async function runHealthCheck(installDir: string): Promise<void> {
 export async function secureUpgrade(options: SecureUpgradeOptions = {}): Promise<void> {
 	const currentVersion = options.currentVersion ?? VERSION
 	const fetchImpl = options.fetchImpl ?? fetch
-	const installDir = options.installDir ?? process.env.NJUST_AI_INSTALL_DIR ?? path.join(os.homedir(), ".njust-ai", "cli")
+	const installDir =
+		options.installDir ?? process.env.NJUST_AI_INSTALL_DIR ?? path.join(os.homedir(), ".njust-ai", "cli")
 	const npmInstall = options.npmInstall ?? true
 
 	console.log(`Current version: ${currentVersion}`)
@@ -547,13 +538,7 @@ export async function secureUpgrade(options: SecureUpgradeOptions = {}): Promise
 
 	try {
 		// Step 6: Download and verify checksum
-		const tarballPath = await downloadAndVerify(
-			artifact.url,
-			artifact.sha256,
-			artifact.size,
-			tmpDir,
-			fetchImpl,
-		)
+		const tarballPath = await downloadAndVerify(artifact.url, artifact.sha256, artifact.size, tmpDir, fetchImpl)
 		console.log("✓ Checksum verified")
 
 		// Step 7: Extract tarball to staging (with path traversal check)

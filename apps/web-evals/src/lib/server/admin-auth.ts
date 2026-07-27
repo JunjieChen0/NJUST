@@ -135,9 +135,7 @@ export async function requireAdminForPage(): Promise<void> {
  * Guard for API Route handlers.
  * Receives the raw NextRequest and returns a NextResponse on failure (or null on success).
  */
-export async function requireAdminForRequest(
-	request: NextRequest,
-): Promise<NextResponse | null> {
+export async function requireAdminForRequest(request: NextRequest): Promise<NextResponse | null> {
 	let secret: string
 	try {
 		secret = getAdminSecret()

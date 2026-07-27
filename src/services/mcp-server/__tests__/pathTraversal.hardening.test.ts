@@ -42,9 +42,7 @@ describe("null byte path injection", () => {
 	})
 
 	it("rejects write with null byte in path", async () => {
-		await expect(
-			execWriteFile(tmpWorkspace, { path: "evil\0.txt", content: "pwned" }),
-		).rejects.toThrow("null byte")
+		await expect(execWriteFile(tmpWorkspace, { path: "evil\0.txt", content: "pwned" })).rejects.toThrow("null byte")
 	})
 })
 
@@ -52,21 +50,15 @@ describe("null byte path injection", () => {
 
 describe("Windows device path rejection", () => {
 	it("rejects \\\\.\\CON device path", async () => {
-		await expect(execReadFile(tmpWorkspace, { path: "\\\\.\\CON" })).rejects.toThrow(
-			/device path|UNC/i,
-		)
+		await expect(execReadFile(tmpWorkspace, { path: "\\\\.\\CON" })).rejects.toThrow(/device path|UNC/i)
 	})
 
 	it("rejects \\\\.\\NUL device path", async () => {
-		await expect(execReadFile(tmpWorkspace, { path: "\\\\.\\NUL" })).rejects.toThrow(
-			/device path|UNC/i,
-		)
+		await expect(execReadFile(tmpWorkspace, { path: "\\\\.\\NUL" })).rejects.toThrow(/device path|UNC/i)
 	})
 
 	it("rejects \\\\?\\C:\\Windows device path", async () => {
-		await expect(execReadFile(tmpWorkspace, { path: "\\\\?\\C:\\Windows" })).rejects.toThrow(
-			/device path|UNC/i,
-		)
+		await expect(execReadFile(tmpWorkspace, { path: "\\\\?\\C:\\Windows" })).rejects.toThrow(/device path|UNC/i)
 	})
 })
 
@@ -74,15 +66,11 @@ describe("Windows device path rejection", () => {
 
 describe("UNC network path rejection", () => {
 	it("rejects \\\\server\\share UNC path", async () => {
-		await expect(execReadFile(tmpWorkspace, { path: "\\\\server\\share\\file.txt" })).rejects.toThrow(
-			/UNC|device/i,
-		)
+		await expect(execReadFile(tmpWorkspace, { path: "\\\\server\\share\\file.txt" })).rejects.toThrow(/UNC|device/i)
 	})
 
 	it("rejects \\\\attacker\\exfil UNC path", async () => {
-		await expect(execReadFile(tmpWorkspace, { path: "\\\\attacker\\exfil\\data" })).rejects.toThrow(
-			/UNC|device/i,
-		)
+		await expect(execReadFile(tmpWorkspace, { path: "\\\\attacker\\exfil\\data" })).rejects.toThrow(/UNC|device/i)
 	})
 })
 
@@ -119,21 +107,19 @@ describe("path traversal attack paths", () => {
 
 	it("rejects encoded traversal (%2e%2e%2f)", async () => {
 		// URL encoding — should fail since path.resolve doesn't decode
-		await expect(
-			execReadFile(tmpWorkspace, { path: "%2e%2e%2f%2e%2e%2fetc/passwd" }),
-		).rejects.toThrow(/not found|escapes/i)
+		await expect(execReadFile(tmpWorkspace, { path: "%2e%2e%2f%2e%2e%2fetc/passwd" })).rejects.toThrow(
+			/not found|escapes/i,
+		)
 	})
 
 	it("rejects double-encoded traversal", async () => {
-		await expect(
-			execReadFile(tmpWorkspace, { path: "%252e%252e%252f" }),
-		).rejects.toThrow(/not found|escapes/i)
+		await expect(execReadFile(tmpWorkspace, { path: "%252e%252e%252f" })).rejects.toThrow(/not found|escapes/i)
 	})
 
 	it("rejects path with excessive ../ segments", async () => {
-		await expect(
-			execReadFile(tmpWorkspace, { path: "../../../../../../../../etc/shadow" }),
-		).rejects.toThrow(/escapes workspace|not found/i)
+		await expect(execReadFile(tmpWorkspace, { path: "../../../../../../../../etc/shadow" })).rejects.toThrow(
+			/escapes workspace|not found/i,
+		)
 	})
 
 	it("allows reading files within workspace", async () => {

@@ -259,13 +259,8 @@ describe("downloadAndVerify", () => {
 		const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "test-"))
 
 		await expect(
-			downloadAndVerify(
-				"https://evil.com/malicious.tar.gz",
-				"a".repeat(64),
-				100,
-				tmpDir,
-				(async () => createStreamFetchResponse([])) as typeof fetch,
-			),
+			downloadAndVerify("https://evil.com/malicious.tar.gz", "a".repeat(64), 100, tmpDir, (async () =>
+				createStreamFetchResponse([])) as typeof fetch),
 		).rejects.toThrow("untrusted host")
 
 		await fs.rm(tmpDir, { recursive: true, force: true })
@@ -359,9 +354,7 @@ describe("upgrade (default secure path)", () => {
 	})
 
 	it("does not attempt download when already up to date", async () => {
-		const releases = [
-			{ tag_name: "cli-v0.1.4" },
-		]
+		const releases = [{ tag_name: "cli-v0.1.4" }]
 		const manifest = {
 			version: "0.1.4",
 			publishedAt: "2025-07-13T00:00:00Z",

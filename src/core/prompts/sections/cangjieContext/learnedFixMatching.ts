@@ -357,7 +357,7 @@ const BUILTIN_SEED_FIXES: LearnedFixPattern[] = [
 	},
 	{
 		errorPattern: "cannot call mut func on.*let|let.*调用.*mut",
-		fix: "将 let 绑定改为 var 绑定。mut 方法只能在 var 绑定的 struct 实例上调用。示例: var counter = Counter() 然后 counter.inc()。",
+		fix: "将 let 绑定改为 var 绑定。mut 方法只能在 var 绑定的 struct 实例上调用。示例: var counter = Counter() 然后 counter.inc()。不要把这条通用修复提示套用到 HashMap.add；只有 HashMap API 签名或编译器诊断明确显示 mut func add 时，才能断言 HashMap.add 需要 var。",
 		successCount: 5,
 		failCount: 0,
 	},

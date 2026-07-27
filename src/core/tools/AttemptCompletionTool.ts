@@ -15,10 +15,24 @@ import type { TaskResult } from "../task/SubTaskOptions"
 import { wrapAsError, getErrorMessage } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import { logger } from "../../shared/logger"
+import { appendCangjieEvalTrace } from "../../services/CangjieEvalTraceLogger"
+import { buildStdModuleEvidenceSuggestions } from "../task/CangjieRuntimePolicy"
 
 interface AttemptCompletionParams {
 	result: string
 	command?: string
+}
+
+const CANGJIE_EVIDENCE_AUDIT_HEADING_RE = /^\s*\**\s*Cangjie evidence audit\s*:?\s*\**\s*$/im
+const CANGJIE_COMPLETION_SURFACE_RE =
+	/\b(?:Cangjie evidence audit|CangjieCorpus|cjpm|HashMap|Option|std\.collection|std\.regex|File\.readFrom|String\.fromUtf8|MatchData)\b|\.cj\b/i
+
+function hasCangjieEvidenceAuditHeading(result: string): boolean {
+	return CANGJIE_EVIDENCE_AUDIT_HEADING_RE.test(result)
+}
+
+function normalizeCangjieEvidenceAuditHeading(result: string): string {
+	return result.replace(CANGJIE_EVIDENCE_AUDIT_HEADING_RE, "Cangjie evidence audit:")
 }
 
 export interface AttemptCompletionCallbacks extends ToolCallbacks {
@@ -48,7 +62,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 	}
 
 	async execute(params: AttemptCompletionParams, task: Task, callbacks: AttemptCompletionCallbacks): Promise<void> {
-		const { result } = params
+		let { result } = params
 		const { handleError, pushToolResult, askFinishSubTaskApproval } = callbacks
 
 		// Prevent attempt_completion if any tool failed in the current turn
@@ -79,14 +93,133 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 			return
 		}
 
-		if (task.taskMode === "cangjie") {
-			const cangjieBlockReason = task.cangjieRuntimePolicy.getAttemptCompletionBlockReason()
-			if (cangjieBlockReason) {
+		const shouldApplyCangjieCompletionGates =
+			task.taskMode === "cangjie" ||
+			CANGJIE_COMPLETION_SURFACE_RE.test(result) ||
+			(await task.cangjieRuntimePolicy.hasCjpmProject())
+
+		if (shouldApplyCangjieCompletionGates) {
+			const blockCangjieCompletion = async (reason: string) => {
 				task.consecutiveMistakeCount++
-				task.recordToolError("attempt_completion", cangjieBlockReason)
-				pushToolResult(formatResponse.toolError(cangjieBlockReason))
+				task.recordToolError("attempt_completion", reason)
+				await this.traceCangjieCompletion(task, result, "attempt_completion_blocked", reason)
+				pushToolResult(formatResponse.toolError(reason))
+			}
+
+			const canHandOffPendingBuild =
+				!!task.parentTaskId && (task.agentType === "CangjieImplement" || task.agentType === "CangjieRepair")
+			const canHandOffFailedBuild = !!task.parentTaskId && task.agentType === "CangjieVerify"
+			const completionGateOptions: {
+				allowPendingBuild?: boolean
+				allowFailedBuildHandoff?: boolean
+			} = {}
+			if (canHandOffPendingBuild) completionGateOptions.allowPendingBuild = true
+			if (canHandOffFailedBuild) completionGateOptions.allowFailedBuildHandoff = true
+			const cangjieBlockReason = task.cangjieRuntimePolicy.getAttemptCompletionBlockReason(completionGateOptions)
+			if (cangjieBlockReason) {
+				await blockCangjieCompletion(cangjieBlockReason)
 				return
 			}
+			const missingCompletionEvidence = task.cangjieRuntimePolicy.getMissingCompletionEvidence(result)
+			if (missingCompletionEvidence.length > 0) {
+				const evidenceSuggestions = missingCompletionEvidence
+					.flatMap((moduleName) =>
+						buildStdModuleEvidenceSuggestions(moduleName).map(
+							(suggestion) => `- ${moduleName}: ${suggestion}`,
+						),
+					)
+					.join("\n")
+				const evidenceSuggestionText = evidenceSuggestions
+					? ` Suggested corpus locations:\n${evidenceSuggestions}\n`
+					: ""
+				const hashMapOptionEvidenceHint =
+					missingCompletionEvidence.includes("std.core") &&
+					/\bHashMap\b|\.get\s*\(|Option<|\?V\b|Some\(|\bNone\b|getOrDefault|\?\?/i.test(result)
+						? " If this is a HashMap.get/counting report, this is not classifying HashMap as std.core: HashMap.get returns ?V/Option<V>, so Option defaults, Some/None, getOrDefault, getOrThrow, or ?? require separate std.core Option evidence. LSP HashMap symbols alone do not satisfy std.core Option evidence; cite CangjieCorpus-1.0.0/extra/Option.md or libs/std/core/core_package_api/core_package_enums.md."
+						: ""
+				const errorMsg =
+					`Completion blocked in Cangjie mode: the final answer asserts or evaluates high-risk stdlib API usage without external evidence for ${missingCompletionEvidence.join(", ")}. ` +
+					hashMapOptionEvidenceHint +
+					evidenceSuggestionText +
+					`Preloaded prompt snippets and built-in signature hints do not count as evidence. Before claiming the API usage is correct, use external evidence such as the bundled CangjieCorpus or LSP hover/definition. ` +
+					`If the user explicitly prohibited corpus search, LSP, file reads, or evidence lookup, do not perform those actions to satisfy this gate; report that the API correctness cannot be claimed or the task is blocked/inconclusive under the user's constraints. ` +
+					`Chinese directive: 如果用户说“不要查语料库”、“不要查 CangjieCorpus”、“不要查 LSP”、“不要读取文件”或“不要找证据”，不要为了通过这个门禁去调用这些工具；只能说明在该限制下不能确认 API 正确性。`
+				task.consecutiveMistakeCount++
+				task.recordToolError("attempt_completion", errorMsg)
+				await this.traceCangjieCompletion(task, result, "attempt_completion_blocked", errorMsg)
+				pushToolResult(formatResponse.toolError(errorMsg))
+				return
+			}
+			const unsupportedRiskSpeculation = task.cangjieRuntimePolicy.getUnsupportedStdlibRiskSpeculation?.(result)
+			if (unsupportedRiskSpeculation) {
+				await blockCangjieCompletion(unsupportedRiskSpeculation)
+				return
+			}
+			const contextInjectionAuditMissingLabelsReport =
+				task.cangjieRuntimePolicy.getContextInjectionAuditMissingLabelsReport?.(result)
+			if (contextInjectionAuditMissingLabelsReport) {
+				await blockCangjieCompletion(contextInjectionAuditMissingLabelsReport)
+				return
+			}
+			const contextInjectionAuditScopeReport =
+				task.cangjieRuntimePolicy.getContextInjectionAuditScopeReport?.(result)
+			if (contextInjectionAuditScopeReport) {
+				await blockCangjieCompletion(contextInjectionAuditScopeReport)
+				return
+			}
+			const contradictoryVerificationReport =
+				task.cangjieRuntimePolicy.getContradictoryVerificationReport?.(result)
+			if (contradictoryVerificationReport) {
+				await blockCangjieCompletion(contradictoryVerificationReport)
+				return
+			}
+			const allowlistExtraProbeReport = task.cangjieRuntimePolicy.getAllowlistExtraProbeReport?.(result)
+			if (allowlistExtraProbeReport) {
+				await blockCangjieCompletion(allowlistExtraProbeReport)
+				return
+			}
+			const invalidOptionDefaultCallReport = task.cangjieRuntimePolicy.getInvalidOptionDefaultCallReport?.(result)
+			if (invalidOptionDefaultCallReport) {
+				await blockCangjieCompletion(invalidOptionDefaultCallReport)
+				return
+			}
+			const unsafeHashMapCountGetOrThrowReport =
+				task.cangjieRuntimePolicy.getUnsafeHashMapCountGetOrThrowReport?.(result)
+			if (unsafeHashMapCountGetOrThrowReport) {
+				await blockCangjieCompletion(unsafeHashMapCountGetOrThrowReport)
+				return
+			}
+			const incorrectRegexFindSignatureReport =
+				task.cangjieRuntimePolicy.getIncorrectRegexFindSignatureReport?.(result)
+			if (incorrectRegexFindSignatureReport) {
+				await blockCangjieCompletion(incorrectRegexFindSignatureReport)
+				return
+			}
+			const evidenceReportInvitationReport = task.cangjieRuntimePolicy.getEvidenceReportInvitationReport?.(result)
+			if (evidenceReportInvitationReport) {
+				await blockCangjieCompletion(evidenceReportInvitationReport)
+				return
+			}
+			const uncitedHashMapSubscriptAssignmentReport =
+				task.cangjieRuntimePolicy.getUncitedHashMapSubscriptAssignmentReport?.(result)
+			if (uncitedHashMapSubscriptAssignmentReport) {
+				await blockCangjieCompletion(uncitedHashMapSubscriptAssignmentReport)
+				return
+			}
+			const unsupportedHashMapMutabilityClaimReport =
+				task.cangjieRuntimePolicy.getUnsupportedHashMapMutabilityClaimReport?.(result)
+			if (unsupportedHashMapMutabilityClaimReport) {
+				await blockCangjieCompletion(unsupportedHashMapMutabilityClaimReport)
+				return
+			}
+			const evidenceAudit = task.cangjieRuntimePolicy.getEvidenceAuditSummary?.()
+			if (evidenceAudit && hasCangjieEvidenceAuditHeading(result)) {
+				result = normalizeCangjieEvidenceAuditHeading(result)
+			} else if (evidenceAudit) {
+				result = `${result.trim()}\n\n${evidenceAudit}`
+			}
+
+			await this.traceCangjieCompletion(task, result, "attempt_completion")
 		}
 
 		try {
@@ -151,6 +284,14 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 			// Record this as the success signal regardless of the user's approval action.
 			task.markAttemptedCompletion()
 
+			// Cangjie completion gates and agent-route validation have already passed.
+			// Waiting for a second UI acknowledgement here causes unattended tasks to
+			// time out and resubmit attempt_completion indefinitely.
+			if (task.taskMode === "cangjie" && !task.parentTaskId) {
+				this.emitTaskCompleted(task)
+				return
+			}
+
 			const { response, text, images } = await task.ask("completion_result", "", false)
 
 			if (response === "yesButtonClicked") {
@@ -168,6 +309,32 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 		}
 	}
 
+	private async traceCangjieCompletion(
+		task: Task,
+		result: string,
+		stage: "attempt_completion" | "attempt_completion_blocked",
+		blockReason?: string,
+	): Promise<void> {
+		try {
+			await appendCangjieEvalTrace({
+				globalStoragePath: task.globalStoragePath,
+				taskId: task.taskId,
+				rootTaskId: task.rootTaskId,
+				parentTaskId: task.parentTaskId,
+				cwd: task.cwd,
+				mode: task.taskMode,
+				stage,
+				result,
+				blockReason,
+				toolUsage: task.toolUsage,
+				runtimeSnapshot: task.cangjieRuntimePolicy.getEvalRuntimeSnapshot(),
+				taskText: task.rootTask?.metadata?.task ?? task.metadata?.task,
+			})
+		} catch (error) {
+			logger.warn("AttemptCompletionTool", `Failed to write Cangjie eval trace: ${getErrorMessage(error)}`)
+		}
+	}
+
 	/**
 	 * Handles the common delegation flow when a subtask completes.
 	 * Returns:
@@ -182,7 +349,8 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 		askFinishSubTaskApproval: () => Promise<boolean>,
 		pushToolResult: (result: string) => void,
 	): Promise<"delegated" | "denied" | "continue"> {
-		const didApprove = await askFinishSubTaskApproval()
+		const isBuiltInCangjieSubtask = !!task.parentTaskId && !!task.agentType?.startsWith("Cangjie")
+		const didApprove = isBuiltInCangjieSubtask || (await askFinishSubTaskApproval())
 
 		if (!didApprove) {
 			pushToolResult(formatResponse.toolDenied())

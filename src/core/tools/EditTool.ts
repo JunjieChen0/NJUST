@@ -108,7 +108,15 @@ export class EditTool extends BaseTool<"edit"> {
 			const isWriteProtected = (await task.rooProtectedController?.isWriteProtected(relPath)) || false
 
 			const absolutePath = path.resolve(task.cwd, relPath)
-			if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+			const isCangjieSourceWrite =
+				absolutePath.toLowerCase().endsWith(".cj") &&
+				(task.taskMode === "cangjie" || (await task.cangjieRuntimePolicy.hasCjpmProject()))
+			const isCangjieBuildAffectingWrite =
+				(absolutePath.toLowerCase().endsWith(".cj") || absolutePath.toLowerCase().endsWith(".toml")) &&
+				(task.taskMode === "cangjie" ||
+					isCangjieSourceWrite ||
+					(await task.cangjieRuntimePolicy.hasCjpmProject()))
+			if (isCangjieSourceWrite) {
 				const initError = await task.cangjieRuntimePolicy.ensureProjectInitializedForWrite(relPath)
 				if (initError) {
 					task.recordToolError("edit", initError)
@@ -122,13 +130,31 @@ export class EditTool extends BaseTool<"edit"> {
 			// File creation: empty old_string + non-existent file
 			if (!fileExists && old_string === "") {
 				// Cangjie preflight for new .cj files in cangjie mode
-				if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+				if (isCangjieBuildAffectingWrite) {
+					const stagnantRepairError = task.cangjieRuntimePolicy.getStagnantRepairWriteBlockReason(relPath)
+					if (stagnantRepairError) {
+						task.recordToolError("edit", stagnantRepairError)
+						pushToolResult(formatResponse.toolError(stagnantRepairError))
+						return
+					}
+				}
+				if (isCangjieSourceWrite) {
 					const rootPkg = await resolveRootPackageName(task.cwd)
 					const preflight = cangjiePreflightCheck(new_string, relPath, task.cwd, rootPkg)
 					if (!preflight.pass) {
 						const errorMsg =
 							`Cangjie preflight failed before creating file:\n` +
 							preflight.errors.map((e) => `- ${e}`).join("\n")
+						task.recordToolError("edit", errorMsg)
+						pushToolResult(formatResponse.toolError(errorMsg))
+						return
+					}
+					const missingEvidence = task.cangjieRuntimePolicy.getMissingImportEvidence(undefined, new_string)
+					if (missingEvidence.length > 0) {
+						const errorMsg =
+							`Missing bundled corpus evidence for newly introduced stdlib modules: ${missingEvidence.join(", ")}. ` +
+							`Preloaded prompt snippets and built-in signature hints do not count as evidence. ` +
+							`Use search_files/read_file against the bundled CangjieCorpus, or LSP hover/definition, before creating this code.`
 						task.recordToolError("edit", errorMsg)
 						pushToolResult(formatResponse.toolError(errorMsg))
 						return
@@ -342,7 +368,15 @@ export class EditTool extends BaseTool<"edit"> {
 
 			// Cangjie preflight check for .cj files (only in Cangjie mode)
 			let cangjiePostWriteWarnings = ""
-			if (absolutePath.toLowerCase().endsWith(".cj") && task.taskMode === "cangjie") {
+			if (isCangjieBuildAffectingWrite) {
+				const stagnantRepairError = task.cangjieRuntimePolicy.getStagnantRepairWriteBlockReason(relPath)
+				if (stagnantRepairError) {
+					task.recordToolError("edit", stagnantRepairError)
+					pushToolResult(formatResponse.toolError(stagnantRepairError))
+					return
+				}
+			}
+			if (isCangjieSourceWrite) {
 				const structureError = await task.cangjieRuntimePolicy.validateProjectStructureForWrite(
 					relPath,
 					newContent,
@@ -372,7 +406,8 @@ export class EditTool extends BaseTool<"edit"> {
 				if (missingEvidence.length > 0) {
 					const errorMsg =
 						`Missing bundled corpus evidence for newly introduced stdlib modules: ${missingEvidence.join(", ")}. ` +
-						`Use search_files or read_file against the bundled CangjieCorpus before editing this code.`
+						`Preloaded prompt snippets and built-in signature hints do not count as evidence. ` +
+						`Use search_files/read_file against the bundled CangjieCorpus, or LSP hover/definition, before editing this code.`
 					task.recordToolError("edit", errorMsg)
 					pushToolResult(formatResponse.toolError(errorMsg))
 					return

@@ -170,6 +170,7 @@ export class TerminalRegistry {
 		cwd: string,
 		taskId?: string,
 		provider: RooTerminalProvider = "vscode",
+		options: { exactCwd?: boolean } = {},
 	): Promise<RooTerminal> {
 		const terminals = this.getAllTerminals()
 		let terminal: RooTerminal | undefined
@@ -197,7 +198,7 @@ export class TerminalRegistry {
 		// working directory state from previous commands (cd, pushd, etc.).
 		// This avoids creating new terminals for every cwd change within the
 		// same task, enabling persistent environment variable and shell state.
-		if (!terminal && taskId) {
+		if (!terminal && taskId && !options.exactCwd) {
 			terminal = terminals.find((t) => {
 				if (t.busy || t.taskId !== taskId || t.provider !== provider) {
 					return false

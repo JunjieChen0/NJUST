@@ -105,6 +105,10 @@ describe("buildAutoCorpusQueries", () => {
 		expect(result[0]).toContain("collection")
 	})
 
+	it("generates Option query text from std.core imports", () => {
+		expect(buildAutoCorpusQueries(["std.core.Option"], [])).toEqual(["core Option"])
+	})
+
 	it("generates diagnostic queries", () => {
 		vi.mocked(resolveCjcPatternForDiagnostic).mockReturnValue(null)
 		const diags = [makeDiagnostic("error: type mismatch in expression")]

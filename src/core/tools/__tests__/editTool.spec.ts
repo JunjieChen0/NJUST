@@ -151,9 +151,11 @@ describe("editTool", () => {
 		mockTask.processQueuedMessages = vi.fn()
 		mockTask.sayAndCreateMissingParamError = vi.fn().mockResolvedValue("Missing param error")
 		mockTask.cangjieRuntimePolicy = {
+			hasCjpmProject: vi.fn().mockResolvedValue(false),
 			noteWriteApplied: vi.fn(),
 			ensureProjectInitializedForWrite: vi.fn().mockResolvedValue(null),
 			validateProjectStructureForWrite: vi.fn().mockResolvedValue(null),
+			getStagnantRepairWriteBlockReason: vi.fn().mockReturnValue(null),
 			getMissingImportEvidence: vi.fn().mockReturnValue([]),
 		}
 
@@ -242,6 +244,49 @@ describe("editTool", () => {
 			expect(mockTask.consecutiveMistakeCount).toBe(0)
 			expect(mockTask.diffViewProvider.editType).toBe("modify")
 			expect(mockAskApproval).toHaveBeenCalled()
+		})
+
+		it("blocks unverified stdlib imports for .cj edits in a cjpm project even outside cangjie mode", async () => {
+			mockedPathResolve.mockReturnValue("/src/main.cj")
+			mockTask.cangjieRuntimePolicy.hasCjpmProject.mockResolvedValue(true)
+			mockTask.cangjieRuntimePolicy.getMissingImportEvidence.mockReturnValue(["std.fs"])
+
+			const result = await executeEditTool(
+				{
+					file_path: "src/main.cj",
+					old_string: "import std.net.*",
+					new_string: "import std.net.*\nimport std.fs.*",
+				},
+				{ fileContent: "package demo\nimport std.net.*\nmain() {}\n" },
+			)
+
+			expect(result).toContain("Missing bundled corpus evidence")
+			expect(result).toContain("std.fs")
+			expect(result).toContain("Preloaded prompt snippets")
+			expect(mockAskApproval).not.toHaveBeenCalled()
+			expect(mockTask.didEditFile).toBe(false)
+		})
+
+		it("blocks .cj edits when the Cangjie repair loop is stagnant", async () => {
+			mockedPathResolve.mockReturnValue("/src/main.cj")
+			mockTask.cangjieRuntimePolicy.hasCjpmProject.mockResolvedValue(true)
+			mockTask.cangjieRuntimePolicy.getStagnantRepairWriteBlockReason.mockReturnValue(
+				"Cangjie repair is stagnant",
+			)
+
+			const result = await executeEditTool(
+				{
+					file_path: "src/main.cj",
+					old_string: "main() {}",
+					new_string: "main(): Int64 { return 0 }",
+				},
+				{ fileContent: "package demo\nmain() {}\n" },
+			)
+
+			expect(result).toContain("Cangjie repair is stagnant")
+			expect(mockTask.recordToolError).toHaveBeenCalledWith("edit", "Cangjie repair is stagnant")
+			expect(mockAskApproval).not.toHaveBeenCalled()
+			expect(mockTask.didEditFile).toBe(false)
 		})
 	})
 

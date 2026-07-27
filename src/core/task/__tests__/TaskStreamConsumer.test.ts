@@ -648,6 +648,62 @@ describe("TaskStreamConsumer — finalizeStreamResponse", () => {
 		toolCallParser = new NativeToolCallParser()
 	})
 
+	it("breaks the parent request loop while a delegated child is active", async () => {
+		const stack: StackItem[] = []
+		const host = createMockHost({ isPaused: true })
+		;(host as any).assistantMessageContent = [{ type: "tool_use", name: "agent", params: {}, id: "agent_1" }]
+		host.userMessageContent.push({
+			type: "tool_result",
+			tool_use_id: "agent_1",
+			content: "Delegated to sub-agent task child-1.",
+		})
+
+		const result = await finalizeStreamResponse({
+			task: host,
+			toolCallParser,
+			placeFinalizedStreamingToolUse: noopFinalizeToolUse,
+			consumptionResult: {
+				assistantMessage: "delegating",
+				reasoningMessage: "",
+				pendingGroundingSources: [],
+				action: "proceed",
+			},
+			requestProfileId: "test-parent-paused",
+			lastApiReqIndex: -1,
+			retryAttempt: 0,
+			currentUserContent: [],
+			stack,
+		})
+
+		expect(result.action).toBe("break")
+		expect(stack).toEqual([])
+	})
+
+	it("does not inject a no-tool reminder while a delegated child is active", async () => {
+		const host = createMockHost({ isPaused: true })
+		;(host as any).assistantMessageContent = []
+
+		const result = await finalizeStreamResponse({
+			task: host,
+			toolCallParser,
+			placeFinalizedStreamingToolUse: noopFinalizeToolUse,
+			consumptionResult: {
+				assistantMessage: "delegating",
+				reasoningMessage: "",
+				pendingGroundingSources: [],
+				action: "proceed",
+			},
+			requestProfileId: "test-parent-paused-no-tool",
+			lastApiReqIndex: -1,
+			retryAttempt: 0,
+			currentUserContent: [],
+			stack: [],
+		})
+
+		expect(result.action).toBe("break")
+		expect(host.userMessageContent).toEqual([])
+	})
+
 	it("有文本内容时构建助手消息并保存到历史", async () => {
 		const host = createMockHost()
 

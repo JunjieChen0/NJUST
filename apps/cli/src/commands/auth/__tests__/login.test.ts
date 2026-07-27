@@ -79,7 +79,11 @@ async function startLogin(timeout = 2000): Promise<TestContext> {
 		return origListen.apply(this, args as Parameters<typeof origListen>)
 	} as typeof http.Server.prototype.listen
 
-	const testContext: TestContext = { port: 0, state: "", loginPromise: undefined as unknown as ReturnType<typeof login> }
+	const testContext: TestContext = {
+		port: 0,
+		state: "",
+		loginPromise: undefined as unknown as ReturnType<typeof login>,
+	}
 
 	const loginPromise = login({ timeout })
 	testContext.loginPromise = loginPromise
@@ -109,13 +113,10 @@ let consoleLogCalls: string[] = []
 async function hitCallback(port: number, path: string, method = "GET"): Promise<number> {
 	if (port === 0) return 0
 	return new Promise<number>((resolve) => {
-		const req = http.request(
-			{ hostname: "127.0.0.1", port, path, method },
-			(res) => {
-				res.on("data", () => {})
-				res.on("end", () => resolve(res.statusCode ?? 0))
-			},
-		)
+		const req = http.request({ hostname: "127.0.0.1", port, path, method }, (res) => {
+			res.on("data", () => {})
+			res.on("end", () => resolve(res.statusCode ?? 0))
+		})
 		req.on("error", () => resolve(0))
 		req.setTimeout(300, () => {
 			req.destroy()
@@ -126,7 +127,10 @@ async function hitCallback(port: number, path: string, method = "GET"): Promise<
 }
 
 async function waitForResult(loginPromise: ReturnType<typeof login>): Promise<Awaited<ReturnType<typeof login>>> {
-	return loginPromise.catch((e: unknown) => ({ success: false as const, error: e instanceof Error ? e.message : String(e) }))
+	return loginPromise.catch((e: unknown) => ({
+		success: false as const,
+		error: e instanceof Error ? e.message : String(e),
+	}))
 }
 
 describe("OAuth callback security", () => {
@@ -138,11 +142,9 @@ describe("OAuth callback security", () => {
 		mockSaveToken.mockClear()
 		mockSaveToken.mockResolvedValue(undefined)
 		consoleLogCalls = []
-		logSpy = vi
-			.spyOn(console, "log")
-			.mockImplementation(((...args: unknown[]) => {
-				consoleLogCalls.push(args.map(String).join(" "))
-			}) as typeof console.log)
+		logSpy = vi.spyOn(console, "log").mockImplementation(((...args: unknown[]) => {
+			consoleLogCalls.push(args.map(String).join(" "))
+		}) as typeof console.log)
 		warnSpy = vi.spyOn(console, "warn").mockImplementation((() => undefined) as typeof console.warn)
 		errorSpy = vi.spyOn(console, "error").mockImplementation((() => undefined) as typeof console.error)
 	})

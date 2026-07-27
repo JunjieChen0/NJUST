@@ -68,7 +68,7 @@ export class DockerPolicyProxy {
 		if (!authToken) {
 			throw new Error(
 				"PROXY_AUTH_TOKEN is required. The Docker policy proxy will not start without authentication. " +
-				"Set PROXY_AUTH_TOKEN in your environment or docker-compose.yml."
+					"Set PROXY_AUTH_TOKEN in your environment or docker-compose.yml.",
 			)
 		}
 
@@ -175,11 +175,7 @@ export class DockerPolicyProxy {
 		}
 	}
 
-	private handleUpgrade(
-		req: http.IncomingMessage,
-		clientSocket: net.Socket,
-		head: Buffer,
-	): void {
+	private handleUpgrade(req: http.IncomingMessage, clientSocket: net.Socket, head: Buffer): void {
 		const { authToken, dockerEndpoint } = this.options
 		const urlPath = req.url ?? "/"
 
@@ -195,8 +191,10 @@ export class DockerPolicyProxy {
 		const parsedUrl = new URL(urlPath, "http://localhost")
 		const normalizedPath = parsedUrl.pathname.replace(/^\/v[\d.]+/, "")
 
-		if (!normalizedPath.match(/\/containers\/[^/]+\/(attach|exec)/) &&
-			!normalizedPath.match(/\/exec\/[^/]+\/start/)) {
+		if (
+			!normalizedPath.match(/\/containers\/[^/]+\/(attach|exec)/) &&
+			!normalizedPath.match(/\/exec\/[^/]+\/start/)
+		) {
 			clientSocket.write("HTTP/1.1 403 Forbidden\r\n\r\n")
 			clientSocket.destroy()
 			return
@@ -206,30 +204,34 @@ export class DockerPolicyProxy {
 		if (normalizedPath.match(/\/containers\/[^/]+\/(attach|exec)/)) {
 			const containerId = normalizedPath.split("/")[2]
 			// Async verify then connect
-			this.verifyContainerNamePrefix(containerId).then(decision => {
-				if (!decision.allowed) {
-					clientSocket.write("HTTP/1.1 403 Forbidden\r\n\r\n")
+			this.verifyContainerNamePrefix(containerId)
+				.then((decision) => {
+					if (!decision.allowed) {
+						clientSocket.write("HTTP/1.1 403 Forbidden\r\n\r\n")
+						clientSocket.destroy()
+						return
+					}
+					this.connectAndPipe(req, clientSocket, head, dockerEndpoint, urlPath)
+				})
+				.catch((err) => {
+					logger.error(SCOPE, "Upgrade verification error", err)
 					clientSocket.destroy()
-					return
-				}
-				this.connectAndPipe(req, clientSocket, head, dockerEndpoint, urlPath)
-			}).catch((err) => {
-				logger.error(SCOPE, "Upgrade verification error", err)
-				clientSocket.destroy()
-			})
+				})
 		} else if (normalizedPath.match(/\/exec\/[^/]+\/start/)) {
 			const execId = normalizedPath.split("/")[2] ?? ""
-			this.verifyExecContainerPrefix(execId).then(decision => {
-				if (!decision.allowed) {
-					clientSocket.write("HTTP/1.1 403 Forbidden\r\n\r\n")
+			this.verifyExecContainerPrefix(execId)
+				.then((decision) => {
+					if (!decision.allowed) {
+						clientSocket.write("HTTP/1.1 403 Forbidden\r\n\r\n")
+						clientSocket.destroy()
+						return
+					}
+					this.connectAndPipe(req, clientSocket, head, dockerEndpoint, urlPath)
+				})
+				.catch((err) => {
+					logger.error(SCOPE, "Upgrade exec verification error", err)
 					clientSocket.destroy()
-					return
-				}
-				this.connectAndPipe(req, clientSocket, head, dockerEndpoint, urlPath)
-			}).catch((err) => {
-				logger.error(SCOPE, "Upgrade exec verification error", err)
-				clientSocket.destroy()
-			})
+				})
 		}
 	}
 
@@ -258,10 +260,7 @@ export class DockerPolicyProxy {
 
 		upstreamSocket.on("connect", () => {
 			const method = req.method ?? "POST"
-			const headers: string[] = [
-				`${method} ${urlPath} HTTP/1.1`,
-				`Host: localhost`,
-			]
+			const headers: string[] = [`${method} ${urlPath} HTTP/1.1`, `Host: localhost`]
 
 			for (const [key, value] of Object.entries(req.headers)) {
 				const lk = key.toLowerCase()
@@ -305,7 +304,11 @@ export class DockerPolicyProxy {
 		})
 	}
 
-	private async validateRequest(method: string, urlPath: string, body: string): Promise<{ allowed: boolean; reason?: string }> {
+	private async validateRequest(
+		method: string,
+		urlPath: string,
+		body: string,
+	): Promise<{ allowed: boolean; reason?: string }> {
 		// Parse URL to extract path and query separately
 		const parsedUrl = new URL(urlPath, "http://localhost")
 		const normalizedPath = parsedUrl.pathname.replace(/^\/v[\d.]+/, "")
@@ -351,12 +354,13 @@ export class DockerPolicyProxy {
 		}
 
 		// Validate start/stop/delete/wait/resize — verify target container name prefix
-		if (method === "POST" && (
-			normalizedPath.match(/\/containers\/[^/]+\/start$/) ||
-			normalizedPath.match(/\/containers\/[^/]+\/stop$/) ||
-			normalizedPath.match(/\/containers\/[^/]+\/wait$/) ||
-			normalizedPath.match(/\/containers\/[^/]+\/resize$/)
-		)) {
+		if (
+			method === "POST" &&
+			(normalizedPath.match(/\/containers\/[^/]+\/start$/) ||
+				normalizedPath.match(/\/containers\/[^/]+\/stop$/) ||
+				normalizedPath.match(/\/containers\/[^/]+\/wait$/) ||
+				normalizedPath.match(/\/containers\/[^/]+\/resize$/))
+		) {
 			const containerId = normalizedPath.split("/")[2]
 			const nameCheck = await this.verifyContainerNamePrefix(containerId ?? "")
 			if (!nameCheck.allowed) return nameCheck
@@ -514,7 +518,9 @@ export class DockerPolicyProxy {
 	 * Verify that a container (by ID or name) has the required name prefix.
 	 * Queries the Docker daemon to inspect the container if the ID is not the name itself.
 	 */
-	private async verifyContainerNamePrefix(containerId: string | undefined): Promise<{ allowed: boolean; reason?: string }> {
+	private async verifyContainerNamePrefix(
+		containerId: string | undefined,
+	): Promise<{ allowed: boolean; reason?: string }> {
 		if (!containerId) {
 			return { allowed: false, reason: "Missing container ID" }
 		}
@@ -634,7 +640,6 @@ export class DockerPolicyProxy {
 			proxyReq.end()
 		})
 	}
-
 }
 
 function readBody(req: http.IncomingMessage): Promise<string> {

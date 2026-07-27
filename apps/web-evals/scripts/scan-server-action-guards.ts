@@ -179,7 +179,7 @@ function main(): void {
 			console.error(`  ${v.file} → ${v.functionName}()`)
 		}
 		console.error(`\n  Total: ${allViolations.length} violation(s)`)
-		console.error("\n  Every exported function in a \"use server\" file must call")
+		console.error('\n  Every exported function in a "use server" file must call')
 		console.error("  requireAdminForAction() as its first statement.\n")
 		process.exit(1)
 	}

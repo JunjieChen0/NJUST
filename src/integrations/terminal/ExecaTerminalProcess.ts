@@ -50,7 +50,9 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 
 	public override async run(command: string) {
 		const shellPath = BaseTerminal.getExecaShellPath()
-		const normalizedCommand = normalizeDotSlashCommandForWindowsShell(command, shellPath)
+		const normalizedCommand = normalizeStderrRedirectForExeca(
+			normalizeDotSlashCommandForWindowsShell(command, shellPath),
+		)
 		this.command = normalizedCommand
 
 		// Security: block command substitution which allows nested execution that
@@ -346,4 +348,11 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 			this.emit("line", output)
 		}
 	}
+}
+
+function normalizeStderrRedirectForExeca(command: string): string {
+	// Execa uses all: true, so stderr is already merged into captured output.
+	// Keep the security check strict while accepting the common cmd syntax
+	// users request explicitly for diagnostics.
+	return command.replace(/\s+2>\s*&\s*1\s*$/i, "")
 }

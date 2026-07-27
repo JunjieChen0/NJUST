@@ -23,14 +23,11 @@ function httpRequest(
 	body?: string,
 ): Promise<{ status: number; body: string }> {
 	return new Promise((resolve, reject) => {
-		const req = http.request(
-			{ hostname: "127.0.0.1", port, method, path, headers: { ...headers } },
-			(res) => {
-				const chunks: Buffer[] = []
-				res.on("data", (c: Buffer) => chunks.push(c))
-				res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString() }))
-			},
-		)
+		const req = http.request({ hostname: "127.0.0.1", port, method, path, headers: { ...headers } }, (res) => {
+			const chunks: Buffer[] = []
+			res.on("data", (c: Buffer) => chunks.push(c))
+			res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString() }))
+		})
 		req.on("error", reject)
 		if (body) req.write(body)
 		req.end()
@@ -50,7 +47,9 @@ describe("Docker Policy Proxy — Server Integration", () => {
 			authToken: TEST_TOKEN,
 		})
 		await proxy.start()
-		const addr = (proxy as unknown as { httpServer: { address: () => import("net").AddressInfo | string | null } }).httpServer?.address()
+		const addr = (
+			proxy as unknown as { httpServer: { address: () => import("net").AddressInfo | string | null } }
+		).httpServer?.address()
 		port = typeof addr === "object" && addr !== null && "port" in addr ? addr.port : 0
 	})
 
@@ -127,20 +126,32 @@ describe("Docker Policy Proxy — Server Integration", () => {
 	describe("Container name enforcement", () => {
 		it("rejects container creation without name", async () => {
 			const body = JSON.stringify({ Image: "evals-runner", Env: [] })
-			const resp = await httpRequest(port, "POST", "/containers/create", {
-				authorization: `Bearer ${TEST_TOKEN}`,
-				"content-type": "application/json",
-			}, body)
+			const resp = await httpRequest(
+				port,
+				"POST",
+				"/containers/create",
+				{
+					authorization: `Bearer ${TEST_TOKEN}`,
+					"content-type": "application/json",
+				},
+				body,
+			)
 			expect(resp.status).toBe(403)
 			expect(JSON.parse(resp.body).message).toContain("Container name is required")
 		})
 
 		it("rejects container creation with wrong prefix", async () => {
 			const body = JSON.stringify({ Image: "evals-runner", Env: [] })
-			const resp = await httpRequest(port, "POST", "/containers/create?name=evil-container", {
-				authorization: `Bearer ${TEST_TOKEN}`,
-				"content-type": "application/json",
-			}, body)
+			const resp = await httpRequest(
+				port,
+				"POST",
+				"/containers/create?name=evil-container",
+				{
+					authorization: `Bearer ${TEST_TOKEN}`,
+					"content-type": "application/json",
+				},
+				body,
+			)
 			expect(resp.status).toBe(403)
 			expect(JSON.parse(resp.body).message).toContain("must start with")
 		})
@@ -154,11 +165,21 @@ describe("Docker Policy Proxy — Server Integration", () => {
 		})
 
 		it("allows container creation with valid name and image", async () => {
-			const body = JSON.stringify({ Image: "evals-runner", Env: [], HostConfig: { Memory: 512 * 1024 * 1024, PidsLimit: 200, NanoCpus: 1e9, NetworkMode: "evals_default" } })
-			const resp = await httpRequest(port, "POST", "/containers/create?name=evals-test-1", {
-				authorization: `Bearer ${TEST_TOKEN}`,
-				"content-type": "application/json",
-			}, body)
+			const body = JSON.stringify({
+				Image: "evals-runner",
+				Env: [],
+				HostConfig: { Memory: 512 * 1024 * 1024, PidsLimit: 200, NanoCpus: 1e9, NetworkMode: "evals_default" },
+			})
+			const resp = await httpRequest(
+				port,
+				"POST",
+				"/containers/create?name=evals-test-1",
+				{
+					authorization: `Bearer ${TEST_TOKEN}`,
+					"content-type": "application/json",
+				},
+				body,
+			)
 			// Will fail to forward (no Docker daemon), but policy passes
 			expect(resp.status).not.toBe(403)
 		})
@@ -171,11 +192,17 @@ describe("Docker Policy Proxy — Server Integration", () => {
 			// The server destroys the connection when body exceeds limit,
 			// so we expect either an HTTP error response or a connection reset.
 			try {
-				const resp = await httpRequest(port, "POST", "/containers/create?name=evals-test", {
-					authorization: `Bearer ${TEST_TOKEN}`,
-					"content-type": "application/json",
-					"content-length": String(largeBody.length),
-				}, largeBody)
+				const resp = await httpRequest(
+					port,
+					"POST",
+					"/containers/create?name=evals-test",
+					{
+						authorization: `Bearer ${TEST_TOKEN}`,
+						"content-type": "application/json",
+						"content-length": String(largeBody.length),
+					},
+					largeBody,
+				)
 				// If we get a response, it should be an error
 				expect(resp.status).toBeGreaterThanOrEqual(400)
 			} catch (err: unknown) {

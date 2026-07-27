@@ -27,11 +27,7 @@ export class OperationalError extends NamedError {
 	readonly code: OperationalErrorCode
 	readonly safeMessage: string
 
-	constructor(
-		code: OperationalErrorCode,
-		message: string,
-		options?: ErrorOptions,
-	) {
+	constructor(code: OperationalErrorCode, message: string, options?: ErrorOptions) {
 		super(message, options)
 		this.name = "OperationalError"
 		this.code = code

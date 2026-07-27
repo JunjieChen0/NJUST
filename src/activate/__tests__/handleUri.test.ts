@@ -63,9 +63,7 @@ describe("handleUri — OAuth callback state handling", () => {
 		const badUri = createMockUri("/openrouter", "code=abc&state=wrong-state")
 		await handleUri(badUri)
 
-		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-			expect.stringContaining("state mismatch"),
-		)
+		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining("state mismatch"))
 		expect(handler.handleOpenRouterCallback).not.toHaveBeenCalled()
 		// Critical: pending state must still be set
 		expect(handler.pendingOAuthState).toBeDefined()
@@ -120,9 +118,7 @@ describe("handleUri — OAuth callback state handling", () => {
 		const noStateUri = createMockUri("/openrouter", "code=abc")
 		await handleUri(noStateUri)
 
-		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-			expect.stringContaining("missing CSRF state"),
-		)
+		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining("missing CSRF state"))
 		expect(handler.pendingOAuthState).toBeDefined()
 		expect(handler.handleOpenRouterCallback).not.toHaveBeenCalled()
 	})
@@ -147,9 +143,7 @@ describe("handleUri — OAuth callback state handling", () => {
 
 		// Second callback fails because state was already consumed
 		await handleUri(uri2)
-		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-			expect.stringContaining("missing CSRF state"),
-		)
+		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining("missing CSRF state"))
 		expect(handler.handleOpenRouterCallback).not.toHaveBeenCalled()
 	})
 
@@ -163,9 +157,7 @@ describe("handleUri — OAuth callback state handling", () => {
 		const uri = createMockUri("/openrouter", "code=abc&state=expired-state")
 		await handleUri(uri)
 
-		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-			expect.stringContaining("expired"),
-		)
+		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining("expired"))
 		expect(handler.pendingOAuthState).toBeDefined()
 		expect(handler.handleOpenRouterCallback).not.toHaveBeenCalled()
 	})
@@ -181,9 +173,7 @@ describe("handleUri — OAuth callback state handling", () => {
 		const uri = createMockUri("/openrouter", "code=abc&state=requesty-state")
 		await handleUri(uri)
 
-		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-			expect.stringContaining("different provider"),
-		)
+		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining("different provider"))
 		expect(handler.pendingOAuthState).toBeDefined()
 		expect(handler.handleOpenRouterCallback).not.toHaveBeenCalled()
 	})
@@ -209,9 +199,7 @@ describe("handleUri — Requesty callback", () => {
 		const badUri = createMockUri("/requesty", "code=abc&state=wrong&baseUrl=https://api.requesty.ai")
 		await handleUri(badUri)
 
-		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-			expect.stringContaining("state mismatch"),
-		)
+		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining("state mismatch"))
 		expect(handler.pendingOAuthState).toBeDefined()
 		expect(handler.handleRequestyCallback).not.toHaveBeenCalled()
 	})
@@ -224,10 +212,7 @@ describe("handleUri — Requesty callback", () => {
 			expectedBaseUrl: "https://api.requesty.ai",
 		}
 
-		const goodUri = createMockUri(
-			"/requesty",
-			"code=req-code&state=req-state-456&baseUrl=https://api.requesty.ai",
-		)
+		const goodUri = createMockUri("/requesty", "code=req-code&state=req-state-456&baseUrl=https://api.requesty.ai")
 		await handleUri(goodUri)
 
 		expect(handler.handleRequestyCallback).toHaveBeenCalledWith("req-code", "https://api.requesty.ai")
@@ -242,15 +227,10 @@ describe("handleUri — Requesty callback", () => {
 			expectedBaseUrl: "https://api.requesty.ai",
 		}
 
-		const uri = createMockUri(
-			"/requesty",
-			"code=req-code&state=req-state-789&baseUrl=https://evil.com",
-		)
+		const uri = createMockUri("/requesty", "code=req-code&state=req-state-789&baseUrl=https://evil.com")
 		await handleUri(uri)
 
-		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-			expect.stringContaining("base URL does not match"),
-		)
+		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining("base URL does not match"))
 		expect(handler.handleRequestyCallback).not.toHaveBeenCalled()
 		// State was validated and cleared
 		expect(handler.pendingOAuthState).toBeUndefined()

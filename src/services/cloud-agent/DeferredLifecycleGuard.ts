@@ -62,18 +62,14 @@ export class DeferredLifecycleGuard {
 		if (this.iteration >= this.config.maxIterations) {
 			this.aborted = true
 			this.phase = "aborted"
-			return this.makeAbortResult(
-				`Iteration limit reached: ${this.iteration} >= ${this.config.maxIterations}`,
-			)
+			return this.makeAbortResult(`Iteration limit reached: ${this.iteration} >= ${this.config.maxIterations}`)
 		}
 
 		const elapsed = this.getElapsedMs()
 		if (elapsed > this.config.maxDurationMs) {
 			this.aborted = true
 			this.phase = "aborted"
-			return this.makeAbortResult(
-				`Wall-clock limit reached: ${elapsed}ms > ${this.config.maxDurationMs}ms`,
-			)
+			return this.makeAbortResult(`Wall-clock limit reached: ${elapsed}ms > ${this.config.maxDurationMs}ms`)
 		}
 
 		this.phase = "pending"
@@ -153,7 +149,7 @@ export class DeferredLifecycleGuard {
 
 	transitionToDone(): void {
 		if (this.phase === "aborted") {
-			return  // Preserve aborted state, do not overwrite with done
+			return // Preserve aborted state, do not overwrite with done
 		}
 		this.phase = "done"
 	}
@@ -167,18 +163,14 @@ export class DeferredLifecycleGuard {
 		if (this.iteration > this.config.maxIterations) {
 			this.aborted = true
 			this.phase = "aborted"
-			return this.makeAbortResult(
-				`Iteration limit reached: ${this.iteration} > ${this.config.maxIterations}`,
-			)
+			return this.makeAbortResult(`Iteration limit reached: ${this.iteration} > ${this.config.maxIterations}`)
 		}
 
 		const elapsed = this.getElapsedMs()
 		if (elapsed > this.config.maxDurationMs) {
 			this.aborted = true
 			this.phase = "aborted"
-			return this.makeAbortResult(
-				`Wall-clock limit reached: ${elapsed}ms > ${this.config.maxDurationMs}ms`,
-			)
+			return this.makeAbortResult(`Wall-clock limit reached: ${elapsed}ms > ${this.config.maxDurationMs}ms`)
 		}
 
 		return this.makeContinueResult()

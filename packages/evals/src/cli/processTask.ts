@@ -109,13 +109,20 @@ export const processTaskInContainer = async ({
 
 	const baseArgs = [
 		"--rm",
-		"--network", "evals_default",
-		"-v", "/tmp/evals:/var/log/evals",
-		"--env-file", envFilePath,
-		"--memory", "512m",
-		"--memory-swap", "1g",
-		"--pids-limit", "200",
-		"--cpus", "1"
+		"--network",
+		"evals_default",
+		"-v",
+		"/tmp/evals:/var/log/evals",
+		"--env-file",
+		envFilePath,
+		"--memory",
+		"512m",
+		"--memory-swap",
+		"1g",
+		"--pids-limit",
+		"200",
+		"--cpus",
+		"1",
 	]
 
 	const shellCommand = `pnpm --filter @njust-ai/evals cli --taskId ${taskId}`
@@ -124,7 +131,18 @@ export const processTaskInContainer = async ({
 	try {
 		for (let attempt = 0; attempt <= maxRetries; attempt++) {
 			const containerName = `evals-task-${taskId}.${attempt}`
-			const args = ["run", "--name", containerName, "-e", `EVALS_ATTEMPT=${attempt}`, ...baseArgs, "evals-runner", "sh", "-c", shellCommand]
+			const args = [
+				"run",
+				"--name",
+				containerName,
+				"-e",
+				`EVALS_ATTEMPT=${attempt}`,
+				...baseArgs,
+				"evals-runner",
+				"sh",
+				"-c",
+				shellCommand,
+			]
 			const isRetry = attempt > 0
 
 			if (isRetry) {
@@ -149,7 +167,9 @@ export const processTaskInContainer = async ({
 						`container process failed with exit code: ${code} (attempt ${attempt + 1}/${maxRetries + 1})`,
 					)
 				} else {
-					logger.error(`container process failed with error: ${error} (attempt ${attempt + 1}/${maxRetries + 1})`)
+					logger.error(
+						`container process failed with error: ${error} (attempt ${attempt + 1}/${maxRetries + 1})`,
+					)
 				}
 
 				if (attempt === maxRetries) {
@@ -160,6 +180,10 @@ export const processTaskInContainer = async ({
 
 		logger.error(`all ${maxRetries + 1} attempts failed, giving up`)
 	} finally {
-		try { fs.unlinkSync(envFilePath) } catch { /* cleanup in finally, ignore errors */ }
+		try {
+			fs.unlinkSync(envFilePath)
+		} catch {
+			/* cleanup in finally, ignore errors */
+		}
 	}
 }

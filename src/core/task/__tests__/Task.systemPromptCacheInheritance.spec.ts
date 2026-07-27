@@ -7,6 +7,9 @@ describe("Task system prompt cache inheritance", () => {
 
 		expect(source).toContain("this.requestBuilder = new TaskRequestBuilder")
 		expect(source).toContain("this.requestBuilder.inheritCacheFromParent(parentTask)")
+		expect(source.indexOf("this.modeHandler = new TaskModeHandler(this)")).toBeLessThan(
+			source.indexOf("this.requestBuilder.inheritCacheFromParent(parentTask)"),
+		)
 		expect(source).toContain("private async getSystemPromptParts(): Promise<SystemPromptParts>")
 		expect(source).toContain("private async getSystemPrompt(): Promise<string>")
 	})

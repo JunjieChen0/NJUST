@@ -12,6 +12,14 @@ describe("AgentTool schema", () => {
 		expect(result.success).toBe(true)
 	})
 
+	it.each(["CangjieExplore", "CangjieImplement", "CangjieVerify", "CangjieRepair"])(
+		"accepts the %s built-in agent",
+		(agentType) => {
+			const result = agentTool.inputSchema.safeParse({ task: "Handle a Cangjie task", agentType })
+			expect(result.success).toBe(true)
+		},
+	)
+
 	it("fails when required fields are missing", () => {
 		const result = agentTool.inputSchema.safeParse({})
 		expect(result.success).toBe(false)

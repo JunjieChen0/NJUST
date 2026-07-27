@@ -656,6 +656,36 @@ export async function buildCompactProjectOverviewSection(
 	return lines.join("\n")
 }
 
+export async function buildProjectPackageValidationSection(cwd: string, info: CjpmProjectInfo): Promise<string> {
+	const roots = info.isWorkspace
+		? (info.members ?? []).slice(0, MAX_WORKSPACE_MEMBERS).map((member) => ({
+				label: member.name,
+				cwd: path.join(cwd, member.path),
+				srcDir: "src",
+				rootPackageName: member.name,
+			}))
+		: [
+				{
+					label: info.name,
+					cwd,
+					srcDir: info.srcDir,
+					rootPackageName: info.name,
+				},
+			]
+	const issues: string[] = []
+
+	for (const root of roots) {
+		const packageTree = await getCachedPackageHierarchy(root.cwd, root.srcDir, root.rootPackageName)
+		if (!packageTree) continue
+		const mismatch = await verifyPackageDeclarations(packageTree, root.cwd, root.srcDir)
+		if (mismatch) issues.push(info.isWorkspace ? `### ${root.label}\n${mismatch}` : mismatch)
+	}
+
+	return issues.length > 0
+		? `Package declaration validation: issues found\n${issues.join("\n\n")}`
+		: "Package declaration validation: OK"
+}
+
 const CJPM_TREE_CACHE_TTL_MS = 60_000
 let cachedCjpmTree: {
 	result: string | null

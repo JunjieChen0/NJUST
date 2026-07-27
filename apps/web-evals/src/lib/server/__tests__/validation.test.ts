@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest"
-import {
-	validateRunId,
-	validateDescription,
-	MAX_DESCRIPTION_LENGTH,
-	MAX_RUN_ID,
-} from "../validation"
+import { validateRunId, validateDescription, MAX_DESCRIPTION_LENGTH, MAX_RUN_ID } from "../validation"
 
 describe("validateRunId", () => {
 	it("accepts valid positive integers", () => {

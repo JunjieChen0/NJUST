@@ -24,6 +24,7 @@ describe("validateToolParams", () => {
 		["ask_followup_question", { question: "Continue?" }],
 		["attempt_completion", { result: "done" }],
 		["generate_image", { path: "output.png", prompt: "a sunset" }],
+		["agent", { task: "Inspect the Cangjie project", agentType: "CangjieExplore", maxTurns: 5 }],
 	] as const)("accepts valid %s params", (toolName, params) => {
 		expect(validateToolParams(toolName, params)).toEqual({ valid: true })
 	})
@@ -50,6 +51,8 @@ describe("validateToolParams", () => {
 		["attempt_completion", { result: "" }, "result: result must not be empty"],
 		["generate_image", { prompt: "test" }, "path"],
 		["generate_image", { path: "", prompt: "test" }, "path must not be empty"],
+		["agent", { task: "" }, "task: task must not be empty"],
+		["agent", { task: "Inspect", agentType: "unknown" }, "agentType"],
 	] as const)("rejects invalid %s params", (toolName, params, errorPart) => {
 		const result = validateToolParams(toolName, params)
 

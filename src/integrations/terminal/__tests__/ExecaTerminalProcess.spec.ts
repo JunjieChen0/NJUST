@@ -202,6 +202,12 @@ describe("ExecaTerminalProcess", () => {
 			expect(mockTerminal.setActiveStream).toHaveBeenCalledWith(expect.any(Object), mockPid)
 			expect(mockTerminal.setActiveStream).toHaveBeenLastCalledWith(undefined)
 		})
+
+		it("should normalize trailing stderr redirect because execa already captures all output", async () => {
+			await terminalProcess.run("cjpm build 2>&1")
+
+			expect(terminalProcess.command).toBe("cjpm build")
+		})
 	})
 
 	describe("trimRetrievedOutput", () => {

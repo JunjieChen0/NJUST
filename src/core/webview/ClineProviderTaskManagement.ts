@@ -145,7 +145,9 @@ export class ClineProviderTaskManagement {
 		})
 
 		await this.host.stack.push(task)
-		task.start()
+		if (options.startTask !== false) {
+			task.start()
+		}
 
 		this.host.log(
 			`[createTask] ${task.parentTask ? "child" : "parent"} task ${task.taskId}.${task.instanceId} instantiated`,

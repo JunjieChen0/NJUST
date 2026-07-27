@@ -9,6 +9,8 @@ that a type might have a value or might not have a value, you can choose to use 
 
 If an `Option` value is already known to be `Some(v)` for some `v`, use function `getOrThrow`
 to extract `v`. If the option value is `None` instead, an exception is thrown.
+Do not pass a default value to `getOrThrow`; use `getOrDefault({ => defaultValue })` or `??`
+when a default value is required.
 
 For example:
 
@@ -17,7 +19,7 @@ let a: Option<Int64> = Some(3)
 println(a.getOrThrow())  // 3
 ```
 
-### Use `getOrDefaule` to extract `Some` value with default case
+### Use `getOrDefault` to extract `Some` value with default case
 
 To extract an `Option` value when it is of the form `Some(v)`, and returning a default
 value if it is `None`, use the `getOrDefault` function. For example:

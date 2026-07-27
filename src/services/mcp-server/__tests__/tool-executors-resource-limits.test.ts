@@ -101,9 +101,9 @@ describe("execWriteFile with resource limits", () => {
 		const limits = new ResourceLimitsService({ maxReadBytes: 999999, maxWriteBytes: 15, maxOpenFileHandles: 5 })
 		await execWriteFile(tmpDir, { path: "f1.txt", content: "hello" }, undefined, limits)
 		await execWriteFile(tmpDir, { path: "f2.txt", content: "world" }, undefined, limits)
-		await expect(
-			execWriteFile(tmpDir, { path: "f3.txt", content: "toolong" }, undefined, limits),
-		).rejects.toThrow("write budget insufficient")
+		await expect(execWriteFile(tmpDir, { path: "f3.txt", content: "toolong" }, undefined, limits)).rejects.toThrow(
+			"write budget insufficient",
+		)
 	})
 
 	it("works without resource limits (backward compatible)", async () => {
@@ -148,10 +148,10 @@ describe("execApplyDiff with resource limits", () => {
 		const filePath = path.join(tmpDir, "test.txt")
 		await fs.writeFile(filePath, "line1\nline2\nline3\n", "utf-8")
 
-		const result = await execApplyDiff(
-			tmpDir,
-			{ path: "test.txt", diff: "<<<<<<< SEARCH\nline2\n=======\nreplaced\n>>>>>>> REPLACE" },
-		)
+		const result = await execApplyDiff(tmpDir, {
+			path: "test.txt",
+			diff: "<<<<<<< SEARCH\nline2\n=======\nreplaced\n>>>>>>> REPLACE",
+		})
 		expect(result).toContain("Successfully applied diff")
 	})
 })

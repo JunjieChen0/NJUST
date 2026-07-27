@@ -292,8 +292,21 @@ const toolSchemas = {
 	}),
 
 	agent: z.object({
-		name: z.string().min(1, "name must not be empty"),
-		message: z.string().min(1, "message must not be empty"),
+		task: z.string().min(1, "task must not be empty"),
+		agentType: z
+			.enum([
+				"explore",
+				"implement",
+				"verify",
+				"CangjieExplore",
+				"CangjieImplement",
+				"CangjieVerify",
+				"CangjieRepair",
+				"custom",
+			])
+			.nullable()
+			.optional(),
+		maxTurns: optionalPositiveIntCoerced.nullable().optional(),
 	}),
 
 	access_mcp_resource: z.object({

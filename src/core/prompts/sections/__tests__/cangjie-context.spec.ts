@@ -79,6 +79,11 @@ vi.mock("../CangjieErrorAnalyzer", async (importOriginal) => {
 })
 
 vi.mock("../CangjieSymbolExtractor", () => ({
+	collectActiveCangjieEditorSnapshot: () => ({
+		imports: [] as string[],
+		symbols: null,
+		activePreparse: undefined,
+	}),
 	getActiveCangjieFileInfo: () => cangjieTestState.activeInfo,
 }))
 
@@ -97,9 +102,10 @@ import * as path from "path"
 import * as os from "os"
 import * as vscode from "vscode"
 
-import { estimateCangjieContextTokensForTest, extractImports } from "../cangjie-context"
+import { estimateCangjieContextTokensForTest, extractImports, getCangjieContextSection } from "../cangjie-context"
 import {
 	buildAutoCorpusQueries,
+	buildCorpusExtraFewShotSection,
 	buildStdlibSignatureHintsSection,
 	diagnosticToCorpusQuery,
 	importPathToCorpusQuery,
@@ -209,6 +215,164 @@ import std.console.*
 	})
 })
 
+describe("getCangjieContextSection mode rules", () => {
+	it("instructs Cangjie mode not to switch to Code mode for shell integration fallback", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "njust-ai-cangjie-context-"))
+		try {
+			fs.writeFileSync(
+				path.join(root, "cjpm.toml"),
+				`
+[package]
+name = "demo"
+version = "0.1.0"
+output-type = "executable"
+`,
+				"utf-8",
+			)
+
+			const section = await getCangjieContextSection(root, "cangjie", undefined, 1200)
+
+			expect(section).toContain("Cangjie Mode Toolchain Rules")
+			expect(section).toContain("Cangjie Context Injection Audit")
+			expect(section).toContain("toolchain-rules")
+			expect(section).toContain("project-overview")
+			expect(section).toContain("Use this audit when evaluating which context sources influenced")
+			expect(section).toContain("If the user asks only which Cangjie context was injected")
+			expect(section).toContain("answer only with this context audit/list and stop")
+			expect(section).toContain("do not add project status")
+			expect(section).toContain("directory trees")
+			expect(section).toContain("source-file lists")
+			expect(section).toContain("current-symbol summaries")
+			expect(section).toContain("project diagnostics")
+			expect(section).toContain("stdlib-signature-hints")
+			expect(section).toContain("must not be used by itself to claim stdlib API correctness")
+			expect(section).toContain(
+				"CangjieExplore -> CangjieImplement -> CangjieVerify -> CangjieRepair -> CangjieVerify",
+			)
+			expect(section).toContain("Use CangjieExplore for project/corpus evidence")
+			expect(section).toContain("asks only for corpus evidence")
+			expect(section).toContain("stop after the evidence/plan report")
+			expect(section).toContain("Do not ask follow-up questions about implementation details")
+			expect(section).toContain("Evidence collected; no files were modified")
+			expect(section).toContain("Do not print the full final evidence report as an ordinary assistant message")
+			expect(section).toContain("attempt_completion.result")
+			expect(section).toContain("attempt_completion")
+			expect(section).toContain("do not resubmit the same long report")
+			expect(section).toContain("use the exact heading `Cangjie evidence audit:`")
+			expect(section).toContain("do not infer undocumented type relationships")
+			expect(section).toContain("Byte/UInt8 compatibility")
+			expect(section).toContain("libs/std/fs/fs_samples/file_samples.md")
+			expect(section).toContain("official sample pattern outweighs isolated signature comparison")
+			expect(section).toContain("如需开始编写代码")
+			expect(section).toContain("explicitly forbids corpus search")
+			expect(section).toContain("do not perform those actions to satisfy Cangjie evidence gates")
+			expect(section).toContain("blocked/inconclusive under the user's constraints")
+			expect(section).toContain("不要查语料库")
+			expect(section).toContain("不要查 LSP")
+			expect(section).toContain("API correctness cannot be confirmed under the user's constraints")
+			expect(section).toContain("Do not skip CangjieVerify")
+			expect(section).toContain("compare the newest build diagnostics")
+			expect(section).toContain("If diagnostics stagnate")
+			expect(section).toContain("stop blind edits")
+			expect(section).toContain("fresh corpus/LSP evidence")
+			expect(section).toContain("Do not switch to Code mode")
+			expect(section).toContain("create a Code subtask")
+			expect(section).toContain("cjpm build")
+			expect(section).toContain("cjlint")
+			expect(section).toContain("Invoke Cangjie toolchain commands directly")
+			expect(section).toContain("Do not wrap them in shell directory switches")
+			expect(section).toContain("cd /d ... && cjpm build")
+			expect(section).toContain("project-cwd resolver")
+			expect(section).toContain("read_command_output")
+			expect(section).toContain("cmd.exe prefer `where.exe cjpm`")
+			expect(section).toContain("PowerShell use `Get-Command cjpm`")
+			expect(section).toContain("Do not replace toolchain verification with speculative static analysis")
+			expect(section).toContain("report verification as inconclusive")
+			expect(section).toContain("do not retry through PowerShell/cmd wrappers")
+			expect(section).toContain("do not ask the user to paste terminal output")
+			expect(section).toContain("do not tell the user to manually run the same verification command")
+			expect(section).toContain("Explicit command allowlists override normal project-confirmation")
+			expect(section).toContain("do not read `cjpm.toml`")
+			expect(section).toContain("do not even announce or plan extra probes")
+			expect(section).toContain("checking whether `cjpm.toml` exists")
+			expect(section).toContain("explicitly limits verification to specific commands")
+			expect(section).toContain("Do not add fallback commands")
+			expect(section).toContain("Keep an execution ledger")
+			expect(section).toContain("Only report a command as attempted if you actually invoked that exact command")
+			expect(section).toContain("run each allowed command at most once")
+			expect(section).toContain("timeout, shell integration warning, or unavailable execute_command result")
+			expect(section).toContain("do not run `where cjpm`, `Get-Command cjpm`, or `powershell -Command ...`")
+			expect(section).toContain("do not run `cjpm build`, `cd /d ... && cjpm build`, or any PowerShell wrapper")
+			expect(section).toContain("terminal shell integration warning")
+			expect(section).toContain("do not rewrite or retry the command")
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true })
+		}
+	})
+
+	it("injects a task-specific agent route without reusing a stale route", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "njust-ai-cangjie-route-"))
+		try {
+			fs.writeFileSync(
+				path.join(root, "cjpm.toml"),
+				`[package]\nname = "demo"\nversion = "0.1.0"\noutput-type = "executable"\n`,
+				"utf-8",
+			)
+
+			const exploreSection = await getCangjieContextSection(
+				root,
+				"cangjie",
+				undefined,
+				2000,
+				undefined,
+				"调查 HashMap 证据，不修改文件",
+			)
+			const verifySection = await getCangjieContextSection(
+				root,
+				"cangjie",
+				undefined,
+				2000,
+				undefined,
+				"只运行 cjpm build 验证项目",
+			)
+
+			expect(exploreSection).toContain("## Cangjie Agent Route")
+			expect(exploreSection).toContain("Required stages: CangjieExplore")
+			expect(verifySection).toContain("Required stages: CangjieVerify")
+			expect(verifySection).not.toContain("Required stages: CangjieExplore\n")
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true })
+		}
+	})
+})
+
+describe("Cangjie agent route retention", () => {
+	it("keeps the verify route at the minimum context budget", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "njust-ai-cangjie-tight-route-"))
+		try {
+			fs.writeFileSync(
+				path.join(root, "cjpm.toml"),
+				`[package]\nname = "demo"\nversion = "0.1.0"\noutput-type = "executable"\n`,
+				"utf-8",
+			)
+
+			const section = await getCangjieContextSection(
+				root,
+				"cangjie",
+				undefined,
+				500,
+				undefined,
+				"\u53ea\u8fd0\u884c cjpm build \u9a8c\u8bc1\u9879\u76ee",
+			)
+
+			expect(section).toContain("Required stages: CangjieVerify")
+			expect(section).toContain("agent-route")
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true })
+		}
+	})
+})
+
 describe("corpus query building", () => {
 	it("converts import paths into compact search terms", () => {
 		expect(importPathToCorpusQuery("std.collection.HashMap")).toBe("collection HashMap")
@@ -261,10 +425,175 @@ describe("corpus query building", () => {
 
 		expect(section).toBeTruthy()
 		expect(section).toContain("std.collection")
+		expect(section).toContain("func add(T): Unit")
+		expect(section).toContain("func add(T, at!: Int64): Unit")
+		expect(section).toContain("do not borrow append/insert")
+		expect(section).not.toContain("func append(T): Unit")
+		expect(section).toContain("func add(K, V): Option<V>")
+		expect(section).toContain("func contains(K): Bool")
+		expect(section).toContain("operator [](K, value!: V): Unit")
+		expect(section).toContain("prefer get(...) plus add(...)")
+		expect(section).toContain("must not evaluate let/var mutability semantics")
+		expect(section).toContain("no let/var semantic conclusion is made here")
+		expect(section).not.toContain("not mut func add")
+		expect(section).not.toContain("let is valid/recommended")
+		expect(section).toContain("HashMap 样例使用 var 或 HashMap 是引用类型")
+		expect(section).toContain("add 必须 var")
+		expect(section).toContain("let 可以调用 add")
+		expect(section).toContain("let 更推荐")
+	})
+
+	it("uses corpus-confirmed signatures for fs regex time and process", async () => {
+		const section = await buildStdlibSignatureHintsSection(
+			["std.fs.File", "std.regex.Regex", "std.time.DateTime", "std.process"],
+			null,
+		)
+
+		expect(section).toContain("File.readFrom")
+		expect(section).toContain("Array<Byte>")
+		expect(section).toContain("MatchData")
+		expect(section).toContain("matchString()")
+		expect(section).toContain("Do not invent a default MatchData constructor")
+		expect(section).toContain("DateTime.nowUTC")
+		expect(section).toContain("TimeZone.load")
+		expect(section).toContain("executeWithOutput")
+		expect(section).toContain("String.fromUtf8")
+	})
+
+	it("includes Option signatures for std.core imports", async () => {
+		const section = await buildStdlibSignatureHintsSection(["std.core.Option"], null)
+
+		expect(section).toContain("std.core")
+		expect(section).toContain("enum Option<T>")
+		expect(section).toContain("?T is equivalent to Option<T>")
+		expect(section).toContain("getOrDefault")
+		expect(section).toContain("getOrThrow")
+		expect(section).toContain("isSome")
+		expect(section).toContain("isNone")
 	})
 
 	it("omits stdlib signature hints when no std imports match", async () => {
 		await expect(buildStdlibSignatureHintsSection(["local.Project"], null)).resolves.toBeNull()
+	})
+
+	it("uses the last user hint to inject common API extra cards before imports exist", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "njust-ai-corpus-extra-"))
+		try {
+			fs.mkdirSync(path.join(root, "extra"), { recursive: true })
+			fs.writeFileSync(
+				path.join(root, "extra", "HashMap.md"),
+				"# HashMap\n\nimport std.collection.*\nvar map: HashMap<String, Int64> = HashMap<String, Int64>()",
+				"utf-8",
+			)
+
+			const section = await buildCorpusExtraFewShotSection(root, [], [], "add a HashMap helper")
+
+			expect(section).toContain("extra/HashMap.md")
+			expect(section).toContain("HashMap<String, Int64>")
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true })
+		}
+	})
+
+	it("uses the last user hint to point file and regex tasks at corpus docs", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "njust-ai-corpus-refs-"))
+		try {
+			fs.mkdirSync(path.join(root, "libs", "std", "fs", "fs_samples"), { recursive: true })
+			fs.mkdirSync(path.join(root, "libs", "std", "regex", "regex_samples"), { recursive: true })
+			fs.writeFileSync(path.join(root, "libs", "std", "fs", "fs_samples", "file_samples.md"), "# file", "utf-8")
+			fs.writeFileSync(
+				path.join(root, "libs", "std", "regex", "regex_samples", "regex_sample.md"),
+				"# regex",
+				"utf-8",
+			)
+
+			const section = await buildCorpusExtraFewShotSection(root, [], [], "read file and regex match")
+
+			expect(section).toContain("libs/std/fs/fs_samples/file_samples.md")
+			expect(section).toContain("libs/std/regex/regex_samples/regex_sample.md")
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true })
+		}
+	})
+
+	it("uses dedicated File and Regex extra cards when those cards are bundled", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "njust-ai-corpus-api-cards-"))
+		try {
+			fs.mkdirSync(path.join(root, "extra"), { recursive: true })
+			fs.writeFileSync(
+				path.join(root, "extra", "File.md"),
+				"# File\n\nFile.readFrom returns Array<Byte>.",
+				"utf-8",
+			)
+			fs.writeFileSync(
+				path.join(root, "extra", "Regex.md"),
+				"# Regex\n\nRegex(...).matches(input)\nfind(input: String, group!: Bool = false): Option<MatchData>",
+				"utf-8",
+			)
+
+			const section = await buildCorpusExtraFewShotSection(root, [], [], "read file and regex match")
+
+			expect(section).toContain("extra/File.md")
+			expect(section).toContain("File.readFrom returns Array<Byte>")
+			expect(section).toContain("extra/Regex.md")
+			expect(section).toContain("Regex(...).matches(input)")
+			expect(section).toContain("find(input: String")
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true })
+		}
+	})
+
+	it("uses dedicated Time and Process extra cards when those cards are bundled", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "njust-ai-corpus-more-api-cards-"))
+		try {
+			fs.mkdirSync(path.join(root, "extra"), { recursive: true })
+			fs.writeFileSync(path.join(root, "extra", "Time.md"), "# Time\n\nDateTime.nowUTC()", "utf-8")
+			fs.writeFileSync(
+				path.join(root, "extra", "Process.md"),
+				"# Process\n\nexecuteWithOutput returns bytes.",
+				"utf-8",
+			)
+
+			const section = await buildCorpusExtraFewShotSection(
+				root,
+				[],
+				[],
+				"format DateTime and run process with executeWithOutput",
+			)
+
+			expect(section).toContain("extra/Time.md")
+			expect(section).toContain("DateTime.nowUTC()")
+			expect(section).toContain("extra/Process.md")
+			expect(section).toContain("executeWithOutput returns bytes")
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true })
+		}
+	})
+
+	it("points Option tasks at the extra card and core enum docs", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "njust-ai-corpus-option-card-"))
+		try {
+			fs.mkdirSync(path.join(root, "extra"), { recursive: true })
+			fs.mkdirSync(path.join(root, "libs", "std", "core", "core_package_api"), { recursive: true })
+			fs.writeFileSync(
+				path.join(root, "extra", "Option.md"),
+				"# Option\n\nUse Some/None and getOrDefault.",
+				"utf-8",
+			)
+			fs.writeFileSync(
+				path.join(root, "libs", "std", "core", "core_package_api", "core_package_enums.md"),
+				"# enum Option<T>\n\npublic enum Option<T> { Some(T) | None }",
+				"utf-8",
+			)
+
+			const section = await buildCorpusExtraFewShotSection(root, [], [], "handle None with getOrDefault")
+
+			expect(section).toContain("extra/Option.md")
+			expect(section).toContain("Use Some/None and getOrDefault")
+			expect(section).toContain("libs/std/core/core_package_api/core_package_enums.md")
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true })
+		}
 	})
 })
 
@@ -531,5 +860,38 @@ tagged = { git = "https://example.test/repo.git", tag = "v1" }
 		expect(section).toContain("executable")
 		expect(section).toContain("src/")
 		expect(section).toContain("demo.sub")
+	})
+
+	it("marks the active workspace member in the compact project overview", async () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "njust-ai-cjpm-workspace-overview-"))
+		const alphaSrc = path.join(root, "alpha", "src")
+		const betaSrc = path.join(root, "beta", "src")
+		fs.mkdirSync(alphaSrc, { recursive: true })
+		fs.mkdirSync(betaSrc, { recursive: true })
+		fs.writeFileSync(path.join(alphaSrc, "main.cj"), "package alpha", "utf-8")
+		fs.writeFileSync(path.join(betaSrc, "main.cj"), "package beta", "utf-8")
+
+		const section = await buildCompactProjectOverviewSection(
+			root,
+			{
+				name: "",
+				version: "",
+				outputType: "",
+				isWorkspace: true,
+				srcDir: "src",
+				members: [
+					{ name: "alpha", path: "alpha", outputType: "executable" },
+					{ name: "beta", path: "beta", outputType: "dynamic" },
+				],
+			},
+			"beta",
+			path.join(betaSrc, "main.cj"),
+		)
+
+		expect(section).toContain("项目: workspace (2 个模块)")
+		expect(section).toContain("- alpha (executable): 1 源/0 测")
+		expect(section).toContain("- beta (dynamic): 1 源/0 测 ← 当前编辑模块")
+		expect(section).toContain("当前编辑包: beta")
+		expect(section).not.toContain("alpha (executable): 1 源/0 测 ← 当前编辑模块")
 	})
 })

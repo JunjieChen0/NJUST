@@ -20,7 +20,6 @@ import { getToolResultBudget, truncateToolResult, estimateTokens } from "../tool
 import type { ModeConfig } from "@njust-ai/types"
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
 import { markUserContentReadyIfDrained } from "./streamState"
-import type { TypedBlock } from "./types"
 
 export function applyToolResultTokenBudget(cline: Task, text: string): string {
 	const contextWindow = cline.api.getModel().info?.contextWindow ?? 200_000
@@ -136,6 +135,15 @@ export async function validateToolUseBlock(
 				.map((tool) => resolveToolAlias(tool))
 		: undefined
 	try {
+		const merged = mergeToolParamsForValidation(block)
+		const agentStageError = cline.cangjieRuntimePolicy?.validateAgentStageToolUse?.(
+			block.name,
+			merged,
+			Boolean(cline.parentTaskId || cline.allowedTools || allowedTools),
+		)
+		if (agentStageError) {
+			throw new Error(agentStageError)
+		}
 		const toolRequirements =
 			disabledTools?.reduce(
 				(acc: Record<string, boolean>, tool: string) => {
@@ -151,13 +159,12 @@ export async function validateToolUseBlock(
 			mode ?? defaultModeSlug,
 			customModes ?? [],
 			toolRequirements,
-			mergeToolParamsForValidation(block),
+			merged,
 			stateExperiments as Record<string, boolean> | undefined,
 			includedTools,
 			allowedTools,
 		)
 		if (!block.partial) {
-			const merged = mergeToolParamsForValidation(block)
 			const paramCheck = validateToolParams(block.name, merged)
 			if (!paramCheck.valid) {
 				throw new Error(paramCheck.error!)
@@ -165,6 +172,11 @@ export async function validateToolUseBlock(
 		}
 	} catch (error) {
 		cline.consecutiveMistakeCount++
+		try {
+			cline.recordToolError(block.name as ToolName, getErrorMessage(error))
+		} catch (recordError) {
+			logger.debug("ToolUse", "recordToolError failed", recordError)
+		}
 		const errorContent = formatResponse.toolError(getErrorMessage(error))
 		cline.pushToolResultToUserContent({
 			type: "tool_result",
@@ -217,10 +229,10 @@ export async function tryEagerBatch(cline: Task): Promise<boolean> {
 			const start = cline.currentStreamingContentIndex
 			const run: ToolUse[] = []
 			for (let i = start; i < cline.assistantMessageContent.length; i++) {
-				const b = cline.assistantMessageContent[i] as unknown as TypedBlock
+				const b = cline.assistantMessageContent[i]
 				if (!b || b.type !== "tool_use") break
 				if (!b.id) break
-				const tb = b as unknown as ToolUse
+				const tb = b
 				if (!isConcurrencySafeToolUseBlock(tb)) break
 				if (streamingToolExecutor.shouldEagerExecute(cline, tb) !== "eager") break
 				run.push(tb)

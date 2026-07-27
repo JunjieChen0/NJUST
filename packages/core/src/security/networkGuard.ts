@@ -150,9 +150,7 @@ function collectHeaderEntries(headers: Headers): [string, string][] {
 	return entries
 }
 
-export function assertHeadersSafe(
-	headers: Headers | Record<string, string> | [string, string][] | undefined,
-): void {
+export function assertHeadersSafe(headers: Headers | Record<string, string> | [string, string][] | undefined): void {
 	if (!headers) return
 	const CRLF_RE = /[\r\n\0]/
 	let entries: [string, string][]

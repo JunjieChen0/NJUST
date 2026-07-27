@@ -6,12 +6,7 @@
  * access, Docker socket nested mounts, and arbitrary bind mounts.
  */
 
-import type {
-	PolicyConfig,
-	PolicyDecision,
-	DockerCreateContainerRequest,
-	DockerKillContainerRequest,
-} from "./types"
+import type { PolicyConfig, PolicyDecision, DockerCreateContainerRequest, DockerKillContainerRequest } from "./types"
 
 /** Default policy configuration for evals environment */
 export const DEFAULT_POLICY: PolicyConfig = {
@@ -125,115 +120,115 @@ export function validateCreateContainer(
 	}
 	const hc = req.HostConfig
 
-		// Reject privileged mode
-		if (hc.Privileged === true) {
-			return { allowed: false, reason: "Privileged containers are not allowed" }
-		}
+	// Reject privileged mode
+	if (hc.Privileged === true) {
+		return { allowed: false, reason: "Privileged containers are not allowed" }
+	}
 
-		// Reject host PID namespace
-		if (hc.PidMode && hc.PidMode !== "" && hc.PidMode !== "none") {
-			return { allowed: false, reason: `Host PID namespace is not allowed: ${hc.PidMode}` }
-		}
+	// Reject host PID namespace
+	if (hc.PidMode && hc.PidMode !== "" && hc.PidMode !== "none") {
+		return { allowed: false, reason: `Host PID namespace is not allowed: ${hc.PidMode}` }
+	}
 
-		// Reject host IPC namespace
-		if (hc.IpcMode && hc.IpcMode !== "" && hc.IpcMode !== "none" && hc.IpcMode !== "private") {
-			return { allowed: false, reason: `Host IPC namespace is not allowed: ${hc.IpcMode}` }
-		}
+	// Reject host IPC namespace
+	if (hc.IpcMode && hc.IpcMode !== "" && hc.IpcMode !== "none" && hc.IpcMode !== "private") {
+		return { allowed: false, reason: `Host IPC namespace is not allowed: ${hc.IpcMode}` }
+	}
 
-		// Reject host user namespace mode ("host" disables userns isolation)
-		if (hc.UsernsMode === "host") {
-			return { allowed: false, reason: `Host user namespace mode is not allowed: ${hc.UsernsMode}` }
-		}
+	// Reject host user namespace mode ("host" disables userns isolation)
+	if (hc.UsernsMode === "host") {
+		return { allowed: false, reason: `Host user namespace mode is not allowed: ${hc.UsernsMode}` }
+	}
 
-		// Reject ALL capabilities (evals containers don't need extra caps)
-		if (hc.CapAdd && hc.CapAdd.length > 0) {
-			return { allowed: false, reason: `Capabilities are not allowed: ${hc.CapAdd.join(", ")}` }
-		}
+	// Reject ALL capabilities (evals containers don't need extra caps)
+	if (hc.CapAdd && hc.CapAdd.length > 0) {
+		return { allowed: false, reason: `Capabilities are not allowed: ${hc.CapAdd.join(", ")}` }
+	}
 
-		// Reject ALL SecurityOpt (evals containers don't need custom security options)
-		if (hc.SecurityOpt && hc.SecurityOpt.length > 0) {
-			return { allowed: false, reason: `SecurityOpt is not allowed: ${hc.SecurityOpt.join(", ")}` }
-		}
+	// Reject ALL SecurityOpt (evals containers don't need custom security options)
+	if (hc.SecurityOpt && hc.SecurityOpt.length > 0) {
+		return { allowed: false, reason: `SecurityOpt is not allowed: ${hc.SecurityOpt.join(", ")}` }
+	}
 
-		// Check volume binds (legacy format)
-		if (hc.Binds) {
-			for (const bind of hc.Binds) {
-				if (!isBindAllowed(bind, policy.allowedVolumeSources)) {
-					return { allowed: false, reason: `Volume bind is not allowed: ${bind}` }
+	// Check volume binds (legacy format)
+	if (hc.Binds) {
+		for (const bind of hc.Binds) {
+			if (!isBindAllowed(bind, policy.allowedVolumeSources)) {
+				return { allowed: false, reason: `Volume bind is not allowed: ${bind}` }
+			}
+		}
+	}
+
+	// Check structured mounts (can bypass Binds validation)
+	if (hc.Mounts) {
+		for (const mount of hc.Mounts) {
+			if (mount.Type === "bind") {
+				const source = mount.Source ?? ""
+				if (!source) {
+					return { allowed: false, reason: "Bind mount requires a source path" }
 				}
-			}
-		}
-
-		// Check structured mounts (can bypass Binds validation)
-		if (hc.Mounts) {
-			for (const mount of hc.Mounts) {
-				if (mount.Type === "bind") {
-					const source = mount.Source ?? ""
-					if (!source) {
-						return { allowed: false, reason: "Bind mount requires a source path" }
-					}
-					// Reuse the same bind validation logic
-					if (!isBindAllowed(`${source}:${mount.Target}`, policy.allowedVolumeSources)) {
-						return { allowed: false, reason: `Mount bind source is not allowed: ${source}` }
-					}
-				} else if (mount.Type === "volume") {
-					// Named volumes are NOT allowed (could mount sensitive data)
-					return { allowed: false, reason: "Named volumes are not allowed (use bind mounts instead)" }
-				} else {
-					return { allowed: false, reason: `Mount type '${mount.Type}' is not allowed (only bind and volume)` }
+				// Reuse the same bind validation logic
+				if (!isBindAllowed(`${source}:${mount.Target}`, policy.allowedVolumeSources)) {
+					return { allowed: false, reason: `Mount bind source is not allowed: ${source}` }
 				}
+			} else if (mount.Type === "volume") {
+				// Named volumes are NOT allowed (could mount sensitive data)
+				return { allowed: false, reason: "Named volumes are not allowed (use bind mounts instead)" }
+			} else {
+				return { allowed: false, reason: `Mount type '${mount.Type}' is not allowed (only bind and volume)` }
 			}
 		}
+	}
 
-		// Enforce memory limit (Memory is required to prevent OOM on host)
-		if (policy.maxMemoryBytes > 0) {
-			if (hc.Memory === undefined || hc.Memory === 0) {
-				return { allowed: false, reason: "Memory limit is required (set HostConfig.Memory > 0)" }
-			}
-			if (hc.Memory > policy.maxMemoryBytes) {
-				return { allowed: false, reason: `Memory (${hc.Memory}) exceeds maximum ${policy.maxMemoryBytes}` }
-			}
+	// Enforce memory limit (Memory is required to prevent OOM on host)
+	if (policy.maxMemoryBytes > 0) {
+		if (hc.Memory === undefined || hc.Memory === 0) {
+			return { allowed: false, reason: "Memory limit is required (set HostConfig.Memory > 0)" }
 		}
+		if (hc.Memory > policy.maxMemoryBytes) {
+			return { allowed: false, reason: `Memory (${hc.Memory}) exceeds maximum ${policy.maxMemoryBytes}` }
+		}
+	}
 
-		// Check MemorySwap (must not be -1 for unlimited, must not exceed 2x Memory)
-		if (hc.MemorySwap !== undefined) {
-			if (hc.MemorySwap === -1) {
-				return { allowed: false, reason: "MemorySwap=-1 (unlimited swap) is not allowed" }
-			}
-			if (hc.Memory !== undefined && hc.MemorySwap > hc.Memory * 2) {
-				return { allowed: false, reason: `MemorySwap (${hc.MemorySwap}) exceeds 2x Memory (${hc.Memory})` }
-			}
+	// Check MemorySwap (must not be -1 for unlimited, must not exceed 2x Memory)
+	if (hc.MemorySwap !== undefined) {
+		if (hc.MemorySwap === -1) {
+			return { allowed: false, reason: "MemorySwap=-1 (unlimited swap) is not allowed" }
 		}
+		if (hc.Memory !== undefined && hc.MemorySwap > hc.Memory * 2) {
+			return { allowed: false, reason: `MemorySwap (${hc.MemorySwap}) exceeds 2x Memory (${hc.Memory})` }
+		}
+	}
 
-		// Require PidsLimit (prevent fork bombs, must be > 0 and <= 500)
-		// Docker API uses -1 for unlimited, so reject all <= 0
-		if (hc.PidsLimit === undefined || hc.PidsLimit <= 0) {
-			return { allowed: false, reason: "PidsLimit is required (set HostConfig.PidsLimit > 0)" }
-		}
-		if (hc.PidsLimit > 500) {
-			return { allowed: false, reason: `PidsLimit (${hc.PidsLimit}) exceeds maximum 500` }
-		}
+	// Require PidsLimit (prevent fork bombs, must be > 0 and <= 500)
+	// Docker API uses -1 for unlimited, so reject all <= 0
+	if (hc.PidsLimit === undefined || hc.PidsLimit <= 0) {
+		return { allowed: false, reason: "PidsLimit is required (set HostConfig.PidsLimit > 0)" }
+	}
+	if (hc.PidsLimit > 500) {
+		return { allowed: false, reason: `PidsLimit (${hc.PidsLimit}) exceeds maximum 500` }
+	}
 
-		// Require NanoCpus (prevent CPU starvation, must be > 0 and <= 1e9 = 1 CPU)
-		if (hc.NanoCpus === undefined || hc.NanoCpus <= 0) {
-			return { allowed: false, reason: "NanoCpus is required (set HostConfig.NanoCpus > 0, e.g. 1e9 for 1 CPU)" }
-		}
-		if (hc.NanoCpus > 1e9) {
-			return { allowed: false, reason: `NanoCpus (${hc.NanoCpus}) exceeds maximum 1e9 (1 CPU)` }
-		}
+	// Require NanoCpus (prevent CPU starvation, must be > 0 and <= 1e9 = 1 CPU)
+	if (hc.NanoCpus === undefined || hc.NanoCpus <= 0) {
+		return { allowed: false, reason: "NanoCpus is required (set HostConfig.NanoCpus > 0, e.g. 1e9 for 1 CPU)" }
+	}
+	if (hc.NanoCpus > 1e9) {
+		return { allowed: false, reason: `NanoCpus (${hc.NanoCpus}) exceeds maximum 1e9 (1 CPU)` }
+	}
 
-		// Require NetworkMode (must be present and in allowed list)
-		if (!hc.NetworkMode || !policy.allowedNetworks.includes(hc.NetworkMode)) {
-			return {
-				allowed: false,
-				reason: `NetworkMode is required and must be in the allowed list: ${policy.allowedNetworks.join(", ")}`,
-			}
+	// Require NetworkMode (must be present and in allowed list)
+	if (!hc.NetworkMode || !policy.allowedNetworks.includes(hc.NetworkMode)) {
+		return {
+			allowed: false,
+			reason: `NetworkMode is required and must be in the allowed list: ${policy.allowedNetworks.join(", ")}`,
 		}
+	}
 
-		// Reject device access
-		if (hc.Devices && hc.Devices.length > 0) {
-			return { allowed: false, reason: "Device access is not allowed" }
-		}
+	// Reject device access
+	if (hc.Devices && hc.Devices.length > 0) {
+		return { allowed: false, reason: "Device access is not allowed" }
+	}
 
 	// Check environment variables
 	if (req.Env) {

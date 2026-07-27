@@ -31,6 +31,8 @@ export interface SystemPromptSettings {
 	cangjieRecentBuildRootCauses?: string[]
 	/** Runtime repair directive from the latest failed Cangjie build. */
 	cangjieRepairDirective?: string
+	/** Ordered Cangjie sub-agent stages already delegated by this task. */
+	cangjieDelegatedAgentTypes?: string[]
 	/** Feature flag to enable turn-aware static prompt pruning. */
 	enableTurnAwarePromptPruning?: boolean
 	/** Cross-session memory from a previous session, injected into the system prompt. */

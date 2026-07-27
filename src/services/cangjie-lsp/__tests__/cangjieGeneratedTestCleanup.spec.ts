@@ -451,7 +451,14 @@ describe("cangjieGeneratedTestCleanup", () => {
 			await registerGeneratedCangjieTestFile(taskId, "/ws/test_test.cj", "/ws")
 			const records = getRecordsForTask(taskId)
 
-			mockLstat.mockResolvedValue({ isFile: () => true, isSymbolicLink: () => false, isFIFO: () => false, isSocket: () => false, isBlockDevice: () => false, isCharacterDevice: () => false } as any)
+			mockLstat.mockResolvedValue({
+				isFile: () => true,
+				isSymbolicLink: () => false,
+				isFIFO: () => false,
+				isSocket: () => false,
+				isBlockDevice: () => false,
+				isCharacterDevice: () => false,
+			} as any)
 			mockRealpath.mockImplementation((p: string) => Promise.resolve(p))
 			mockUnlink.mockResolvedValue(undefined)
 
@@ -468,7 +475,14 @@ describe("cangjieGeneratedTestCleanup", () => {
 			await registerGeneratedCangjieTestFile(taskId, "/ws/test_test.cj", "/ws")
 			const records = getRecordsForTask(taskId)
 
-			mockLstat.mockResolvedValue({ isFile: () => true, isSymbolicLink: () => false, isFIFO: () => false, isSocket: () => false, isBlockDevice: () => false, isCharacterDevice: () => false } as any)
+			mockLstat.mockResolvedValue({
+				isFile: () => true,
+				isSymbolicLink: () => false,
+				isFIFO: () => false,
+				isSocket: () => false,
+				isBlockDevice: () => false,
+				isCharacterDevice: () => false,
+			} as any)
 			mockRealpath.mockImplementation((p: string) => Promise.resolve(p))
 			mockReadFile.mockResolvedValue(Buffer.from("modified"))
 
@@ -565,7 +579,14 @@ describe("cangjieGeneratedTestCleanup", () => {
 			await registerGeneratedCangjieTestFile(taskId, "/ws/test_test.cj", "/ws")
 			const records = getRecordsForTask(taskId)
 
-			mockLstat.mockResolvedValue({ isFile: () => true, isSymbolicLink: () => false, isFIFO: () => false, isSocket: () => false, isBlockDevice: () => false, isCharacterDevice: () => false } as any)
+			mockLstat.mockResolvedValue({
+				isFile: () => true,
+				isSymbolicLink: () => false,
+				isFIFO: () => false,
+				isSocket: () => false,
+				isBlockDevice: () => false,
+				isCharacterDevice: () => false,
+			} as any)
 			mockRealpath.mockImplementation((p: string) => {
 				if (p === "/ws") return Promise.resolve("/ws")
 				return Promise.resolve("/etc/passwd")
@@ -609,7 +630,14 @@ describe("cangjieGeneratedTestCleanup", () => {
 			initTestCleanup(memento as any)
 			const records = getRecordsForTask("task1")
 
-			mockLstat.mockResolvedValue({ isFile: () => true, isSymbolicLink: () => false, isFIFO: () => false, isSocket: () => false, isBlockDevice: () => false, isCharacterDevice: () => false } as any)
+			mockLstat.mockResolvedValue({
+				isFile: () => true,
+				isSymbolicLink: () => false,
+				isFIFO: () => false,
+				isSocket: () => false,
+				isBlockDevice: () => false,
+				isCharacterDevice: () => false,
+			} as any)
 			mockRealpath.mockImplementation((p: string) => Promise.resolve(p))
 
 			const result = await deleteConfirmedCangjieTestFiles(records)
@@ -642,7 +670,14 @@ describe("cangjieGeneratedTestCleanup", () => {
 			await registerGeneratedCangjieTestFile(taskId, "/ws/test_test.cj", "/ws")
 			const records = getRecordsForTask(taskId)
 
-			mockLstat.mockResolvedValue({ isFile: () => true, isSymbolicLink: () => false, isFIFO: () => false, isSocket: () => false, isBlockDevice: () => false, isCharacterDevice: () => false } as any)
+			mockLstat.mockResolvedValue({
+				isFile: () => true,
+				isSymbolicLink: () => false,
+				isFIFO: () => false,
+				isSocket: () => false,
+				isBlockDevice: () => false,
+				isCharacterDevice: () => false,
+			} as any)
 			mockRealpath.mockImplementation((p: string) => Promise.resolve(p))
 			mockUnlink.mockResolvedValue(undefined)
 
@@ -676,7 +711,14 @@ describe("cangjieGeneratedTestCleanup", () => {
 			initTestCleanup(memento as any)
 			const records = getRecordsForTask("task1")
 
-			mockLstat.mockResolvedValue({ isFile: () => true, isSymbolicLink: () => false, isFIFO: () => false, isSocket: () => false, isBlockDevice: () => false, isCharacterDevice: () => false } as any)
+			mockLstat.mockResolvedValue({
+				isFile: () => true,
+				isSymbolicLink: () => false,
+				isFIFO: () => false,
+				isSocket: () => false,
+				isBlockDevice: () => false,
+				isCharacterDevice: () => false,
+			} as any)
 			mockRealpath.mockImplementation((p: string) => Promise.resolve(p))
 			mockReadFile.mockResolvedValue(Buffer.from("different content"))
 
@@ -848,7 +890,14 @@ describe("deleteConfirmedCangjieTestFiles — legacy with allowLegacy and worksp
 		})
 		initTestCleanup(memento as any)
 
-		mockLstat.mockResolvedValue({ isFile: () => true, isSymbolicLink: () => false, isFIFO: () => false, isSocket: () => false, isBlockDevice: () => false, isCharacterDevice: () => false })
+		mockLstat.mockResolvedValue({
+			isFile: () => true,
+			isSymbolicLink: () => false,
+			isFIFO: () => false,
+			isSocket: () => false,
+			isBlockDevice: () => false,
+			isCharacterDevice: () => false,
+		})
 		mockRealpath.mockResolvedValue("/workspace/src/foo_test.cj")
 		mockUnlink.mockResolvedValue(undefined)
 
