@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest"
 
 import type { ToolUsage } from "@njust-ai/types"
 import fs from "fs/promises"
+import path from "path"
 import * as vscode from "vscode"
 
 import { Task } from "../../task/Task"
@@ -83,6 +84,10 @@ vitest.mock("../../prompts/responses")
 // Import the module
 import * as executeCommandModule from "../ExecuteCommandTool"
 const { executeCommandTool, isSuccessfulCommandResult, validateCangjieImplementCommand } = executeCommandModule
+
+function asTestType<T>(value: unknown): T {
+	return value as T
+}
 
 describe("validateCangjieImplementCommand", () => {
 	it("allows only a direct cjpm init command for CangjieImplement", () => {
@@ -312,10 +317,10 @@ describe("executeCommandTool", () => {
 				return Promise.resolve(undefined)
 			})
 
-			await executeCommandTool.execute({ command: "cjpm build 2>&1" }, mockCline as unknown as Task, {
-				askApproval: mockAskApproval as unknown as AskApproval,
-				handleError: mockHandleError as unknown as HandleError,
-				pushToolResult: mockPushToolResult as unknown as PushToolResult,
+			await executeCommandTool.execute({ command: "cjpm build 2>&1" }, asTestType<Task>(mockCline), {
+				askApproval: asTestType<AskApproval>(mockAskApproval),
+				handleError: asTestType<HandleError>(mockHandleError),
+				pushToolResult: asTestType<PushToolResult>(mockPushToolResult),
 			})
 
 			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(
@@ -328,9 +333,10 @@ describe("executeCommandTool", () => {
 		})
 
 		it("should resolve Cangjie toolchain cwd from the active editor even outside Cangjie task mode", async () => {
-			mockCline.cwd = "C:\\Users\\Administrator\\Desktop"
+			const projectRoot = path.join(path.parse(process.cwd()).root, "cangjie", "Cangjie-Examples", "HTTP")
+			mockCline.cwd = path.join(path.parse(process.cwd()).root, "Users", "Administrator", "Desktop")
 			;(vscode.window as any).activeTextEditor = {
-				document: { uri: { fsPath: "D:\\cangjie\\Cangjie-Examples\\HTTP\\src\\main.cj" } },
+				document: { uri: { fsPath: path.join(projectRoot, "src", "main.cj") } },
 			}
 			;(fs.access as any).mockImplementation((filePath: string) => {
 				const normalizedPath = filePath.replace(/\\/g, "/")
@@ -346,18 +352,15 @@ describe("executeCommandTool", () => {
 				return Promise.reject(new Error("missing"))
 			})
 
-			await executeCommandTool.execute({ command: "cjpm build 2>&1" }, mockCline as unknown as Task, {
-				askApproval: mockAskApproval as unknown as AskApproval,
-				handleError: mockHandleError as unknown as HandleError,
-				pushToolResult: mockPushToolResult as unknown as PushToolResult,
+			await executeCommandTool.execute({ command: "cjpm build 2>&1" }, asTestType<Task>(mockCline), {
+				askApproval: asTestType<AskApproval>(mockAskApproval),
+				handleError: asTestType<HandleError>(mockHandleError),
+				pushToolResult: asTestType<PushToolResult>(mockPushToolResult),
 			})
 
-			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(
-				"D:\\cangjie\\Cangjie-Examples\\HTTP",
-				"test-task-id",
-				"execa",
-				{ exactCwd: true },
-			)
+			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(projectRoot, "test-task-id", "execa", {
+				exactCwd: true,
+			})
 		})
 
 		it("should force execa for Cangjie toolchain commands even when shell integration is enabled", async () => {
@@ -373,10 +376,10 @@ describe("executeCommandTool", () => {
 				},
 			})
 
-			await executeCommandTool.execute({ command: "cjpm check" }, mockCline as unknown as Task, {
-				askApproval: mockAskApproval as unknown as AskApproval,
-				handleError: mockHandleError as unknown as HandleError,
-				pushToolResult: mockPushToolResult as unknown as PushToolResult,
+			await executeCommandTool.execute({ command: "cjpm check" }, asTestType<Task>(mockCline), {
+				askApproval: asTestType<AskApproval>(mockAskApproval),
+				handleError: asTestType<HandleError>(mockHandleError),
+				pushToolResult: asTestType<PushToolResult>(mockPushToolResult),
 			})
 
 			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(
@@ -395,11 +398,11 @@ describe("executeCommandTool", () => {
 
 			await executeCommandTool.execute(
 				{ command: 'powershell -Command "cd d:\\cangjie\\Cangjie-Examples\\HTTP; cjpm build"' },
-				mockCline as unknown as Task,
+				asTestType<Task>(mockCline),
 				{
-					askApproval: mockAskApproval as unknown as AskApproval,
-					handleError: mockHandleError as unknown as HandleError,
-					pushToolResult: mockPushToolResult as unknown as PushToolResult,
+					askApproval: asTestType<AskApproval>(mockAskApproval),
+					handleError: asTestType<HandleError>(mockHandleError),
+					pushToolResult: asTestType<PushToolResult>(mockPushToolResult),
 				},
 			)
 
@@ -425,11 +428,11 @@ describe("executeCommandTool", () => {
 
 			await executeCommandTool.execute(
 				{ command: "cd /d D:\\cangjie\\Cangjie-Examples\\HTTP && cjpm build" },
-				mockCline as unknown as Task,
+				asTestType<Task>(mockCline),
 				{
-					askApproval: mockAskApproval as unknown as AskApproval,
-					handleError: mockHandleError as unknown as HandleError,
-					pushToolResult: mockPushToolResult as unknown as PushToolResult,
+					askApproval: asTestType<AskApproval>(mockAskApproval),
+					handleError: asTestType<HandleError>(mockHandleError),
+					pushToolResult: asTestType<PushToolResult>(mockPushToolResult),
 				},
 			)
 
@@ -452,11 +455,11 @@ describe("executeCommandTool", () => {
 
 			await executeCommandTool.execute(
 				{ command: "cjpm build 2>&1", cwd: "packages/http" },
-				mockCline as unknown as Task,
+				asTestType<Task>(mockCline),
 				{
-					askApproval: mockAskApproval as unknown as AskApproval,
-					handleError: mockHandleError as unknown as HandleError,
-					pushToolResult: mockPushToolResult as unknown as PushToolResult,
+					askApproval: asTestType<AskApproval>(mockAskApproval),
+					handleError: asTestType<HandleError>(mockHandleError),
+					pushToolResult: asTestType<PushToolResult>(mockPushToolResult),
 				},
 			)
 

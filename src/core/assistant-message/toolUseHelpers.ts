@@ -20,7 +20,6 @@ import { getToolResultBudget, truncateToolResult, estimateTokens } from "../tool
 import type { ModeConfig } from "@njust-ai/types"
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
 import { markUserContentReadyIfDrained } from "./streamState"
-import type { TypedBlock } from "./types"
 
 export function applyToolResultTokenBudget(cline: Task, text: string): string {
 	const contextWindow = cline.api.getModel().info?.contextWindow ?? 200_000
@@ -230,10 +229,10 @@ export async function tryEagerBatch(cline: Task): Promise<boolean> {
 			const start = cline.currentStreamingContentIndex
 			const run: ToolUse[] = []
 			for (let i = start; i < cline.assistantMessageContent.length; i++) {
-				const b = cline.assistantMessageContent[i] as unknown as TypedBlock
+				const b = cline.assistantMessageContent[i]
 				if (!b || b.type !== "tool_use") break
 				if (!b.id) break
-				const tb = b as unknown as ToolUse
+				const tb = b
 				if (!isConcurrencySafeToolUseBlock(tb)) break
 				if (streamingToolExecutor.shouldEagerExecute(cline, tb) !== "eager") break
 				run.push(tb)
