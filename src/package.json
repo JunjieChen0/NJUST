@@ -1,6 +1,6 @@
 {
 	"name": "njust-ai",
-	"version": "2026.6.1",
+	"version": "2026.6.2",
 	"description": "AI-powered coding assistant for NJUST",
 	"main": "./dist/extension.js",
 	"scripts": {

@@ -1,5 +1,11 @@
 # NJUST_AI Changelog
 
+## 2026.6.2
+
+### Patch Changes
+
+- Add support for OpenAI `gpt-5.4-mini` and `gpt-5.4-nano` models.
+
 ## 3.51.1
 
 ### Patch Changes

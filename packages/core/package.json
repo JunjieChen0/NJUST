@@ -1,6 +1,6 @@
 {
 	"name": "@njust-ai/core",
-	"version": "0.0.0",
+	"version": "0.0.1",
 	"description": "Platform agnostic core functionality for NJUST_AI.",
 	"type": "module",
 	"exports": {

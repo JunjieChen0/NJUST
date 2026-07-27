@@ -1,6 +1,6 @@
 {
 	"name": "@njust-ai/evals",
-	"version": "0.0.0",
+	"version": "0.0.1",
 	"description": "NJUST_AI evals.",
 	"type": "module",
 	"exports": "./src/index.ts",

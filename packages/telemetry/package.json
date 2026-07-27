@@ -1,6 +1,6 @@
 {
 	"name": "@njust-ai/telemetry",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Telemetry service stub for NJUST_AI",
 	"type": "module",
 	"exports": "./src/index.ts",

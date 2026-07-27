@@ -1,6 +1,6 @@
 {
 	"name": "@njust-ai/ipc",
-	"version": "0.0.0",
+	"version": "0.0.1",
 	"description": "IPC server and client for remote NJUST_AI access.",
 	"type": "module",
 	"exports": "./src/index.ts",
