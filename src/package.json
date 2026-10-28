@@ -1445,7 +1445,7 @@
 	"displayName": "NJUST_AI",
 	"engines": {
 		"vscode": "^1.93.0",
-		"node": "20.19.2"
+		"node": ">=20.19.2 <25"
 	},
 	"galleryBanner": {
 		"color": "#617A91",

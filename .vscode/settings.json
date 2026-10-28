@@ -13,11 +13,6 @@
 	"vitest.disableWorkspaceWarning": true,
 	"njust-ai.mcpServer.enabled": false,
 	"njust-ai.mcpServer.port": 3100,
-	"terminal.integrated.env.windows": {
-		"CANGJIE_HOME": "D:\\cangjie",
-		"CANGJIE_PATH": "D:\\cangjie\\runtime\\lib\\windows_x86_64_cjnative;D:\\cangjie\\bin;D:\\cangjie\\tools\\bin;D:\\cangjie\\tools\\lib;D:\\cangjie\\debugger\\bin;C:\\Users\\Junjie\\.cjpm\\bin",
-		"PATH": "${config:terminal.integrated.env.windows.CANGJIE_PATH};${env:PATH}"
-	},
 	"editor.gotoLocation.alternativeDeclarationCommand": "editor.action.revealDefinition",
 	"editor.gotoLocation.alternativeDefinitionCommand": "editor.action.revealDefinition",
 	"editor.gotoLocation.alternativeTypeDefinitionCommand": "editor.action.revealDefinition",

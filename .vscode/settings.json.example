@@ -2,3 +2,12 @@
 // 仅在连接自建服务时，在用户设置里覆盖：
 // "njust-ai.cloudAgent.serverUrl": "http://...",
 // "njust-ai.cloudAgent.apiKey": "..."
+
+// Cangjie SDK 路径请配置在个人环境（系统环境变量 CANGJIE_HOME）或用户设置中，
+// 不要提交到本文件或 .vscode/settings.json，避免机器相关的绝对路径进入仓库。
+// 如需在集成终端中显式覆盖，可在个人用户设置中加入（把路径换成自己的 SDK）：
+// "terminal.integrated.env.windows": {
+//     "CANGJIE_HOME": "<path-to-cangjie-sdk>",
+//     "CANGJIE_PATH": "<path-to-cangjie-sdk>\\runtime\\lib\\windows_x86_64_cjnative;<path-to-cangjie-sdk>\\bin;<path-to-cangjie-sdk>\\tools\\bin;<path-to-cangjie-sdk>\\tools\\lib;<path-to-cangjie-sdk>\\debugger\\bin;<path-to-cjpm>\\bin",
+//     "PATH": "${config:terminal.integrated.env.windows.CANGJIE_PATH};${env:PATH}"
+// }
