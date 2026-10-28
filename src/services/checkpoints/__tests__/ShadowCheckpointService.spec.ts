@@ -48,7 +48,7 @@ const withoutGitEnv = () => {
 	const env: Record<string, string> = {}
 
 	for (const [key, value] of Object.entries(process.env)) {
-		if (value !== undefined && !key.startsWith("GIT_")) {
+		if (value !== undefined && !key.startsWith("GIT_") && key !== "EDITOR" && key !== "PAGER") {
 			env[key] = value
 		}
 	}
