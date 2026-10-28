@@ -1,0 +1,11 @@
+{
+	"exceptions": [
+		{
+			"id": "GHSA-mrhx-c7xc-m3w5",
+			"package": "zod",
+			"reason": "Upgrading zod to 4.x requires @njust-ai/types and src to migrate together: NjustAiSettingsSchema is compiled against zod 3, 22 dependencies require ^3.25.76, and src imports zod in 78 files. The affected path is apps/web-evals only, which is a development dashboard and is not shipped in the extension. Re-evaluate when the zod 4 migration is scheduled.",
+			"owner": "repo-maintainers",
+			"expires": "2026-12-31"
+		}
+	]
+}
