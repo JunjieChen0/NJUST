@@ -37,6 +37,30 @@ function assertEqual(label, actual, expected) {
 	}
 }
 
+function parseNodeRange(range) {
+	const match = range.match(/^>=\s*(\d+)\.(\d+)\.(\d+)\s+<\s*(\d+)$/)
+	if (!match) {
+		return null
+	}
+	return { lower: match.slice(1, 4).map(Number), upperMajorExclusive: Number(match[4]) }
+}
+
+function assertNodeVersionInRange(label, version, range) {
+	const parsed = parseNodeRange(range)
+	if (!parsed) {
+		fail(`${label}: unsupported engines.node range format "${range}" (expected ">=X.Y.Z <N")`)
+		return
+	}
+	const [major, minor, patch] = version.split(".").map(Number)
+	const [lowerMajor, lowerMinor, lowerPatch] = parsed.lower
+	const atLeastLower =
+		major > lowerMajor ||
+		(major === lowerMajor && (minor > lowerMinor || (minor === lowerMinor && patch >= lowerPatch)))
+	if (!atLeastLower || major >= parsed.upperMajorExclusive) {
+		fail(`${label}: expected a version within ${range}, got ${version || "<empty>"}`)
+	}
+}
+
 const rootPackage = readJson("package.json")
 const srcPackage = readJson("src/package.json")
 
@@ -53,10 +77,11 @@ if (rootPackage) {
 	const setupNode = setupAction.match(/default:\s*"([^"]+)"/)?.[1] ?? ""
 	const setupPnpm = setupAction.match(/pnpm-version:[\s\S]*?default:\s*"([^"]+)"/)?.[1] ?? ""
 
-	assertEqual("root engines.node vs .nvmrc", rootPackage.engines?.node, nvmNode)
-	assertEqual("root engines.node vs .tool-versions nodejs", rootPackage.engines?.node, toolNode)
+	const rootNodeRange = rootPackage.engines?.node ?? ""
+	assertNodeVersionInRange("root engines.node vs .nvmrc", nvmNode, rootNodeRange)
+	assertNodeVersionInRange("root engines.node vs .tool-versions nodejs", toolNode, rootNodeRange)
 	assertEqual("packageManager pnpm vs .tool-versions pnpm", pnpmVersion, toolPnpm)
-	assertEqual("setup action node-version vs root engines.node", setupNode, rootPackage.engines?.node)
+	assertNodeVersionInRange("setup action node-version vs root engines.node", setupNode, rootNodeRange)
 	assertEqual("setup action pnpm-version vs packageManager", setupPnpm, pnpmVersion)
 }
 
