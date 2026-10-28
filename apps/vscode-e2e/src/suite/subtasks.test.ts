@@ -17,9 +17,9 @@ suite("NJUST_AI Subtasks", () => {
 			if (message.type === "ask" && message.ask === "tool" && typeof message.text === "string") {
 				try {
 					sawNewTaskTool = sawNewTaskTool || JSON.parse(message.text).tool === "newTask"
-			} catch {
-				// Intentionally ignore JSON parse errors for non-tool messages.
-			}
+				} catch {
+					// Intentionally ignore JSON parse errors for non-tool messages.
+				}
 			}
 			if (message.type === "say" && message.partial === false) {
 				messages[taskId] = messages[taskId] || []
@@ -68,7 +68,16 @@ suite("NJUST_AI Subtasks", () => {
 			)
 
 			// Start a new task with the same message as the subtask.
-			const anotherTaskId = await api.startNewTask({ text: childPrompt })
+			const anotherTaskId = await api.startNewTask({
+				configuration: {
+					mode: "ask",
+					alwaysAllowModeSwitch: true,
+					alwaysAllowSubtasks: true,
+					autoApprovalEnabled: true,
+					enableCheckpoints: false,
+				},
+				text: childPrompt,
+			})
 			await waitFor(() => completedTaskIds.has(anotherTaskId), { timeout: 60_000 })
 
 			// Wait a bit to ensure any task resumption would have happened.
@@ -83,9 +92,9 @@ suite("NJUST_AI Subtasks", () => {
 
 			// Clean up - cancel all tasks.
 			await api.clearCurrentTask()
-			await waitFor(() => completedTaskIds.has(parentTaskId) || abortedTaskIds.has(parentTaskId), { timeout: 10_000 }).catch(
-				() => undefined,
-			)
+			await waitFor(() => completedTaskIds.has(parentTaskId) || abortedTaskIds.has(parentTaskId), {
+				timeout: 10_000,
+			}).catch(() => undefined)
 		} finally {
 			api.off(NJUST_AIEventName.Message, messageHandler)
 			api.off(NJUST_AIEventName.TaskCompleted, taskCompletedHandler)
