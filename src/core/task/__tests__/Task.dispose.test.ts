@@ -40,6 +40,13 @@ describe("Task dispose method", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks()
+		// dispose() logs through `logger`, which posts an `onUserConsoleLog` RPC to the
+		// vitest worker. Silence everything except console.error (asserted below) so a
+		// log emitted during teardown cannot race the worker closing.
+		vi.spyOn(console, "log").mockImplementation(function () {})
+		vi.spyOn(console, "info").mockImplementation(function () {})
+		vi.spyOn(console, "warn").mockImplementation(function () {})
+		vi.spyOn(console, "debug").mockImplementation(function () {})
 		mockProvider = {
 			context: {
 				globalStorageUri: { fsPath: "/test/path" },
@@ -58,7 +65,7 @@ describe("Task dispose method", () => {
 		})
 	})
 
-	afterEach(async () => {
+	afterEach(() => {
 		if (task && !task.abort) {
 			task.dispose()
 		}
@@ -66,10 +73,6 @@ describe("Task dispose method", () => {
 		// cleanup still hits the mock, not the real console (which would race
 		// with vitest worker teardown and cause EnvironmentTeardownError).
 		vi.restoreAllMocks()
-		// dispose() logs through `logger`, which posts an `onUserConsoleLog` RPC to
-		// the vitest worker. Yield a macrotask so the RPC settles before the file
-		// environment tears down.
-		await new Promise((resolve) => setTimeout(resolve, 0))
 	})
 
 	it("marks isDisposed and removes listeners", () => {
