@@ -158,14 +158,19 @@ jobs:
               uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
             - name: Setup Node.js and pnpm
               uses: ./.github/actions/setup-node-pnpm
-            - name: Run pnpm audit (high)
-              run: pnpm audit --audit-level=high
-            - name: Run pnpm audit (critical)
-              run: pnpm audit --audit-level=critical
-            - name: Run src package audit (high)
-              run: cd src && pnpm audit --audit-level=high
-            - name: Run src package audit (critical)
-              run: cd src && pnpm audit --audit-level=critical
+            - name: Run dependency audit gate (root)
+              run: |
+                  set -o pipefail
+                  # pnpm audit exits non-zero for raw findings; the report script owns the policy
+                  # (severity gate plus time-boxed exceptions), so capture the data first.
+                  pnpm audit --json > "$RUNNER_TEMP/audit-root.json" 2> "$RUNNER_TEMP/audit-root.stderr" || true
+                  node scripts/vulnerability-report.js < "$RUNNER_TEMP/audit-root.json"
+            - name: Run dependency audit gate (src)
+              run: |
+                  set -o pipefail
+                  cd src
+                  pnpm audit --json > "$RUNNER_TEMP/audit-src.json" 2> "$RUNNER_TEMP/audit-src.stderr" || true
+                  node ../scripts/vulnerability-report.js < "$RUNNER_TEMP/audit-src.json"
 
     circular-deps:
         name: circular-dependency-guard
