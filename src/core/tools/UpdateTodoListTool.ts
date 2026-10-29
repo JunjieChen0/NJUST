@@ -7,7 +7,7 @@ import { BaseTool, ToolCallbacks } from "./BaseTool"
 import type { ToolUse } from "../../shared/tools"
 import cloneDeep from "clone-deep"
 import crypto from "crypto"
-import { TodoItem, TodoStatus, todoStatusSchema } from "@njust-ai/types"
+import { type ClineMessage, TodoItem, TodoStatus, todoStatusSchema } from "@njust-ai/types"
 import { getLatestTodo } from "../../shared/todo"
 import { ignoreAbortError } from "../../utils/errorHandling"
 import { logger } from "../../shared/logger"
@@ -162,7 +162,10 @@ export function setTodoListForTask(cline?: Task, todos?: TodoItem[]) {
 	cline.todoList = Array.isArray(todos) ? todos : []
 }
 
-export function restoreTodoListForTask(cline: Task, todoList?: TodoItem[]) {
+export function restoreTodoListForTask(
+	cline: { todoList?: TodoItem[]; clineMessages: ClineMessage[] },
+	todoList?: TodoItem[],
+) {
 	if (todoList) {
 		cline.todoList = Array.isArray(todoList) ? todoList : []
 		return

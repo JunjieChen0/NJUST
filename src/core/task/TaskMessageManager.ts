@@ -9,7 +9,15 @@
  * is reduced via further decoupling.
  */
 import type { Anthropic } from "@anthropic-ai/sdk"
-import type { ClineMessage, ProviderSettings } from "@njust-ai/types"
+import type {
+	ClineMessage,
+	ExtensionMessage,
+	HistoryItem,
+	ProviderSettings,
+	TodoItem,
+	TokenUsage,
+	ToolUsage,
+} from "@njust-ai/types"
 import { NJUST_AIEventName, TelemetryEventName, getApiProtocol, getModelId, isRetiredProvider } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { defaultModeSlug } from "../../shared/modes"
@@ -60,16 +68,18 @@ export interface TaskMessageContext {
 	taskApiConfigReady: Promise<void>
 	initialStatus?: "active" | "delegated" | "completed"
 
-	cwd: string
-	debouncedEmitTokenUsage: (tokenUsage: UnsafeAny, toolUsage: UnsafeAny) => void
-	toolUsage: UnsafeAny
+	todoList?: TodoItem[]
 
-	emit(event: string, ...args: UnsafeAny[]): boolean
+	cwd: string
+	debouncedEmitTokenUsage: (tokenUsage: TokenUsage, toolUsage: ToolUsage) => void
+	toolUsage: ToolUsage
+
+	emit(event: string, ...args: unknown[]): boolean
 
 	readonly notifier?: {
 		postStateToWebviewWithoutTaskHistory(): Promise<void>
-		postMessageToWebview(message: UnsafeAny): Promise<void>
-		updateTaskHistory(item: UnsafeAny): Promise<unknown>
+		postMessageToWebview(message: ExtensionMessage): Promise<void>
+		updateTaskHistory(item: HistoryItem): Promise<unknown>
 	}
 }
 
@@ -90,8 +100,8 @@ export class TaskMessageManager {
 			getResponseId?: () => string | undefined
 			getEncryptedContent?: () => { encrypted_content: string; id?: string } | undefined
 			getThoughtSignature?: () => string | undefined
-			getSummary?: () => UnsafeAny[] | undefined
-			getReasoningDetails?: () => UnsafeAny[] | undefined
+			getSummary?: () => unknown[] | undefined
+			getReasoningDetails?: () => unknown[] | undefined
 		}
 
 		if (message.role === "assistant") {
@@ -151,7 +161,7 @@ export class TaskMessageManager {
 				const reasoningBlock = {
 					type: "reasoning",
 					text: reasoning,
-					summary: reasoningSummary ?? ([] as UnsafeAny[]),
+					summary: reasoningSummary ?? [],
 				}
 
 				// Also store reasoning_content as a top-level field so that it
@@ -174,7 +184,7 @@ export class TaskMessageManager {
 				// OpenAI Native encrypted reasoning
 				const reasoningBlock = {
 					type: "reasoning",
-					summary: [] as UnsafeAny[],
+					summary: [],
 					encrypted_content: reasoningData.encrypted_content,
 					...(reasoningData.id ? { id: reasoningData.id } : {}),
 				}
@@ -359,7 +369,7 @@ export class TaskMessageManager {
 
 	async overwriteClineMessages(newMessages: ClineMessage[]): Promise<void> {
 		this.ctx.clineMessages = newMessages
-		restoreTodoListForTask(this.ctx as UnsafeAny)
+		restoreTodoListForTask(this.ctx)
 		await this.saveClineMessages()
 	}
 
