@@ -76,6 +76,11 @@ export default defineConfig({
 					branches: 63,
 					statements: 73,
 				},
+				"src/services/mcp/**": {
+					functions: 59,
+					branches: 60,
+					statements: 59,
+				},
 			},
 		},
 	},
