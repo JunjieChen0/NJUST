@@ -1,4 +1,4 @@
-import { describe, expect, vi, beforeAll, beforeEach, afterEach, it } from "vitest"
+import { describe, expect, vi, beforeEach, afterEach, it } from "vitest"
 
 import { ProviderSettings } from "@njust-ai/types"
 
@@ -38,20 +38,6 @@ describe("Task dispose method", () => {
 	let mockApiConfiguration: ProviderSettings
 	let task: Task
 
-	beforeAll(() => {
-		// dispose() schedules fire-and-forget work (dynamic TerminalRegistry import,
-		// sandbox scope cleanup, task-directory cleanup) whose catch blocks call
-		// logger.error. Those continuations can log after afterEach returns, so the
-		// console stays mocked for the whole file: a late log would otherwise post an
-		// onUserConsoleLog RPC that races the worker teardown and fails the run with
-		// EnvironmentTeardownError.
-		vi.spyOn(console, "log").mockImplementation(function () {})
-		vi.spyOn(console, "info").mockImplementation(function () {})
-		vi.spyOn(console, "warn").mockImplementation(function () {})
-		vi.spyOn(console, "debug").mockImplementation(function () {})
-		vi.spyOn(console, "error").mockImplementation(function () {})
-	})
-
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mockProvider = {
@@ -76,9 +62,10 @@ describe("Task dispose method", () => {
 		if (task && !task.abort) {
 			task.dispose()
 		}
-		// Console spies are intentionally left installed until the file's environment is
-		// torn down; restoring them would let dispose()'s deferred error logs reach the
-		// real console and race the worker teardown.
+		// Restore spies AFTER dispose so any console.error triggered during
+		// cleanup still hits the mock, not the real console (which would race
+		// with vitest worker teardown and cause EnvironmentTeardownError).
+		vi.restoreAllMocks()
 	})
 
 	it("marks isDisposed and removes listeners", () => {
