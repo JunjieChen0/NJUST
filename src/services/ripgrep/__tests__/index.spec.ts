@@ -1,6 +1,6 @@
 // npx vitest run src/services/ripgrep/__tests__/index.spec.ts
 
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 
 import { truncateLine } from "../index"
 
@@ -48,5 +48,47 @@ describe("Ripgrep line truncation", () => {
 
 		expect(truncated.length).toEqual(customLength + " [truncated...]".length)
 		expect(truncated).toContain("[truncated...]")
+	})
+})
+
+describe("getBinPath PATH fallback", () => {
+	it("skips missing candidates and returns the first path that exists", async () => {
+		vi.resetModules()
+		vi.doMock("child_process", () => ({
+			execSync: () => "C:\broken\rg.exe\r\nC:\valid\rg.exe\r\n",
+			spawn: vi.fn(),
+		}))
+		vi.doMock("../../../utils/fs", () => ({
+			fileExistsAtPath: async (candidate: string) => candidate === "C:\valid\rg.exe",
+		}))
+
+		try {
+			const { getBinPath } = await import("../index")
+			await expect(getBinPath("C:\vscode")).resolves.toBe("C:\valid\rg.exe")
+		} finally {
+			vi.doUnmock("child_process")
+			vi.doUnmock("../../../utils/fs")
+			vi.resetModules()
+		}
+	})
+
+	it("returns undefined when no candidate exists", async () => {
+		vi.resetModules()
+		vi.doMock("child_process", () => ({
+			execSync: () => "C:\broken\rg.exe\r\n",
+			spawn: vi.fn(),
+		}))
+		vi.doMock("../../../utils/fs", () => ({
+			fileExistsAtPath: async () => false,
+		}))
+
+		try {
+			const { getBinPath } = await import("../index")
+			await expect(getBinPath("C:\vscode")).resolves.toBeUndefined()
+		} finally {
+			vi.doUnmock("child_process")
+			vi.doUnmock("../../../utils/fs")
+			vi.resetModules()
+		}
 	})
 })

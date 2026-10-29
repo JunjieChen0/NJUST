@@ -103,12 +103,18 @@ export async function getBinPath(vscodeAppRoot: string): Promise<string | undefi
 
 	// Fallback: search in PATH
 	try {
-		const result = childProcess
-			.execSync(isWindows ? "where rg" : "which rg", { encoding: "utf8" })
-			.trim()
-			.split("\n")[0]
-		if (result) {
-			return result
+		const output = childProcess.execSync(isWindows ? "where rg" : "which rg", { encoding: "utf8" })
+		// Both `where` and `which` can return several lines with CRLF endings; take the
+		// first candidate that actually exists instead of trusting line 0 verbatim.
+		const candidates = output
+			.split(/\r?\n/)
+			.map((line) => line.trim())
+			.filter(Boolean)
+
+		for (const candidate of candidates) {
+			if (await fileExistsAtPath(candidate)) {
+				return candidate
+			}
 		}
 	} catch {
 		// intentionally ignored: rg not found in PATH
