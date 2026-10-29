@@ -66,6 +66,16 @@ export default defineConfig({
 					branches: 68,
 					statements: 80,
 				},
+				"src/services/cloud-agent/**": {
+					functions: 85,
+					branches: 74,
+					statements: 82,
+				},
+				"src/core/task/**": {
+					functions: 70,
+					branches: 63,
+					statements: 73,
+				},
 			},
 		},
 	},
