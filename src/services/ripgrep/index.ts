@@ -91,11 +91,17 @@ export async function getBinPath(vscodeAppRoot: string): Promise<string | undefi
 		return (await fileExistsAtPath(fullPath)) ? fullPath : undefined
 	}
 
+	// VS Code 1.144+ ships ripgrep as `@vscode/ripgrep-universal` with a
+	// `${platform}-${arch}` subdirectory instead of `@vscode/ripgrep/bin`.
+	const platformArch = `${process.platform}-${process.arch}`
+
 	const fromVscode =
 		(await checkPath("node_modules/@vscode/ripgrep/bin/")) ||
+		(await checkPath("node_modules.asar.unpacked/@vscode/ripgrep/bin/")) ||
+		(await checkPath(`node_modules/@vscode/ripgrep-universal/bin/${platformArch}/`)) ||
+		(await checkPath(`node_modules.asar.unpacked/@vscode/ripgrep-universal/bin/${platformArch}/`)) ||
 		(await checkPath("node_modules/vscode-ripgrep/bin")) ||
-		(await checkPath("node_modules.asar.unpacked/vscode-ripgrep/bin/")) ||
-		(await checkPath("node_modules.asar.unpacked/@vscode/ripgrep/bin/"))
+		(await checkPath("node_modules.asar.unpacked/vscode-ripgrep/bin/"))
 
 	if (fromVscode) {
 		return fromVscode

@@ -51,20 +51,23 @@ describe("Ripgrep line truncation", () => {
 	})
 })
 
-describe("getBinPath PATH fallback", () => {
-	it("skips missing candidates and returns the first path that exists", async () => {
+describe("getBinPath resolution", () => {
+	it("skips missing PATH candidates and returns the first path that exists", async () => {
 		vi.resetModules()
+		const broken = "C:\\broken\\rg.exe"
+		const valid = "C:\\valid\\rg.exe"
+
 		vi.doMock("child_process", () => ({
-			execSync: () => "C:\broken\rg.exe\r\nC:\valid\rg.exe\r\n",
+			execSync: () => `${broken}\r\n${valid}\r\n`,
 			spawn: vi.fn(),
 		}))
 		vi.doMock("../../../utils/fs", () => ({
-			fileExistsAtPath: async (candidate: string) => candidate === "C:\valid\rg.exe",
+			fileExistsAtPath: async (candidate: string) => candidate === valid,
 		}))
 
 		try {
 			const { getBinPath } = await import("../index")
-			await expect(getBinPath("C:\vscode")).resolves.toBe("C:\valid\rg.exe")
+			await expect(getBinPath("C:\\vscode")).resolves.toBe(valid)
 		} finally {
 			vi.doUnmock("child_process")
 			vi.doUnmock("../../../utils/fs")
@@ -75,7 +78,7 @@ describe("getBinPath PATH fallback", () => {
 	it("returns undefined when no candidate exists", async () => {
 		vi.resetModules()
 		vi.doMock("child_process", () => ({
-			execSync: () => "C:\broken\rg.exe\r\n",
+			execSync: () => "C:\\broken\\rg.exe\r\n",
 			spawn: vi.fn(),
 		}))
 		vi.doMock("../../../utils/fs", () => ({
@@ -84,7 +87,34 @@ describe("getBinPath PATH fallback", () => {
 
 		try {
 			const { getBinPath } = await import("../index")
-			await expect(getBinPath("C:\vscode")).resolves.toBeUndefined()
+			await expect(getBinPath("C:\\vscode")).resolves.toBeUndefined()
+		} finally {
+			vi.doUnmock("child_process")
+			vi.doUnmock("../../../utils/fs")
+			vi.resetModules()
+		}
+	})
+
+	it("finds ripgrep in the @vscode/ripgrep-universal layout (VS Code 1.144+)", async () => {
+		vi.resetModules()
+		const base = process.platform === "win32" ? "C:\\vscode" : "/opt/vscode"
+
+		vi.doMock("child_process", () => ({
+			execSync: () => {
+				throw new Error("rg not in PATH")
+			},
+			spawn: vi.fn(),
+		}))
+		vi.doMock("../../../utils/fs", () => ({
+			fileExistsAtPath: async (candidate: string) => candidate.includes("ripgrep-universal"),
+		}))
+
+		try {
+			const { getBinPath } = await import("../index")
+			const result = await getBinPath(base)
+
+			expect(result).toContain("ripgrep-universal")
+			expect(result).toContain(`${process.platform}-${process.arch}`)
 		} finally {
 			vi.doUnmock("child_process")
 			vi.doUnmock("../../../utils/fs")
