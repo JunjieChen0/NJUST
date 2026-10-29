@@ -60,6 +60,6 @@
 		"@types/react-dom": "^18.3.5",
 		"tailwindcss": "^4",
 		"tsx": "^4.19.0",
-		"vitest": "^4.1.8"
+		"vitest": "^4.1.12"
 	}
 }

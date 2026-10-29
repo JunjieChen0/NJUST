@@ -20,6 +20,11 @@ export default defineConfig({
 		watch: false,
 		reporters,
 		silent,
+		// Vitest intercepts worker console calls and reports them over an RPC that can
+		// still be pending when a worker tears down, failing the run with
+		// EnvironmentTeardownError ("onUserConsoleLog" was pending). Letting console
+		// write straight to stdout removes that RPC entirely.
+		disableConsoleIntercept: true,
 		pool: "forks",
 		maxWorkers: process.env.CI ? 4 : undefined,
 		testTimeout: 30_000,
