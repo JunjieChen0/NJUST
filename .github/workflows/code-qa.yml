@@ -93,8 +93,8 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                # Newest pinned build plus the oldest version we intend to support.
-                vscode: ["1.101.2", "1.95.3"]
+                # Current stable plus the lower bound declared in engines.vscode.
+                vscode: ["1.144.0", "1.95.3"]
         steps:
             - name: Checkout code
               uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

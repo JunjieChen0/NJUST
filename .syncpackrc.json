@@ -30,6 +30,12 @@
 			"range": "~"
 		},
 		{
+			"label": "@types/vscode tracks the minimum supported VS Code version",
+			"dependencies": ["@types/vscode"],
+			"dependencyTypes": ["prod", "dev"],
+			"range": "~"
+		},
+		{
 			"label": "All dependencies use caret ranges",
 			"range": "^",
 			"dependencyTypes": ["prod", "dev"]

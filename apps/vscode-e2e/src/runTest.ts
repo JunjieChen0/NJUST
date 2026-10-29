@@ -47,7 +47,11 @@ async function main() {
 			extensionTestsPath,
 			launchArgs: [testWorkspace],
 			extensionTestsEnv,
-			version: process.env.VSCODE_VERSION || "1.101.2",
+			// VSCODE_EXECUTABLE_PATH lets a local run reuse an installed VS Code build
+			// instead of downloading one; CI keeps using downloadable version pins.
+			...(process.env.VSCODE_EXECUTABLE_PATH
+				? { vscodeExecutablePath: process.env.VSCODE_EXECUTABLE_PATH }
+				: { version: process.env.VSCODE_VERSION || "1.144.0" }),
 		})
 	} catch (error) {
 		console.error("Failed to run tests", error)

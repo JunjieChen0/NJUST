@@ -121,7 +121,7 @@
 		"@types/semver-compare": "^1.0.3",
 		"@types/shell-quote": "^1.7.5",
 		"@types/turndown": "^5.0.5",
-		"@types/vscode": "^1.93.0",
+		"@types/vscode": "~1.95.0",
 		"@vscode/test-electron": "^2.5.2",
 		"@vscode/vsce": "^3.9.2",
 		"ai": "^6.0.75",
@@ -1444,7 +1444,7 @@
 	},
 	"displayName": "NJUST_AI",
 	"engines": {
-		"vscode": "^1.93.0",
+		"vscode": "^1.95.0",
 		"node": ">=20.19.2 <25"
 	},
 	"galleryBanner": {
