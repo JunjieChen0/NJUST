@@ -13,6 +13,11 @@ import {
 	type ProviderSettingsEntry,
 	type TaskEvent,
 	type CreateTaskOptions,
+	type ClineMessage,
+	type QueuedMessage,
+	type TokenUsage,
+	type ToolUsage,
+	type ToolName,
 	NJUST_AIEventName,
 	TaskCommandName,
 	isSecretStateKey,
@@ -34,7 +39,7 @@ export class API extends EventEmitter<NJUST_AIEvents> implements NJUST_AIAPI {
 	private readonly sidebarProvider: IProviderHost
 	private readonly context: vscode.ExtensionContext
 	private readonly ipc?: IpcServer
-	private readonly log: (...args: UnsafeAny[]) => void
+	private readonly log: (...args: unknown[]) => void
 	private logfile?: string
 
 	constructor(
@@ -52,7 +57,7 @@ export class API extends EventEmitter<NJUST_AIEvents> implements NJUST_AIAPI {
 		this.context = provider.context
 
 		if (enableLogging) {
-			this.log = (...args: UnsafeAny[]) => {
+			this.log = (...args: unknown[]) => {
 				this.outputChannelLog(...args)
 				logger.info("API", args.map(String).join(" "))
 			}
@@ -74,7 +79,7 @@ export class API extends EventEmitter<NJUST_AIEvents> implements NJUST_AIAPI {
 			this.log(`[API] ipc server started: socketPath=${socketPath}, pid=${process.pid}, ppid=${process.ppid}`)
 
 			ipc.on(IpcMessageType.TaskCommand, async (clientId, command) => {
-				const sendResponse = (eventName: NJUST_AIEventName, payload: UnsafeAny[]) => {
+				const sendResponse = (eventName: NJUST_AIEventName, payload: unknown[]) => {
 					ipc.send(clientId, {
 						type: IpcMessageType.TaskEvent,
 						origin: IpcOrigin.Server,
@@ -196,7 +201,7 @@ export class API extends EventEmitter<NJUST_AIEvents> implements NJUST_AIAPI {
 			await vscode.commands.executeCommand("workbench.action.closeAllEditors")
 
 			provider = await openClineInNewTab({ context: this.context, outputChannel: this.outputChannel })
-			this.registerListeners(provider as UnsafeAny)
+			this.registerListeners(provider)
 		} else {
 			await vscode.commands.executeCommand(`${Package.name}.SidebarProvider.focus`)
 
@@ -317,9 +322,12 @@ export class API extends EventEmitter<NJUST_AIEvents> implements NJUST_AIAPI {
 			// Track all listeners registered for this task so we can clean them up
 			// when the task completes or is aborted, preventing memory leaks from
 			// long-lived task objects.
-			const listeners: Array<{ event: string; listener: (...args: UnsafeAny[]) => void }> = []
-			const $on = (event: string, listener: (...args: UnsafeAny[]) => void) => {
-				task.on(event, listener)
+			// Handlers declare concrete payload types; `as never` bridges the dynamic
+			// event key to the strongly typed EventEmitter at this single boundary.
+			type LooseListener = (...args: never[]) => void
+			const listeners: Array<{ event: string; listener: LooseListener }> = []
+			const $on = (event: string, listener: LooseListener) => {
+				task.on(event as never, listener as never)
 				listeners.push({ event, listener })
 			}
 
@@ -329,7 +337,7 @@ export class API extends EventEmitter<NJUST_AIEvents> implements NJUST_AIAPI {
 				// After removal no further events will reach these listeners, so
 				// cleanup() will not be called again.
 				for (const { event, listener } of listeners) {
-					task.off(event, listener)
+					task.off(event as never, listener as never)
 				}
 			}
 
@@ -338,8 +346,7 @@ export class API extends EventEmitter<NJUST_AIEvents> implements NJUST_AIAPI {
 				await this.fileLog(`[${new Date().toISOString()}] taskStarted -> ${task.taskId}\n`)
 			})
 
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			$on(NJUST_AIEventName.TaskCompleted, async (_: unknown, tokenUsage: any, toolUsage: any) => {
+			$on(NJUST_AIEventName.TaskCompleted, async (_: unknown, tokenUsage: TokenUsage, toolUsage: ToolUsage) => {
 				this.emit(NJUST_AIEventName.TaskCompleted, task.taskId, tokenUsage, toolUsage, {
 					isSubtask: !!task.parentTaskId,
 				})
@@ -389,39 +396,36 @@ export class API extends EventEmitter<NJUST_AIEvents> implements NJUST_AIAPI {
 				this.emit(NJUST_AIEventName.TaskUnpaused, task.taskId)
 			})
 
-			$on(NJUST_AIEventName.TaskSpawned, (childTaskId: UnsafeAny) => {
+			$on(NJUST_AIEventName.TaskSpawned, (childTaskId: string) => {
 				this.emit(NJUST_AIEventName.TaskSpawned, task.taskId, childTaskId)
 			})
 
-			$on(NJUST_AIEventName.TaskDelegated as UnsafeAny, (childTaskId: UnsafeAny) => {
-				;(this.emit as UnsafeAny)(NJUST_AIEventName.TaskDelegated, task.taskId, childTaskId)
+			$on(NJUST_AIEventName.TaskDelegated, (childTaskId: string) => {
+				this.emit(NJUST_AIEventName.TaskDelegated, task.taskId, childTaskId)
+			})
+
+			$on(NJUST_AIEventName.TaskDelegationCompleted, (childTaskId: string, summary: string) => {
+				this.emit(NJUST_AIEventName.TaskDelegationCompleted, task.taskId, childTaskId, summary)
+			})
+
+			$on(NJUST_AIEventName.TaskDelegationResumed, (childTaskId: string) => {
+				this.emit(NJUST_AIEventName.TaskDelegationResumed, task.taskId, childTaskId)
 			})
 
 			$on(
-				NJUST_AIEventName.TaskDelegationCompleted as UnsafeAny,
-				(childTaskId: UnsafeAny, summary: UnsafeAny) => {
-					;(this.emit as UnsafeAny)(
-						NJUST_AIEventName.TaskDelegationCompleted,
-						task.taskId,
-						childTaskId,
-						summary,
-					)
+				NJUST_AIEventName.Message,
+				async (message: { action: "created" | "updated"; message: ClineMessage }) => {
+					this.emit(NJUST_AIEventName.Message, { taskId: task.taskId, ...message })
+
+					if (message.message.partial !== true) {
+						await this.fileLog(
+							`[${new Date().toISOString()}] ${JSON.stringify(message.message, null, 2)}\n`,
+						)
+					}
 				},
 			)
 
-			$on(NJUST_AIEventName.TaskDelegationResumed as UnsafeAny, (childTaskId: UnsafeAny) => {
-				;(this.emit as UnsafeAny)(NJUST_AIEventName.TaskDelegationResumed, task.taskId, childTaskId)
-			})
-
-			$on(NJUST_AIEventName.Message, async (message: UnsafeAny) => {
-				this.emit(NJUST_AIEventName.Message, { taskId: task.taskId, ...message })
-
-				if (message.message.partial !== true) {
-					await this.fileLog(`[${new Date().toISOString()}] ${JSON.stringify(message.message, null, 2)}\n`)
-				}
-			})
-
-			$on(NJUST_AIEventName.TaskModeSwitched, (taskId: UnsafeAny, mode: UnsafeAny) => {
+			$on(NJUST_AIEventName.TaskModeSwitched, (taskId: string, mode: string) => {
 				this.emit(NJUST_AIEventName.TaskModeSwitched, taskId, mode)
 			})
 
@@ -429,20 +433,17 @@ export class API extends EventEmitter<NJUST_AIEvents> implements NJUST_AIAPI {
 				this.emit(NJUST_AIEventName.TaskAskResponded, task.taskId)
 			})
 
-			$on(NJUST_AIEventName.QueuedMessagesUpdated, (taskId: UnsafeAny, messages: UnsafeAny) => {
+			$on(NJUST_AIEventName.QueuedMessagesUpdated, (taskId: string, messages: QueuedMessage[]) => {
 				this.emit(NJUST_AIEventName.QueuedMessagesUpdated, taskId, messages)
 			})
 
-			$on(NJUST_AIEventName.TaskToolFailed, (taskId: UnsafeAny, tool: UnsafeAny, error: UnsafeAny) => {
+			$on(NJUST_AIEventName.TaskToolFailed, (taskId: string, tool: ToolName, error: string) => {
 				this.emit(NJUST_AIEventName.TaskToolFailed, taskId, tool, error)
 			})
 
-			$on(
-				NJUST_AIEventName.TaskTokenUsageUpdated,
-				(_: UnsafeAny, tokenUsage: UnsafeAny, toolUsage: UnsafeAny) => {
-					this.emit(NJUST_AIEventName.TaskTokenUsageUpdated, task.taskId, tokenUsage, toolUsage)
-				},
-			)
+			$on(NJUST_AIEventName.TaskTokenUsageUpdated, (_: unknown, tokenUsage: TokenUsage, toolUsage: ToolUsage) => {
+				this.emit(NJUST_AIEventName.TaskTokenUsageUpdated, task.taskId, tokenUsage, toolUsage)
+			})
 
 			this.emit(NJUST_AIEventName.TaskCreated, task.taskId)
 		})
@@ -450,7 +451,7 @@ export class API extends EventEmitter<NJUST_AIEvents> implements NJUST_AIAPI {
 
 	// Logging
 
-	private outputChannelLog(...args: UnsafeAny[]) {
+	private outputChannelLog(...args: unknown[]) {
 		for (const arg of args) {
 			if (arg === null) {
 				this.outputChannel.appendLine("null")
