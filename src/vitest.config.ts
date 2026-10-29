@@ -57,6 +57,15 @@ export default defineConfig({
 				functions: 69,
 				branches: 60,
 				statements: 68,
+				// Security-sensitive paths get their own floor so regressions here fail
+				// even while the repo-wide totals still pass. Values sit ~2 points below
+				// the measured baseline to absorb cross-platform variance.
+				"src/services/sandbox/**": {
+					lines: 85,
+					functions: 85,
+					branches: 68,
+					statements: 80,
+				},
 			},
 		},
 	},

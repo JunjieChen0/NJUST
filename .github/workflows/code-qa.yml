@@ -88,17 +88,29 @@ jobs:
                 NODE_OPTIONS: "--max-old-space-size=4096"
 
     e2e-test:
-        name: e2e-test
+        name: e2e-test (VS Code ${{ matrix.vscode }})
         runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                # Newest pinned build plus the oldest version we intend to support.
+                vscode: ["1.101.2", "1.95.3"]
         steps:
             - name: Checkout code
               uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
             - name: Setup Node.js and pnpm
               uses: ./.github/actions/setup-node-pnpm
+            - name: Cache VS Code test build
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+              with:
+                  path: apps/vscode-e2e/.vscode-test
+                  key: vscode-test-${{ runner.os }}-${{ matrix.vscode }}
             - name: Build types package
               run: pnpm --filter @njust-ai/types build
             - name: Run E2E tests
               run: xvfb-run -a pnpm --filter @njust-ai/vscode-e2e test:ci
+              env:
+                  VSCODE_VERSION: ${{ matrix.vscode }}
 
     coverage:
         name: coverage (${{ matrix.name }})

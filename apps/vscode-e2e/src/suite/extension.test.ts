@@ -8,7 +8,8 @@ suite("NJUST_AI Extension", function () {
 
 	test("Commands should be registered", async () => {
 		const expectedCommands = [
-			"SidebarProvider.open",
+			// `SidebarProvider.open` is a VS Code-generated view-container command that only
+			// exists in newer builds, so it is intentionally not part of the required set.
 			"SidebarProvider.focus",
 			"SidebarProvider.resetViewLocation",
 			"SidebarProvider.toggleVisibility",
@@ -33,9 +34,12 @@ suite("NJUST_AI Extension", function () {
 		]
 
 		const commands = new Set((await vscode.commands.getCommands(true)).filter((cmd) => cmd.startsWith("njust-ai")))
+		const missing = expectedCommands.filter((command) => !commands.has(`njust-ai.${command}`))
 
-		for (const command of expectedCommands) {
-			assert.ok(commands.has(`njust-ai.${command}`), `Command ${command} should be registered`)
-		}
+		assert.deepStrictEqual(
+			missing,
+			[],
+			`Commands should be registered. Missing: ${missing.join(", ")}. Available: ${[...commands].sort().join(", ")}`,
+		)
 	})
 })
