@@ -36,7 +36,7 @@ type OpenAIMessageWithReasoning = OpenAI.Chat.ChatCompletionMessageParam & {
 }
 
 type AnthropicMessageWithReasoning = Anthropic.Messages.MessageParam & {
-	reasoning_details?: UnsafeAny[]
+	reasoning_details?: unknown[]
 }
 
 /**
@@ -239,7 +239,7 @@ export function sanitizeGeminiMessages(
 					reasoning_details?: ReasoningDetail[]
 				} = {
 					role: "assistant",
-					content: (anyMsg.content ?? "") as UnsafeAny,
+					content: (anyMsg.content ?? "") as OpenAI.Chat.ChatCompletionAssistantMessageParam["content"],
 				}
 
 				if (validReasoningDetails.length > 0) {
@@ -295,18 +295,19 @@ export function convertToOpenAiMessages(
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
 	const openAiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = []
 
-	const mapReasoningDetails = (details: UnsafeAny): UnsafeAny[] | undefined => {
+	const mapReasoningDetails = (details: unknown): unknown[] | undefined => {
 		if (!Array.isArray(details)) {
 			return undefined
 		}
 
-		return details.map((detail: UnsafeAny) => {
+		return (details as unknown[]).map((detail) => {
+			const entry = detail as { format?: string; id?: unknown } | null | undefined
 			// Strip `id` from openai-responses-v1 blocks because OpenAI's Responses API
 			// requires `store: true` to persist reasoning blocks. Since we manage
 			// conversation state client-side, we don't use `store: true`, and sending
 			// back the `id` field causes a 404 error.
-			if (detail?.format === "openai-responses-v1" && detail?.id) {
-				const { id: _id, ...rest } = detail
+			if (entry?.format === "openai-responses-v1" && entry?.id) {
+				const { id: _id, ...rest } = entry
 				return rest
 			}
 			return detail
@@ -323,7 +324,7 @@ export function convertToOpenAiMessages(
 			// If a message also contains reasoning_details (Gemini 3 / xAI / o-series, etc.),
 			// we must preserve it here as well.
 			const messageWithDetails = anthropicMessage as AnthropicMessageWithReasoning
-			const baseMessage: OpenAI.Chat.ChatCompletionMessageParam & { reasoning_details?: UnsafeAny[] } = {
+			const baseMessage: OpenAI.Chat.ChatCompletionMessageParam & { reasoning_details?: unknown[] } = {
 				role: anthropicMessage.role,
 				content: anthropicMessage.content,
 			}
@@ -331,9 +332,7 @@ export function convertToOpenAiMessages(
 			if (anthropicMessage.role === "assistant") {
 				const mapped = mapReasoningDetails(messageWithDetails.reasoning_details)
 				if (mapped) {
-					;(
-						baseMessage as OpenAI.Chat.ChatCompletionMessageParam & { reasoning_details?: UnsafeAny[] }
-					).reasoning_details = mapped
+					baseMessage.reasoning_details = mapped
 				}
 			}
 
@@ -504,7 +503,7 @@ export function convertToOpenAiMessages(
 				// the order expected by providers like Njust-AI. Property order matters
 				// when sending messages back to some APIs.
 				const baseMessage: OpenAI.Chat.ChatCompletionAssistantMessageParam & {
-					reasoning_details?: UnsafeAny[]
+					reasoning_details?: unknown[]
 				} = {
 					role: "assistant",
 					// Use empty string instead of undefined for providers like Gemini (via OpenRouter)

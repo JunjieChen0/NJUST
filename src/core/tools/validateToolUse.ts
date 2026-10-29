@@ -17,7 +17,7 @@ import { TelemetryService } from "@njust-ai/telemetry"
  * Previously, non-string values were `JSON.stringify`d, which turned `false` into the string `"false"`
  * and `60` into `"60"`, breaking zod validation and tool execution.
  */
-function mergeNativeValueForValidation(value: UnsafeAny): UnsafeAny {
+function mergeNativeValueForValidation(value: unknown): unknown {
 	if (value === undefined || value === null) {
 		return value
 	}
@@ -32,13 +32,13 @@ function mergeNativeValueForValidation(value: UnsafeAny): UnsafeAny {
 }
 
 export function mergeToolParamsForValidation(block: {
-	params?: Record<string, UnsafeAny>
-	nativeArgs?: UnsafeAny
-}): Record<string, UnsafeAny> {
-	const merged: Record<string, UnsafeAny> = { ...(block.params ?? {}) }
+	params?: Record<string, unknown>
+	nativeArgs?: unknown
+}): Record<string, unknown> {
+	const merged: Record<string, unknown> = { ...(block.params ?? {}) }
 	const na = block.nativeArgs
 	if (na && typeof na === "object" && !Array.isArray(na)) {
-		for (const [key, value] of Object.entries(na as Record<string, UnsafeAny>)) {
+		for (const [key, value] of Object.entries(na as Record<string, unknown>)) {
 			const currentValue = merged[key]
 			const shouldUseNativeStructuredValue =
 				typeof currentValue === "string" && value !== null && typeof value === "object" && !Array.isArray(value)
@@ -82,7 +82,7 @@ export function validateToolUse(
 	mode: Mode,
 	customModes?: ModeConfig[],
 	toolRequirements?: Record<string, boolean>,
-	toolParams?: Record<string, UnsafeAny>,
+	toolParams?: Record<string, unknown>,
 	experiments?: Record<string, boolean>,
 	includedTools?: string[],
 	allowedTools?: string[],
@@ -196,7 +196,7 @@ export function isToolAllowedForMode(
 	modeSlug: string,
 	customModes: ModeConfig[],
 	toolRequirements?: Record<string, boolean>,
-	toolParams?: Record<string, UnsafeAny>, // All tool parameters
+	toolParams?: Record<string, unknown>, // All tool parameters
 	experiments?: Record<string, boolean>,
 	includedTools?: string[], // Opt-in tools explicitly included (e.g., from modelInfo)
 ): boolean {
@@ -232,7 +232,7 @@ export function isToolAllowedForMode(
 	}
 
 	// Always allow these tools (unless explicitly disabled above)
-	if (ALWAYS_AVAILABLE_TOOLS.includes(tool as UnsafeAny)) {
+	if ((ALWAYS_AVAILABLE_TOOLS as readonly string[]).includes(tool)) {
 		return true
 	}
 
@@ -284,9 +284,10 @@ export function isToolAllowedForMode(
 
 		// For the edit group, check file regex if specified
 		if (groupName === "edit" && options.fileRegex) {
-			const filePath = toolParams?.path || toolParams?.file_path
+			const rawPath = toolParams?.path ?? toolParams?.file_path
+			const filePath = typeof rawPath === "string" ? rawPath : undefined
 			// Check if this is an actual edit operation (not just path-only for streaming)
-			const isEditOperation = EDIT_OPERATION_PARAMS.some((param) => toolParams?.[param])
+			const isEditOperation = EDIT_OPERATION_PARAMS.some((param) => Boolean(toolParams?.[param]))
 
 			// Handle single file path validation
 			if (filePath && isEditOperation && !doesFileMatchRegex(filePath, options.fileRegex)) {

@@ -11,6 +11,14 @@ import { getErrorMessage } from "../../../shared/error-utils"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
 
+/** Shape of the HTTP error thrown by `@qdrant/js-client-rest`; all fields are optional. */
+type QdrantHttpErrorShape = {
+	status?: number
+	statusCode?: number
+	data?: unknown
+	response?: { status?: number; data?: unknown }
+}
+
 /**
  * Qdrant implementation of the vector store interface
  */
@@ -135,7 +143,7 @@ export class QdrantVectorStore implements IVectorStore {
 		try {
 			const collectionInfo = await this.client.getCollection(this.collectionName)
 			return collectionInfo
-		} catch (error: UnsafeAny) {
+		} catch (error) {
 			if (error instanceof Error) {
 				logger.warn(
 					"QdrantVectorStore",
@@ -187,7 +195,7 @@ export class QdrantVectorStore implements IVectorStore {
 				) {
 					existingVectorSize = vectorsConfig.size
 				} else {
-					existingVectorSize = 0 // Fallback for UnsafeAny configuration
+					existingVectorSize = 0 // Fallback for unrecognized configuration
 				}
 
 				if (existingVectorSize === this.vectorSize) {
@@ -201,7 +209,7 @@ export class QdrantVectorStore implements IVectorStore {
 			// Create payload indexes
 			await this._createPayloadIndexes()
 			return created
-		} catch (error: UnsafeAny) {
+		} catch (error) {
 			const errorMessage = getErrorMessage(error)
 			logger.error(
 				"QdrantVectorStore",
@@ -314,7 +322,7 @@ export class QdrantVectorStore implements IVectorStore {
 				field_name: "type",
 				field_schema: "keyword",
 			})
-		} catch (indexError: UnsafeAny) {
+		} catch (indexError) {
 			const errorMessage = getErrorMessage(indexError).toLowerCase()
 			if (!errorMessage.includes("already exists")) {
 				logger.warn(
@@ -333,7 +341,7 @@ export class QdrantVectorStore implements IVectorStore {
 					field_name: `pathSegments.${i}`,
 					field_schema: "keyword",
 				})
-			} catch (indexError: UnsafeAny) {
+			} catch (indexError) {
 				const errorMessage = getErrorMessage(indexError).toLowerCase()
 				if (!errorMessage.includes("already exists")) {
 					logger.warn(
@@ -355,13 +363,15 @@ export class QdrantVectorStore implements IVectorStore {
 		points: Array<{
 			id: string
 			vector: number[]
-			payload: Record<string, UnsafeAny>
+			payload: Record<string, unknown>
 		}>,
 	): Promise<void> {
 		try {
 			const processedPoints = points.map((point) => {
-				if (point.payload?.filePath) {
-					const normalizedPath = point.payload.filePath.replace(/\\/g, "/")
+				const filePath = point.payload?.filePath
+
+				if (typeof filePath === "string" && filePath) {
+					const normalizedPath = filePath.replace(/\\/g, "/")
 					const segments = normalizedPath.split("/").filter(Boolean)
 					const pathSegments = segments.reduce(
 						(acc: Record<string, string>, segment: string, index: number) => {
@@ -397,7 +407,7 @@ export class QdrantVectorStore implements IVectorStore {
 	 * @param payload Payload to check
 	 * @returns Boolean indicating if the payload is valid
 	 */
-	private isPayloadValid(payload: Record<string, UnsafeAny> | null | undefined): payload is Payload {
+	private isPayloadValid(payload: Record<string, unknown> | null | undefined): payload is Payload {
 		if (!payload) {
 			return false
 		}
@@ -542,11 +552,11 @@ export class QdrantVectorStore implements IVectorStore {
 				filter,
 				wait: true,
 			})
-		} catch (error: UnsafeAny) {
+		} catch (error) {
 			// Extract more detailed error information
 			const errorMessage = getErrorMessage(error)
-			const err = error as Record<string, UnsafeAny>
-			const response = err.response as Record<string, UnsafeAny> | undefined
+			const err = (error ?? {}) as QdrantHttpErrorShape
+			const response = err.response
 			const errorStatus = err.status || response?.status || err.statusCode
 			const errorDetails = response?.data || err.data || ""
 
