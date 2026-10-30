@@ -58,6 +58,7 @@ import {
 } from "./McpHubConfigSchema"
 import { McpHubFileWatcherManager } from "./McpHubFileWatcherManager"
 import { callToolWithHub, readResourceWithHub } from "./McpHubToolCalls"
+import { refreshToolsWithHub } from "./McpHubToolRefresh"
 import {
 	isWorkspaceTrusted,
 	promptUserToTrustMcpServers as promptTrustPrompt,
@@ -727,7 +728,7 @@ export class McpHub implements IMcpHubService {
 		return null
 	}
 
-	private async fetchToolsList(serverName: string, source?: "global" | "project"): Promise<McpTool[]> {
+	public async fetchToolsList(serverName: string, source?: "global" | "project"): Promise<McpTool[]> {
 		return fetchToolsListWithHub(this as unknown as McpHubInternal, serverName, source)
 	}
 
@@ -771,41 +772,7 @@ export class McpHub implements IMcpHubService {
 	 * @returns Map of server names to their refreshed tool counts.
 	 */
 	async refreshTools(serverName?: string): Promise<Map<string, number>> {
-		const result = new Map<string, number>()
-
-		const targets = serverName
-			? this.connections.filter((c) => c.server.name === serverName && c.type === "connected")
-			: this.connections.filter((c) => c.type === "connected")
-
-		if (targets.length === 0) {
-			logger.warn(
-				"McpHub",
-				`refreshTools: No connected server(s) found${serverName ? ` for "${serverName}"` : ""}`,
-			)
-			return result
-		}
-
-		await Promise.allSettled(
-			targets.map(async (connection) => {
-				const name = connection.server.name
-				const source = connection.server.source || "global"
-				try {
-					const tools = await this.fetchToolsList(name, source as "global" | "project")
-					connection.server.tools = tools
-					result.set(name, tools.length)
-					logger.info("McpHub", `refreshTools: Refreshed ${tools.length} tool(s) for server "${name}"`)
-				} catch (error) {
-					logger.error("McpHub", `refreshTools: Failed to refresh tools for "${name}":`, error)
-					TelemetryService.reportError(error, TelemetryEventName.MCP_ERROR)
-					result.set(name, -1) // -1 signals failure
-				}
-			}),
-		)
-
-		// Notify the webview so the UI reflects the updated tool lists
-		await this.notifyWebviewOfServerChanges()
-
-		return result
+		return refreshToolsWithHub(this, serverName)
 	}
 
 	async deleteConnection(name: string, source?: "global" | "project"): Promise<void> {
@@ -1057,7 +1024,7 @@ export class McpHub implements IMcpHubService {
 		}
 	}
 
-	private async notifyWebviewOfServerChanges(): Promise<void> {
+	public async notifyWebviewOfServerChanges(): Promise<void> {
 		// Get global server order from settings file
 		const settingsPath = await this.getMcpSettingsFilePath()
 		const content = await fs.readFile(settingsPath, "utf-8")
