@@ -669,10 +669,11 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 							const parsed = codexResponsesStreamEventSchema.parse(
 								JSON.parse(line),
 							) as ResponsesStreamEvent
-							if (parsed.content || parsed.text || parsed.message) {
+							const fallbackText = parsed.content || parsed.text || parsed.message
+							if (typeof fallbackText === "string" && fallbackText) {
 								hasContent = true
 								this.sawTextOutputInCurrentResponse = true
-								yield { type: "text", text: parsed.content || parsed.text || parsed.message }
+								yield { type: "text", text: fallbackText }
 							}
 						} catch {
 							// intentionally ignored: non-JSON line in SSE stream

@@ -18,7 +18,7 @@ export interface OpenAiCodexModel {
 	reasoningBudget: number | undefined
 	verbosity: VerbosityLevel | undefined
 	tools?: boolean
-	reasoning?: { reasoning_effort?: UnsafeAny }
+	reasoning?: { reasoning_effort?: string | null }
 }
 
 // ---------------------------------------------------------------------------
@@ -45,8 +45,8 @@ export interface OpenAiCodexUsageData {
 // ---------------------------------------------------------------------------
 
 export type CodexInputItem =
-	| { role: "user" | "assistant"; content: Record<string, UnsafeAny>[] }
-	| { type: string; content?: string; id?: string; encrypted_content?: string; [key: string]: UnsafeAny }
+	| { role: "user" | "assistant"; content: Record<string, unknown>[] }
+	| { type: string; content?: string; id?: string; encrypted_content?: string; [key: string]: unknown }
 	| Anthropic.Messages.MessageParam
 
 export interface ResponsesOutputItem {
@@ -60,11 +60,11 @@ export interface ResponsesOutputItem {
 	id?: string
 	name?: string
 	function_name?: string
-	function?: { name?: string; arguments?: UnsafeAny }
-	arguments?: UnsafeAny
-	input?: UnsafeAny
+	function?: { name?: string; arguments?: unknown }
+	arguments?: unknown
+	input?: unknown
 	encrypted_content?: string
-	[key: string]: UnsafeAny
+	[key: string]: unknown
 }
 
 export interface ResponsesStreamEvent {
@@ -84,13 +84,13 @@ export interface ResponsesStreamEvent {
 	id?: string
 	name?: string
 	function_name?: string
-	arguments?: UnsafeAny
+	arguments?: unknown
 	index?: number
 	choices?: Array<{ delta?: { content?: string } }>
 	usage?: OpenAiCodexUsageData
-	error?: { message?: string; [key: string]: UnsafeAny }
+	error?: { message?: string; [key: string]: unknown }
 	message?: string
-	[key: string]: UnsafeAny
+	[key: string]: unknown
 }
 
 export interface ResponsesRequestBody {
@@ -106,10 +106,10 @@ export interface ResponsesRequestBody {
 		type: "function"
 		name: string
 		description?: string
-		parameters?: Record<string, UnsafeAny>
+		parameters?: Record<string, unknown>
 		strict?: boolean
 	}>
-	tool_choice?: UnsafeAny
+	tool_choice?: unknown
 	parallel_tool_calls?: boolean
 }
 

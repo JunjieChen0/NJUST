@@ -8,7 +8,12 @@ export async function* handleToolEvent(event: ResponsesStreamEvent, ctx: EventHa
 	if (type === "response.tool_call_arguments.delta" || type === "response.function_call_arguments.delta") {
 		const callId = event.call_id || event.tool_call_id || event.id || ctx.pendingToolCallId || undefined
 		const name = event.name || event.function_name || ctx.pendingToolCallName || undefined
-		const args = event.delta || event.arguments
+		const args =
+			typeof event.delta === "string"
+				? event.delta
+				: typeof event.arguments === "string"
+					? event.arguments
+					: undefined
 
 		if (typeof name === "string" && name.length > 0 && typeof callId === "string" && callId.length > 0) {
 			ctx.streamedToolCallIds.add(callId)

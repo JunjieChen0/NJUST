@@ -33,8 +33,8 @@ import { getApiRequestTimeout } from "../utils/timeout-config"
 export type OpenAiNativeModel = ReturnType<OpenAiNativeHandlerBase["getModel"]>
 
 export type ResponsesInputItem =
-	| { role: "user" | "assistant"; content: Record<string, UnsafeAny>[] }
-	| { type: string; id?: string; encrypted_content?: string; [key: string]: UnsafeAny }
+	| { role: "user" | "assistant"; content: Record<string, unknown>[] }
+	| { type: string; id?: string; encrypted_content?: string; [key: string]: unknown }
 	| Anthropic.Messages.MessageParam
 
 export interface ResponsesOutputItem {
@@ -48,11 +48,11 @@ export interface ResponsesOutputItem {
 	id?: string
 	name?: string
 	function_name?: string
-	function?: { name?: string; arguments?: UnsafeAny }
-	arguments?: UnsafeAny
-	input?: UnsafeAny
+	function?: { name?: string; arguments?: unknown }
+	arguments?: unknown
+	input?: unknown
 	encrypted_content?: string
-	[key: string]: UnsafeAny
+	[key: string]: unknown
 }
 
 export interface ResponsesStreamEvent {
@@ -73,11 +73,13 @@ export interface ResponsesStreamEvent {
 	id?: string
 	name?: string
 	function_name?: string
-	arguments?: UnsafeAny
+	arguments?: unknown
 	index?: number
 	choices?: Array<{ delta?: { content?: string } }>
 	usage?: OpenAiUsageData
-	[key: string]: UnsafeAny
+	error?: { message?: string; [key: string]: unknown }
+	message?: string
+	[key: string]: unknown
 }
 
 export interface ResponsesClientLike {
