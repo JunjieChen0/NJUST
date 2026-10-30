@@ -3,7 +3,7 @@
  * Used by openai-codex and openai-native to normalize JSON schemas.
  */
 
-type JsonSchema = Record<string, UnsafeAny> & {
+type JsonSchema = Record<string, unknown> & {
 	type?: string | string[]
 	required?: string[]
 	additionalProperties?: boolean
@@ -11,12 +11,15 @@ type JsonSchema = Record<string, UnsafeAny> & {
 	items?: JsonSchema
 }
 
-function isSchema(value: UnsafeAny): value is JsonSchema {
+function isSchema(value: unknown): value is JsonSchema {
 	return typeof value === "object" && value !== null
 }
 
-export function ensureAllRequired(schema: UnsafeAny): UnsafeAny {
-	const getPrimaryType = (value: UnsafeAny): string | undefined =>
+export function ensureAllRequired(schema: JsonSchema): JsonSchema
+export function ensureAllRequired(schema: undefined): undefined
+export function ensureAllRequired(schema: JsonSchema | undefined): JsonSchema | undefined
+export function ensureAllRequired(schema: JsonSchema | undefined): JsonSchema | undefined {
+	const getPrimaryType = (value: unknown): string | undefined =>
 		isSchema(value) ? (Array.isArray(value.type) ? value.type.find((t) => t !== "null") : value.type) : undefined
 
 	if (!isSchema(schema) || getPrimaryType(schema) !== "object") {
@@ -62,7 +65,10 @@ export function ensureAllRequired(schema: UnsafeAny): UnsafeAny {
 	return result
 }
 
-export function ensureAdditionalPropertiesFalse(schema: UnsafeAny): UnsafeAny {
+export function ensureAdditionalPropertiesFalse(schema: JsonSchema): JsonSchema
+export function ensureAdditionalPropertiesFalse(schema: undefined): undefined
+export function ensureAdditionalPropertiesFalse(schema: JsonSchema | undefined): JsonSchema | undefined
+export function ensureAdditionalPropertiesFalse(schema: JsonSchema | undefined): JsonSchema | undefined {
 	if (!isSchema(schema) || schema.type !== "object") {
 		return schema
 	}

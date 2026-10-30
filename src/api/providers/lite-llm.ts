@@ -86,7 +86,7 @@ export class LiteLLMHandler extends RouterProvider implements SingleCompletionHa
 
 		return openAiMessages.map((msg) => {
 			if (msg.role === "assistant") {
-				const toolCalls = (msg as Record<string, UnsafeAny>).tool_calls as UnsafeAny[] | undefined
+				const toolCalls = (msg as { tool_calls?: LiteLLMToolCall[] }).tool_calls
 
 				// Only process if there are tool calls
 				if (toolCalls && toolCalls.length > 0) {
@@ -142,7 +142,7 @@ export class LiteLLMHandler extends RouterProvider implements SingleCompletionHa
 						type: "text",
 						text: systemPrompt,
 						cache_control: { type: "ephemeral" },
-					} as UnsafeAny,
+					} as LiteLLMTextPart,
 				],
 			}
 
@@ -166,7 +166,7 @@ export class LiteLLMHandler extends RouterProvider implements SingleCompletionHa
 									type: "text",
 									text: message.content,
 									cache_control: { type: "ephemeral" },
-								} as UnsafeAny,
+								} as LiteLLMTextPart,
 							],
 						}
 					} else if (Array.isArray(message.content)) {
@@ -178,7 +178,7 @@ export class LiteLLMHandler extends RouterProvider implements SingleCompletionHa
 									? ({
 											...content,
 											cache_control: { type: "ephemeral" },
-										} as UnsafeAny)
+										} as LiteLLMContentPart)
 									: content,
 							),
 						}
@@ -234,7 +234,7 @@ export class LiteLLMHandler extends RouterProvider implements SingleCompletionHa
 		try {
 			const { data: completion } = await this.client.chat.completions.create(requestOptions).withResponse()
 
-			let lastUsage
+			let lastUsage: LiteLLMUsage | undefined
 
 			for await (const chunk of completion) {
 				const delta = chunk.choices[0]?.delta
@@ -266,13 +266,11 @@ export class LiteLLMHandler extends RouterProvider implements SingleCompletionHa
 				// Extract cache-related information if available
 				// LiteLLM may use different field names for cache tokens
 				const cacheWriteTokens =
-					lastUsage.cache_creation_input_tokens ||
-					(lastUsage as Record<string, UnsafeAny>).prompt_cache_miss_tokens ||
-					0
+					lastUsage.cache_creation_input_tokens || lastUsage.prompt_cache_miss_tokens || 0
 				const cacheReadTokens =
 					lastUsage.prompt_tokens_details?.cached_tokens ||
-					(lastUsage as Record<string, UnsafeAny>).cache_read_input_tokens ||
-					(lastUsage as Record<string, UnsafeAny>).prompt_cache_hit_tokens ||
+					lastUsage.cache_read_input_tokens ||
+					lastUsage.prompt_cache_hit_tokens ||
 					0
 
 				const { totalCost } = calculateApiCostOpenAI(
@@ -339,4 +337,17 @@ export class LiteLLMHandler extends RouterProvider implements SingleCompletionHa
 // LiteLLM usage may include an extra field for Anthropic use cases.
 interface LiteLLMUsage extends OpenAI.CompletionUsage {
 	cache_creation_input_tokens?: number
+	prompt_cache_miss_tokens?: number
+	cache_read_input_tokens?: number
+	prompt_cache_hit_tokens?: number
+}
+
+type LiteLLMCacheControl = { type: "ephemeral" }
+
+type LiteLLMTextPart = OpenAI.Chat.ChatCompletionContentPartText & { cache_control?: LiteLLMCacheControl }
+
+type LiteLLMContentPart = OpenAI.Chat.ChatCompletionContentPart & { cache_control?: LiteLLMCacheControl }
+
+type LiteLLMToolCall = OpenAI.Chat.ChatCompletionMessageToolCall & {
+	provider_specific_fields?: Record<string, unknown>
 }

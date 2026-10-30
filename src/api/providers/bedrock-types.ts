@@ -19,7 +19,7 @@ interface BedrockError extends Error {
 
 export const bedrockStreamEventSchema = z.object({}).loose()
 
-export function isBedrockError(error: UnsafeAny): error is BedrockError {
+export function isBedrockError(error: unknown): error is BedrockError {
 	return error instanceof Error && ("status" in error || "$metadata" in error || "__type" in error)
 }
 

@@ -358,7 +358,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				throw error
 			}
 
-			const relPath = filePath || "UnsafeAny"
+			const relPath = filePath || "unknown"
 			const errorMsg = getErrorMessage(error)
 
 			updateFileResult(relPath, {

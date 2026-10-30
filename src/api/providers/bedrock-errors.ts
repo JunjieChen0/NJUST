@@ -178,7 +178,7 @@ Please check:
 /**
  * Determines the error type based on the error message or name
  */
-export function getBedrockErrorType(error: UnsafeAny): string {
+export function getBedrockErrorType(error: unknown): string {
 	if (!(error instanceof Error)) {
 		return "GENERIC"
 	}
@@ -226,11 +226,11 @@ export function getBedrockErrorType(error: UnsafeAny): string {
  * Formats an error message based on the error type and context
  */
 export function formatBedrockErrorMessage(
-	error: UnsafeAny,
+	error: unknown,
 	errorType: string,
 	_isStreamContext: boolean,
 	modelConfig: { id: string; info: ModelInfo },
-	region: UnsafeAny,
+	region: string,
 ): string {
 	const definition = BEDROCK_ERROR_TYPES[errorType] || BEDROCK_ERROR_TYPES.GENERIC
 	let template = definition!.messageTemplate
@@ -243,7 +243,7 @@ export function formatBedrockErrorMessage(
 		templateVars.errorName = error.name
 
 		templateVars.modelId = modelConfig.id
-		templateVars.contextWindow = String(modelConfig.info.contextWindow || "UnsafeAny")
+		templateVars.contextWindow = String(modelConfig.info.contextWindow || "unknown")
 	}
 
 	// Add context-specific template variables
@@ -264,10 +264,10 @@ export function formatBedrockErrorMessage(
  * @returns Error message string for non-streaming context or array of stream chunks for streaming context
  */
 export function handleBedrockError(
-	error: UnsafeAny,
+	error: unknown,
 	isStreamContext: boolean,
 	customArn: string | undefined,
-	region: UnsafeAny,
+	region: string,
 	modelConfig: { id: string; info: ModelInfo },
 	client: BedrockRuntimeClient | undefined,
 ): string | Array<{ type: string; text?: string; inputTokens?: number; outputTokens?: number }> {

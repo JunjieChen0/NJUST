@@ -182,7 +182,7 @@ export class CustomModesManager {
 					logger.error("CustomModesManager", `Failed to parse YAML from ${filePath}:`, errorMsg)
 
 					const lineMatch = errorMsg.match(/at line (\d+)/)
-					const line = lineMatch ? lineMatch[1] : "UnsafeAny"
+					const line = lineMatch ? lineMatch[1] : "unknown"
 					vscode.window.showErrorMessage(t("common:customModes.errors.yamlParseError", { line }))
 
 					// Return empty object to prevent duplicate error handling

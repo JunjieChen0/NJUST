@@ -46,6 +46,19 @@ import {
  */
 export type BedrockConverseHandler = UnsafeAny
 
+/**
+ * Cache-relevant subset of the model info passed to the converse converter.
+ * Structural so both ModelInfo and the Bedrock model-config shapes fit.
+ */
+export interface BedrockCacheModelInfo {
+	maxTokens?: number | null
+	contextWindow?: number
+	supportsPromptCache?: boolean
+	maxCachePoints?: number
+	minTokensPerCachePoint?: number
+	cachableFields?: readonly string[]
+}
+
 export async function* bedrockCreateMessageInner(
 	handler: BedrockConverseHandler,
 	systemPrompt: string,
@@ -429,7 +442,7 @@ export function bedrockConvertToBedrockConverseMessages(
 	anthropicMessages: Anthropic.Messages.MessageParam[] | { role: string; content: string }[],
 	systemMessage?: string,
 	usePromptCache: boolean = false,
-	modelInfo?: UnsafeAny,
+	modelInfo?: BedrockCacheModelInfo,
 	conversationId?: string, // Optional conversation ID to track cache points across messages
 ): { system: SystemContentBlock[]; messages: Message[] } {
 	// First convert messages using shared converter for proper image handling
@@ -450,7 +463,10 @@ export function bedrockConvertToBedrockConverseMessages(
 		supportsPromptCache: modelInfo?.supportsPromptCache || false,
 		maxCachePoints: modelInfo?.maxCachePoints || 0,
 		minTokensPerCachePoint: modelInfo?.minTokensPerCachePoint || 50,
-		cachableFields: modelInfo?.cachableFields || [],
+		cachableFields: (modelInfo?.cachableFields ?? []).filter(
+			(field): field is "system" | "messages" | "tools" =>
+				field === "system" || field === "messages" || field === "tools",
+		),
 	}
 
 	// Get previous cache point placements for this conversation if available

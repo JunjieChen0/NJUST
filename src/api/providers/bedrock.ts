@@ -29,6 +29,8 @@ import { BaseProvider } from "./base-provider"
 import { logger } from "../../utils/logging"
 import { Package } from "../../shared/package"
 import { getModelParams } from "../transform/model-params"
+import type { AnthropicReasoningParams } from "../transform/reasoning"
+import type { CachePointPlacement } from "../transform/cache-strategy/types"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../types"
 import { getErrorMessage } from "../../shared/error-utils"
 import { type BedrockInferenceConfig, isBedrockError } from "./bedrock-types"
@@ -43,7 +45,11 @@ import {
 	getPrefixForRegion as getPrefixForRegionImpl,
 	isSystemInferenceProfile as isSystemInferenceProfileImpl,
 } from "./bedrock-models"
-import { bedrockCreateMessageInner, bedrockConvertToBedrockConverseMessages } from "./bedrock-converse"
+import {
+	bedrockCreateMessageInner,
+	bedrockConvertToBedrockConverseMessages,
+	type BedrockCacheModelInfo,
+} from "./bedrock-converse"
 
 export type { StreamEvent, UsageType } from "./bedrock-types"
 
@@ -302,7 +308,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 	}
 
 	private createEnhancedProviderError(
-		error: UnsafeAny,
+		error: unknown,
 		errorMessage: string,
 		operation: "createMessage" | "completePrompt",
 	): ApiProviderError {
@@ -336,7 +342,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 		anthropicMessages: Anthropic.Messages.MessageParam[] | { role: string; content: string }[],
 		systemMessage?: string,
 		usePromptCache: boolean = false,
-		modelInfo?: UnsafeAny,
+		modelInfo?: BedrockCacheModelInfo,
 		conversationId?: string, // Optional conversation ID to track cache points across messages
 	): { system: SystemContentBlock[]; messages: Message[] } {
 		return bedrockConvertToBedrockConverseMessages(
@@ -413,7 +419,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 		info: ModelInfo
 		maxTokens?: number
 		temperature?: number
-		reasoning?: UnsafeAny
+		reasoning?: AnthropicReasoningParams
 		reasoningBudget?: number
 	} {
 		if (this.costModelConfig?.id?.trim().length > 0) {
@@ -520,7 +526,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			info: ModelInfo
 			maxTokens?: number
 			temperature?: number
-			reasoning?: UnsafeAny
+			reasoning?: AnthropicReasoningParams
 			reasoningBudget?: number
 		}
 	}
@@ -532,7 +538,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 	 *************************************************************************************/
 
 	// Store previous cache point placements for maintaining consistency across consecutive messages
-	private previousCachePointPlacements: { [conversationId: string]: UnsafeAny[] } = {}
+	private previousCachePointPlacements: { [conversationId: string]: CachePointPlacement[] } = {}
 
 	private supportsAwsPromptCache(modelConfig: { id: BedrockModelId | string; info: ModelInfo }): boolean | undefined {
 		// Check if the model supports prompt cache
@@ -575,20 +581,20 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 	/**
 	 * Determines the error type based on the error message or name
 	 */
-	private getErrorType(error: UnsafeAny): string {
+	private getErrorType(error: unknown): string {
 		return getBedrockErrorType(error)
 	}
 
 	/**
 	 * Formats an error message based on the error type and context
 	 */
-	private formatErrorMessage(error: UnsafeAny, errorType: string, _isStreamContext: boolean): string {
+	private formatErrorMessage(error: unknown, errorType: string, _isStreamContext: boolean): string {
 		const modelConfig = this.getModel()
 		const region =
 			typeof this?.client?.config?.region === "function"
 				? this?.client?.config?.region()
 				: this?.client?.config?.region
-		return formatBedrockErrorMessage(error, errorType, _isStreamContext, modelConfig, region)
+		return formatBedrockErrorMessage(error, errorType, _isStreamContext, modelConfig, String(region))
 	}
 
 	/**
@@ -598,7 +604,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 	 * @returns Error message string for non-streaming context or array of stream chunks for streaming context
 	 */
 	private handleBedrockError(
-		error: UnsafeAny,
+		error: unknown,
 		isStreamContext: boolean,
 	): string | Array<{ type: string; text?: string; inputTokens?: number; outputTokens?: number }> {
 		const modelConfig = this.getModel()
@@ -610,7 +616,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			error,
 			isStreamContext,
 			this.options.awsCustomArn,
-			region,
+			String(region),
 			modelConfig,
 			this.client,
 		)

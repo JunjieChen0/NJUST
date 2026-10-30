@@ -18,7 +18,7 @@ export type ReasoningDetail = {
 	id?: string | null // Unique identifier for the reasoning detail
 	/**
 	 * Format of the reasoning detail:
-	 * - "UnsafeAny" - Format is not specified
+	 * - "unknown" - Format is not specified
 	 * - "openai-responses-v1" - OpenAI responses format version 1
 	 * - "anthropic-claude-v1" - Anthropic Claude format version 1 (default)
 	 * - "google-gemini-v1" - Google Gemini format version 1
@@ -81,7 +81,7 @@ export function consolidateReasoningDetails(reasoningDetails: ReasoningDetail[])
 		let concatenatedSummary = ""
 		let signature: string | undefined
 		let id: string | undefined
-		let format = "UnsafeAny"
+		let format = "unknown"
 		let type = "reasoning.text"
 
 		for (const detail of details) {

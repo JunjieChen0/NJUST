@@ -320,7 +320,8 @@ export class FileWatcher implements IFileWatcher {
 					}
 				} else {
 					const error = settledResult.reason as Error
-					const rejectedPath = (settledResult.reason as Record<string, UnsafeAny>)?.path || "UnsafeAny"
+					const rejectedReasonPath = (settledResult.reason as { path?: unknown })?.path
+					const rejectedPath = typeof rejectedReasonPath === "string" ? rejectedReasonPath : "unknown"
 					logger.error("FileWatcher", "A file processing promise was rejected:", settledResult.reason)
 					batchResults.push({
 						path: rejectedPath,

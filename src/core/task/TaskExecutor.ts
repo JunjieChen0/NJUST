@@ -568,7 +568,7 @@ export class TaskExecutor {
 			globalQueryProfiler.start({
 				requestId: requestProfileId,
 				taskId: t.taskId,
-				modelId: modelId ?? "UnsafeAny",
+				modelId: modelId ?? "unknown",
 				startedAt: requestStartedAt,
 			})
 
