@@ -28,11 +28,10 @@ import type { IMcpHubService } from "./interfaces/IMcpHubService"
 import { GlobalFileNames } from "../../shared/globalFileNames"
 
 import { fileExistsAtPath } from "../../utils/fs"
-import { arePathsEqual, getWorkspacePath } from "../../utils/path"
+import { getWorkspacePath } from "../../utils/path"
 import { sanitizeMcpName, toolNamesMatch } from "../../utils/mcp-name"
 import { logger } from "../../shared/logger"
 import { TelemetryService } from "@njust-ai/telemetry"
-import { TIMING } from "../../shared/constants"
 import { getErrorMessage } from "../../shared/error-utils"
 import { appendErrorMessageToConnection, connectToServerWithHub } from "./McpHubConnection"
 import {
@@ -57,6 +56,7 @@ import {
 import { McpHubFileWatcherManager } from "./McpHubFileWatcherManager"
 import { callToolWithHub, readResourceWithHub } from "./McpHubToolCalls"
 import { refreshToolsWithHub } from "./McpHubToolRefresh"
+import { McpConfigWatcherManager } from "./McpConfigWatcherManager"
 import {
 	type McpConnectionLifecycleHost,
 	refreshAllConnectionsWithHub,
@@ -123,28 +123,36 @@ export { ServerConfigSchema } from "./McpHubConfigSchema"
 
 export class McpHub implements IMcpHubService {
 	private providerRef: WeakRef<IMcpHubClient>
-	private disposables: vscode.Disposable[] = []
-	private settingsWatcher?: vscode.FileSystemWatcher
 	private fileWatcherManager = new McpHubFileWatcherManager()
-	private projectMcpWatcher?: vscode.FileSystemWatcher
 	private isDisposed: boolean = false
 	connections: McpConnection[] = []
 	isConnecting: boolean = false
 	private refCount: number = 0 // Reference counter for active clients
-	private configChangeDebounceTimers: Map<string, NodeJS.Timeout> = new Map()
-	private isProgrammaticUpdate: boolean = false
-	private flagResetTimer?: NodeJS.Timeout
 	private sanitizedNameRegistry: Map<string, string> = new Map()
+
+	private readonly configWatchers = new McpConfigWatcherManager({
+		getWorkspaceFolderPath: () => this.providerRef.deref()?.cwd ?? getWorkspacePath(),
+		getProjectMcpPath: () => this.getProjectMcpPath(),
+		getMcpSettingsFilePath: () => this.getMcpSettingsFilePath(),
+		ensureProjectMcpTrusted: () => this.ensureProjectMcpTrusted(),
+		updateServerConnections: (servers, source, manageConnectingState) =>
+			this.updateServerConnections(servers, source, manageConnectingState),
+		deleteConnection: (name, source) => this.deleteConnection(name, source),
+		getProjectConnectionNames: () =>
+			this.connections.filter((c) => c.server.source === "project").map((c) => c.server.name),
+		notifyWebviewOfServerChanges: () => this.notifyWebviewOfServerChanges(),
+		showErrorMessage: (message, error) => this.showErrorMessage(message, error),
+	})
 	private initializationPromise: Promise<void>
 
 	constructor(provider: IMcpHubClient) {
 		this.providerRef = new WeakRef(provider)
-		void this.watchMcpSettingsFile()
-		this.watchProjectMcpFile().catch((err) => {
+		void this.configWatchers.watchMcpSettingsFile()
+		this.configWatchers.watchProjectMcpFile().catch((err: unknown) => {
 			logger.error("McpHub", "watchProjectMcpFile failed:", err)
 			TelemetryService.reportError(err, TelemetryEventName.MCP_ERROR)
 		})
-		this.setupWorkspaceFoldersWatcher()
+		this.configWatchers.setupWorkspaceFoldersWatcher()
 		// Only global MCP servers are auto-started. Project-level MCP servers
 		// (.njust_ai/mcp.json) require explicit user action — prevents malicious
 		// workspace configs from spawning subprocesses on open.
@@ -212,189 +220,21 @@ export class McpHub implements IMcpHubService {
 		logger.error("McpHub", `${message}:`, error)
 	}
 
-	public setupWorkspaceFoldersWatcher(): void {
-		// Skip if test environment is detected
-		if (process.env.NODE_ENV === "test") {
-			return
-		}
+	setProgrammaticUpdateFlag(): void {
+		this.configWatchers.setProgrammaticUpdateFlag()
+	}
 
-		this.disposables.push(
-			vscode.workspace.onDidChangeWorkspaceFolders(async () => {
-				await this.updateProjectMcpServers()
-				await this.watchProjectMcpFile()
-			}),
-		)
+	scheduleProgrammaticUpdateFlagReset(): void {
+		this.configWatchers.scheduleProgrammaticUpdateFlagReset()
+	}
+
+	public setupWorkspaceFoldersWatcher(): void {
+		this.configWatchers.setupWorkspaceFoldersWatcher()
 	}
 
 	/**
 	 * Debounced wrapper for handling config file changes
 	 */
-	private debounceConfigChange(filePath: string, source: "global" | "project"): void {
-		// Skip processing if this is a programmatic update to prevent unnecessary server restarts
-		if (this.isProgrammaticUpdate) {
-			return
-		}
-
-		const key = `${source}-${filePath}`
-
-		// Clear existing timer if any
-		const existingTimer = this.configChangeDebounceTimers.get(key)
-		if (existingTimer) {
-			clearTimeout(existingTimer)
-		}
-
-		// Set new timer
-		const timer = setTimeout(async () => {
-			this.configChangeDebounceTimers.delete(key)
-			await this.handleConfigFileChange(filePath, source)
-		}, TIMING.MCP_CONFIG_CHANGE_DEBOUNCE_MS)
-
-		this.configChangeDebounceTimers.set(key, timer)
-	}
-
-	private async handleConfigFileChange(filePath: string, source: "global" | "project"): Promise<void> {
-		try {
-			const content = await fs.readFile(filePath, "utf-8")
-			let config: unknown
-
-			try {
-				config = JSON.parse(content)
-			} catch (parseError) {
-				const errorMessage = t("mcp:errors.invalid_settings_syntax")
-				logger.error("McpHub", errorMessage, parseError)
-				TelemetryService.reportError(parseError, TelemetryEventName.MCP_ERROR)
-				vscode.window.showErrorMessage(errorMessage)
-				return
-			}
-
-			const result = McpSettingsSchema.safeParse(config)
-
-			if (!result.success) {
-				const errorMessages = result.error.errors
-					.map((err) => `${err.path.join(".")}: ${err.message}`)
-					.join("\n")
-				vscode.window.showErrorMessage(t("mcp:errors.invalid_settings_validation", { errorMessages }))
-				return
-			}
-
-			// For project MCP config, require workspace trust before starting servers.
-			// This prevents malicious workspace configs from spawning subprocesses
-			// via file watcher events without user consent.
-			if (source === "project" && !(await this.ensureProjectMcpTrusted())) {
-				return
-			}
-
-			await this.updateServerConnections(result.data.mcpServers || {}, source)
-		} catch (error) {
-			// Check if the error is because the file doesn't exist
-			if ((error as NodeJS.ErrnoException).code === "ENOENT" && source === "project") {
-				// File was deleted, clean up project MCP servers
-				await this.cleanupProjectMcpServers()
-				await this.notifyWebviewOfServerChanges()
-				vscode.window.showInformationMessage(t("mcp:info.project_config_deleted"))
-			} else {
-				this.showErrorMessage(t("mcp:errors.failed_update_project"), error)
-			}
-		}
-	}
-
-	private async watchProjectMcpFile(): Promise<void> {
-		// Skip if test environment is detected or VSCode APIs are not available
-		if (process.env.NODE_ENV === "test" || !vscode.workspace.createFileSystemWatcher) {
-			return Promise.resolve()
-		}
-
-		// Clean up existing project MCP watcher if it exists
-		if (this.projectMcpWatcher) {
-			this.projectMcpWatcher.dispose()
-			this.projectMcpWatcher = undefined
-		}
-
-		if (!vscode.workspace.workspaceFolders?.length) {
-			return Promise.resolve()
-		}
-
-		const workspaceFolder = this.providerRef.deref()?.cwd ?? getWorkspacePath()
-		const projectMcpPattern = new vscode.RelativePattern(workspaceFolder, `${NJUST_AI_CONFIG_DIR}/mcp.json`)
-
-		// Create a file system watcher for the project MCP file pattern
-		this.projectMcpWatcher = vscode.workspace.createFileSystemWatcher(projectMcpPattern)
-
-		// Watch for file changes
-		const changeDisposable = this.projectMcpWatcher.onDidChange((uri) => {
-			this.debounceConfigChange(uri.fsPath, "project")
-		})
-
-		// Watch for file creation
-		const createDisposable = this.projectMcpWatcher.onDidCreate((uri) => {
-			this.debounceConfigChange(uri.fsPath, "project")
-		})
-
-		// Watch for file deletion
-		const deleteDisposable = this.projectMcpWatcher.onDidDelete(async () => {
-			// Clean up all project MCP servers when the file is deleted
-			await this.cleanupProjectMcpServers()
-			await this.notifyWebviewOfServerChanges()
-			vscode.window.showInformationMessage(t("mcp:info.project_config_deleted"))
-		})
-
-		this.disposables.push(
-			vscode.Disposable.from(changeDisposable, createDisposable, deleteDisposable, this.projectMcpWatcher),
-		)
-	}
-
-	private async updateProjectMcpServers(): Promise<void> {
-		try {
-			const projectMcpPath = await this.getProjectMcpPath()
-			if (!projectMcpPath) return
-
-			const content = await fs.readFile(projectMcpPath, "utf-8")
-			let config: unknown
-
-			try {
-				config = JSON.parse(content)
-			} catch (parseError) {
-				const errorMessage = t("mcp:errors.invalid_settings_syntax")
-				logger.error("McpHub", errorMessage, parseError)
-				TelemetryService.reportError(parseError, TelemetryEventName.MCP_ERROR)
-				vscode.window.showErrorMessage(errorMessage)
-				return
-			}
-
-			// Validate configuration structure
-			const result = McpSettingsSchema.safeParse(config)
-			if (result.success) {
-				// Require workspace trust before auto-starting project MCP servers
-				// on workspace folder changes.
-				if (!(await this.ensureProjectMcpTrusted())) {
-					return
-				}
-				await this.updateServerConnections(result.data.mcpServers || {}, "project")
-			} else {
-				// Format validation errors for better user feedback
-				const errorMessages = result.error.errors
-					.map((err) => `${err.path.join(".")}: ${err.message}`)
-					.join("\n")
-				logger.error("McpHub", "Invalid project MCP settings format:", errorMessages)
-				vscode.window.showErrorMessage(t("mcp:errors.invalid_settings_validation", { errorMessages }))
-			}
-		} catch (error) {
-			this.showErrorMessage(t("mcp:errors.failed_update_project"), error)
-		}
-	}
-
-	private async cleanupProjectMcpServers(): Promise<void> {
-		// Disconnect and remove all project MCP servers
-		const projectConnections = this.connections.filter((conn) => conn.server.source === "project")
-
-		for (const conn of projectConnections) {
-			await this.deleteConnection(conn.server.name, "project")
-		}
-
-		// Clear project servers from the connections list
-		await this.updateServerConnections({}, "project", false)
-	}
-
 	getServers(): McpServer[] {
 		// Only return enabled servers, deduplicating by name with project servers taking priority
 		const enabledConnections = this.connections.filter((conn) => !conn.server.disabled)
@@ -450,41 +290,6 @@ export class McpHub implements IMcpHubService {
 			)
 		}
 		return mcpSettingsFilePath
-	}
-
-	private async watchMcpSettingsFile(): Promise<void> {
-		// Skip if test environment is detected or VSCode APIs are not available
-		if (process.env.NODE_ENV === "test" || !vscode.workspace.createFileSystemWatcher) {
-			return
-		}
-
-		// Clean up existing settings watcher if it exists
-		if (this.settingsWatcher) {
-			this.settingsWatcher.dispose()
-			this.settingsWatcher = undefined
-		}
-
-		const settingsPath = await this.getMcpSettingsFilePath()
-		const settingsPattern = new vscode.RelativePattern(path.dirname(settingsPath), path.basename(settingsPath))
-
-		// Create a file system watcher for the global MCP settings file
-		this.settingsWatcher = vscode.workspace.createFileSystemWatcher(settingsPattern)
-
-		// Watch for file changes
-		const changeDisposable = this.settingsWatcher.onDidChange((uri) => {
-			if (arePathsEqual(uri.fsPath, settingsPath)) {
-				this.debounceConfigChange(settingsPath, "global")
-			}
-		})
-
-		// Watch for file creation
-		const createDisposable = this.settingsWatcher.onDidCreate((uri) => {
-			if (arePathsEqual(uri.fsPath, settingsPath)) {
-				this.debounceConfigChange(settingsPath, "global")
-			}
-		})
-
-		this.disposables.push(vscode.Disposable.from(changeDisposable, createDisposable, this.settingsWatcher))
 	}
 
 	private async initializeMcpServers(source: "global" | "project"): Promise<void> {
@@ -863,20 +668,6 @@ export class McpHub implements IMcpHubService {
 		this.fileWatcherManager.removeForServer(serverName)
 	}
 
-	private setProgrammaticUpdateFlag(): void {
-		if (this.flagResetTimer) {
-			clearTimeout(this.flagResetTimer)
-		}
-		this.isProgrammaticUpdate = true
-	}
-
-	private scheduleProgrammaticUpdateFlagReset(): void {
-		this.flagResetTimer = setTimeout(() => {
-			this.isProgrammaticUpdate = false
-			this.flagResetTimer = undefined
-		}, 600)
-	}
-
 	async restartConnection(serverName: string, source?: "global" | "project"): Promise<void> {
 		return restartConnectionWithHub(this.connectionLifecycleHost, serverName, source)
 	}
@@ -1106,20 +897,7 @@ export class McpHub implements IMcpHubService {
 
 		this.isDisposed = true
 
-		// Clear all debounce timers
-		for (const timer of this.configChangeDebounceTimers.values()) {
-			clearTimeout(timer)
-		}
-
-		this.configChangeDebounceTimers.clear()
-
-		// Clear flag reset timer and reset programmatic update flag
-		if (this.flagResetTimer) {
-			clearTimeout(this.flagResetTimer)
-			this.flagResetTimer = undefined
-		}
-
-		this.isProgrammaticUpdate = false
+		this.configWatchers.dispose()
 		this.removeAllFileWatchers()
 
 		for (const connection of this.connections) {
@@ -1133,16 +911,6 @@ export class McpHub implements IMcpHubService {
 
 		this.connections = []
 
-		if (this.settingsWatcher) {
-			this.settingsWatcher.dispose()
-			this.settingsWatcher = undefined
-		}
-
-		if (this.projectMcpWatcher) {
-			this.projectMcpWatcher.dispose()
-			this.projectMcpWatcher = undefined
-		}
-
-		this.disposables.forEach((d) => d.dispose())
+		this.configWatchers.dispose()
 	}
 }
