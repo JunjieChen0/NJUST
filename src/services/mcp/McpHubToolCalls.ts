@@ -1,4 +1,3 @@
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { CallToolResultSchema, ReadResourceResultSchema } from "@modelcontextprotocol/sdk/types.js"
 
 import type { McpResourceResponse, McpServer, McpToolCallResponse } from "@njust-ai/types"
@@ -11,11 +10,16 @@ import { ServerConfigSchema } from "./McpHubConfigSchema"
 
 type McpSource = "global" | "project"
 
+/** The only client capability these calls need; keeps the seam testable. */
+export interface McpRequestable {
+	request(request: unknown, resultSchema: unknown, options?: { timeout?: number }): Promise<unknown>
+}
+
 /** Minimal structural view of a hub connection used by resource/tool calls. */
 export interface McpToolCallConnection {
 	type: "connected" | "disconnected"
 	server: McpServer
-	client: Client | null
+	client: McpRequestable | null
 }
 
 export interface McpToolCallHost {
@@ -30,7 +34,7 @@ function requireConnected(
 	source: McpSource | undefined,
 	disabledMessage: (name: string) => string,
 	missingMessage: (name: string, source?: McpSource) => string,
-): McpToolCallConnection & { client: Client } {
+): McpToolCallConnection & { client: McpRequestable } {
 	const connection = host.findConnection(serverName, source)
 
 	if (!connection || connection.type !== "connected" || !connection.client) {
@@ -41,7 +45,7 @@ function requireConnected(
 		throw new Error(disabledMessage(serverName))
 	}
 
-	return connection as McpToolCallConnection & { client: Client }
+	return connection as McpToolCallConnection & { client: McpRequestable }
 }
 
 /** Reads an MCP resource from a connected server. */
@@ -59,7 +63,10 @@ export async function readResourceWithHub(
 		(name, src) => `No connection found for server: ${name}${src ? ` with source ${src}` : ""}`,
 	)
 
-	return connection.client.request({ method: "resources/read", params: { uri } }, ReadResourceResultSchema)
+	return (await connection.client.request(
+		{ method: "resources/read", params: { uri } },
+		ReadResourceResultSchema,
+	)) as McpResourceResponse
 }
 
 /** Invokes an MCP tool, validating argument serializability and resolving the timeout. */
@@ -107,7 +114,7 @@ export async function callToolWithHub(
 		}
 	}
 
-	return connection.client.request(
+	return (await connection.client.request(
 		{
 			method: "tools/call",
 			params: {
@@ -117,5 +124,5 @@ export async function callToolWithHub(
 		},
 		CallToolResultSchema,
 		{ timeout },
-	)
+	)) as McpToolCallResponse
 }

@@ -18,10 +18,9 @@ type FakeConnection = {
 
 const validConfig = JSON.stringify({ type: "stdio", command: "node", timeout: 5 })
 
-const makeHost = (connection: FakeConnection | undefined): McpToolCallHost =>
-	({
-		findConnection: vi.fn(() => connection),
-	}) as unknown as McpToolCallHost
+const makeHost = (connection: FakeConnection | undefined): McpToolCallHost => ({
+	findConnection: vi.fn(() => connection) as McpToolCallHost["findConnection"],
+})
 
 const makeConnection = (overrides: Partial<FakeConnection> & { disabled?: boolean; config?: string } = {}) => {
 	const { disabled, config, ...rest } = overrides as any
