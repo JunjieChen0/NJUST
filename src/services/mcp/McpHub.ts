@@ -7,8 +7,6 @@ import type { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdi
 import type { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { ListResourceTemplatesResultSchema } from "@modelcontextprotocol/sdk/types.js"
-import delay from "delay"
-import deepEqual from "fast-deep-equal"
 import { z } from "zod"
 
 import {
@@ -59,6 +57,12 @@ import {
 import { McpHubFileWatcherManager } from "./McpHubFileWatcherManager"
 import { callToolWithHub, readResourceWithHub } from "./McpHubToolCalls"
 import { refreshToolsWithHub } from "./McpHubToolRefresh"
+import {
+	type McpConnectionLifecycleHost,
+	refreshAllConnectionsWithHub,
+	restartConnectionWithHub,
+	updateServerConnectionsWithHub,
+} from "./McpHubConnectionLifecycle"
 import {
 	isWorkspaceTrusted,
 	promptUserToTrustMcpServers as promptTrustPrompt,
@@ -811,73 +815,34 @@ export class McpHub implements IMcpHubService {
 		}
 	}
 
+	private get connectionLifecycleHost(): McpConnectionLifecycleHost {
+		return {
+			getConnections: () => this.connections,
+			getIsConnecting: () => this.isConnecting,
+			setIsConnecting: (value: boolean) => {
+				this.isConnecting = value
+			},
+			isMcpEnabled: () => this.isMcpEnabled(),
+			deleteConnection: (name, source) => this.deleteConnection(name, source),
+			findConnection: (name, source) => this.findConnection(name, source),
+			validateServerConfig: (config, name) => this.validateServerConfig(config, name),
+			showErrorMessage: (message, error) => this.showErrorMessage(message, error),
+			setupFileWatcher: (name, config, source) => this.setupFileWatcher(name, config, source),
+			removeAllFileWatchers: () => this.removeAllFileWatchers(),
+			connectToServer: (name, config, source) => this.connectToServer(name, config, source),
+			notifyWebviewOfServerChanges: () => this.notifyWebviewOfServerChanges(),
+			initializeMcpServers: (source) => this.initializeMcpServers(source),
+			getMcpSettingsFilePath: () => this.getMcpSettingsFilePath(),
+			getProjectMcpPath: () => this.getProjectMcpPath(),
+		}
+	}
+
 	async updateServerConnections(
 		newServers: Record<string, unknown>,
 		source: "global" | "project" = "global",
 		manageConnectingState: boolean = true,
 	): Promise<void> {
-		if (manageConnectingState) {
-			this.isConnecting = true
-		}
-		this.removeAllFileWatchers()
-		// Filter connections by source
-		const currentConnections = this.connections.filter(
-			(conn) => conn.server.source === source || (!conn.server.source && source === "global"),
-		)
-		const currentNames = new Set(currentConnections.map((conn) => conn.server.name))
-		const newNames = new Set(Object.keys(newServers))
-
-		// Delete removed servers
-		for (const name of currentNames) {
-			if (!newNames.has(name)) {
-				await this.deleteConnection(name, source)
-			}
-		}
-
-		// Update or add servers
-		for (const [name, config] of Object.entries(newServers)) {
-			// Only consider connections that match the current source
-			const currentConnection = this.findConnection(name, source)
-
-			// Validate and transform the config
-			let validatedConfig: z.infer<typeof ServerConfigSchema>
-			try {
-				validatedConfig = this.validateServerConfig(config, name)
-			} catch (error) {
-				this.showErrorMessage(`Invalid configuration for MCP server "${name}"`, error)
-				continue
-			}
-
-			if (!currentConnection) {
-				// New server
-				try {
-					// Only setup file watcher for enabled servers
-					if (!validatedConfig.disabled) {
-						this.setupFileWatcher(name, validatedConfig, source)
-					}
-					await this.connectToServer(name, validatedConfig, source)
-				} catch (error) {
-					this.showErrorMessage(`Failed to connect to new MCP server ${name}`, error)
-				}
-			} else if (!deepEqual(JSON.parse(currentConnection.server.config), config)) {
-				// Existing server with changed config
-				try {
-					// Only setup file watcher for enabled servers
-					if (!validatedConfig.disabled) {
-						this.setupFileWatcher(name, validatedConfig, source)
-					}
-					await this.deleteConnection(name, source)
-					await this.connectToServer(name, validatedConfig, source)
-				} catch (error) {
-					this.showErrorMessage(`Failed to reconnect MCP server ${name}`, error)
-				}
-			}
-			// If server exists with same config, do nothing
-		}
-		await this.notifyWebviewOfServerChanges()
-		if (manageConnectingState) {
-			this.isConnecting = false
-		}
+		return updateServerConnectionsWithHub(this.connectionLifecycleHost, newServers, source, manageConnectingState)
 	}
 
 	private setupFileWatcher(
@@ -913,115 +878,11 @@ export class McpHub implements IMcpHubService {
 	}
 
 	async restartConnection(serverName: string, source?: "global" | "project"): Promise<void> {
-		this.isConnecting = true
-
-		// Check if MCP is globally enabled
-		const mcpEnabled = await this.isMcpEnabled()
-		if (!mcpEnabled) {
-			this.isConnecting = false
-			return
-		}
-
-		// Get existing connection and update its status
-		const connection = this.findConnection(serverName, source)
-		const config = connection?.server.config
-		if (config) {
-			vscode.window.showInformationMessage(t("mcp:info.server_restarting", { serverName }))
-			connection.server.status = "connecting"
-			connection.server.error = ""
-			await this.notifyWebviewOfServerChanges()
-			await delay(500) // artificial delay to show user that server is restarting
-			try {
-				await this.deleteConnection(serverName, connection.server.source)
-				// Parse the config to validate it
-				const parsedConfig = JSON.parse(config)
-				try {
-					// Validate the config
-					const validatedConfig = this.validateServerConfig(parsedConfig, serverName)
-
-					// Try to connect again using validated config
-					await this.connectToServer(serverName, validatedConfig, connection.server.source || "global")
-					vscode.window.showInformationMessage(t("mcp:info.server_connected", { serverName }))
-				} catch (validationError) {
-					this.showErrorMessage(`Invalid configuration for MCP server "${serverName}"`, validationError)
-				}
-			} catch (error) {
-				this.showErrorMessage(`Failed to restart ${serverName} MCP server connection`, error)
-			}
-		}
-
-		await this.notifyWebviewOfServerChanges()
-		this.isConnecting = false
+		return restartConnectionWithHub(this.connectionLifecycleHost, serverName, source)
 	}
 
 	public async refreshAllConnections(): Promise<void> {
-		if (this.isConnecting) {
-			return
-		}
-
-		// Check if MCP is globally enabled
-		const mcpEnabled = await this.isMcpEnabled()
-		if (!mcpEnabled) {
-			// Clear all existing connections
-			const existingConnections = [...this.connections]
-			for (const conn of existingConnections) {
-				await this.deleteConnection(conn.server.name, conn.server.source)
-			}
-
-			// Still initialize servers to track them, but they won't connect
-			await this.initializeMcpServers("global")
-			await this.initializeMcpServers("project")
-
-			await this.notifyWebviewOfServerChanges()
-			return
-		}
-
-		this.isConnecting = true
-
-		try {
-			const globalPath = await this.getMcpSettingsFilePath()
-			let _globalServers: Record<string, unknown> = {}
-			try {
-				const globalContent = await fs.readFile(globalPath, "utf-8")
-				const globalConfig = JSON.parse(globalContent)
-				_globalServers = globalConfig.mcpServers || {}
-			} catch (error) {
-				logger.warn("McpHub", "Error reading global MCP config:", error)
-				TelemetryService.reportError(error, TelemetryEventName.MCP_ERROR)
-			}
-
-			const projectPath = await this.getProjectMcpPath()
-			let _projectServers: Record<string, unknown> = {}
-			if (projectPath) {
-				try {
-					const projectContent = await fs.readFile(projectPath, "utf-8")
-					const projectConfig = JSON.parse(projectContent)
-					_projectServers = projectConfig.mcpServers || {}
-				} catch (error) {
-					logger.warn("McpHub", "Error reading project MCP config:", error)
-					TelemetryService.reportError(error, TelemetryEventName.MCP_ERROR)
-				}
-			}
-
-			// Clear all existing connections first
-			const existingConnections = [...this.connections]
-			for (const conn of existingConnections) {
-				await this.deleteConnection(conn.server.name, conn.server.source)
-			}
-
-			// Re-initialize all servers from scratch
-			// This ensures proper initialization including fetching tools, resources, etc.
-			await this.initializeMcpServers("global")
-			await this.initializeMcpServers("project")
-
-			await delay(100)
-
-			await this.notifyWebviewOfServerChanges()
-		} catch (error) {
-			this.showErrorMessage("Failed to refresh MCP servers", error)
-		} finally {
-			this.isConnecting = false
-		}
+		return refreshAllConnectionsWithHub(this.connectionLifecycleHost)
 	}
 
 	public async notifyWebviewOfServerChanges(): Promise<void> {
