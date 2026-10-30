@@ -3,7 +3,8 @@
 		{
 			"id": "GHSA-mrhx-c7xc-m3w5",
 			"package": "zod",
-			"reason": "Upgrading zod to 4.x requires @njust-ai/types and src to migrate together: NjustAiSettingsSchema is compiled against zod 3, 22 dependencies require ^3.25.76, and src imports zod in 78 files. The affected path is apps/web-evals only, which is a development dashboard and is not shipped in the extension. Re-evaluate when the zod 4 migration is scheduled.",
+			"paths": ["src>@lmstudio/sdk>zod"],
+			"reason": "zod >= 4.6.6 fixes the advisory and the workspace now uses zod 4.6.7, but @lmstudio/sdk (2.1.0, latest) pins zod ^3.22.4 and crashes at import time under zod 4, so the SDK keeps a nested zod 3.25.76. The SDK only validates local LM Studio config/responses, not untrusted remote input. Re-evaluate when the SDK supports zod 4 or when the SDK is replaced with direct LM Studio REST calls.",
 			"owner": "repo-maintainers",
 			"expires": "2026-12-31"
 		}
