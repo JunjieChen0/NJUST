@@ -1237,7 +1237,7 @@ describe("DockerSandboxRunner", () => {
 				createdAt: Date.now(),
 			})
 
-			const first = runner.run(makeRequest({ executionId: "first", timeoutMs: 50 }))
+			const first = runner.run(makeRequest({ executionId: "first", timeoutMs: 1_000 }))
 			const firstRejection = expect(first).rejects.toBeInstanceOf(CommandTimeoutError)
 			await vi.waitFor(() => expect(internals.createContainer).toHaveBeenCalledOnce())
 			await firstRejection
@@ -1254,13 +1254,14 @@ describe("DockerSandboxRunner", () => {
 			const lateCreation = deferred<Container>()
 			internals.createContainer = vi.fn().mockReturnValue(lateCreation.promise)
 
-			const first = runner.run(makeRequest({ executionId: "first", timeoutMs: 20 }))
+			const first = runner.run(makeRequest({ executionId: "first", timeoutMs: 1_000 }))
 			const firstRejection = expect(first).rejects.toBeInstanceOf(CommandTimeoutError)
 			await vi.waitFor(() => expect(internals.createContainer).toHaveBeenCalledOnce())
 			await firstRejection
 
-			const second = runner.run(makeRequest({ executionId: "second", timeoutMs: 20 }))
+			const second = runner.run(makeRequest({ executionId: "second", timeoutMs: 1_000 }))
 			await expect(second).rejects.toBeInstanceOf(CommandTimeoutError)
+			expect(internals.createContainer).toHaveBeenCalledTimes(1)
 
 			lateCreation.reject(new Error("aborted docker create"))
 			await Promise.resolve()
@@ -1272,7 +1273,7 @@ describe("DockerSandboxRunner", () => {
 			const lateCreation = deferred<Container>()
 			internals.createContainer = vi.fn().mockReturnValue(lateCreation.promise)
 
-			const execution = runner.run(makeRequest({ executionId: "late", timeoutMs: 20 }))
+			const execution = runner.run(makeRequest({ executionId: "late", timeoutMs: 1_000 }))
 			const rejection = expect(execution).rejects.toBeInstanceOf(CommandTimeoutError)
 			await vi.waitFor(() => expect(internals.createContainer).toHaveBeenCalledOnce())
 			await rejection
@@ -1302,7 +1303,7 @@ describe("DockerSandboxRunner", () => {
 			const lateCreation = deferred<Container>()
 			internals.createContainer = vi.fn().mockReturnValue(lateCreation.promise)
 
-			const execution = runner.run(makeRequest({ executionId: "late-cleanup", timeoutMs: 20 }))
+			const execution = runner.run(makeRequest({ executionId: "late-cleanup", timeoutMs: 1_000 }))
 			const rejection = expect(execution).rejects.toBeInstanceOf(CommandTimeoutError)
 			await vi.waitFor(() => expect(internals.createContainer).toHaveBeenCalledOnce())
 			await rejection
