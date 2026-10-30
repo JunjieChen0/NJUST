@@ -6,11 +6,7 @@ import type { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import type { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import type { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
-import {
-	CallToolResultSchema,
-	ListResourceTemplatesResultSchema,
-	ReadResourceResultSchema,
-} from "@modelcontextprotocol/sdk/types.js"
+import { ListResourceTemplatesResultSchema } from "@modelcontextprotocol/sdk/types.js"
 import delay from "delay"
 import deepEqual from "fast-deep-equal"
 import { z } from "zod"
@@ -61,6 +57,7 @@ import {
 	validateServerConfig as validateServerConfigStandalone,
 } from "./McpHubConfigSchema"
 import { McpHubFileWatcherManager } from "./McpHubFileWatcherManager"
+import { callToolWithHub, readResourceWithHub } from "./McpHubToolCalls"
 import {
 	isWorkspaceTrusted,
 	promptUserToTrustMcpServers as promptTrustPrompt,
@@ -681,7 +678,7 @@ export class McpHub implements IMcpHubService {
 	 * @param source Optional source to filter by (global or project)
 	 * @returns The matching connection or undefined if not found
 	 */
-	private findConnection(serverName: string, source?: "global" | "project"): McpConnection | undefined {
+	public findConnection(serverName: string, source?: "global" | "project"): McpConnection | undefined {
 		// If source is specified, only find servers with that source
 		if (source !== undefined) {
 			return this.connections.find((conn) => conn.server.name === serverName && conn.server.source === source)
@@ -1169,22 +1166,7 @@ export class McpHub implements IMcpHubService {
 		return deleteServerWithHub(this as unknown as McpHubInternal, serverName, source)
 	}
 	async readResource(serverName: string, uri: string, source?: "global" | "project"): Promise<McpResourceResponse> {
-		const connection = this.findConnection(serverName, source)
-		if (!connection || connection.type !== "connected") {
-			throw new Error(`No connection found for server: ${serverName}${source ? ` with source ${source}` : ""}`)
-		}
-		if (connection.server.disabled) {
-			throw new Error(`Server "${serverName}" is disabled`)
-		}
-		return await connection.client.request(
-			{
-				method: "resources/read",
-				params: {
-					uri,
-				},
-			},
-			ReadResourceResultSchema,
-		)
+		return readResourceWithHub(this, serverName, uri, source)
 	}
 
 	async callTool(
@@ -1193,56 +1175,7 @@ export class McpHub implements IMcpHubService {
 		toolArguments?: Record<string, unknown>,
 		source?: "global" | "project",
 	): Promise<McpToolCallResponse> {
-		const connection = this.findConnection(serverName, source)
-		if (!connection || connection.type !== "connected") {
-			throw new Error(
-				`No connection found for server: ${serverName}${source ? ` with source ${source}` : ""}. Please make sure to use MCP servers available under 'Connected MCP Servers'.`,
-			)
-		}
-		if (connection.server.disabled) {
-			throw new Error(`Server "${serverName}" is disabled and cannot be used`)
-		}
-
-		let timeout: number
-		try {
-			const parsedConfig = ServerConfigSchema.parse(JSON.parse(connection.server.config))
-			timeout = (parsedConfig.timeout ?? 60) * 1000
-		} catch (error) {
-			logger.error("McpHub", "Failed to parse server config for timeout:", error)
-			TelemetryService.reportError(error, TelemetryEventName.MCP_ERROR)
-			// Default to 60 seconds if parsing fails
-			timeout = 60 * 1000
-		}
-
-		// Validate arguments are JSON-serializable before passing to RPC layer.
-		// Circular references, Functions, Symbols, and BigInt values cause
-		// JSON.stringify to throw, which would crash the caller uncaught.
-		let safeArguments: Record<string, unknown> | undefined
-		if (toolArguments !== undefined) {
-			try {
-				safeArguments = JSON.parse(JSON.stringify(toolArguments))
-			} catch (serializeError) {
-				throw new Error(
-					`Cannot serialize tool arguments for "${toolName}" on server "${serverName}": ` +
-						`arguments contain non-JSON-safe values (circular references, functions, etc.). ` +
-						`Original error: ${(serializeError as Error).message}`,
-				)
-			}
-		}
-
-		return await connection.client.request(
-			{
-				method: "tools/call",
-				params: {
-					name: toolName,
-					arguments: safeArguments,
-				},
-			},
-			CallToolResultSchema,
-			{
-				timeout,
-			},
-		)
+		return callToolWithHub(this, serverName, toolName, toolArguments, source)
 	}
 
 	/**
