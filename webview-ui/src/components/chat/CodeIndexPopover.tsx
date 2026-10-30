@@ -477,7 +477,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 		} catch (error) {
 			if (error instanceof z.ZodError) {
 				const errors: Record<string, string> = {}
-				error.errors.forEach((err) => {
+				error.issues.forEach((err) => {
 					if (err.path[0]) {
 						errors[err.path[0] as string] = err.message
 					}
@@ -619,9 +619,7 @@ export const CodeIndexPopover: React.FC<CodeIndexPopoverProps> = ({
 						<div className="flex flex-row items-center gap-1 p-0 mt-0 mb-1 w-full">
 							<h4 className="m-0 pb-2 flex-1">{t("settings:codeIndex.title")}</h4>
 						</div>
-						<p className="my-0 pr-4 text-sm w-full">
-							{t("settings:codeIndex.description")}
-						</p>
+						<p className="my-0 pr-4 text-sm w-full">{t("settings:codeIndex.description")}</p>
 					</div>
 
 					<div className="p-4">

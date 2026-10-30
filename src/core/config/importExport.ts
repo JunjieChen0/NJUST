@@ -189,7 +189,13 @@ export async function importSettingsFromPath(
 		let error = "Unknown error"
 
 		if (e instanceof ZodError) {
-			error = e.issues.map((issue) => `[${issue.path.join(".")}]: ${issue.message}`).join("\n")
+			error = e.issues
+				.map((issue) => {
+					const message =
+						issue.code === "invalid_type" && issue.input === undefined ? "Required" : issue.message
+					return `[${issue.path.join(".")}]: ${message}`
+				})
+				.join("\n")
 			TelemetryService.instance.captureSchemaValidationError({ schemaName: "ImportExport", error: e })
 		} else if (e instanceof Error) {
 			error = e.message

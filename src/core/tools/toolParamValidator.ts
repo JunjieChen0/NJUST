@@ -49,13 +49,12 @@ function formatValidationError(toolName: string, issues: ToolValidationIssue[]):
 
 function zodIssuesToValidationIssues(zodIssues: z.ZodIssue[]): ToolValidationIssue[] {
 	return zodIssues.map((issue) => {
-		const detail = issue as unknown as Record<string, unknown>
-		const expected = detail?.expected
-		const received = detail?.received
+		const missingRequired = issue.code === "invalid_type" && issue.input === undefined
 		return {
 			field: issue.path.join(".") || "<root>",
-			reason: issue.message,
-			expected: expected !== undefined && received !== undefined ? `${JSON.stringify(expected)}` : undefined,
+			reason: missingRequired ? "Required" : issue.message,
+			expected:
+				issue.code === "invalid_type" && !missingRequired ? `${JSON.stringify(issue.expected)}` : undefined,
 		}
 	})
 }
@@ -73,9 +72,7 @@ export interface ToolValidator<T = Record<string, unknown>> {
  * @param schema - Zod schema describing the tool's parameters
  * @returns ToolValidator with unified error formatting
  */
-export function createToolValidator<T = Record<string, unknown>>(
-	schema: z.ZodType<T, z.ZodTypeDef, unknown>,
-): ToolValidator<T> {
+export function createToolValidator<T = Record<string, unknown>>(schema: z.ZodType<T, unknown>): ToolValidator<T> {
 	return {
 		validate(params) {
 			const result = schema.safeParse(params)
@@ -167,7 +164,7 @@ const toolSchemas = {
 	use_mcp_tool: z.object({
 		server_name: z.string().min(1, "server_name must not be empty"),
 		tool_name: z.string().min(1, "tool_name must not be empty"),
-		arguments: z.record(z.unknown()).optional(),
+		arguments: z.record(z.string(), z.unknown()).optional(),
 	}),
 
 	new_task: z.object({
@@ -254,7 +251,7 @@ const toolSchemas = {
 
 	skill: z.object({
 		skill_id: z.string().min(1, "skill_id must not be empty"),
-		args: z.record(z.unknown()).optional(),
+		args: z.record(z.string(), z.unknown()).optional(),
 	}),
 
 	sleep: z.object({

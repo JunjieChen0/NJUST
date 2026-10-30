@@ -40,7 +40,7 @@ const taskBoardItemSchema = z.object({
 	dependsOn: z.array(z.string()).optional(),
 	createdAt: z.number(),
 	updatedAt: z.number(),
-	metadata: z.record(z.unknown()).optional(),
+	metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
 const persistedTaskBoardSchema = z.array(z.unknown())

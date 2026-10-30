@@ -316,7 +316,7 @@ export class McpHub implements IMcpHubService {
 				// Pass all servers including disabled ones - they'll be handled in updateServerConnections
 				await this.updateServerConnections(result.data.mcpServers || {}, source, false)
 			} else {
-				const errorMessages = result.error.errors
+				const errorMessages = result.error.issues
 					.map((err) => `${err.path.join(".")}: ${err.message}`)
 					.join("\n")
 				logger.error("McpHub", `Invalid ${source} MCP settings format:`, errorMessages)

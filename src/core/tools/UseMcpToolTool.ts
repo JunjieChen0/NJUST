@@ -44,7 +44,7 @@ export class UseMcpToolTool extends BaseTool<"use_mcp_tool"> {
 		return z.object({
 			server_name: z.string().min(1, "server_name is required"),
 			tool_name: z.string().min(1, "tool_name is required"),
-			arguments: z.record(z.unknown()).optional(),
+			arguments: z.record(z.string(), z.unknown()).optional(),
 		})
 	}
 

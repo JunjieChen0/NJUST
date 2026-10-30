@@ -48,7 +48,7 @@
 		"eslint": "^9.28.0",
 		"glob": "^11.1.0",
 		"husky": "^9.1.7",
-		"knip": "^5.44.4",
+		"knip": "^6.44.0",
 		"lint-staged": "^17.0.5",
 		"madge": "^8.0.0",
 		"mkdirp": "^3.0.1",
@@ -72,6 +72,11 @@
 		"onlyBuiltDependencies": [
 			"@vscode/ripgrep"
 		],
+		"peerDependencyRules": {
+			"allowedVersions": {
+				"openai>zod": "4"
+			}
+		},
 		"overrides": {
 			"tar-fs": "^3.1.1",
 			"tar": "^7.5.22",
@@ -154,7 +159,6 @@
 			"protobufjs": "^7.5.8",
 			"@types/react": "^18.3.23",
 			"@types/react-dom": "^18.3.5",
-			"zod": "^3.25.76",
 			"shell-quote": "1.12.0",
 			"cookie": "^0.7.0",
 			"cross-spawn": "^7.0.5",

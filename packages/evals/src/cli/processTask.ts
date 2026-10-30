@@ -63,6 +63,7 @@ export const processTask = async ({
 
 		await publish({
 			eventName: passed ? NJUST_AIEventName.EvalPass : NJUST_AIEventName.EvalFail,
+			payload: undefined,
 			taskId: task.id,
 		})
 	} finally {

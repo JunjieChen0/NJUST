@@ -14,7 +14,14 @@ export const DEFAULT_CONSECUTIVE_MISTAKE_LIMIT = 3
  * Dynamic provider requires external API calls in order to get the model list.
  */
 
-export const dynamicProviders = ["openrouter", "vercel-ai-gateway", "litellm", "requesty", "njust-ai", "unbound"] as const
+export const dynamicProviders = [
+	"openrouter",
+	"vercel-ai-gateway",
+	"litellm",
+	"requesty",
+	"njust-ai",
+	"unbound",
+] as const
 
 export type DynamicProvider = (typeof dynamicProviders)[number]
 
@@ -391,43 +398,45 @@ const basetenSchema = apiModelIdProviderModelSchema.extend({
 })
 
 const defaultSchema = z.object({
-	apiProvider: z.undefined(),
+	apiProvider: z.undefined().optional(),
 })
 
-export const providerSettingsSchemaDiscriminated = z.discriminatedUnion("apiProvider", [
-	anthropicSchema.merge(z.object({ apiProvider: z.literal("anthropic") })),
-	openRouterSchema.merge(z.object({ apiProvider: z.literal("openrouter") })),
-	bedrockSchema.merge(z.object({ apiProvider: z.literal("bedrock") })),
-	vertexSchema.merge(z.object({ apiProvider: z.literal("vertex") })),
-	openAiSchema.merge(z.object({ apiProvider: z.literal("openai") })),
-	ollamaSchema.merge(z.object({ apiProvider: z.literal("ollama") })),
-	vsCodeLmSchema.merge(z.object({ apiProvider: z.literal("vscode-lm") })),
-	lmStudioSchema.merge(z.object({ apiProvider: z.literal("lmstudio") })),
-	geminiSchema.merge(z.object({ apiProvider: z.literal("gemini") })),
-	geminiCliSchema.merge(z.object({ apiProvider: z.literal("gemini-cli") })),
-	openAiCodexSchema.merge(z.object({ apiProvider: z.literal("openai-codex") })),
-	openAiNativeSchema.merge(z.object({ apiProvider: z.literal("openai-native") })),
-	mistralSchema.merge(z.object({ apiProvider: z.literal("mistral") })),
-	deepSeekSchema.merge(z.object({ apiProvider: z.literal("deepseek") })),
-	moonshotSchema.merge(z.object({ apiProvider: z.literal("moonshot") })),
-	minimaxSchema.merge(z.object({ apiProvider: z.literal("minimax") })),
-	qwenSchema.merge(z.object({ apiProvider: z.literal("qwen") })),
-	doubaoSchema.merge(z.object({ apiProvider: z.literal("doubao") })),
-	glmSchema.merge(z.object({ apiProvider: z.literal("glm") })),
-	mimoSchema.merge(z.object({ apiProvider: z.literal("mimo") })),
-	mimoTokenPlanSchema.merge(z.object({ apiProvider: z.literal("mimo-token-plan") })),
-	requestySchema.merge(z.object({ apiProvider: z.literal("requesty") })),
-	unboundSchema.merge(z.object({ apiProvider: z.literal("unbound") })),
-	fakeAiSchema.merge(z.object({ apiProvider: z.literal("fake-ai") })),
-	xaiSchema.merge(z.object({ apiProvider: z.literal("xai") })),
-	basetenSchema.merge(z.object({ apiProvider: z.literal("baseten") })),
-	litellmSchema.merge(z.object({ apiProvider: z.literal("litellm") })),
-	sambaNovaSchema.merge(z.object({ apiProvider: z.literal("sambanova") })),
-	zaiSchema.merge(z.object({ apiProvider: z.literal("zai") })),
-	fireworksSchema.merge(z.object({ apiProvider: z.literal("fireworks") })),
-	qwenCodeSchema.merge(z.object({ apiProvider: z.literal("qwen-code") })),
-	rooSchema.merge(z.object({ apiProvider: z.literal("njust-ai") })),
-	vercelAiGatewaySchema.merge(z.object({ apiProvider: z.literal("vercel-ai-gateway") })),
+export const providerSettingsSchemaDiscriminated = z.union([
+	z.discriminatedUnion("apiProvider", [
+		anthropicSchema.merge(z.object({ apiProvider: z.literal("anthropic") })),
+		openRouterSchema.merge(z.object({ apiProvider: z.literal("openrouter") })),
+		bedrockSchema.merge(z.object({ apiProvider: z.literal("bedrock") })),
+		vertexSchema.merge(z.object({ apiProvider: z.literal("vertex") })),
+		openAiSchema.merge(z.object({ apiProvider: z.literal("openai") })),
+		ollamaSchema.merge(z.object({ apiProvider: z.literal("ollama") })),
+		vsCodeLmSchema.merge(z.object({ apiProvider: z.literal("vscode-lm") })),
+		lmStudioSchema.merge(z.object({ apiProvider: z.literal("lmstudio") })),
+		geminiSchema.merge(z.object({ apiProvider: z.literal("gemini") })),
+		geminiCliSchema.merge(z.object({ apiProvider: z.literal("gemini-cli") })),
+		openAiCodexSchema.merge(z.object({ apiProvider: z.literal("openai-codex") })),
+		openAiNativeSchema.merge(z.object({ apiProvider: z.literal("openai-native") })),
+		mistralSchema.merge(z.object({ apiProvider: z.literal("mistral") })),
+		deepSeekSchema.merge(z.object({ apiProvider: z.literal("deepseek") })),
+		moonshotSchema.merge(z.object({ apiProvider: z.literal("moonshot") })),
+		minimaxSchema.merge(z.object({ apiProvider: z.literal("minimax") })),
+		qwenSchema.merge(z.object({ apiProvider: z.literal("qwen") })),
+		doubaoSchema.merge(z.object({ apiProvider: z.literal("doubao") })),
+		glmSchema.merge(z.object({ apiProvider: z.literal("glm") })),
+		mimoSchema.merge(z.object({ apiProvider: z.literal("mimo") })),
+		mimoTokenPlanSchema.merge(z.object({ apiProvider: z.literal("mimo-token-plan") })),
+		requestySchema.merge(z.object({ apiProvider: z.literal("requesty") })),
+		unboundSchema.merge(z.object({ apiProvider: z.literal("unbound") })),
+		fakeAiSchema.merge(z.object({ apiProvider: z.literal("fake-ai") })),
+		xaiSchema.merge(z.object({ apiProvider: z.literal("xai") })),
+		basetenSchema.merge(z.object({ apiProvider: z.literal("baseten") })),
+		litellmSchema.merge(z.object({ apiProvider: z.literal("litellm") })),
+		sambaNovaSchema.merge(z.object({ apiProvider: z.literal("sambanova") })),
+		zaiSchema.merge(z.object({ apiProvider: z.literal("zai") })),
+		fireworksSchema.merge(z.object({ apiProvider: z.literal("fireworks") })),
+		qwenCodeSchema.merge(z.object({ apiProvider: z.literal("qwen-code") })),
+		rooSchema.merge(z.object({ apiProvider: z.literal("njust-ai") })),
+		vercelAiGatewaySchema.merge(z.object({ apiProvider: z.literal("vercel-ai-gateway") })),
+	]),
 	defaultSchema,
 ])
 

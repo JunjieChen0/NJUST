@@ -212,7 +212,7 @@ export class McpConfigWatcherManager {
 			const result = McpSettingsSchema.safeParse(config)
 
 			if (!result.success) {
-				const errorMessages = result.error.errors
+				const errorMessages = result.error.issues
 					.map((err) => `${err.path.join(".")}: ${err.message}`)
 					.join("\n")
 				vscode.window.showErrorMessage(t("mcp:errors.invalid_settings_validation", { errorMessages }))
@@ -264,7 +264,7 @@ export class McpConfigWatcherManager {
 				}
 				await this.host.updateServerConnections(result.data.mcpServers || {}, "project")
 			} else {
-				const errorMessages = result.error.errors
+				const errorMessages = result.error.issues
 					.map((err) => `${err.path.join(".")}: ${err.message}`)
 					.join("\n")
 				logger.error("McpHub", "Invalid project MCP settings format:", errorMessages)

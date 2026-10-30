@@ -1,4 +1,4 @@
-import { type ZodSchema } from "zod"
+import { z, type ZodSchema } from "zod"
 import { logger } from "../../shared/logger"
 
 /**
@@ -22,9 +22,9 @@ export type JSONSchema = {
  * - Zod schema → used internally for validation in BaseTool.handle()
  * - JSON Schema → used by MCP tool registration and prompt generation
  *
- * When only a Zod schema is provided, the JSON Schema is lazily derived using
- * zod-to-json-schema. When only a JSON Schema is provided, no Zod schema is
- * available (MCP tools skip Zod validation).
+ * When only a Zod schema is provided, the JSON Schema is lazily derived with
+ * Zod's built-in `z.toJSONSchema`. When only a JSON Schema is provided, no Zod
+ * schema is available (MCP tools skip Zod validation).
  */
 export class DualSchemaAdapter {
 	private cachedJsonSchema: JSONSchema | undefined
@@ -55,12 +55,9 @@ export class DualSchemaAdapter {
 		}
 		if (this.zodSchema && !this.cachedJsonSchema) {
 			try {
-				const { zodToJsonSchema } = await import("zod-to-json-schema")
-				this.cachedJsonSchema = zodToJsonSchema(this.zodSchema, {
-					target: "openApi3",
-				}) as JSONSchema
-			} catch {
-				logger.warn("DualSchemaAdapter", "zod-to-json-schema not available; JSON Schema conversion skipped.")
+				this.cachedJsonSchema = z.toJSONSchema(this.zodSchema, { target: "openapi-3.0" }) as JSONSchema
+			} catch (error) {
+				logger.warn("DualSchemaAdapter", "Zod to JSON Schema conversion failed; JSON Schema skipped.", error)
 				return undefined
 			}
 		}

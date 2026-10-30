@@ -32,7 +32,7 @@ const createServerTypeSchema = () => {
 			command: z.string().min(1, "Command cannot be empty"),
 			args: z.array(z.string()).optional(),
 			cwd: z.string().default(() => vscode.workspace.workspaceFolders?.at(0)?.uri.fsPath ?? process.cwd()),
-			env: z.record(z.string()).optional(),
+			env: z.record(z.string(), z.string()).optional(),
 			// Ensure no SSE fields are present
 			url: z.undefined().optional(),
 			headers: z.undefined().optional(),
@@ -51,7 +51,7 @@ const createServerTypeSchema = () => {
 				.refine((url) => url.startsWith("http://") || url.startsWith("https://"), {
 					message: "SSE server URL must use http:// or https:// protocol",
 				}),
-			headers: z.record(z.string()).optional(),
+			headers: z.record(z.string(), z.string()).optional(),
 			// Ensure no stdio fields are present
 			command: z.undefined().optional(),
 			args: z.undefined().optional(),
@@ -71,7 +71,7 @@ const createServerTypeSchema = () => {
 				.refine((url) => url.startsWith("http://") || url.startsWith("https://"), {
 					message: "Streamable HTTP server URL must use http:// or https:// protocol",
 				}),
-			headers: z.record(z.string()).optional(),
+			headers: z.record(z.string(), z.string()).optional(),
 			// Ensure no stdio fields are present
 			command: z.undefined().optional(),
 			args: z.undefined().optional(),
@@ -92,7 +92,7 @@ export const ServerConfigSchema = createServerTypeSchema()
 
 // Settings schema
 export const McpSettingsSchema = z.object({
-	mcpServers: z.record(ServerConfigSchema),
+	mcpServers: z.record(z.string(), ServerConfigSchema),
 })
 
 /**
@@ -149,7 +149,7 @@ export function validateServerConfig(
 	} catch (validationError) {
 		if (validationError instanceof z.ZodError) {
 			// Extract and format validation errors
-			const errorMessages = validationError.errors
+			const errorMessages = validationError.issues
 				.map((err) => `${err.path.join(".")}: ${err.message}`)
 				.join("; ")
 			throw new Error(
