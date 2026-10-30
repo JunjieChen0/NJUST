@@ -28,7 +28,7 @@ const lmStudioModelListItemSchema = z
 	.object({
 		id: z.string().min(1),
 	})
-	.passthrough()
+	.loose()
 
 export class LmStudioHandler extends BaseProvider implements SingleCompletionHandler {
 	protected options: ApiHandlerOptions

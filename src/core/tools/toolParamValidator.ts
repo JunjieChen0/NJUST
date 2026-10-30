@@ -188,7 +188,7 @@ const toolSchemas = {
 	}),
 
 	web_fetch: z.object({
-		url: z.string().url("url must be a valid URL"),
+		url: z.url("url must be a valid URL"),
 	}),
 
 	ask_followup_question: z.object({

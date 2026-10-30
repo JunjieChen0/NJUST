@@ -19,7 +19,7 @@ const liteLlmModelInfoSchema = z
 		cache_creation_input_token_cost: z.number().optional(),
 		cache_read_input_token_cost: z.number().optional(),
 	})
-	.passthrough()
+	.loose()
 
 const liteLlmModelEntrySchema = z
 	.object({
@@ -29,9 +29,9 @@ const liteLlmModelEntrySchema = z
 			.object({
 				model: z.string().min(1),
 			})
-			.passthrough(),
+			.loose(),
 	})
-	.passthrough()
+	.loose()
 
 const liteLlmModelsResponseSchema = z.object({
 	data: z.array(z.unknown()),
@@ -76,7 +76,7 @@ export async function getLiteLLMModels(apiKey: string, baseUrl: string): Promise
 			for (const rawModel of parsedResponse.data.data) {
 				const parsedModel = liteLlmModelEntrySchema.safeParse(rawModel)
 				if (!parsedModel.success) {
-					logger.error("LiteLLM", "Skipping invalid LiteLLM model entry", parsedModel.error.format())
+					logger.error("LiteLLM", "Skipping invalid LiteLLM model entry", z.treeifyError(parsedModel.error))
 					continue
 				}
 

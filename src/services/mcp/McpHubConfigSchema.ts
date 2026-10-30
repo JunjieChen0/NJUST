@@ -46,7 +46,6 @@ const createServerTypeSchema = () => {
 		BaseConfigSchema.extend({
 			type: z.enum(["sse"]).optional(),
 			url: z
-				.string()
 				.url("URL must be a valid URL format")
 				.refine((url) => url.startsWith("http://") || url.startsWith("https://"), {
 					message: "SSE server URL must use http:// or https:// protocol",
@@ -66,7 +65,6 @@ const createServerTypeSchema = () => {
 		BaseConfigSchema.extend({
 			type: z.enum(["streamable-http"]).optional(),
 			url: z
-				.string()
 				.url("URL must be a valid URL format")
 				.refine((url) => url.startsWith("http://") || url.startsWith("https://"), {
 					message: "Streamable HTTP server URL must use http:// or https:// protocol",

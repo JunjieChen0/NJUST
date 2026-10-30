@@ -146,13 +146,13 @@ export const openAiErrorResponseSchema = z
 			.object({
 				message: z.string().optional(),
 			})
-			.passthrough()
+			.loose()
 			.optional(),
 		message: z.string().optional(),
 	})
-	.passthrough()
+	.loose()
 
-export const openAiResponsesStreamEventSchema = z.object({}).passthrough()
+export const openAiResponsesStreamEventSchema = z.object({}).loose()
 
 export type Constructor<T = object> = new (...args: unknown[]) => T
 

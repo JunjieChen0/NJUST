@@ -159,7 +159,7 @@ export const rooCliStreamEventSchema = z
 		tool_result: rooCliToolResultSchema.optional(),
 		cost: rooCliCostSchema.optional(),
 	})
-	.passthrough()
+	.loose()
 
 export type RooCliStreamEvent = z.infer<typeof rooCliStreamEventSchema>
 

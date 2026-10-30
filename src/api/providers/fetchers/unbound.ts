@@ -20,12 +20,9 @@ const unboundModelSchema = z
 		caching_price: z.union([z.string(), z.number()]).optional(),
 		cached_price: z.union([z.string(), z.number()]).optional(),
 	})
-	.passthrough()
+	.loose()
 
-const unboundModelsResponseSchema = z.union([
-	z.object({ data: z.array(z.unknown()) }).passthrough(),
-	z.array(z.unknown()),
-])
+const unboundModelsResponseSchema = z.union([z.object({ data: z.array(z.unknown()) }).loose(), z.array(z.unknown())])
 
 type UnboundModel = z.infer<typeof unboundModelSchema>
 
@@ -48,13 +45,13 @@ export async function getUnboundModels(apiKey?: string | null): Promise<Record<s
 			: []
 
 		if (!parsedResponse.success) {
-			logger.error("Unbound", "Models response is invalid", parsedResponse.error.format())
+			logger.error("Unbound", "Models response is invalid", z.treeifyError(parsedResponse.error))
 		}
 
 		for (const rawModelCandidate of rawModels) {
 			const parsedModel = unboundModelSchema.safeParse(rawModelCandidate)
 			if (!parsedModel.success) {
-				logger.error("Unbound", "Skipping invalid model entry", parsedModel.error.format())
+				logger.error("Unbound", "Skipping invalid model entry", z.treeifyError(parsedModel.error))
 				continue
 			}
 

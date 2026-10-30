@@ -79,14 +79,12 @@ export const organizationDefaultSettingsSchema = globalSettingsSchema
 		disabledTools: true,
 	})
 	// Add stronger validations for some fields.
-	.merge(
-		z.object({
-			maxOpenTabsContext: z.number().int().nonnegative().optional(),
-			maxWorkspaceFiles: z.number().int().nonnegative().optional(),
-			terminalCommandDelay: z.number().int().nonnegative().optional(),
-			terminalShellIntegrationTimeout: z.number().int().nonnegative().optional(),
-		}),
-	)
+	.extend({
+		maxOpenTabsContext: z.number().int().nonnegative().optional(),
+		maxWorkspaceFiles: z.number().int().nonnegative().optional(),
+		terminalCommandDelay: z.number().int().nonnegative().optional(),
+		terminalShellIntegrationTimeout: z.number().int().nonnegative().optional(),
+	})
 
 export type OrganizationDefaultSettings = z.infer<typeof organizationDefaultSettingsSchema>
 

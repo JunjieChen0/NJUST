@@ -45,7 +45,7 @@ const qwenTokenResponseSchema = z
 		error: z.string().optional(),
 		error_description: z.string().optional(),
 	})
-	.passthrough()
+	.loose()
 
 type QwenOAuthCredentials = z.infer<typeof qwenOAuthCredentialsSchema>
 

@@ -75,11 +75,11 @@ const OpenRouterMetadataRawSchema = z
 					.object({
 						message: z.string().optional(),
 					})
-					.passthrough(),
+					.loose(),
 			])
 			.optional(),
 	})
-	.passthrough()
+	.loose()
 
 // OpenRouter error structure that may include error.metadata.raw with actual upstream error
 // This is for caught exceptions which have the error wrapped in an "error" property

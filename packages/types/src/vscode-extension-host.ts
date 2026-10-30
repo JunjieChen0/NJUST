@@ -910,7 +910,7 @@ const nonSandboxWebviewMessageSchema = z
 	.object({
 		type: webviewMessageTypeSchema,
 	})
-	.passthrough()
+	.loose()
 	.refine((message) => !sandboxWebviewMessageTypes.has(message.type), {
 		message: "Sandbox action messages require their validated payload",
 	})
@@ -1107,4 +1107,4 @@ export const clineApiReqInfoSchema = z
 		cost: z.number().optional(),
 		cancelReason: z.enum(["streaming_failed", "user_cancelled"]).optional(),
 	})
-	.passthrough()
+	.loose()

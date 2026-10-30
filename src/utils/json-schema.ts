@@ -103,7 +103,7 @@ export const ToolInputSchema: z.ZodType<JsonSchema> = z.lazy(() =>
 			maxItems: z.number().optional(),
 			uniqueItems: z.boolean().optional(),
 		})
-		.passthrough(),
+		.loose(),
 )
 
 /**
@@ -152,7 +152,7 @@ const NormalizedToolSchemaInternal: z.ZodType<Record<string, unknown>, Record<st
 			// Format field - unsupported values will be stripped in transform
 			format: z.string().optional(),
 		})
-		.passthrough()
+		.loose()
 		.transform((schema) => {
 			const {
 				type,

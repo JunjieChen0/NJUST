@@ -393,7 +393,7 @@ export class ProviderSettingsManager {
 				// UnsafeAny keys that strict parse() would strip.
 				const filteredConfig =
 					typeof config.apiProvider === "string" && isRetiredProvider(config.apiProvider)
-						? providerSettingsWithIdSchema.passthrough().parse(config)
+						? providerSettingsWithIdSchema.loose().parse(config)
 						: discriminatedProviderSettingsWithIdSchema.parse(config)
 				providerProfiles.apiConfigs[name] = { ...filteredConfig, id }
 				await this.store(providerProfiles)
@@ -640,7 +640,7 @@ export class ProviderSettingsManager {
 							: undefined
 					const schema =
 						typeof providerValue === "string" && isRetiredProvider(providerValue)
-							? providerSettingsWithIdSchema.passthrough()
+							? providerSettingsWithIdSchema.loose()
 							: providerSettingsWithIdSchema
 					const result = schema.safeParse(sanitizedConfig)
 					return result.success ? { ...acc, [key]: result.data } : acc

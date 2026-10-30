@@ -320,7 +320,7 @@ export function getModelsFromCache(provider: ProviderName): ModelRecord | undefi
 				logger.error(
 					"ModelCache",
 					`Invalid disk cache data structure for ${provider}:`,
-					validation.error.format(),
+					z.treeifyError(validation.error),
 				)
 				return undefined
 			}
@@ -390,7 +390,7 @@ function readDynamicDiskCache(provider: ProviderName): DiskCacheEntry | undefine
 		const parsed = JSON.parse(raw)
 		const validation = diskCacheEntrySchema.safeParse(parsed)
 		if (!validation.success) {
-			logger.error("ModelCache", `Invalid dynamic disk cache for ${provider}:`, validation.error.format())
+			logger.error("ModelCache", `Invalid dynamic disk cache for ${provider}:`, z.treeifyError(validation.error))
 			return undefined
 		}
 		const entry: DiskCacheEntry = {

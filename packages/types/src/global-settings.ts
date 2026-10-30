@@ -274,7 +274,7 @@ export const GLOBAL_SETTINGS_KEYS = globalSettingsSchema.keyof().options
  * NJUST_AISettings
  */
 
-export const NjustAiSettingsSchema = providerSettingsSchema.merge(globalSettingsSchema)
+export const NjustAiSettingsSchema = providerSettingsSchema.extend(globalSettingsSchema.shape)
 
 export type NJUST_AISettings = GlobalSettings & ProviderSettings
 

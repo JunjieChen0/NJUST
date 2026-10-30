@@ -13,7 +13,7 @@ const apiErrorResponseSchema = z
 			})
 			.optional(),
 	})
-	.passthrough()
+	.loose()
 
 const imageGenerationResponseSchema = apiErrorResponseSchema.extend({
 	choices: z
@@ -30,14 +30,14 @@ const imageGenerationResponseSchema = apiErrorResponseSchema.extend({
 											type: z.string().optional(),
 											image_url: z.object({ url: z.string().optional() }).optional(),
 										})
-										.passthrough(),
+										.loose(),
 								)
 								.optional(),
 						})
-						.passthrough()
+						.loose()
 						.optional(),
 				})
-				.passthrough(),
+				.loose(),
 		)
 		.optional(),
 })
@@ -50,7 +50,7 @@ const imagesApiResponseSchema = apiErrorResponseSchema.extend({
 					b64_json: z.string().optional(),
 					url: z.string().optional(),
 				})
-				.passthrough(),
+				.loose(),
 		)
 		.optional(),
 })

@@ -104,13 +104,13 @@ export async function getOpenRouterModels(options?: ApiHandlerOptions): Promise<
 		const result = openRouterModelsResponseSchema.safeParse(response.data)
 
 		if (!result.success) {
-			logger.error("OpenRouter", "Models response is invalid", result.error.format())
+			logger.error("OpenRouter", "Models response is invalid", z.treeifyError(result.error))
 		}
 
 		for (const rawModel of result.success ? result.data.data : []) {
 			const parsedModel = openRouterModelSchema.safeParse(rawModel)
 			if (!parsedModel.success) {
-				logger.error("OpenRouter", "Skipping invalid model entry", parsedModel.error.format())
+				logger.error("OpenRouter", "Skipping invalid model entry", z.treeifyError(parsedModel.error))
 				continue
 			}
 			const model = parsedModel.data
@@ -160,7 +160,7 @@ export async function getOpenRouterModelEndpoints(
 		const result = openRouterModelEndpointsResponseSchema.safeParse(response.data)
 
 		if (!result.success) {
-			logger.error("OpenRouter", "Model endpoints response is invalid", result.error.format())
+			logger.error("OpenRouter", "Model endpoints response is invalid", z.treeifyError(result.error))
 			return models
 		}
 
@@ -174,7 +174,11 @@ export async function getOpenRouterModelEndpoints(
 		for (const rawEndpoint of endpoints) {
 			const parsedEndpoint = openRouterModelEndpointSchema.safeParse(rawEndpoint)
 			if (!parsedEndpoint.success) {
-				logger.error("OpenRouter", "Skipping invalid model endpoint entry", parsedEndpoint.error.format())
+				logger.error(
+					"OpenRouter",
+					"Skipping invalid model endpoint entry",
+					z.treeifyError(parsedEndpoint.error),
+				)
 				continue
 			}
 			const endpoint = parsedEndpoint.data

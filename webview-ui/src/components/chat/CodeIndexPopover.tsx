@@ -85,9 +85,8 @@ const createValidationSchema = (provider: EmbedderProvider, t: any) => {
 	const baseSchema = z.object({
 		codebaseIndexEnabled: z.boolean(),
 		codebaseIndexQdrantUrl: z
-			.string()
-			.min(1, t("settings:codeIndex.validation.qdrantUrlRequired"))
-			.url(t("settings:codeIndex.validation.invalidQdrantUrl")),
+			.url(t("settings:codeIndex.validation.invalidQdrantUrl"))
+			.min(1, t("settings:codeIndex.validation.qdrantUrlRequired")),
 		codeIndexQdrantApiKey: z.string().optional(),
 	})
 
@@ -103,9 +102,8 @@ const createValidationSchema = (provider: EmbedderProvider, t: any) => {
 		case "ollama":
 			return baseSchema.extend({
 				codebaseIndexEmbedderBaseUrl: z
-					.string()
-					.min(1, t("settings:codeIndex.validation.ollamaBaseUrlRequired"))
-					.url(t("settings:codeIndex.validation.invalidOllamaUrl")),
+					.url(t("settings:codeIndex.validation.invalidOllamaUrl"))
+					.min(1, t("settings:codeIndex.validation.ollamaBaseUrlRequired")),
 				codebaseIndexEmbedderModelId: z.string().min(1, t("settings:codeIndex.validation.modelIdRequired")),
 				codebaseIndexEmbedderModelDimension: z
 					.number()
@@ -116,9 +114,8 @@ const createValidationSchema = (provider: EmbedderProvider, t: any) => {
 		case "openai-compatible":
 			return baseSchema.extend({
 				codebaseIndexOpenAiCompatibleBaseUrl: z
-					.string()
-					.min(1, t("settings:codeIndex.validation.baseUrlRequired"))
-					.url(t("settings:codeIndex.validation.invalidBaseUrl")),
+					.url(t("settings:codeIndex.validation.invalidBaseUrl"))
+					.min(1, t("settings:codeIndex.validation.baseUrlRequired")),
 				codebaseIndexOpenAiCompatibleApiKey: z
 					.string()
 					.min(1, t("settings:codeIndex.validation.apiKeyRequired")),

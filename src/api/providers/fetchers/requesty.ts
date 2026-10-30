@@ -22,7 +22,7 @@ const requestyModelSchema = z
 		caching_price: z.union([z.string(), z.number()]).optional(),
 		cached_price: z.union([z.string(), z.number()]).optional(),
 	})
-	.passthrough()
+	.loose()
 
 const requestyModelsResponseSchema = z.object({
 	data: z.array(z.unknown()),
@@ -48,13 +48,13 @@ export async function getRequestyModels(baseUrl?: string, apiKey?: string): Prom
 		const rawModels = parsedResponse.success ? parsedResponse.data.data : []
 
 		if (!parsedResponse.success) {
-			logger.error("Requesty", "Models response is invalid", parsedResponse.error.format())
+			logger.error("Requesty", "Models response is invalid", z.treeifyError(parsedResponse.error))
 		}
 
 		for (const rawModelCandidate of rawModels) {
 			const parsedModel = requestyModelSchema.safeParse(rawModelCandidate)
 			if (!parsedModel.success) {
-				logger.error("Requesty", "Skipping invalid model entry", parsedModel.error.format())
+				logger.error("Requesty", "Skipping invalid model entry", z.treeifyError(parsedModel.error))
 				continue
 			}
 

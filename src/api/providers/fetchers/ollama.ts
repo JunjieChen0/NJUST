@@ -131,7 +131,7 @@ export async function getOllamaModels(
 								logger.error(
 									"Ollama",
 									"Error parsing Ollama model info response",
-									parsedModelInfo.error.format(),
+									z.treeifyError(parsedModelInfo.error),
 								)
 								return
 							}

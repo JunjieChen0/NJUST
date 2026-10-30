@@ -132,14 +132,14 @@ export const codexErrorResponseSchema = z
 			.object({
 				message: z.string().optional(),
 			})
-			.passthrough()
+			.loose()
 			.optional(),
 		message: z.string().optional(),
 		detail: z.string().optional(),
 	})
-	.passthrough()
+	.loose()
 
-export const codexResponsesStreamEventSchema = z.object({}).passthrough()
+export const codexResponsesStreamEventSchema = z.object({}).loose()
 
 export const codexCompleteResponseSchema = z
 	.object({
@@ -156,12 +156,12 @@ export const codexCompleteResponseSchema = z
 										type: z.string().optional(),
 										text: z.string().optional(),
 									})
-									.passthrough(),
+									.loose(),
 							)
 							.optional(),
 					})
-					.passthrough(),
+					.loose(),
 			)
 			.optional(),
 	})
-	.passthrough()
+	.loose()

@@ -69,7 +69,10 @@ export async function getVercelAiGatewayModels(_options?: ApiHandlerOptions): Pr
 		const result = vercelAiGatewayModelsResponseSchema.safeParse(response.data)
 
 		if (!result.success) {
-			logger.error("VercelAiGateway", `Models response is invalid ${JSON.stringify(result.error.format())}`)
+			logger.error(
+				"VercelAiGateway",
+				`Models response is invalid ${JSON.stringify(z.treeifyError(result.error))}`,
+			)
 		} else if (result.data.object === undefined) {
 			logger.error("VercelAiGateway", "Models response is missing object field")
 		}
@@ -79,7 +82,7 @@ export async function getVercelAiGatewayModels(_options?: ApiHandlerOptions): Pr
 			if (!parsedModel.success) {
 				logger.error(
 					"VercelAiGateway",
-					`Skipping invalid model entry ${JSON.stringify(parsedModel.error.format())}`,
+					`Skipping invalid model entry ${JSON.stringify(z.treeifyError(parsedModel.error))}`,
 				)
 				continue
 			}

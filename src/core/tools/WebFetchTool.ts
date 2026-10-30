@@ -55,7 +55,7 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 
 	protected override get inputSchema() {
 		return z.object({
-			url: z.string().url("url must be a valid URL"),
+			url: z.url("url must be a valid URL"),
 			format: z.enum(["text", "html", "json", "markdown"]).optional(),
 			maxLength: z.number().int().positive().optional(),
 		})

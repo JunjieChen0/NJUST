@@ -37,7 +37,7 @@ const openAiModelListItemSchema = z
 	.object({
 		id: z.string().min(1),
 	})
-	.passthrough()
+	.loose()
 
 // TODO: Rename this to OpenAICompatibleHandler. Also, I think the
 // `OpenAINativeHandler` can subclass from this, since it's obviously

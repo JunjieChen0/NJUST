@@ -18,8 +18,8 @@ import {
 const contactFormSchema = z.object({
 	name: z.string().min(1, "Name is required"),
 	company: z.string().min(1, "Company is required"),
-	email: z.string().email("Invalid email address"),
-	website: z.string().url("Invalid website URL").or(z.string().length(0)),
+	email: z.email("Invalid email address"),
+	website: z.url("Invalid website URL").or(z.string().length(0)),
 	engineerCount: z.enum(["1-10", "11-50", "51-200", "201-500", "501-1000", "1000+"]),
 	formType: z.enum(["early-access", "demo"]),
 	_honeypot: z.string().optional(),
