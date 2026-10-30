@@ -59,7 +59,9 @@ export class TaskStreamProcessor {
 	/**
 	 * Get the current profile ID from provider state.
 	 */
-	getCurrentProfileId(state: UnsafeAny): string {
+	getCurrentProfileId(
+		state: { listApiConfigMeta?: Array<{ id?: string; name?: string }>; currentApiConfigName?: string } | undefined,
+	): string {
 		return (
 			state?.listApiConfigMeta?.find((profile: UnsafeAny) => profile.name === state?.currentApiConfigName)?.id ??
 			"default"

@@ -1283,7 +1283,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	// Delegated to TaskStreamProcessor
-	private getCurrentProfileId(state: UnsafeAny): string {
+	private getCurrentProfileId(
+		state: { listApiConfigMeta?: Array<{ id?: string; name?: string }>; currentApiConfigName?: string } | undefined,
+	): string {
 		return this.streamProcessor.getCurrentProfileId(state)
 	}
 

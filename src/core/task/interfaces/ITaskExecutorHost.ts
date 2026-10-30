@@ -8,6 +8,7 @@
 import type { Anthropic } from "@anthropic-ai/sdk"
 import type OpenAI from "openai"
 import type {
+	ExtensionMessage,
 	ClineMessage,
 	ClineSay,
 	ClineAsk,
@@ -74,7 +75,11 @@ export interface TaskExecutorDelegatesHost {
 		maybeWaitForProviderRateLimit(retryAttempt: number): Promise<void>
 		backoffAndAnnounce(retryAttempt: number, error: unknown): Promise<void>
 		buildCleanConversationHistory(messages: ApiMessage[]): UnsafeAny[]
-		getCurrentProfileId(state: UnsafeAny): string
+		getCurrentProfileId(
+			state:
+				| { listApiConfigMeta?: Array<{ id?: string; name?: string }>; currentApiConfigName?: string }
+				| undefined,
+		): string
 		handleContextWindowExceededError(): Promise<void>
 		getFilesReadByRooSafely(context: string): Promise<string[] | undefined>
 	}
@@ -138,7 +143,7 @@ export interface TaskExecutorStreamHost {
 	consecutiveNoAssistantMessagesCount: number
 	streamingToolCallIndices: Map<string, number>
 	cachedStreamingModel?: ReturnType<ApiHandler["getModel"]>
-	readonly notifier?: { postMessageToWebview(message: UnsafeAny): Promise<void> }
+	readonly notifier?: { postMessageToWebview(message: ExtensionMessage): Promise<void> }
 	didFinishAbortingStream: boolean
 	currentStreamingDidCheckpoint: boolean
 	_savedMessagesForCurrentRequest?: boolean
@@ -182,7 +187,7 @@ export interface TaskExecutorMessagingHost {
 export interface TaskExecutorControlHost {
 	getTokenUsage(): TokenUsage
 	combineMessages(messages: ClineMessage[]): ClineMessage[]
-	emit(event: string, ...args: UnsafeAny[]): boolean
+	emit(event: string, ...args: unknown[]): boolean
 
 	setLastGlobalApiRequestTime(time: number): void
 	getLastGlobalApiRequestTime(): number
