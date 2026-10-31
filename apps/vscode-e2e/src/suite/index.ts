@@ -3,13 +3,17 @@ import Mocha from "mocha"
 import { glob } from "glob"
 import * as vscode from "vscode"
 
-import { NJUST_AIEventName, type NJUST_AIAPI, type UnsafeAny } from "@njust-ai/types"
+import { NJUST_AIEventName, type NJUST_AIAPI } from "@njust-ai/types"
 
 import { waitFor } from "./utils"
 
 type TestApiWithCurrentTask = NJUST_AIAPI & {
 	sidebarProvider?: {
 		getCurrentTask?: () => { approveAsk?: () => void } | undefined
+		contextProxy?: {
+			getValues?: () => Record<string, unknown> | undefined
+			storeSecret?: (key: string, value: string) => Promise<void> | void
+		}
 	}
 }
 
@@ -68,7 +72,7 @@ export async function run() {
 
 		// Verify that the provider configuration (including secret keys) was persisted.
 		// getConfiguration() strips secrets, so we access the internal contextProxy.
-		const internalConfig = (api as UnsafeAny).sidebarProvider?.contextProxy?.getValues?.()
+		const internalConfig = (api as TestApiWithCurrentTask).sidebarProvider?.contextProxy?.getValues?.()
 		if (!internalConfig?.openAiApiKey) {
 			console.error(
 				"[e2e setup] CRITICAL: openAiApiKey is missing after setConfiguration. " +
@@ -78,7 +82,7 @@ export async function run() {
 					"Attempting direct secret store as fallback...",
 			)
 			// Fallback: directly call storeSecret to ensure the key is in the cache.
-			const contextProxy = (api as UnsafeAny).sidebarProvider?.contextProxy
+			const contextProxy = (api as TestApiWithCurrentTask).sidebarProvider?.contextProxy
 			if (contextProxy?.storeSecret) {
 				await contextProxy.storeSecret("openAiApiKey", "mock-key")
 				// Verify the fallback worked.
