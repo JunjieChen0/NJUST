@@ -216,7 +216,7 @@ export type NativeToolArgs = {
 	brief: { content: string; maxLength?: number }
 	config: { action: string; key?: string; value?: unknown }
 	// NOTE: `custom_tool` (used by WorktreeTool) is intentionally NOT mapped here. Leaving it
-	// unmapped keeps `ToolParams<ToolName>` resolving to the `UnsafeAny` fallback for the full
+	// unmapped keeps `ToolParams<ToolName>` resolving to the `any` fallback for the full
 	// union, which is load-bearing for the heterogeneous RegisteredTool registry (see BaseTool.ts).
 	// Add more tools as they are migrated to native protocol
 }

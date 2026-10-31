@@ -1,6 +1,5 @@
-import type { UnsafeAny } from "@njust-ai/types"
 /**
- * FlagStore �?Lightweight feature flag evaluation.
+ * FlagStore — Lightweight feature flag evaluation.
  *
  * Supports three tiers (highest priority wins):
  *   1. Kill switch (force-on / force-off via settings.json)
@@ -23,6 +22,12 @@ export interface FlagContext {
 	workspaceId?: string
 }
 
+interface FlagSnapshot {
+	enabled: boolean
+	defaultValue: boolean
+	rolloutPercent?: number
+}
+
 export type FlagOverrides = Record<string, boolean | undefined> // force on/off
 
 export class FlagStore {
@@ -30,11 +35,7 @@ export class FlagStore {
 	private overrides: FlagOverrides
 	private context: FlagContext
 
-	constructor(
-		flags: Record<string, FlagDefinition>,
-		overrides: FlagOverrides = {},
-		context: FlagContext = {},
-	) {
+	constructor(flags: Record<string, FlagDefinition>, overrides: FlagOverrides = {}, context: FlagContext = {}) {
 		this.flags = new Map(Object.entries(flags))
 		this.overrides = overrides
 		this.context = context
@@ -65,8 +66,8 @@ export class FlagStore {
 		return this.flags.get(flagName)?.rolloutPercent ?? 100
 	}
 
-	getAllFlags(): Record<string, { enabled: boolean; defaultValue: boolean; rolloutPercent?: number }> {
-		const result: Record<string, UnsafeAny> = {}
+	getAllFlags(): Record<string, FlagSnapshot> {
+		const result: Record<string, FlagSnapshot> = {}
 		for (const [name, def] of this.flags) {
 			result[name] = {
 				enabled: this.isEnabled(name),

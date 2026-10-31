@@ -1,4 +1,3 @@
-import type { UnsafeAny } from "@njust-ai/types"
 import {
 	type ClineAsk,
 	type ClineSayTool,
@@ -74,7 +73,7 @@ export async function checkAutoApproval({
 	text,
 	isProtected,
 }: {
-	state?: Partial<ExtensionState> & Record<string, UnsafeAny>
+	state?: Partial<ExtensionState> & { commandPatternRules?: PatternRule[] }
 	ask: ClineAsk
 	text?: string
 	isProtected?: boolean
@@ -164,7 +163,7 @@ export async function checkAutoApproval({
 		const risk = classifyBashCommand(text)
 		if (risk === "dangerous") return { decision: "deny" }
 
-		const patternRules = ((state as Record<string, UnsafeAny>)?.commandPatternRules ?? []) as PatternRule[]
+		const patternRules = state.commandPatternRules ?? []
 		const patternDecision = matchPatternRules(text, patternRules)
 		if (patternDecision === "allow") return { decision: "approve" }
 		if (patternDecision === "deny") return { decision: "deny" }

@@ -1,4 +1,3 @@
-import type { UnsafeAny } from "@njust-ai/types"
 import { logger } from "./logger.js"
 import type { ModelInfo } from "@njust-ai/types"
 import type { ServiceTier } from "@njust-ai/types"
@@ -38,7 +37,10 @@ export function resolveOpenAiUsageForCost(args: {
 			if (total === 0 || Math.abs(total - sumParts) <= tolerance) {
 				total = sumParts
 			} else if (total < sumParts - tolerance) {
-				logger.warn("Cost", `Token mismatch beyond tolerance: reported=${total}, sumParts=${sumParts} (miss=${miss}, cached=${cachedD}, writes=${cw}), tolerance=${tolerance}`)
+				logger.warn(
+					"Cost",
+					`Token mismatch beyond tolerance: reported=${total}, sumParts=${sumParts} (miss=${miss}, cached=${cachedD}, writes=${cw}), tolerance=${tolerance}`,
+				)
 				// Total likely excludes cached portion; reconstruct billable prompt size
 				total = sumParts
 			}
@@ -160,9 +162,7 @@ export type OpenAiCostOptions = {
 	inputTokenDetails?: { cache_miss_tokens?: number; cached_tokens?: number }
 }
 
-function normalizeOpenAiCostOptions(
-	sixth?: ServiceTier | OpenAiCostOptions,
-): OpenAiCostOptions {
+function normalizeOpenAiCostOptions(sixth?: ServiceTier | OpenAiCostOptions): OpenAiCostOptions {
 	if (sixth === undefined) {
 		return {}
 	}
@@ -203,4 +203,4 @@ export function calculateApiCostOpenAI(
 	)
 }
 
-export const parseApiPrice = (price: UnsafeAny) => (price ? parseFloat(price) * 1_000_000 : undefined)
+export const parseApiPrice = (price?: string | number) => (price ? parseFloat(String(price)) * 1_000_000 : undefined)

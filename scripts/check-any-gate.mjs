@@ -69,6 +69,8 @@ const EXCLUDE_FILES = new Set([
 	// The single canonical declaration of `type UnsafeAny = any`. Counting it
 	// would create a phantom +1 we can never narrow.
 	"src/shared/unsafe-any.d.ts",
+	// Same canonical declaration re-exported from the shared types package.
+	"packages/types/src/type-fu.ts",
 	// This script's own pattern table.
 	"scripts/check-any-gate.mjs",
 ])

@@ -1,20 +1,31 @@
-import type { UnsafeAny } from "@njust-ai/types"
 import { logger } from "./logger.js"
 
 // Support prompts
-type PromptParams = Record<string, string | UnsafeAny[]>
+type PromptParams = Record<string, string | unknown[]>
 
-const generateDiagnosticText = (diagnostics?: UnsafeAny[]) => {
+interface PromptDiagnostic {
+	source?: unknown
+	message?: unknown
+	code?: unknown
+}
+
+const generateDiagnosticText = (diagnostics?: unknown[]) => {
 	if (!diagnostics?.length) return ""
 	return `\nCurrent problems detected:\n${diagnostics
-		.map((d) => `- [${d.source || "Error"}] ${d.message}${d.code ? ` (${d.code})` : ""}`)
+		.map((diagnostic) => {
+			const d = (diagnostic && typeof diagnostic === "object" ? diagnostic : {}) as PromptDiagnostic
+			const source = typeof d.source === "string" && d.source ? d.source : "Error"
+			const message = typeof d.message === "string" ? d.message : String(d.message ?? "")
+			return `- [${source}] ${message}${d.code ? ` (${String(d.code)})` : ""}`
+		})
 		.join("\n")}`
 }
 
 export const createPrompt = (template: string, params: PromptParams): string => {
 	return template.replace(/\$\{(\w+)\}/g, (match, key) => {
 		if (key === "diagnosticText") {
-			return generateDiagnosticText(params["diagnostics"] as UnsafeAny[])
+			const diagnostics = params["diagnostics"]
+			return generateDiagnosticText(Array.isArray(diagnostics) ? diagnostics : undefined)
 		} else if (key in params) {
 			const value = params[key]
 			if (typeof value === "string") {
@@ -243,13 +254,13 @@ Please provide:
 
 export const supportPrompt = {
 	default: Object.fromEntries(Object.entries(supportPromptConfigs).map(([key, config]) => [key, config.template])),
-	get: (customSupportPrompts: Record<string, UnsafeAny> | undefined, type: SupportPromptType): string => {
+	get: (customSupportPrompts: Record<string, string | undefined> | undefined, type: SupportPromptType): string => {
 		return customSupportPrompts?.[type] ?? supportPromptConfigs[type].template
 	},
 	create: (
 		type: SupportPromptType,
 		params: PromptParams,
-		customSupportPrompts?: Record<string, UnsafeAny>,
+		customSupportPrompts?: Record<string, string | undefined>,
 	): string => {
 		const template = supportPrompt.get(customSupportPrompts, type)
 		return createPrompt(template, params)
