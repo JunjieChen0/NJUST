@@ -49,6 +49,22 @@ import { reopenParentFromDelegationWithProvider, type IDelegationHost } from "..
 import { readTaskMessages } from "../core/task-persistence/taskMessages"
 import { readApiMessages, saveApiMessages, saveTaskMessages } from "../core/task-persistence"
 
+function createDelegationHost(overrides: Partial<IDelegationHost> = {}): IDelegationHost {
+	return {
+		getCurrentTask: vi.fn(),
+		log: vi.fn(),
+		stack: { pop: vi.fn().mockResolvedValue(undefined) },
+		handleModeSwitch: vi.fn(),
+		createTask: vi.fn(),
+		getTaskWithId: vi.fn(),
+		updateTaskHistory: vi.fn(),
+		emit: vi.fn(),
+		contextProxy: { globalStorageUri: { fsPath: "/test/storage" } },
+		createTaskWithHistoryItem: vi.fn(),
+		...overrides,
+	} as unknown as IDelegationHost
+}
+
 describe("History resume delegation - parent metadata transitions", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
@@ -87,7 +103,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 					? { id, status: "delegated", awaitingChildId: "child-1", childIds: ["child-1"], task: "Parent" }
 					: { id, status: "active", task: "Child" },
 		}))
-		const provider = {
+		const provider = createDelegationHost({
 			contextProxy: { globalStorageUri: { fsPath: "/tmp" } },
 			getTaskWithId,
 			emit: vi.fn(),
@@ -99,7 +115,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 					current = parent
 				}),
 			},
-		} as unknown as IDelegationHost
+		})
 		vi.mocked(readTaskMessages).mockResolvedValue([])
 		vi.mocked(readApiMessages).mockResolvedValue([])
 
@@ -151,7 +167,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			overwriteApiConversationHistory: vi.fn().mockResolvedValue(undefined),
 		})
 
-		const provider = {
+		const provider = createDelegationHost({
 			contextProxy: { globalStorageUri: { fsPath: "/tmp" } },
 			getTaskWithId,
 			emit: providerEmit,
@@ -164,7 +180,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			createTaskWithHistoryItem,
 			updateTaskHistory,
 			stack: { pop: vi.fn().mockResolvedValue(undefined) },
-		} as unknown as IDelegationHost
+		})
 
 		// Mock persistence reads to return empty arrays
 		vi.mocked(readTaskMessages).mockResolvedValue([])
@@ -205,7 +221,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 	})
 
 	it("reopenParentFromDelegation injects subtask_result into both UI and API histories", async () => {
-		const provider = {
+		const provider = createDelegationHost({
 			contextProxy: { globalStorageUri: { fsPath: "/storage" } },
 			getTaskWithId: vi.fn().mockResolvedValue({
 				historyItem: {
@@ -235,7 +251,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			}),
 			updateTaskHistory: vi.fn().mockResolvedValue([]),
 			stack: { pop: vi.fn().mockResolvedValue(undefined) },
-		} as unknown as IDelegationHost
+		})
 
 		// Start with existing messages in history
 		const existingUiMessages = [{ type: "ask", ask: "tool", text: "Old tool", ts: 50 }]
@@ -293,7 +309,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 	})
 
 	it("reopenParentFromDelegation injects tool_result when new_task tool_use exists in API history", async () => {
-		const provider = {
+		const provider = createDelegationHost({
 			contextProxy: { globalStorageUri: { fsPath: "/storage" } },
 			getTaskWithId: vi.fn().mockResolvedValue({
 				historyItem: {
@@ -323,7 +339,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			}),
 			updateTaskHistory: vi.fn().mockResolvedValue([]),
 			stack: { pop: vi.fn().mockResolvedValue(undefined) },
-		} as unknown as IDelegationHost
+		})
 
 		// Include an assistant message with new_task tool_use to exercise the tool_result path
 		const existingUiMessages = [{ type: "ask", ask: "tool", text: "new_task request", ts: 50 }]
@@ -384,7 +400,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 	})
 
 	it("reopenParentFromDelegation injects plain text when no new_task tool_use exists in API history", async () => {
-		const provider = {
+		const provider = createDelegationHost({
 			contextProxy: { globalStorageUri: { fsPath: "/storage" } },
 			getTaskWithId: vi.fn().mockResolvedValue({
 				historyItem: {
@@ -414,7 +430,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			}),
 			updateTaskHistory: vi.fn().mockResolvedValue([]),
 			stack: { pop: vi.fn().mockResolvedValue(undefined) },
-		} as unknown as IDelegationHost
+		})
 
 		// No assistant tool_use in history
 		const existingUiMessages = [{ type: "ask", ask: "tool", text: "subtask request", ts: 50 }]
@@ -449,7 +465,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			overwriteApiConversationHistory: vi.fn().mockResolvedValue(undefined),
 		}
 
-		const provider = {
+		const provider = createDelegationHost({
 			contextProxy: { globalStorageUri: { fsPath: "/tmp" } },
 			getTaskWithId: vi.fn().mockResolvedValue({
 				historyItem: {
@@ -474,7 +490,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			createTaskWithHistoryItem: vi.fn().mockResolvedValue(parentInstance),
 			updateTaskHistory: vi.fn().mockResolvedValue([]),
 			stack: { pop: vi.fn().mockResolvedValue(undefined) },
-		} as unknown as IDelegationHost
+		})
 
 		vi.mocked(readTaskMessages).mockResolvedValue([])
 		vi.mocked(readApiMessages).mockResolvedValue([])
@@ -494,7 +510,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 		const emitSpy = vi.fn()
 		const updateTaskHistory = vi.fn().mockResolvedValue([])
 
-		const provider = {
+		const provider = createDelegationHost({
 			contextProxy: { globalStorageUri: { fsPath: "/tmp" } },
 			getTaskWithId: vi.fn().mockResolvedValue({
 				historyItem: {
@@ -523,7 +539,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			}),
 			updateTaskHistory,
 			stack: { pop: vi.fn().mockResolvedValue(undefined) },
-		} as unknown as IDelegationHost
+		})
 
 		vi.mocked(readTaskMessages).mockResolvedValue([])
 		vi.mocked(readApiMessages).mockResolvedValue([])
@@ -565,7 +581,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			overwriteApiConversationHistory: vi.fn().mockRejectedValue(new Error("api overwrite failed")),
 		}
 
-		const provider = {
+		const provider = createDelegationHost({
 			contextProxy: { globalStorageUri: { fsPath: "/tmp" } },
 			getTaskWithId: vi.fn(async function (id: string) {
 				if (id === "parent-rpd06") {
@@ -606,7 +622,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			createTaskWithHistoryItem: vi.fn().mockResolvedValue(parentInstance),
 			updateTaskHistory: vi.fn().mockResolvedValue([]),
 			stack: { pop: vi.fn().mockResolvedValue(undefined) },
-		} as unknown as IDelegationHost
+		})
 
 		vi.mocked(readTaskMessages).mockResolvedValue([])
 		vi.mocked(readApiMessages).mockResolvedValue([])
@@ -640,7 +656,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 	it("reopenParentFromDelegation does NOT emit TaskPaused or TaskUnpaused (new flow only)", async () => {
 		const emitSpy = vi.fn()
 
-		const provider = {
+		const provider = createDelegationHost({
 			contextProxy: { globalStorageUri: { fsPath: "/tmp" } },
 			getTaskWithId: vi.fn().mockResolvedValue({
 				historyItem: {
@@ -669,7 +685,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			}),
 			updateTaskHistory: vi.fn().mockResolvedValue([]),
 			stack: { pop: vi.fn().mockResolvedValue(undefined) },
-		} as unknown as IDelegationHost
+		})
 
 		vi.mocked(readTaskMessages).mockResolvedValue([])
 		vi.mocked(readApiMessages).mockResolvedValue([])
@@ -698,7 +714,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 		const removeClineFromStack = vi.fn().mockResolvedValue(undefined)
 		const createTaskWithHistoryItem = vi.fn().mockResolvedValue(parentInstance)
 
-		const provider = {
+		const provider = createDelegationHost({
 			contextProxy: { globalStorageUri: { fsPath: "/tmp" } },
 			getTaskWithId: vi.fn(async function (id: string) {
 				if (id === "parent-rpd02") {
@@ -738,7 +754,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			createTaskWithHistoryItem,
 			updateTaskHistory,
 			stack: { pop: vi.fn().mockResolvedValue(undefined) },
-		} as unknown as IDelegationHost
+		})
 
 		vi.mocked(readTaskMessages).mockResolvedValue([])
 		vi.mocked(readApiMessages).mockResolvedValue([])
@@ -783,7 +799,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			return []
 		})
 
-		const provider = {
+		const provider = createDelegationHost({
 			contextProxy: { globalStorageUri: { fsPath: "/tmp" } },
 			getTaskWithId: vi.fn(async function (id: string) {
 				if (id === "parent-rpd04") {
@@ -824,7 +840,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			createTaskWithHistoryItem: vi.fn().mockResolvedValue(parentInstance),
 			updateTaskHistory,
 			stack: { pop: vi.fn().mockResolvedValue(undefined) },
-		} as unknown as IDelegationHost
+		})
 
 		vi.mocked(readTaskMessages).mockResolvedValue([])
 		vi.mocked(readApiMessages).mockResolvedValue([])
@@ -854,7 +870,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 	})
 
 	it("handles empty history gracefully when injecting synthetic messages", async () => {
-		const provider = {
+		const provider = createDelegationHost({
 			contextProxy: { globalStorageUri: { fsPath: "/tmp" } },
 			getTaskWithId: vi.fn().mockResolvedValue({
 				historyItem: {
@@ -883,7 +899,7 @@ describe("History resume delegation - parent metadata transitions", () => {
 			}),
 			updateTaskHistory: vi.fn().mockResolvedValue([]),
 			stack: { pop: vi.fn().mockResolvedValue(undefined) },
-		} as unknown as IDelegationHost
+		})
 
 		// Mock read failures or empty returns
 		vi.mocked(readTaskMessages).mockResolvedValue([])

@@ -9,6 +9,19 @@ import { RooToolsMcpServer } from "../RooToolsMcpServer"
 import * as toolExecutors from "../tool-executors"
 import { RooIgnoreController } from "../../../core/ignore/RooIgnoreController"
 
+interface ServerInternals {
+	httpServer: { address: () => { port: number } }
+	createMcpServer: (getSessionId: () => string | undefined) => {
+		connect: (transport: InMemoryTransport) => Promise<void>
+		close: () => Promise<void>
+	}
+	pathValidator?: unknown
+}
+
+function internals(server: RooToolsMcpServer): ServerInternals {
+	return server as unknown as ServerInternals
+}
+
 describe("RooToolsMcpServer — body size limit", () => {
 	it("MAX_BODY_SIZE is 10 MB", () => {
 		const MAX_BODY_SIZE = 10 * 1024 * 1024
@@ -46,7 +59,7 @@ describe("RooToolsMcpServer CORS origin", () => {
 		})
 
 		await server.start()
-		const address = (server as unknown as { httpServer: { address: () => { port: number } } }).httpServer.address()
+		const address = internals(server).httpServer.address()
 		return { server, port: address.port }
 	}
 
@@ -140,14 +153,7 @@ describe("RooToolsMcpServer access controllers", () => {
 
 	async function connectClient(server: RooToolsMcpServer): Promise<Client> {
 		const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-		const mcpServer = (
-			server as unknown as {
-				createMcpServer: (getSessionId: () => string | undefined) => {
-					connect: (transport: InMemoryTransport) => Promise<void>
-					close: () => Promise<void>
-				}
-			}
-		).createMcpServer(() => "test-session")
+		const mcpServer = internals(server).createMcpServer(() => "test-session")
 		await mcpServer.connect(serverTransport)
 		mcpServers.push(mcpServer)
 
@@ -280,7 +286,7 @@ describe("RooToolsMcpServer access controllers", () => {
 		await server.start()
 		try {
 			expect(initialize).toHaveBeenCalledOnce()
-			expect((server as unknown as { pathValidator?: unknown }).pathValidator).toBeInstanceOf(RooIgnoreController)
+			expect(internals(server).pathValidator).toBeInstanceOf(RooIgnoreController)
 		} finally {
 			await server.stop()
 		}
@@ -293,11 +299,11 @@ describe("RooToolsMcpServer access controllers", () => {
 		const dispose = vi.spyOn(RooIgnoreController.prototype, "dispose")
 		const server = createServer()
 		await server.start()
-		const firstController = (server as unknown as { pathValidator?: unknown }).pathValidator
+		const firstController = internals(server).pathValidator
 
 		try {
 			await server.updateWorkspacePath(path.join(process.cwd(), "src"))
-			const nextController = (server as unknown as { pathValidator?: unknown }).pathValidator
+			const nextController = internals(server).pathValidator
 			expect(nextController).toBeInstanceOf(RooIgnoreController)
 			expect(nextController).not.toBe(firstController)
 			expect(dispose).toHaveBeenCalledOnce()

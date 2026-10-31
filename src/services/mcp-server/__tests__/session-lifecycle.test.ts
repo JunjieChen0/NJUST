@@ -76,16 +76,30 @@ async function flushMicrotasks(): Promise<void> {
 
 // ─── Accessor helpers (avoid direct assignment on private fields) ────────────
 
+interface ServerInternals {
+	transports: Map<string, FakeEntry>
+	pendingSlots: number
+	pendingSandboxCleanupSessions: Set<string>
+	reclaimExpiredSessions(): void
+	httpServer?: http.Server
+	cleanupSandboxSession(sessionId: string): void | Promise<void>
+	scheduleSandboxSessionCleanup(sessionId: string): void
+}
+
+function internals(server: RooToolsMcpServer): ServerInternals {
+	return server as unknown as ServerInternals
+}
+
 function getTransports(server: RooToolsMcpServer): Map<string, FakeEntry> {
-	return (server as unknown as { transports: Map<string, FakeEntry> }).transports
+	return internals(server).transports
 }
 
 function getPendingSlots(server: RooToolsMcpServer): number {
-	return (server as unknown as { pendingSlots: number }).pendingSlots
+	return internals(server).pendingSlots
 }
 
 function getPendingSandboxCleanupSessions(server: RooToolsMcpServer): Set<string> {
-	return (server as unknown as { pendingSandboxCleanupSessions: Set<string> }).pendingSandboxCleanupSessions
+	return internals(server).pendingSandboxCleanupSessions
 }
 
 function setPendingSlots(server: RooToolsMcpServer, value: number): void {
@@ -97,7 +111,7 @@ function setPendingSlotsByIp(server: RooToolsMcpServer, value: Map<string, numbe
 }
 
 function reclaim(server: RooToolsMcpServer): void {
-	;(server as unknown as { reclaimExpiredSessions: () => void }).reclaimExpiredSessions()
+	internals(server).reclaimExpiredSessions()
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -110,7 +124,7 @@ describe("MCP Session Lifecycle", () => {
 		nock.enableNetConnect("127.0.0.1")
 		server = new RooToolsMcpServer({ workspacePath: process.cwd(), port: 0, bindAddress: "127.0.0.1" })
 		await server.start()
-		const addr = (server as unknown as { httpServer: http.Server }).httpServer?.address()
+		const addr = internals(server).httpServer?.address()
 		port = typeof addr === "object" && addr ? addr.port : 0
 	})
 
@@ -289,9 +303,7 @@ describe("MCP Session Lifecycle", () => {
 		const disposeTask = vi.spyOn(SandboxExecutionService.getInstance(), "disposeTask").mockResolvedValue(undefined)
 		const entry = makeEntry("127.0.0.1", Date.now())
 		entry.transport.close = vi.fn(async () => {
-			;(server as unknown as { cleanupSandboxSession: (sessionId: string) => void }).cleanupSandboxSession(
-				"dedupe-session",
-			)
+			void internals(server).cleanupSandboxSession("dedupe-session")
 			await flushMicrotasks()
 		})
 		getTransports(server).set("dedupe-session", entry)
@@ -311,9 +323,7 @@ describe("MCP Session Lifecycle", () => {
 		const disposeTask = vi
 			.spyOn(SandboxExecutionService.getInstance(), "disposeTask")
 			.mockImplementation(() => cleanup)
-		;(server as unknown as { cleanupSandboxSession: (sessionId: string) => Promise<void> })
-			.cleanupSandboxSession("closed-session")
-			.catch(() => {})
+		Promise.resolve(internals(server).cleanupSandboxSession("closed-session")).catch(() => {})
 
 		let stopped = false
 		const stopping = server.stop().then(() => {
@@ -333,9 +343,7 @@ describe("MCP Session Lifecycle", () => {
 			.spyOn(SandboxExecutionService.getInstance(), "disposeTask")
 			.mockRejectedValueOnce(new Error("transient cleanup failure"))
 			.mockResolvedValueOnce(undefined)
-		;(
-			server as unknown as { scheduleSandboxSessionCleanup: (sessionId: string) => void }
-		).scheduleSandboxSessionCleanup("closed-failed-session")
+		internals(server).scheduleSandboxSessionCleanup("closed-failed-session")
 		await flushMicrotasks()
 
 		expect(disposeTask).toHaveBeenCalledOnce()
@@ -351,9 +359,7 @@ describe("MCP Session Lifecycle", () => {
 			.spyOn(SandboxExecutionService.getInstance(), "disposeTask")
 			.mockRejectedValueOnce(new Error("transient cleanup failure"))
 			.mockResolvedValueOnce(undefined)
-		;(
-			server as unknown as { scheduleSandboxSessionCleanup: (sessionId: string) => void }
-		).scheduleSandboxSessionCleanup("background-retry")
+		internals(server).scheduleSandboxSessionCleanup("background-retry")
 
 		await vi.advanceTimersByTimeAsync(0)
 		expect(disposeTask).toHaveBeenCalledOnce()

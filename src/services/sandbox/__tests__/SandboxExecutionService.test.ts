@@ -36,6 +36,25 @@ vi.mock("uuid", () => ({
 	v4: () => "test-uuid-1234",
 }))
 
+interface ServiceInternals {
+	guardedHostRunner: {
+		run: ReturnType<typeof vi.fn>
+		cancel: ReturnType<typeof vi.fn>
+		disposeTask: ReturnType<typeof vi.fn>
+	}
+	externalProcesses: Map<string, Set<unknown>>
+	recordExecutionFailure: (executionId: string, backend: "docker", error: unknown) => void
+	dockerRunner: { run: ReturnType<typeof vi.fn> }
+}
+
+function serviceInternals(service: SandboxExecutionService): ServiceInternals {
+	return service as unknown as ServiceInternals
+}
+
+function makeTerminal(): import("vscode").Terminal {
+	return { sendText: vi.fn(), dispose: vi.fn() } as unknown as import("vscode").Terminal
+}
+
 describe("SandboxExecutionService", () => {
 	let service: SandboxExecutionService
 	let mockConfigProvider: SandboxConfigProvider
@@ -335,11 +354,7 @@ describe("SandboxExecutionService", () => {
 		})
 
 		it("propagates runner cleanup failures", async () => {
-			const guardedHostRunner = (
-				service as unknown as {
-					guardedHostRunner: { disposeTask: ReturnType<typeof vi.fn> }
-				}
-			).guardedHostRunner
+			const guardedHostRunner = serviceInternals(service).guardedHostRunner
 			guardedHostRunner.disposeTask = vi.fn().mockRejectedValue(new Error("host cleanup failed"))
 
 			await expect(service.disposeScope("task:test:instance")).rejects.toThrow("host cleanup failed")
@@ -350,14 +365,7 @@ describe("SandboxExecutionService", () => {
 			const disposal = new Promise<void>((resolve) => {
 				resolveDisposal = resolve
 			})
-			const guardedHostRunner = (
-				service as unknown as {
-					guardedHostRunner: {
-						run: ReturnType<typeof vi.fn>
-						disposeTask: ReturnType<typeof vi.fn>
-					}
-				}
-			).guardedHostRunner
+			const guardedHostRunner = serviceInternals(service).guardedHostRunner
 			guardedHostRunner.disposeTask = vi.fn().mockReturnValue(disposal)
 			guardedHostRunner.run = vi.fn().mockImplementation(async (request: CommandExecutionRequest) => ({
 				executionId: request.executionId,
@@ -408,13 +416,7 @@ describe("SandboxExecutionService", () => {
 
 			resolveProcess()
 			await disposing
-			expect(
-				(
-					service as unknown as {
-						externalProcesses: Map<string, Set<unknown>>
-					}
-				).externalProcesses.has(resourceScopeId),
-			).toBe(false)
+			expect(serviceInternals(service).externalProcesses.has(resourceScopeId)).toBe(false)
 			expect(() => unregister()).not.toThrow()
 		})
 
@@ -443,14 +445,7 @@ describe("SandboxExecutionService", () => {
 		it("preserves cancellation when the runner settles after the deadline", async () => {
 			vi.useFakeTimers()
 			let rejectRun!: (error: Error) => void
-			const guardedHostRunner = (
-				service as unknown as {
-					guardedHostRunner: {
-						run: ReturnType<typeof vi.fn>
-						cancel: ReturnType<typeof vi.fn>
-					}
-				}
-			).guardedHostRunner
+			const guardedHostRunner = serviceInternals(service).guardedHostRunner
 			guardedHostRunner.run = vi.fn().mockReturnValue(
 				new Promise((_resolve, reject) => {
 					rejectRun = reject
@@ -495,11 +490,7 @@ describe("SandboxExecutionService", () => {
 				memoryMb: 512,
 				cpuLimit: 1,
 			}
-			;(
-				service as unknown as {
-					recordExecutionFailure: (executionId: string, backend: "docker", error: unknown) => void
-				}
-			).recordExecutionFailure(request.executionId, "docker", error)
+			serviceInternals(service).recordExecutionFailure(request.executionId, "docker", error)
 
 			expect(sandboxAudit.getRecords()[0]).toMatchObject({
 				containerId: "container-timeout",
@@ -526,7 +517,7 @@ describe("SandboxExecutionService", () => {
 				getTimeoutSeconds: () => 120,
 			})
 			const run = vi.fn().mockRejectedValue(containmentError)
-			;(dockerService as unknown as { dockerRunner: { run: typeof run } }).dockerRunner = { run }
+			serviceInternals(dockerService).dockerRunner = { run }
 			const request = createMockRequest("mcp")
 
 			await expect(dockerService.run(request)).rejects.toBe(containmentError)
@@ -560,7 +551,7 @@ describe("SandboxExecutionService", () => {
 				return { dispose: vi.fn() }
 			})
 			vi.mocked(vscode.window.onDidCloseTerminal).mockReturnValue({ dispose: vi.fn() })
-			const terminal = { sendText: vi.fn() } as unknown as import("vscode").Terminal
+			const terminal = makeTerminal()
 			const request = createMockRequest("user")
 			service.evaluateAndAuditExecution(request)
 
@@ -588,7 +579,7 @@ describe("SandboxExecutionService", () => {
 				closeHandler = handler
 				return { dispose: disposeClose }
 			})
-			const terminal = { sendText: vi.fn(), dispose: vi.fn() } as unknown as import("vscode").Terminal
+			const terminal = makeTerminal()
 			const request = createMockRequest("user")
 			service.evaluateAndAuditExecution(request)
 
@@ -631,7 +622,7 @@ describe("SandboxExecutionService", () => {
 				closeHandler = handler
 				return { dispose: disposeClose }
 			})
-			const terminal = { sendText: vi.fn(), dispose: vi.fn() } as unknown as import("vscode").Terminal
+			const terminal = makeTerminal()
 			const request = createMockRequest("user")
 			service.evaluateAndAuditExecution(request)
 

@@ -55,6 +55,16 @@ function createUserProfile(overrides?: Partial<CloudAgentProfile>): CloudAgentPr
 	}
 }
 
+function createMockWorkspaceConfiguration(overrides: Record<string, unknown> = {}): vscode.WorkspaceConfiguration {
+	return {
+		get: vi.fn().mockReturnValue(undefined),
+		has: vi.fn().mockReturnValue(false),
+		inspect: vi.fn(),
+		update: vi.fn().mockResolvedValue(undefined),
+		...overrides,
+	} as unknown as vscode.WorkspaceConfiguration
+}
+
 describe("ProfileStorageService", () => {
 	let globalState: vscode.Memento
 	let workspaceState: vscode.Memento
@@ -66,9 +76,7 @@ describe("ProfileStorageService", () => {
 		workspaceState = createMockMemento()
 		secrets = createMockSecretStorage()
 		service = new ProfileStorageService(globalState, workspaceState, secrets)
-		vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-			get: vi.fn().mockReturnValue(undefined),
-		} as unknown as vscode.WorkspaceConfiguration)
+		vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(createMockWorkspaceConfiguration())
 	})
 
 	describe("getProfiles()", () => {
@@ -282,13 +290,15 @@ describe("ProfileStorageService", () => {
 		})
 
 		it("creates migrated profile from legacy config", async () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-				get: vi.fn(function (key: string) {
-					if (key === "cloudAgent.serverUrl") return "http://legacy.example.com"
-					if (key === "cloudAgent.apiKey") return "legacy-key"
-					return undefined
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+				createMockWorkspaceConfiguration({
+					get: vi.fn(function (key: string) {
+						if (key === "cloudAgent.serverUrl") return "http://legacy.example.com"
+						if (key === "cloudAgent.apiKey") return "legacy-key"
+						return undefined
+					}),
 				}),
-			} as unknown as vscode.WorkspaceConfiguration)
+			)
 
 			const result = await service.migrateFromLegacyConfig()
 			expect(result).not.toBeNull()
@@ -299,12 +309,14 @@ describe("ProfileStorageService", () => {
 		})
 
 		it("is idempotent — skips if already migrated", async () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
-				get: vi.fn(function (key: string) {
-					if (key === "cloudAgent.serverUrl") return "http://legacy.example.com"
-					return undefined
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
+				createMockWorkspaceConfiguration({
+					get: vi.fn(function (key: string) {
+						if (key === "cloudAgent.serverUrl") return "http://legacy.example.com"
+						return undefined
+					}),
 				}),
-			} as unknown as vscode.WorkspaceConfiguration)
+			)
 
 			await service.migrateFromLegacyConfig()
 			const result = await service.migrateFromLegacyConfig()
@@ -331,7 +343,7 @@ describe("ProfileStorageService", () => {
 
 describe("getProfileStorageService() singleton", () => {
 	it("throws when not initialized", () => {
-		setProfileStorageService(undefined as unknown as ProfileStorageService)
+		setProfileStorageService(undefined!)
 		expect(() => getProfileStorageService()).toThrow(/errors\.cloud_agent\.not_initialized/)
 	})
 })

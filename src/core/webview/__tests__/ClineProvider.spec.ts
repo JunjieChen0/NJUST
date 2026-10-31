@@ -5,6 +5,11 @@ import Anthropic from "@anthropic-ai/sdk"
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as vscode from "vscode"
+import {
+	createMockExtensionContext,
+	createMockOutputChannel,
+	createMockWebviewView,
+} from "../../../__tests__/helpers/vscodeMocks"
 import axios from "axios"
 
 import {
@@ -444,7 +449,7 @@ describe("ClineProvider", () => {
 
 		const secrets: Record<string, string | undefined> = {}
 
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			extensionPath: "/test/path",
 			extensionUri: {} as vscode.Uri,
 			globalState: {
@@ -471,7 +476,7 @@ describe("ClineProvider", () => {
 			globalStorageUri: {
 				fsPath: "/test/storage/path",
 			},
-		} as unknown as vscode.ExtensionContext
+		})
 
 		// Mock CustomModesManager
 		const mockCustomModesManager = {
@@ -481,16 +486,16 @@ describe("ClineProvider", () => {
 		}
 
 		// Mock output channel
-		mockOutputChannel = {
+		mockOutputChannel = createMockOutputChannel({
 			appendLine: vi.fn(),
 			clear: vi.fn(),
 			dispose: vi.fn(),
-		} as unknown as vscode.OutputChannel
+		})
 
 		// Mock webview
 		mockPostMessage = vi.fn()
 
-		mockWebviewView = {
+		mockWebviewView = createMockWebviewView({
 			webview: {
 				postMessage: mockPostMessage,
 				html: "",
@@ -509,7 +514,7 @@ describe("ClineProvider", () => {
 					dispose: vi.fn(),
 				}
 			}),
-		} as unknown as vscode.WebviewView
+		})
 
 		provider = new ClineProvider(mockContext, mockOutputChannel, "sidebar", new ContextProxy(mockContext))
 
@@ -1181,7 +1186,7 @@ describe("ClineProvider", () => {
 
 	it("saves mode config when updating API configuration", async () => {
 		// Setup mock context with mode and config name
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			...mockContext,
 			globalState: {
 				...mockContext.globalState,
@@ -1196,7 +1201,7 @@ describe("ClineProvider", () => {
 				update: vi.fn(),
 				keys: vi.fn().mockReturnValue([]),
 			},
-		} as unknown as vscode.ExtensionContext
+		})
 
 		// Create new provider with updated mock context
 		provider = new ClineProvider(mockContext, mockOutputChannel, "sidebar", new ContextProxy(mockContext))
@@ -2093,7 +2098,7 @@ describe("Project MCP Settings", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			extensionPath: "/test/path",
 			extensionUri: {} as vscode.Uri,
 			globalState: {
@@ -2118,16 +2123,16 @@ describe("Project MCP Settings", () => {
 			globalStorageUri: {
 				fsPath: "/test/storage/path",
 			},
-		} as unknown as vscode.ExtensionContext
+		})
 
-		mockOutputChannel = {
+		mockOutputChannel = createMockOutputChannel({
 			appendLine: vi.fn(),
 			clear: vi.fn(),
 			dispose: vi.fn(),
-		} as unknown as vscode.OutputChannel
+		})
 
 		mockPostMessage = vi.fn()
-		mockWebviewView = {
+		mockWebviewView = createMockWebviewView({
 			webview: {
 				postMessage: mockPostMessage,
 				html: "",
@@ -2139,7 +2144,7 @@ describe("Project MCP Settings", () => {
 			visible: true,
 			onDidDispose: vi.fn(),
 			onDidChangeVisibility: vi.fn(),
-		} as unknown as vscode.WebviewView
+		})
 
 		provider = new ClineProvider(mockContext, mockOutputChannel, "sidebar", new ContextProxy(mockContext))
 	})
@@ -2235,7 +2240,7 @@ describe("ContextProxy integration", () => {
 		vi.clearAllMocks()
 
 		// Setup basic mocks
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			globalState: {
 				get: vi.fn(),
 				update: vi.fn(),
@@ -2250,9 +2255,9 @@ describe("ContextProxy integration", () => {
 			extensionUri: {} as vscode.Uri,
 			globalStorageUri: { fsPath: "/test/path" },
 			extension: { packageJSON: { version: "1.0.0" } },
-		} as unknown as vscode.ExtensionContext
+		})
 
-		mockOutputChannel = { appendLine: vi.fn() } as unknown as vscode.OutputChannel
+		mockOutputChannel = createMockOutputChannel()
 		mockContextProxy = new ContextProxy(mockContext)
 		vi.spyOn(mockContextProxy, "updateGlobalState")
 		vi.spyOn(mockContextProxy, "getGlobalState")
@@ -2304,7 +2309,7 @@ describe("getTelemetryProperties", () => {
 		}
 
 		// Setup basic mocks
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			globalState: {
 				get: vi.fn(function (key: string) {
 					if (key === "mode") return "code"
@@ -2323,9 +2328,9 @@ describe("getTelemetryProperties", () => {
 			extensionUri: {} as vscode.Uri,
 			globalStorageUri: { fsPath: "/test/path" },
 			extension: { packageJSON: { version: "1.0.0" } },
-		} as unknown as vscode.ExtensionContext
+		})
 
-		mockOutputChannel = { appendLine: vi.fn() } as unknown as vscode.OutputChannel
+		mockOutputChannel = createMockOutputChannel()
 		provider = new ClineProvider(mockContext, mockOutputChannel, "sidebar", new ContextProxy(mockContext))
 
 		defaultTaskOptions = {
@@ -2381,7 +2386,7 @@ describe("ClineProvider - Router Models", () => {
 		const globalState: Record<string, string | undefined> = {}
 		const secrets: Record<string, string | undefined> = {}
 
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			extensionPath: "/test/path",
 			extensionUri: {} as vscode.Uri,
 			globalState: {
@@ -2408,16 +2413,16 @@ describe("ClineProvider - Router Models", () => {
 			globalStorageUri: {
 				fsPath: "/test/storage/path",
 			},
-		} as unknown as vscode.ExtensionContext
+		})
 
-		mockOutputChannel = {
+		mockOutputChannel = createMockOutputChannel({
 			appendLine: vi.fn(),
 			clear: vi.fn(),
 			dispose: vi.fn(),
-		} as unknown as vscode.OutputChannel
+		})
 
 		mockPostMessage = vi.fn()
-		mockWebviewView = {
+		mockWebviewView = createMockWebviewView({
 			webview: {
 				postMessage: mockPostMessage,
 				html: "",
@@ -2435,7 +2440,7 @@ describe("ClineProvider - Router Models", () => {
 					dispose: vi.fn(),
 				}
 			}),
-		} as unknown as vscode.WebviewView
+		})
 
 		if (!TelemetryService.hasInstance()) {
 			TelemetryService.createInstance()
@@ -2753,7 +2758,7 @@ describe("ClineProvider - Comprehensive Edit/Delete Edge Cases", () => {
 
 		const secrets: Record<string, string | undefined> = {}
 
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			extensionPath: "/test/path",
 			extensionUri: {} as vscode.Uri,
 			globalState: {
@@ -2780,17 +2785,17 @@ describe("ClineProvider - Comprehensive Edit/Delete Edge Cases", () => {
 			globalStorageUri: {
 				fsPath: "/test/storage/path",
 			},
-		} as unknown as vscode.ExtensionContext
+		})
 
-		mockOutputChannel = {
+		mockOutputChannel = createMockOutputChannel({
 			appendLine: vi.fn(),
 			clear: vi.fn(),
 			dispose: vi.fn(),
-		} as unknown as vscode.OutputChannel
+		})
 
 		mockPostMessage = vi.fn()
 
-		mockWebviewView = {
+		mockWebviewView = createMockWebviewView({
 			webview: {
 				postMessage: mockPostMessage,
 				html: "",
@@ -2808,7 +2813,7 @@ describe("ClineProvider - Comprehensive Edit/Delete Edge Cases", () => {
 					dispose: vi.fn(),
 				}
 			}),
-		} as unknown as vscode.WebviewView
+		})
 
 		provider = new ClineProvider(mockContext, mockOutputChannel, "sidebar", new ContextProxy(mockContext))
 

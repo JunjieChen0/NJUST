@@ -41,8 +41,8 @@ describe("CloudAgentClient", () => {
 	}
 
 	it("connects, submits task, streams logs and summary, returns usage", async () => {
-		const fetchMock = vi.fn()
-		globalThis.fetch = fetchMock as unknown as typeof fetch
+		const fetchMock = vi.fn<typeof fetch>()
+		globalThis.fetch = fetchMock
 
 		fetchMock.mockResolvedValueOnce(new Response("", { status: 200 }))
 		fetchMock.mockResolvedValueOnce(
@@ -101,8 +101,8 @@ describe("CloudAgentClient", () => {
 	})
 
 	it("returns parsed workspace_ops from response", async () => {
-		const fetchMock = vi.fn()
-		globalThis.fetch = fetchMock as unknown as typeof fetch
+		const fetchMock = vi.fn<typeof fetch>()
+		globalThis.fetch = fetchMock
 		fetchMock.mockResolvedValueOnce(new Response("", { status: 200 }))
 		fetchMock.mockResolvedValueOnce(
 			new Response(
@@ -131,8 +131,8 @@ describe("CloudAgentClient", () => {
 	})
 
 	it("returns workspaceOpsParseError when workspace_ops fails validation", async () => {
-		const fetchMock = vi.fn()
-		globalThis.fetch = fetchMock as unknown as typeof fetch
+		const fetchMock = vi.fn<typeof fetch>()
+		globalThis.fetch = fetchMock
 		fetchMock.mockResolvedValueOnce(new Response("", { status: 200 }))
 		fetchMock.mockResolvedValueOnce(
 			new Response(
@@ -158,8 +158,8 @@ describe("CloudAgentClient", () => {
 	})
 
 	it("omits X-API-Key when apiKey option is unset", async () => {
-		const fetchMock = vi.fn()
-		globalThis.fetch = fetchMock as unknown as typeof fetch
+		const fetchMock = vi.fn<typeof fetch>()
+		globalThis.fetch = fetchMock
 		fetchMock.mockResolvedValue(new Response("", { status: 200 }))
 
 		const client = new CloudAgentClient(createCallbacks(), {
@@ -172,8 +172,8 @@ describe("CloudAgentClient", () => {
 	})
 
 	it("omits X-Device-Token when deviceToken is empty", async () => {
-		const fetchMock = vi.fn()
-		globalThis.fetch = fetchMock as unknown as typeof fetch
+		const fetchMock = vi.fn<typeof fetch>()
+		globalThis.fetch = fetchMock
 		fetchMock.mockResolvedValue(new Response("", { status: 200 }))
 
 		// 清空 device token
@@ -191,12 +191,12 @@ describe("CloudAgentClient", () => {
 	})
 
 	it("enriches connect() error when fetch fails with a cause (e.g. ECONNREFUSED)", async () => {
-		const fetchMock = vi.fn().mockRejectedValue(
+		const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(
 			Object.assign(new Error("fetch failed"), {
 				cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
 			}),
 		)
-		globalThis.fetch = fetchMock as unknown as typeof fetch
+		globalThis.fetch = fetchMock
 
 		const client = new CloudAgentClient(createCallbacks(), {
 			profile: createMockProfile(),
@@ -205,8 +205,8 @@ describe("CloudAgentClient", () => {
 	}, 15_000)
 
 	it("throws on non-OK HTTP for submitTask", async () => {
-		const fetchMock = vi.fn()
-		globalThis.fetch = fetchMock as unknown as typeof fetch
+		const fetchMock = vi.fn<typeof fetch>()
+		globalThis.fetch = fetchMock
 		fetchMock.mockResolvedValueOnce(new Response("", { status: 200 }))
 		fetchMock.mockImplementation(() => Promise.resolve(new Response("nope", { status: 502 })))
 
@@ -221,8 +221,8 @@ describe("CloudAgentClient", () => {
 		vi.useFakeTimers()
 		vi.spyOn(Math, "random").mockReturnValue(0.5)
 
-		const fetchMock = vi.fn()
-		globalThis.fetch = fetchMock as unknown as typeof fetch
+		const fetchMock = vi.fn<typeof fetch>()
+		globalThis.fetch = fetchMock
 		fetchMock.mockResolvedValueOnce(new Response("", { status: 502 }))
 		fetchMock.mockResolvedValueOnce(
 			new Response(JSON.stringify({ ok: true, logs: [], memory_summary: "" }), { status: 200 }),
@@ -239,8 +239,8 @@ describe("CloudAgentClient", () => {
 	}, 10_000)
 
 	it("does not retry submitTask on auth failures", async () => {
-		const fetchMock = vi.fn().mockResolvedValue(new Response("bad key", { status: 401 }))
-		globalThis.fetch = fetchMock as unknown as typeof fetch
+		const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("bad key", { status: 401 }))
+		globalThis.fetch = fetchMock
 
 		const client = new CloudAgentClient(createCallbacks(), {
 			profile: createMockProfile(),
@@ -251,8 +251,8 @@ describe("CloudAgentClient", () => {
 	})
 
 	it("throws when response body is not JSON", async () => {
-		const fetchMock = vi.fn()
-		globalThis.fetch = fetchMock as unknown as typeof fetch
+		const fetchMock = vi.fn<typeof fetch>()
+		globalThis.fetch = fetchMock
 		fetchMock.mockResolvedValueOnce(new Response("", { status: 200 }))
 		fetchMock.mockImplementation(() => Promise.resolve(new Response("not-json", { status: 200 })))
 
@@ -270,7 +270,7 @@ describe("CloudAgentClient", () => {
 			}
 			return Promise.resolve(new Response("", { status: 200 }))
 		})
-		globalThis.fetch = fetchMock as unknown as typeof fetch
+		globalThis.fetch = fetchMock
 
 		const ac = new AbortController()
 		ac.abort()
@@ -291,7 +291,7 @@ describe("CloudAgentClient", () => {
 				})
 			})
 		})
-		globalThis.fetch = fetchMock as unknown as typeof fetch
+		globalThis.fetch = fetchMock
 
 		const client = new CloudAgentClient(createCallbacks(), {
 			profile: createMockProfile(),
@@ -344,7 +344,7 @@ describe("CloudAgentClient", () => {
 			const fetchMock = vi
 				.fn()
 				.mockResolvedValue(new Response(JSON.stringify({ success: true, output: "" }), { status: 200 }))
-			globalThis.fetch = fetchMock as unknown as typeof fetch
+			globalThis.fetch = fetchMock
 
 			const client = new CloudAgentClient(createCallbacks(), {
 				profile: createMockProfile({ serverUrl: "http://localhost:4000" }),
@@ -363,7 +363,7 @@ describe("CloudAgentClient", () => {
 				.mockResolvedValue(
 					new Response(JSON.stringify({ success: false, output: "error: line 5" }), { status: 200 }),
 				)
-			globalThis.fetch = fetchMock as unknown as typeof fetch
+			globalThis.fetch = fetchMock
 
 			const client = new CloudAgentClient(createCallbacks(), {
 				profile: createMockProfile({ serverUrl: "http://localhost:4000" }),
@@ -380,7 +380,7 @@ describe("CloudAgentClient", () => {
 				callCount++
 				return Promise.resolve(new Response("internal error", { status: 500 }))
 			})
-			globalThis.fetch = fetchMock as unknown as typeof fetch
+			globalThis.fetch = fetchMock
 
 			const client = new CloudAgentClient(createCallbacks(), {
 				profile: createMockProfile({ serverUrl: "http://localhost:4000" }),
@@ -392,7 +392,7 @@ describe("CloudAgentClient", () => {
 
 	describe("deferred protocol", () => {
 		it("deferredStart sends to correct endpoint with images", async () => {
-			const fetchMock = vi.fn().mockResolvedValue(
+			const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
 				new Response(
 					JSON.stringify({
 						run_id: "run-1",
@@ -402,7 +402,7 @@ describe("CloudAgentClient", () => {
 					{ status: 200 },
 				),
 			)
-			globalThis.fetch = fetchMock as unknown as typeof fetch
+			globalThis.fetch = fetchMock
 
 			const client = new CloudAgentClient(createCallbacks(), {
 				profile: createMockProfile({ serverUrl: "http://localhost:4000" }),
@@ -425,7 +425,7 @@ describe("CloudAgentClient", () => {
 				.mockResolvedValue(
 					new Response(JSON.stringify({ run_id: "run-2", status: "done", ok: true }), { status: 200 }),
 				)
-			globalThis.fetch = fetchMock as unknown as typeof fetch
+			globalThis.fetch = fetchMock
 
 			const client = new CloudAgentClient(createCallbacks(), {
 				profile: createMockProfile({ serverUrl: "http://localhost:4000" }),
@@ -441,7 +441,7 @@ describe("CloudAgentClient", () => {
 				.mockResolvedValue(
 					new Response(JSON.stringify({ run_id: "run-1", status: "done", ok: true }), { status: 200 }),
 				)
-			globalThis.fetch = fetchMock as unknown as typeof fetch
+			globalThis.fetch = fetchMock
 
 			const client = new CloudAgentClient(createCallbacks(), {
 				profile: createMockProfile({ serverUrl: "http://localhost:4000" }),
@@ -459,15 +459,15 @@ describe("CloudAgentClient", () => {
 
 	describe("sendDeferredAbort (static)", () => {
 		it("handles 404 gracefully (older servers)", async () => {
-			const fetchMock = vi.fn().mockResolvedValue(new Response("not found", { status: 404 }))
-			globalThis.fetch = fetchMock as unknown as typeof fetch
+			const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("not found", { status: 404 }))
+			globalThis.fetch = fetchMock
 
 			await CloudAgentClient.sendDeferredAbort(createMockProfile({ serverUrl: "http://localhost:4000" }), "sid-1")
 		})
 
 		it("sends correct body with runId", async () => {
-			const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }))
-			globalThis.fetch = fetchMock as unknown as typeof fetch
+			const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("", { status: 200 }))
+			globalThis.fetch = fetchMock
 
 			await CloudAgentClient.sendDeferredAbort(
 				createMockProfile({ serverUrl: "http://localhost:4000" }),
@@ -486,8 +486,8 @@ describe("CloudAgentClient", () => {
 
 	describe("disconnect", () => {
 		it("calls sendDeferredAbort with correct params", async () => {
-			const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }))
-			globalThis.fetch = fetchMock as unknown as typeof fetch
+			const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("", { status: 200 }))
+			globalThis.fetch = fetchMock
 
 			const client = new CloudAgentClient(createCallbacks(), {
 				profile: createMockProfile({ serverUrl: "http://localhost:4000" }),
@@ -500,8 +500,8 @@ describe("CloudAgentClient", () => {
 		})
 
 		it("does nothing when sessionId is empty", async () => {
-			const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }))
-			globalThis.fetch = fetchMock as unknown as typeof fetch
+			const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("", { status: 200 }))
+			globalThis.fetch = fetchMock
 
 			const client = new CloudAgentClient(createCallbacks(), {
 				profile: createMockProfile({ serverUrl: "http://localhost:4000" }),

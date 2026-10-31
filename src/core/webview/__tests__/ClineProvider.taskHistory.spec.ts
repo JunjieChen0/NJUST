@@ -2,6 +2,11 @@
 
 import { describe, it, expect, vi, beforeEach, afterAll } from "vitest"
 import * as vscode from "vscode"
+import {
+	createMockExtensionContext,
+	createMockOutputChannel,
+	createMockWebviewView,
+} from "../../../__tests__/helpers/vscodeMocks"
 import type { HistoryItem } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
 
@@ -297,7 +302,7 @@ describe("ClineProvider Task History Synchronization", () => {
 
 		const secrets: Record<string, string | undefined> = {}
 
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			extensionPath: "/test/path",
 			extensionUri: {} as vscode.Uri,
 			globalState: {
@@ -327,17 +332,17 @@ describe("ClineProvider Task History Synchronization", () => {
 			globalStorageUri: {
 				fsPath: "/test/storage/path",
 			},
-		} as unknown as vscode.ExtensionContext
+		})
 
-		mockOutputChannel = {
+		mockOutputChannel = createMockOutputChannel({
 			appendLine: vi.fn(),
 			clear: vi.fn(),
 			dispose: vi.fn(),
-		} as unknown as vscode.OutputChannel
+		})
 
 		mockPostMessage = vi.fn()
 
-		mockWebviewView = {
+		mockWebviewView = createMockWebviewView({
 			webview: {
 				postMessage: mockPostMessage,
 				html: "",
@@ -356,7 +361,7 @@ describe("ClineProvider Task History Synchronization", () => {
 					dispose: vi.fn(),
 				}
 			}),
-		} as unknown as vscode.WebviewView
+		})
 
 		provider = new ClineProvider(mockContext, mockOutputChannel, "sidebar", new ContextProxy(mockContext))
 

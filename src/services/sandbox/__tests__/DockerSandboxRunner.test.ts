@@ -91,6 +91,40 @@ function makeRequest(overrides: Partial<CommandExecutionRequest> = {}): CommandE
 // we test the helper functions and validate the container creation args
 // indirectly through the exported functions.
 
+type RunnerAccess = {
+	containers: Map<string, unknown>
+	pendingCreation: Map<string, Promise<unknown>>
+	containerGates: Map<string, { dispose: () => void }>
+	containmentFailures: Map<string, SandboxContainmentError>
+	resolveAndValidateWorkspacePath: (workspacePath: string) => Promise<string>
+	createContainer: (
+		taskId: string,
+		resourceScopeId: string,
+		workspacePath: string,
+		scope: "task" | "workspace",
+	) => Promise<Container>
+	ensureContainerRunning: (containerId: string) => Promise<string | undefined>
+	execInContainer: (
+		containerId: string,
+		command: string,
+		cwd: string,
+		workspacePath: string,
+		timeoutMs: number,
+		environment: Record<string, string> | undefined,
+		signal: AbortSignal,
+		onOutput: CommandExecutionRequest["onOutput"],
+		executionId: string,
+	) => Promise<ExecResult>
+	removeContainer: (containerId: string) => Promise<void>
+	stopAndConfirmContainer: (containerId: string) => Promise<boolean>
+	gate: { acquireExclusive: () => Promise<() => void> }
+	settings: SandboxSettings
+}
+
+function runnerAccess(runner: DockerSandboxRunner): RunnerAccess {
+	return runner as unknown as RunnerAccess
+}
+
 describe("DockerSandboxRunner", () => {
 	let settings: SandboxSettings
 
@@ -717,28 +751,7 @@ describe("DockerSandboxRunner", () => {
 			mockSpawn.mockReturnValueOnce(child)
 
 			const runner = new DockerSandboxRunner({ ...DEFAULT_SETTINGS })
-			const execInContainer = (
-				runner as unknown as {
-					execInContainer: (
-						containerId: string,
-						command: string,
-						cwd: string,
-						workspacePath: string,
-						timeoutMs: number,
-						environment: Record<string, string> | undefined,
-						signal: AbortSignal,
-						onOutput: (chunk: { text: string; isStderr?: boolean; timestamp: number }) => void,
-						executionId: string,
-					) => Promise<{
-						exitCode: number
-						output: string
-						stdout: string
-						stderr: string
-						truncated: boolean
-						capturedBytes: number
-					}>
-				}
-			).execInContainer.bind(runner)
+			const execInContainer = runnerAccess(runner).execInContainer.bind(runner)
 
 			const execution = execInContainer(
 				"container-1",
@@ -828,33 +841,6 @@ describe("DockerSandboxRunner", () => {
 			truncated: boolean
 			capturedBytes: number
 		}
-		type RunnerInternals = {
-			containers: Map<string, Container>
-			pendingCreation: Map<string, Promise<Container>>
-			containerGates: Map<string, { dispose: () => void }>
-			containmentFailures: Map<string, SandboxContainmentError>
-			resolveAndValidateWorkspacePath: (workspacePath: string) => Promise<string>
-			createContainer: (
-				taskId: string,
-				resourceScopeId: string,
-				workspacePath: string,
-				scope: "task" | "workspace",
-			) => Promise<Container>
-			ensureContainerRunning: (containerId: string) => Promise<string | undefined>
-			execInContainer: (
-				containerId: string,
-				command: string,
-				cwd: string,
-				workspacePath: string,
-				timeoutMs: number,
-				environment: Record<string, string> | undefined,
-				signal: AbortSignal,
-				onOutput: CommandExecutionRequest["onOutput"],
-				executionId: string,
-			) => Promise<ExecResult>
-			removeContainer: (containerId: string) => Promise<void>
-			stopAndConfirmContainer: (containerId: string) => Promise<boolean>
-		}
 
 		const success = (output = "ok"): ExecResult => ({
 			exitCode: 0,
@@ -866,7 +852,7 @@ describe("DockerSandboxRunner", () => {
 		})
 
 		function stubRunner(runner: DockerSandboxRunner): RunnerInternals {
-			const internals = runner as unknown as RunnerInternals
+			const internals = runnerAccess(runner)
 			let nextContainer = 0
 			internals.resolveAndValidateWorkspacePath = vi.fn(async (workspacePath) => path.resolve(workspacePath))
 			internals.createContainer = vi.fn(async (taskId, resourceScopeId) => ({
@@ -887,11 +873,7 @@ describe("DockerSandboxRunner", () => {
 				.mockResolvedValueOnce({ stdout: "task-container\n", stderr: "" })
 				.mockResolvedValueOnce({ stdout: "shared-container\n", stderr: "" })
 			const runner = new DockerSandboxRunner({ ...DEFAULT_SETTINGS })
-			const createContainer = (
-				runner as unknown as {
-					createContainer: RunnerInternals["createContainer"]
-				}
-			).createContainer.bind(runner)
+			const createContainer = runnerAccess(runner).createContainer.bind(runner)
 
 			await createContainer("task-1", "task-1:instance", process.cwd(), "task")
 			await createContainer("task-2", "task-2:instance", process.cwd(), "workspace")
@@ -1345,16 +1327,16 @@ describe("DockerSandboxRunner", () => {
 			const containerName = createArgs[nameIndex + 1]
 			expect(containerName).toMatch(/^njust-ai-sandbox-/)
 			await vi.waitFor(() =>
-				expect(
-					Array.from((runner as unknown as { containers: Map<string, Container> }).containers.values()),
-				).toEqual([expect.objectContaining({ containerId: containerName })]),
+				expect(Array.from(runnerAccess(runner).containers.values())).toEqual([
+					expect.objectContaining({ containerId: containerName }),
+				]),
 			)
 
 			await runner.disposeTask("task-1:instance-1")
 			expect(mockExecFileAsync).toHaveBeenLastCalledWith("docker", ["rm", "-f", containerName], {
 				timeout: 30_000,
 			})
-			expect((runner as unknown as { containers: Map<string, Container> }).containers.size).toBe(0)
+			expect(runnerAccess(runner).containers.size).toBe(0)
 		})
 	})
 
@@ -1362,11 +1344,7 @@ describe("DockerSandboxRunner", () => {
 		it("times out while waiting for the global runner gate", async () => {
 			vi.useFakeTimers()
 			const runner = new DockerSandboxRunner({ ...DEFAULT_SETTINGS })
-			const gate = (
-				runner as unknown as {
-					gate: { acquireExclusive: () => Promise<() => void> }
-				}
-			).gate
+			const gate = runnerAccess(runner).gate
 			const release = await gate.acquireExclusive()
 
 			try {
@@ -1417,21 +1395,7 @@ describe("DockerSandboxRunner", () => {
 			const child = createFakeChild({ closeOnKill: false })
 			mockSpawn.mockReturnValueOnce(child)
 			const runner = new DockerSandboxRunner({ ...DEFAULT_SETTINGS })
-			const execInContainer = (
-				runner as unknown as {
-					execInContainer: (
-						containerId: string,
-						command: string,
-						cwd: string,
-						workspacePath: string,
-						timeoutMs: number,
-						environment: Record<string, string> | undefined,
-						signal: AbortSignal,
-						onOutput: CommandExecutionRequest["onOutput"],
-						executionId: string,
-					) => Promise<{ output: string }>
-				}
-			).execInContainer.bind(runner)
+			const execInContainer = runnerAccess(runner).execInContainer.bind(runner)
 			const onOutput = vi.fn(() => {
 				throw new Error("consumer failed")
 			})
@@ -1459,21 +1423,7 @@ describe("DockerSandboxRunner", () => {
 			mockSpawn.mockReturnValueOnce(child)
 			const runner = new DockerSandboxRunner({ ...DEFAULT_SETTINGS })
 			const abortController = new AbortController()
-			const execInContainer = (
-				runner as unknown as {
-					execInContainer: (
-						containerId: string,
-						command: string,
-						cwd: string,
-						workspacePath: string,
-						timeoutMs: number,
-						environment: Record<string, string> | undefined,
-						signal: AbortSignal,
-						onOutput: CommandExecutionRequest["onOutput"],
-						executionId: string,
-					) => Promise<unknown>
-				}
-			).execInContainer.bind(runner)
+			const execInContainer = runnerAccess(runner).execInContainer.bind(runner)
 
 			const execution = execInContainer(
 				"container-1",
@@ -1503,21 +1453,7 @@ describe("DockerSandboxRunner", () => {
 				const child = createFakeChild()
 				mockSpawn.mockReturnValueOnce(child)
 				const runner = new DockerSandboxRunner({ ...DEFAULT_SETTINGS })
-				const execInContainer = (
-					runner as unknown as {
-						execInContainer: (
-							containerId: string,
-							command: string,
-							cwd: string,
-							workspacePath: string,
-							timeoutMs: number,
-							environment: Record<string, string> | undefined,
-							signal: AbortSignal,
-							onOutput: CommandExecutionRequest["onOutput"],
-							executionId: string,
-						) => Promise<unknown>
-					}
-				).execInContainer.bind(runner)
+				const execInContainer = runnerAccess(runner).execInContainer.bind(runner)
 
 				const execution = execInContainer(
 					"container-1",
@@ -1545,21 +1481,7 @@ describe("DockerSandboxRunner", () => {
 			mockSpawn.mockReturnValueOnce(child)
 			const runner = new DockerSandboxRunner({ ...DEFAULT_SETTINGS })
 			const onOutput = vi.fn()
-			const execInContainer = (
-				runner as unknown as {
-					execInContainer: (
-						containerId: string,
-						command: string,
-						cwd: string,
-						workspacePath: string,
-						timeoutMs: number,
-						environment: Record<string, string> | undefined,
-						signal: AbortSignal,
-						onOutput: CommandExecutionRequest["onOutput"],
-						executionId: string,
-					) => Promise<{ output: string; truncated: boolean; capturedBytes: number }>
-				}
-			).execInContainer.bind(runner)
+			const execInContainer = runnerAccess(runner).execInContainer.bind(runner)
 
 			const execution = execInContainer(
 				"container-1",
@@ -1589,9 +1511,7 @@ describe("DockerSandboxRunner", () => {
 	describe("maintenance errors and image validation", () => {
 		it("removes containers with docker rm -f", async () => {
 			const runner = new DockerSandboxRunner({ ...DEFAULT_SETTINGS })
-			const removeContainer = (
-				runner as unknown as { removeContainer: (containerId: string) => Promise<void> }
-			).removeContainer.bind(runner)
+			const removeContainer = runnerAccess(runner).removeContainer.bind(runner)
 			await removeContainer("container-1")
 
 			expect(mockExecFileAsync).toHaveBeenCalledWith("docker", ["rm", "-f", "container-1"], { timeout: 30_000 })
@@ -1602,9 +1522,7 @@ describe("DockerSandboxRunner", () => {
 				.mockResolvedValueOnce({ stdout: "container-1\n", stderr: "" })
 				.mockResolvedValueOnce({ stdout: "false\n", stderr: "" })
 			const runner = new DockerSandboxRunner({ ...DEFAULT_SETTINGS })
-			const stopAndConfirmContainer = (
-				runner as unknown as { stopAndConfirmContainer: (containerId: string) => Promise<boolean> }
-			).stopAndConfirmContainer.bind(runner)
+			const stopAndConfirmContainer = runnerAccess(runner).stopAndConfirmContainer.bind(runner)
 
 			await expect(stopAndConfirmContainer("container-1")).resolves.toBe(true)
 			expect(mockExecFileAsync).toHaveBeenNthCalledWith(1, "docker", ["kill", "container-1"], { timeout: 10_000 })
@@ -1657,16 +1575,9 @@ describe("DockerSandboxRunner", () => {
 	})
 
 	describe("transactional settings update", () => {
-		type RunnerInternals = {
-			settings: SandboxSettings
-			containers: Map<string, { taskId: string; containerId: string; createdAt: number }>
-			pendingCreation: Map<string, Promise<{ taskId: string; containerId: string; createdAt: number }>>
-			removeContainer: (containerId: string) => Promise<void>
-		}
-
 		it("keeps old settings and container tracking when removal fails", async () => {
 			const runner = new DockerSandboxRunner({ ...DEFAULT_SETTINGS })
-			const internals = runner as unknown as RunnerInternals
+			const internals = runnerAccess(runner)
 			internals.containers.set("/workspace::task-1", {
 				taskId: "task-1",
 				containerId: "container-old",
@@ -1683,7 +1594,7 @@ describe("DockerSandboxRunner", () => {
 
 		it("commits new settings only after old containers are removed", async () => {
 			const runner = new DockerSandboxRunner({ ...DEFAULT_SETTINGS })
-			const internals = runner as unknown as RunnerInternals
+			const internals = runnerAccess(runner)
 			internals.containers.set("/workspace::task-1", {
 				taskId: "task-1",
 				containerId: "container-old",
@@ -1700,7 +1611,7 @@ describe("DockerSandboxRunner", () => {
 
 		it("waits for pending creation and removes the resulting container", async () => {
 			const runner = new DockerSandboxRunner({ ...DEFAULT_SETTINGS })
-			const internals = runner as unknown as RunnerInternals
+			const internals = runnerAccess(runner)
 			const key = "/workspace::task-pending"
 			let resolveCreation!: (container: { taskId: string; containerId: string; createdAt: number }) => void
 			const creation = new Promise<{ taskId: string; containerId: string; createdAt: number }>((resolve) => {
