@@ -84,12 +84,12 @@ export interface ToolCallbacks {
  * Helper type to extract the parameter type for a tool based on its name.
  * If the tool has native args defined in NativeToolArgs, use those; otherwise fall back to any.
  */
-// NOTE: The `UnsafeAny` fallback here is load-bearing. `RegisteredTool = BaseTool<ToolName>`
+// NOTE: The `any` fallback here is load-bearing. `RegisteredTool = BaseTool<ToolName>`
 // stores a heterogeneous array of `BaseTool<"specific">` instances; that assignment is only
 // type-checkable because `ToolParams<ToolName>` (the full union) collapses to `any`, making
 // `execute(params)` bivariant. Completing NativeToolArgs or narrowing the fallback makes the
 // conditional resolve to the concrete param union and breaks the registry (contravariance).
-// Removing this `any` requires a registry-type refactor (out of scope for UnsafeAny elimination).
+// Removing this `any` requires a registry-type refactor (out of scope for type-escape elimination).
 type ToolParams<TName extends ToolName> = TName extends keyof NativeToolArgs ? NativeToolArgs[TName] : UnsafeAny
 
 /**

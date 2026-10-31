@@ -6,6 +6,11 @@ import type { Task } from "../task/Task"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { formatResponse } from "../prompts/responses"
 
+type VscodeLocation = import("vscode").Location
+type VscodeLocationLink = import("vscode").LocationLink
+type VscodeHover = import("vscode").Hover
+type VscodeSymbolInformation = import("vscode").SymbolInformation
+
 type LSPAction = "definition" | "references" | "hover" | "symbols" | "implementations"
 
 interface LSPParams {
@@ -42,15 +47,16 @@ async function getVscodeModule(): Promise<typeof import("vscode") | undefined> {
 /**
  * Format a vscode.Location (or LocationLink) array into readable text.
  */
-function formatLocations(locations: UnsafeAny[], cwd: string): string {
+function formatLocations(locations: Array<VscodeLocation | VscodeLocationLink>, cwd: string): string {
 	if (!locations || locations.length === 0) {
 		return "No results found."
 	}
 	const lines: string[] = []
 	for (const loc of locations) {
 		// LocationLink has targetUri/targetRange; Location has uri/range
-		const uri = loc.targetUri ?? loc.uri
-		const range = loc.targetRange ?? loc.range
+		const isLink = "targetUri" in loc
+		const uri = isLink ? loc.targetUri : loc.uri
+		const range = isLink ? loc.targetRange : loc.range
 		if (!uri || !range) {
 			continue
 		}
@@ -67,7 +73,7 @@ function formatLocations(locations: UnsafeAny[], cwd: string): string {
 /**
  * Format hover results into readable text.
  */
-function formatHoverResults(hovers: UnsafeAny[]): string {
+function formatHoverResults(hovers: VscodeHover[]): string {
 	if (!hovers || hovers.length === 0) {
 		return "No hover information available."
 	}
@@ -90,7 +96,7 @@ function formatHoverResults(hovers: UnsafeAny[]): string {
 /**
  * Format workspace symbol results into readable text.
  */
-function formatSymbolResults(symbols: UnsafeAny[], cwd: string): string {
+function formatSymbolResults(symbols: VscodeSymbolInformation[], cwd: string): string {
 	if (!symbols || symbols.length === 0) {
 		return "No symbols found."
 	}
@@ -237,7 +243,7 @@ export class LSPTool extends BaseTool<"lsp"> {
 			if (action === "symbols") {
 				// Workspace symbol search doesn't need a document/position
 				const command = ACTION_COMMAND_MAP[action]
-				const results = await vscode.commands.executeCommand<UnsafeAny[]>(command, symbolName)
+				const results = await vscode.commands.executeCommand<VscodeSymbolInformation[]>(command, symbolName)
 				resultText = formatSymbolResults(results, task.cwd)
 				if (task.taskMode === "cangjie" && symbolName && resultText !== "No symbols found.") {
 					task.cangjieRuntimePolicy.noteLspEvidence("symbols", symbolName, resultText.slice(0, 1000))
@@ -250,11 +256,16 @@ export class LSPTool extends BaseTool<"lsp"> {
 				const position = new vscode.Position((line ?? 1) - 1, (character ?? 1) - 1)
 
 				const command = ACTION_COMMAND_MAP[action]
-				const results = await vscode.commands.executeCommand<UnsafeAny[]>(command, document.uri, position)
 
 				if (action === "hover") {
+					const results = await vscode.commands.executeCommand<VscodeHover[]>(command, document.uri, position)
 					resultText = formatHoverResults(results)
 				} else {
+					const results = await vscode.commands.executeCommand<Array<VscodeLocation | VscodeLocationLink>>(
+						command,
+						document.uri,
+						position,
+					)
 					resultText = formatLocations(results, task.cwd)
 				}
 				if (

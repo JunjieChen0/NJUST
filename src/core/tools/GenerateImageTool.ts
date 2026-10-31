@@ -21,6 +21,7 @@ import { BaseTool, ToolCallbacks } from "./BaseTool"
 import type { ToolUse } from "../../shared/tools"
 import { t } from "../../i18n"
 import { getErrorMessage, wrapAsError } from "../../shared/error-utils"
+import type { ApiHandlerOptions } from "../../shared/api"
 
 export class GenerateImageTool extends BaseTool<"generate_image"> {
 	readonly name = "generate_image" as const
@@ -214,11 +215,11 @@ export class GenerateImageTool extends BaseTool<"generate_image"> {
 			let result
 			if (modelProvider === "njust-ai") {
 				// Use NJUST_AI Cloud provider (supports both chat completions and images API)
-				const rooHandler = new RooHandler({} as UnsafeAny)
+				const rooHandler = new RooHandler({} as ApiHandlerOptions)
 				result = await rooHandler.generateImage(prompt, selectedModel!, inputImageData, apiMethod)
 			} else {
 				// Use OpenRouter provider (only supports chat completions API)
-				const openRouterHandler = new OpenRouterHandler({} as UnsafeAny)
+				const openRouterHandler = new OpenRouterHandler({} as ApiHandlerOptions)
 				result = await openRouterHandler.generateImage(
 					prompt,
 					selectedModel!,

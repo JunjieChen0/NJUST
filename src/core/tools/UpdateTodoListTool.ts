@@ -220,14 +220,15 @@ export function setPendingTodoList(todos: TodoItem[]) {
 	approvedTodoList = todos
 }
 
-function validateTodos(todos: UnsafeAny[]): { valid: boolean; error?: string } {
+function validateTodos(todos: unknown[]): { valid: boolean; error?: string } {
 	if (!Array.isArray(todos)) return { valid: false, error: "todos must be an array" }
 	for (const [i, t] of todos.entries()) {
 		if (!t || typeof t !== "object") return { valid: false, error: `Item ${i + 1} is not an object` }
-		if (!t.id || typeof t.id !== "string") return { valid: false, error: `Item ${i + 1} is missing id` }
-		if (!t.content || typeof t.content !== "string")
+		const item = t as Record<string, unknown>
+		if (!item.id || typeof item.id !== "string") return { valid: false, error: `Item ${i + 1} is missing id` }
+		if (!item.content || typeof item.content !== "string")
 			return { valid: false, error: `Item ${i + 1} is missing content` }
-		if (t.status && !todoStatusSchema.options.includes(t.status as TodoStatus))
+		if (item.status && !todoStatusSchema.options.includes(item.status as TodoStatus))
 			return { valid: false, error: `Item ${i + 1} has invalid status` }
 	}
 	return { valid: true }

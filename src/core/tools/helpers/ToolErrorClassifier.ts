@@ -48,8 +48,8 @@ export type ToolErrorCategory =
  * the most specific category. It is designed to be used alongside
  * RetryableError.isRetryable() — not as a replacement.
  */
-export function classifyToolError(error: UnsafeAny): ToolErrorClassification {
-	const e = error as UnsafeAny
+export function classifyToolError(error: unknown): ToolErrorClassification {
+	const e = typeof error === "object" && error !== null ? (error as Record<string, unknown>) : undefined
 	const msg = String(e?.message ?? "").toLowerCase()
 	const code = String(e?.code ?? "")
 	const _errno = String(e?.errno ?? "")

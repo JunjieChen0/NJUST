@@ -142,7 +142,7 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 		}
 
 		try {
-			await reportProgress?.({ text: "Reading persisted command output" } as UnsafeAny)
+			await reportProgress?.({ text: "Reading persisted command output" })
 			// Get the task directory path
 			const provider = await task.providerRef.deref()
 			const globalStoragePath = provider?.context?.globalStorageUri?.fsPath

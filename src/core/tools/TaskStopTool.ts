@@ -36,7 +36,14 @@ export class TaskStopTool extends BaseTool<"task_stop"> {
 	override async execute(params: TaskStopParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { pushToolResult } = callbacks
 
-		const provider = task.providerRef.deref() as UnsafeAny
+		const provider = task.providerRef.deref() as
+			| (NonNullable<ReturnType<typeof task.providerRef.deref>> & {
+					getTaskWithId?: (taskId: string) => Promise<{
+						historyItem?: { rootTaskId?: string; id?: string }
+					}>
+					getAllTaskInstances?: () => Task[]
+			  })
+			| undefined
 		if (!provider?.getTaskWithId) {
 			pushToolResult(formatResponse.toolError("Task provider is unavailable for task_stop."))
 			return

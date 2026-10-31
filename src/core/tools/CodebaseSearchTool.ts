@@ -78,7 +78,7 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 		task.consecutiveMistakeCount = 0
 
 		try {
-			await reportProgress?.({ text: "Building codebase search context" } as UnsafeAny)
+			await reportProgress?.({ text: "Building codebase search context" })
 			const context = task.providerRef.deref()?.context
 			if (!context) {
 				throw new Error("Extension context is not available.")
@@ -97,7 +97,7 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 				throw new Error("Code Indexing is not configured (Missing OpenAI Key or Qdrant URL).")
 			}
 
-			await reportProgress?.({ text: "Searching indexed codebase" } as UnsafeAny)
+			await reportProgress?.({ text: "Searching indexed codebase" })
 			const searchResults: VectorStoreSearchResult[] = await manager.searchIndex(query, directoryPrefix)
 
 			if (!searchResults || searchResults.length === 0) {
@@ -154,7 +154,7 @@ Code Chunk: ${result.codeChunk}
 
 			toolResultCache.set(cacheKey, output)
 			pushToolResult(output)
-		} catch (error: UnsafeAny) {
+		} catch (error: unknown) {
 			await handleError("codebase_search", error instanceof Error ? error : new Error(String(error)))
 		}
 	}

@@ -124,9 +124,13 @@ export function truncateToolResult(result: string, budgetTokens: number): string
 /**
  * Check if a content block contains image data (should not be truncated).
  */
-function isImageContent(content: UnsafeAny): boolean {
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null
+}
+
+function isImageContent(content: unknown): boolean {
 	if (Array.isArray(content)) {
-		return content.some((block) => (block as UnsafeAny as Record<string, UnsafeAny>).type === "image")
+		return content.some((block) => isRecord(block) && block.type === "image")
 	}
 	return false
 }
@@ -141,12 +145,10 @@ function getToolResultText(block: Anthropic.Messages.ToolResultBlockParam): stri
 	}
 	if (Array.isArray(block.content)) {
 		// If it contains images, don't truncate
-		if (block.content.some((item: UnsafeAny) => item.type === "image")) {
+		if (block.content.some((item) => item.type === "image")) {
 			return null
 		}
-		const textParts = block.content
-			.filter((item: UnsafeAny) => item.type === "text")
-			.map((item: UnsafeAny) => item.text || "")
+		const textParts = block.content.filter((item) => item.type === "text").map((item) => item.text || "")
 		return textParts.join("\n")
 	}
 	return null
@@ -164,7 +166,7 @@ function setToolResultText(
 	}
 	if (Array.isArray(block.content)) {
 		// Replace text blocks, keep non-text blocks
-		const nonTextBlocks = block.content.filter((item: UnsafeAny) => item.type !== "text")
+		const nonTextBlocks = block.content.filter((item) => item.type !== "text")
 		return {
 			...block,
 			content: [{ type: "text" as const, text: newText }, ...nonTextBlocks],
@@ -209,9 +211,9 @@ export function applyToolResultBudget(
 
 			let modified = false
 			const newContent = message.content.map((block) => {
-				if ((block as UnsafeAny as Record<string, UnsafeAny>).type !== "tool_result") return block
+				if (block.type !== "tool_result") return block
 
-				const toolResultBlock = block as Anthropic.Messages.ToolResultBlockParam
+				const toolResultBlock = block
 
 				// Skip image results
 				if (isImageContent(toolResultBlock.content)) return block

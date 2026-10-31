@@ -150,8 +150,8 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 	override getEagerExecutionDecision() {
 		return "eager" as const
 	}
-	override isPartialArgsStable(partial: Record<string, UnsafeAny>): boolean {
-		return typeof partial.path === "string" && (partial.path as string).length > 0
+	override isPartialArgsStable(partial: Record<string, unknown>): boolean {
+		return typeof partial.path === "string" && partial.path.length > 0
 	}
 
 	override userFacingName(): string {
@@ -794,9 +794,9 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			} else {
 				if (statusMessage) {
 					const textBlock = { type: "text" as const, text: finalResult }
-					pushToolResult([...result, textBlock] as UnsafeAny)
+					pushToolResult([...result, textBlock])
 				} else {
-					pushToolResult(result as UnsafeAny)
+					pushToolResult(result)
 				}
 			}
 		} else {
@@ -807,21 +807,18 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 
 	getReadFileToolDescription(blockName: string, blockParams: { path?: string }): string
 	getReadFileToolDescription(blockName: string, nativeArgs: ReadFileParams): string
-	getReadFileToolDescription(blockName: string, second: UnsafeAny): string {
+	getReadFileToolDescription(blockName: string, second: unknown): string {
 		// If native typed args were provided
 		if (
 			second &&
 			typeof second === "object" &&
 			"path" in second &&
-			typeof (second as Record<string, UnsafeAny>).path === "string"
+			typeof second.path === "string" &&
+			second.path
 		) {
-			return `[${blockName} for '${(second as Record<string, UnsafeAny>).path}']`
+			return `[${blockName} for '${second.path}']`
 		}
 
-		const blockParams = second as Record<string, UnsafeAny>
-		if (blockParams?.path) {
-			return `[${blockName} for '${blockParams.path}']`
-		}
 		return `[${blockName} with missing path]`
 	}
 
