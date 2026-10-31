@@ -33,9 +33,7 @@ function convertToVsCodeLmTools(tools: OpenAI.Chat.ChatCompletionTool[]): vscode
 		.map((tool) => ({
 			name: tool.function.name,
 			description: tool.function.description || "",
-			inputSchema: tool.function.parameters
-				? normalizeToolSchema(tool.function.parameters as Record<string, UnsafeAny>)
-				: undefined,
+			inputSchema: tool.function.parameters ? normalizeToolSchema(tool.function.parameters) : undefined,
 		}))
 }
 
@@ -355,7 +353,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 		return this.client
 	}
 
-	private cleanMessageContent(content: UnsafeAny): UnsafeAny {
+	private cleanMessageContent(content: unknown): unknown {
 		if (!content) {
 			return content
 		}
@@ -369,8 +367,8 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 		}
 
 		if (typeof content === "object") {
-			const cleaned: UnsafeAny = {}
-			for (const [key, value] of Object.entries(content)) {
+			const cleaned: Record<string, unknown> = {}
+			for (const [key, value] of Object.entries(content as Record<string, unknown>)) {
 				cleaned[key] = this.cleanMessageContent(value)
 			}
 			return cleaned
@@ -391,7 +389,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 		// Process messages
 		const cleanedMessages = messages.map((msg) => ({
 			...msg,
-			content: this.cleanMessageContent(msg.content),
+			content: this.cleanMessageContent(msg.content) as Anthropic.Messages.MessageParam["content"],
 		}))
 
 		// Convert Anthropic messages to VS Code LM messages
@@ -505,7 +503,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 				inputTokens: totalInputTokens,
 				outputTokens: totalOutputTokens,
 			}
-		} catch (error: UnsafeAny) {
+		} catch (error: unknown) {
 			this.ensureCleanState()
 
 			if (error instanceof vscode.CancellationError) {
@@ -534,7 +532,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 				apiError.status = extractHttpStatus(error)
 				throw apiError
 			} else {
-				// Fallback for UnsafeAny error types
+				// Fallback for unknown error types
 				const errorMessage = String(error)
 				logger.error("VsCodeLm", "Unknown stream error:", errorMessage)
 				TelemetryService.reportError(error, TelemetryEventName.API_PROVIDER_ERROR)

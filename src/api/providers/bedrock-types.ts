@@ -11,7 +11,7 @@ import type { BedrockModelId, BedrockServiceTier } from "@njust-ai/core/provider
 
 interface BedrockError extends Error {
 	status?: number
-	$metadata?: { httpStatusCode?: number; [key: string]: UnsafeAny }
+	$metadata?: { httpStatusCode?: number; [key: string]: unknown }
 	name: string
 	__type?: string
 	code?: string
@@ -41,6 +41,7 @@ export interface BedrockAdditionalModelFields {
 				type: "adaptive"
 		  }
 	anthropic_beta?: string[]
+	// AWS DocumentType is an any-like recursive map; a precise index type breaks the SDK assignment.
 	[key: string]: UnsafeAny // Add index signature to be compatible with DocumentType
 }
 
@@ -118,7 +119,7 @@ export interface StreamEvent {
 	}
 	messageStop?: {
 		stopReason?: "end_turn" | "tool_use" | "max_tokens" | "stop_sequence"
-		additionalModelResponseFields?: Record<string, UnsafeAny>
+		additionalModelResponseFields?: Record<string, unknown>
 	}
 	contentBlockStart?: ContentBlockStartEvent
 	contentBlockDelta?: ContentBlockDeltaEvent

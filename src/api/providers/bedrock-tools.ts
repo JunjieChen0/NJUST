@@ -21,7 +21,7 @@ export function convertToolsForBedrock(tools: OpenAI.Chat.ChatCompletionTool[]):
 						inputSchema: {
 							// Normalize schema to JSON Schema draft 2020-12 compliant format
 							// This converts type: ["T", "null"] to anyOf: [{type: "T"}, {type: "null"}]
-							json: normalizeToolSchema(tool.function.parameters as Record<string, UnsafeAny>),
+							json: normalizeToolSchema(tool.function.parameters as Record<string, unknown>),
 						},
 					},
 				}) as Tool,

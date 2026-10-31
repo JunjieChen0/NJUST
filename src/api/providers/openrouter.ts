@@ -157,7 +157,7 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 	protected models: ModelRecord = {}
 	protected endpoints: ModelRecord = {}
 	private readonly providerName = "OpenRouter"
-	private currentReasoningDetails: UnsafeAny[] = []
+	private currentReasoningDetails: Array<Record<string, unknown>> = []
 
 	constructor(options: ApiHandlerOptions) {
 		super()
@@ -201,7 +201,7 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 		}
 	}
 
-	getReasoningDetails(): UnsafeAny[] | undefined {
+	getReasoningDetails(): Array<Record<string, unknown>> | undefined {
 		return this.currentReasoningDetails.length > 0 ? this.currentReasoningDetails : undefined
 	}
 
@@ -294,10 +294,9 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 			// Step 2: Inject fake reasoning.encrypted block for tool calls that survived sanitization
 			openAiMessages = openAiMessages.map((msg) => {
 				if (msg.role === "assistant") {
-					const toolCalls = (msg as Record<string, UnsafeAny>).tool_calls as UnsafeAny[] | undefined
-					const existingDetails = (msg as Record<string, UnsafeAny>).reasoning_details as
-						| UnsafeAny[]
-						| undefined
+					const toolCalls = (msg as { tool_calls?: Array<{ id?: string }> }).tool_calls
+					const existingDetails = (msg as { reasoning_details?: Array<Record<string, unknown>> })
+						.reasoning_details
 
 					// Only inject if there are tool calls and no existing encrypted reasoning
 					if (toolCalls && toolCalls.length > 0) {
@@ -309,7 +308,7 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 							const fakeEncrypted = {
 								type: "reasoning.encrypted",
 								data: "skip_thought_signature_validator",
-								id: toolCalls[0].id,
+								id: toolCalls[0]!.id,
 								format: "google-gemini-v1",
 								index: 0,
 							}

@@ -176,7 +176,7 @@ export class RequestyHandler extends BaseProvider implements SingleCompletionHan
 		} catch (error) {
 			throw handleProviderError(error, this.providerName)
 		}
-		let lastUsage: UnsafeAny = undefined
+		let lastUsage: OpenAiUsageMetrics | undefined = undefined
 
 		for await (const chunk of stream) {
 			const delta = chunk.choices[0]?.delta

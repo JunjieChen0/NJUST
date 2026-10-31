@@ -18,6 +18,8 @@ export type DeepSeekAssistantMessage = AssistantMessage & {
 	reasoning_content?: string
 }
 
+type ReasoningContentPart = { type: "reasoning"; text?: string }
+
 /**
  * Converts Anthropic messages to OpenAI format while merging consecutive messages with the same role.
  * This is required for DeepSeek Reasoner which does not support successive messages with the same role.
@@ -176,7 +178,9 @@ export function convertToR1Format(
 				const toolCalls: OpenAI.Chat.ChatCompletionMessageToolCall[] = []
 				let extractedReasoning: string | undefined
 
-				for (const part of message.content) {
+				for (const part of message.content as Array<
+					Anthropic.Messages.ContentBlockParam | ReasoningContentPart
+				>) {
 					if (part.type === "text") {
 						textParts.push(part.text)
 					} else if (part.type === "tool_use") {
@@ -188,12 +192,9 @@ export function convertToR1Format(
 								arguments: JSON.stringify(part.input),
 							},
 						})
-					} else if (
-						(part as Record<string, UnsafeAny>).type === "reasoning" &&
-						(part as Record<string, UnsafeAny>).text
-					) {
+					} else if (part.type === "reasoning" && part.text) {
 						// Extract reasoning from content blocks (Task stores it this way)
-						extractedReasoning = (part as Record<string, UnsafeAny>).text
+						extractedReasoning = part.text
 					}
 				}
 
@@ -210,11 +211,7 @@ export function convertToR1Format(
 
 				// Check if we can merge with the last message (only if no tool calls)
 				const lastMessage = result[result.length - 1]
-				if (
-					lastMessage?.role === "assistant" &&
-					!toolCalls.length &&
-					!(lastMessage as Record<string, UnsafeAny>).tool_calls
-				) {
+				if (lastMessage?.role === "assistant" && !toolCalls.length && !lastMessage.tool_calls) {
 					// Merge text content
 					if (typeof lastMessage.content === "string" && typeof assistantMessage.content === "string") {
 						lastMessage.content += `\n${assistantMessage.content}`
@@ -232,7 +229,7 @@ export function convertToR1Format(
 			} else {
 				// Simple string content
 				const lastMessage = result[result.length - 1]
-				if (lastMessage?.role === "assistant" && !(lastMessage as Record<string, UnsafeAny>).tool_calls) {
+				if (lastMessage?.role === "assistant" && !lastMessage.tool_calls) {
 					if (typeof lastMessage.content === "string") {
 						lastMessage.content += `\n${message.content}`
 					} else {

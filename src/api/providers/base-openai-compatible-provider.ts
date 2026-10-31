@@ -104,7 +104,7 @@ export abstract class BaseOpenAiCompatibleProvider<ModelName extends string>
 
 		// Add thinking parameter if reasoning is enabled and model supports it
 		if (this.options.enableReasoningEffort && info.supportsReasoningBinary) {
-			;(params as Record<string, UnsafeAny>).thinking = { type: "enabled" }
+			Object.assign(params, { thinking: { type: "enabled" } })
 		}
 
 		try {
@@ -148,7 +148,7 @@ export abstract class BaseOpenAiCompatibleProvider<ModelName extends string>
 
 		for await (const chunk of stream) {
 			// Check for provider-specific error responses (e.g., MiniMax base_resp)
-			const chunkAny = chunk as UnsafeAny
+			const chunkAny = chunk as { base_resp?: { status_code?: number; status_msg?: string } }
 			if (chunkAny.base_resp?.status_code && chunkAny.base_resp.status_code !== 0) {
 				throw new Error(
 					`${this.providerName} API Error (${chunkAny.base_resp.status_code}): ${chunkAny.base_resp.status_msg || "Unknown error"}`,
@@ -167,7 +167,8 @@ export abstract class BaseOpenAiCompatibleProvider<ModelName extends string>
 			if (delta) {
 				for (const key of ["reasoning_content", "reasoning"] as const) {
 					if (key in delta) {
-						const reasoning_content = ((delta as UnsafeAny)[key] as string | undefined) || ""
+						const reasoningValue = (delta as Record<string, unknown>)[key]
+						const reasoning_content = (typeof reasoningValue === "string" ? reasoningValue : "") || ""
 						if (reasoning_content?.trim()) {
 							yield { type: "reasoning", text: reasoning_content }
 						}
@@ -262,14 +263,14 @@ export abstract class BaseOpenAiCompatibleProvider<ModelName extends string>
 
 		// Add thinking parameter if reasoning is enabled and model supports it
 		if (this.options.enableReasoningEffort && modelInfo.supportsReasoningBinary) {
-			;(params as Record<string, UnsafeAny>).thinking = { type: "enabled" }
+			Object.assign(params, { thinking: { type: "enabled" } })
 		}
 
 		try {
 			const response = await this.client.chat.completions.create(params)
 
 			// Check for provider-specific error responses (e.g., MiniMax base_resp)
-			const responseAny = response as UnsafeAny
+			const responseAny = response as { base_resp?: { status_code?: number; status_msg?: string } }
 			if (responseAny.base_resp?.status_code && responseAny.base_resp.status_code !== 0) {
 				throw new Error(
 					`${this.providerName} API Error (${responseAny.base_resp.status_code}): ${responseAny.base_resp.status_msg || "Unknown error"}`,

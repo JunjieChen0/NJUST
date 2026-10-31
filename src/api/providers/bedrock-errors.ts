@@ -270,7 +270,7 @@ export function handleBedrockError(
 	region: string,
 	modelConfig: { id: string; info: ModelInfo },
 	client: BedrockRuntimeClient | undefined,
-): string | Array<{ type: string; text?: string; inputTokens?: number; outputTokens?: number }> {
+): string | Array<{ type: "text"; text: string } | { type: "usage"; inputTokens: number; outputTokens: number }> {
 	// Determine error type
 	const errorType = getBedrockErrorType(error)
 

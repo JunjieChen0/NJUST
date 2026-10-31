@@ -606,7 +606,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 	private handleBedrockError(
 		error: unknown,
 		isStreamContext: boolean,
-	): string | Array<{ type: string; text?: string; inputTokens?: number; outputTokens?: number }> {
+	): string | Array<{ type: "text"; text: string } | { type: "usage"; inputTokens: number; outputTokens: number }> {
 		const modelConfig = this.getModel()
 		const region =
 			typeof this?.client?.config?.region === "function"

@@ -5,7 +5,7 @@ import { logger } from "../../shared/logger"
 /**
  * Safely converts a value into a plain object.
  */
-function asObjectSafe(value: UnsafeAny): object {
+function asObjectSafe(value: unknown): object {
 	// Handle null/undefined
 	if (!value) {
 		return {}

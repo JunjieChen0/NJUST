@@ -69,7 +69,7 @@ export function extractHttpStatus(error: unknown): number | undefined {
  * }
  */
 export function handleProviderError(
-	error: UnsafeAny,
+	error: unknown,
 	providerName: string,
 	options?: {
 		/** Custom message prefix (default: "completion") */

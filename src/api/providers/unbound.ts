@@ -145,7 +145,9 @@ export class UnboundHandler extends BaseProvider implements SingleCompletionHand
 		]
 
 		// Map extended efforts to OpenAI Chat Completions-accepted values (omit unsupported)
-		const allowedEffort = (["low", "medium", "high"] as const).includes(reasoning_effort as UnsafeAny)
+		const allowedEffort = (["low", "medium", "high"] as const).includes(
+			reasoning_effort as "low" | "medium" | "high",
+		)
 			? (reasoning_effort as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming["reasoning_effort"])
 			: undefined
 
@@ -169,7 +171,7 @@ export class UnboundHandler extends BaseProvider implements SingleCompletionHand
 		} catch (error) {
 			throw handleProviderError(error, this.providerName)
 		}
-		let lastUsage: UnsafeAny = undefined
+		let lastUsage: OpenAiUsageMetrics | undefined = undefined
 
 		for await (const chunk of stream) {
 			const delta = chunk.choices[0]?.delta

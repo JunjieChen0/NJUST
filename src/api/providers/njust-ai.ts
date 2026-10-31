@@ -39,7 +39,7 @@ function getSessionToken(): string {
 
 export class RooHandler extends BaseOpenAiCompatibleProvider<string> {
 	private fetcherBaseURL: string
-	private currentReasoningDetails: UnsafeAny[] = []
+	private currentReasoningDetails: Array<Record<string, unknown>> = []
 
 	constructor(options: ApiHandlerOptions) {
 		const sessionToken = options.rooApiKey ?? getSessionToken()
@@ -119,7 +119,7 @@ export class RooHandler extends BaseOpenAiCompatibleProvider<string> {
 		}
 	}
 
-	getReasoningDetails(): UnsafeAny[] | undefined {
+	getReasoningDetails(): Array<Record<string, unknown>> | undefined {
 		return this.currentReasoningDetails.length > 0 ? this.currentReasoningDetails : undefined
 	}
 

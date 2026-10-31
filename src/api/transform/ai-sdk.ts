@@ -5,7 +5,7 @@
 
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI from "openai"
-import { tool as createTool, jsonSchema, type ModelMessage, type TextStreamPart } from "ai"
+import { tool as createTool, jsonSchema, type ModelMessage, type TextStreamPart, type ToolSet } from "ai"
 import type { ApiStreamChunk } from "./stream"
 
 /**
@@ -115,7 +115,7 @@ export function convertToAiSdkMessages(messages: Anthropic.Messages.MessageParam
 					type: "tool-call"
 					toolCallId: string
 					toolName: string
-					input: UnsafeAny
+					input: unknown
 				}> = []
 
 				for (const part of message.content) {
@@ -133,7 +133,7 @@ export function convertToAiSdkMessages(messages: Anthropic.Messages.MessageParam
 
 				const content: Array<
 					| { type: "text"; text: string }
-					| { type: "tool-call"; toolCallId: string; toolName: string; input: UnsafeAny }
+					| { type: "tool-call"; toolCallId: string; toolName: string; input: unknown }
 				> = []
 
 				if (textParts.length > 0) {
@@ -171,7 +171,7 @@ export function convertToolsForAiSdk(
 		if (t.type === "function") {
 			toolSet[t.function.name] = createTool({
 				description: t.function.description,
-				inputSchema: jsonSchema(t.function.parameters as UnsafeAny),
+				inputSchema: jsonSchema(t.function.parameters as Parameters<typeof jsonSchema>[0]),
 			})
 		}
 	}
@@ -183,10 +183,7 @@ export function convertToolsForAiSdk(
  * Extended stream part type that includes additional fullStream event types
  * that are emitted at runtime but not included in the AI SDK TextStreamPart type definitions.
  */
-type ExtendedStreamPart =
-	| TextStreamPart<UnsafeAny>
-	| { type: "text"; text: string }
-	| { type: "reasoning"; text: string }
+type ExtendedStreamPart = TextStreamPart<ToolSet> | { type: "text"; text: string } | { type: "reasoning"; text: string }
 
 /**
  * Process a single AI SDK stream part and yield the appropriate ApiStreamChunk(s).

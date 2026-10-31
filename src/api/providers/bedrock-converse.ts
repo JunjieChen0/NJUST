@@ -223,7 +223,7 @@ export async function* bedrockCreateMessageInner(
 				streamEvent =
 					typeof chunk === "string"
 						? (bedrockStreamEventSchema.parse(JSON.parse(chunk)) as StreamEvent)
-						: (chunk as UnsafeAny as StreamEvent)
+						: (chunk as StreamEvent)
 			} catch (e) {
 				logger.error("Failed to parse stream event", {
 					ctx: "bedrock",
@@ -404,7 +404,7 @@ export async function* bedrockCreateMessageInner(
 		}
 		// Clear timeout after stream completes
 		clearTimeout(timeoutId)
-	} catch (error: UnsafeAny) {
+	} catch (error: unknown) {
 		// Clear timeout on error
 		clearTimeout(timeoutId)
 
@@ -425,7 +425,7 @@ export async function* bedrockCreateMessageInner(
 		const errorChunks = handler.handleBedrockError(error, true) // true for streaming context
 		// Yield each chunk individually to ensure type compatibility
 		for (const chunk of errorChunks) {
-			yield chunk as UnsafeAny // Cast to any to bypass type checking since we know the structure is correct
+			yield chunk // Structure matches ApiStream text/usage chunks
 		}
 
 		// Throw enhanced error so stream failures still trigger retry/backoff logic upstream.

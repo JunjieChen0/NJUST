@@ -130,7 +130,7 @@ export class MiniMaxHandler extends BaseProvider implements SingleCompletionHand
 				...(metadata?.signal ? [{ signal: metadata.signal }] : []),
 			)
 		} catch (error) {
-			const status = (error as Record<string, UnsafeAny>)?.status
+			const status = (error as { status?: unknown })?.status
 			const msg = getErrorMessage(error)
 			throw Object.assign(new Error(`MiniMax API error (HTTP ${status || "?"}): ${msg}`), { status })
 		}

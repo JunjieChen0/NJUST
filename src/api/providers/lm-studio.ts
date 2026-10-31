@@ -216,7 +216,9 @@ export class LmStudioHandler extends BaseProvider implements SingleCompletionHan
 	async completePrompt(prompt: string): Promise<string> {
 		try {
 			// Create params object with optional draft model
-			const params: UnsafeAny = {
+			const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
+				draft_model?: string
+			} = {
 				model: this.getModel().id,
 				messages: [{ role: "user", content: prompt }],
 				temperature: this.options.modelTemperature ?? LMSTUDIO_DEFAULT_TEMPERATURE,

@@ -1,6 +1,6 @@
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI, { AzureOpenAI } from "openai"
-import axios from "axios"
+import axios, { type AxiosRequestConfig } from "axios"
 import { z } from "zod"
 
 import { type ModelInfo, type OpenAiUsageMetrics } from "@njust-ai/types"
@@ -569,7 +569,7 @@ export async function getOpenAiModels(baseUrl?: string, apiKey?: string, openAiH
 			return []
 		}
 
-		const config: Record<string, UnsafeAny> = {}
+		const config: AxiosRequestConfig = {}
 		const headers: Record<string, string> = {
 			...DEFAULT_HEADERS,
 			...(openAiHeaders || {}),
@@ -580,7 +580,7 @@ export async function getOpenAiModels(baseUrl?: string, apiKey?: string, openAiH
 		}
 
 		if (Object.keys(headers).length > 0) {
-			config["headers"] = headers
+			config.headers = headers
 		}
 
 		const response = await axios.get(`${trimmedBaseUrl}/models`, config)
