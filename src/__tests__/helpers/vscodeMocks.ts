@@ -67,3 +67,14 @@ export function createMockClineProvider(
 		...overrides,
 	} as unknown as import("../../core/webview/ClineProvider").ClineProvider
 }
+
+export function createMockTextDocument(overrides: Record<string, unknown> = {}): vscode.TextDocument {
+	return {
+		uri: { fsPath: "/test/file.ts" },
+		fileName: "/test/file.ts",
+		languageId: "typescript",
+		lineAt: () => ({ text: "" }),
+		getText: () => "",
+		...overrides,
+	} as unknown as vscode.TextDocument
+}

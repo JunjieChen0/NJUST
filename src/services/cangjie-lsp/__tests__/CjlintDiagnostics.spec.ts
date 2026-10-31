@@ -203,6 +203,14 @@ async function runLintWorkspace(
 // Tests
 // ---------------------------------------------------------------------------
 
+function createLintConfig(overrides: Record<string, unknown> = {}): CangjieLintConfig {
+	return {
+		isFileExcluded: vi.fn(),
+		filterDiagnostics: vi.fn(() => []),
+		...overrides,
+	} as unknown as CangjieLintConfig
+}
+
 describe("CjlintDiagnostics", () => {
 	let diagnostics: CjlintDiagnostics
 	let mockOutput: { appendLine: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }
@@ -710,10 +718,10 @@ describe("CjlintDiagnostics", () => {
 
 	describe("lintSingleFile additional paths", () => {
 		it("deletes diagnostics when file is excluded by lintConfig", async () => {
-			const lintConfig = {
+			const lintConfig = createLintConfig({
 				isFileExcluded: mockIsFileExcluded,
 				filterDiagnostics: mockFilterDiagnostics,
-			} as unknown as CangjieLintConfig
+			})
 			mockIsFileExcluded.mockReturnValue(true)
 
 			const absPath = path.resolve("/test/file.cj")
@@ -746,10 +754,10 @@ describe("CjlintDiagnostics", () => {
 		})
 
 		it("calls filterDiagnostics when lintConfig is present", async () => {
-			const lintConfig = {
+			const lintConfig = createLintConfig({
 				isFileExcluded: mockIsFileExcluded,
 				filterDiagnostics: mockFilterDiagnostics,
-			} as unknown as CangjieLintConfig
+			})
 			mockIsFileExcluded.mockReturnValue(false)
 			mockFilterDiagnostics.mockImplementation((d: any[]) => d)
 
@@ -895,10 +903,10 @@ describe("CjlintDiagnostics", () => {
 		})
 
 		it("skips excluded files in lintWorkspace", async () => {
-			const lintConfig = {
+			const lintConfig = createLintConfig({
 				isFileExcluded: mockIsFileExcluded,
 				filterDiagnostics: mockFilterDiagnostics,
-			} as unknown as CangjieLintConfig
+			})
 			mockIsFileExcluded.mockReturnValue(true)
 			mockFilterDiagnostics.mockImplementation((d: any[]) => d)
 
@@ -929,10 +937,10 @@ describe("CjlintDiagnostics", () => {
 		})
 
 		it("calls filterDiagnostics in lintWorkspace when lintConfig is present", async () => {
-			const lintConfig = {
+			const lintConfig = createLintConfig({
 				isFileExcluded: mockIsFileExcluded,
 				filterDiagnostics: mockFilterDiagnostics,
-			} as unknown as CangjieLintConfig
+			})
 			mockIsFileExcluded.mockReturnValue(false)
 			mockFilterDiagnostics.mockImplementation((d: any[]) => d)
 

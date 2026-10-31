@@ -24,6 +24,12 @@ vi.mock("@njust-ai/telemetry", () => ({
 	},
 }))
 
+function extractTaskHistory(messages: ClineMessage[]): string {
+	return (
+		MessageEnhancer as unknown as { extractTaskHistory: (messages: ClineMessage[]) => string }
+	).extractTaskHistory(messages)
+}
+
 describe("MessageEnhancer", () => {
 	let mockProviderSettingsManager: ProviderSettingsManager
 	let mockSingleCompletionHandler: ReturnType<typeof vi.fn>
@@ -51,7 +57,7 @@ describe("MessageEnhancer", () => {
 				apiKey: "enhancement-key",
 				apiModelId: "claude-3",
 			}),
-		} as unknown as ProviderSettingsManager
+		} as never
 
 		// Mock single completion handler
 		mockSingleCompletionHandler = vi.fn().mockResolvedValue("Enhanced prompt text")
@@ -318,9 +324,7 @@ describe("MessageEnhancer", () => {
 			]
 
 			// Access private method for testing
-			const history = (
-				MessageEnhancer as unknown as { extractTaskHistory: (messages: ClineMessage[]) => string }
-			).extractTaskHistory(messages)
+			const history = extractTaskHistory(messages)
 
 			expect(history).toContain("User: User message 1")
 			expect(history).toContain("Assistant: Assistant message 1")
@@ -336,12 +340,10 @@ describe("MessageEnhancer", () => {
 				undefined,
 				{ type: "ask" }, // Missing required properties
 				"not an object",
-			] as unknown as ClineMessage[]
+			] as never
 
 			// Access private method for testing
-			const history = (
-				MessageEnhancer as unknown as { extractTaskHistory: (messages: ClineMessage[]) => string }
-			).extractTaskHistory(malformedMessages)
+			const history = extractTaskHistory(malformedMessages)
 
 			// Should return empty string and log error
 			expect(history).toBe("")
@@ -360,9 +362,7 @@ describe("MessageEnhancer", () => {
 			const messages = [circularMessage] as ClineMessage[]
 
 			// Access private method for testing
-			const history = (
-				MessageEnhancer as unknown as { extractTaskHistory: (messages: ClineMessage[]) => string }
-			).extractTaskHistory(messages)
+			const history = extractTaskHistory(messages)
 
 			// Should handle gracefully
 			expect(history).toBe("User: Test")

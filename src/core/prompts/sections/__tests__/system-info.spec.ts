@@ -14,7 +14,7 @@ vi.mock("../../../../utils/shell", () => ({
 import { getSystemInfoSection } from "../system-info"
 import osName from "os-name"
 
-const mockOsName = osName as unknown as ReturnType<typeof vi.fn>
+const mockOsName = vi.mocked(osName)
 
 describe("getSystemInfoSection", () => {
 	const mockCwd = "/test/workspace"

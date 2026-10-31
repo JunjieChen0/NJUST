@@ -22,20 +22,20 @@ describe("AwsBedrockHandler - Extended Thinking", () => {
 		mockSend = vi.fn()
 
 		// Mock ConverseStreamCommand to capture the payload
-		;(ConverseStreamCommand as unknown as ReturnType<typeof vi.fn>).mockImplementation(function (payload) {
+		vi.mocked(ConverseStreamCommand).mockImplementation(function (payload) {
 			capturedPayload = payload
 			return {
 				input: payload,
 			}
 		})
-		;(BedrockRuntimeClient as unknown as ReturnType<typeof vi.fn>).mockImplementation(function () {
+		vi.mocked(BedrockRuntimeClient).mockImplementation(function () {
 			return {
 				send: mockSend,
 				config: { region: "us-east-1" },
 			}
 		})
-		;(logger.info as unknown as ReturnType<typeof vi.fn>).mockImplementation(function () {})
-		;(logger.error as unknown as ReturnType<typeof vi.fn>).mockImplementation(function () {})
+		vi.mocked(logger.info).mockImplementation(function () {})
+		vi.mocked(logger.error).mockImplementation(function () {})
 	})
 
 	afterEach(() => {

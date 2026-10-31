@@ -76,7 +76,7 @@ describe("OpenAiNativeHandlerBase", () => {
 		})
 
 		it("should create an OpenAI client with default headers", () => {
-			;(OpenAI as unknown as ReturnType<typeof vi.fn>).mockClear()
+			vi.mocked(OpenAI).mockClear()
 			new TestOpenAiNativeHandler(makeOptions())
 			expect(OpenAI).toHaveBeenCalledWith(
 				expect.objectContaining({
@@ -89,13 +89,13 @@ describe("OpenAiNativeHandlerBase", () => {
 		})
 
 		it("should pass custom baseURL when set", () => {
-			;(OpenAI as unknown as ReturnType<typeof vi.fn>).mockClear()
+			vi.mocked(OpenAI).mockClear()
 			new TestOpenAiNativeHandler(makeOptions({ openAiNativeBaseUrl: "https://custom.example.com/v1" }))
 			expect(OpenAI).toHaveBeenCalledWith(expect.objectContaining({ baseURL: "https://custom.example.com/v1" }))
 		})
 
 		it("should pass undefined baseURL when openAiNativeBaseUrl is empty", () => {
-			;(OpenAI as unknown as ReturnType<typeof vi.fn>).mockClear()
+			vi.mocked(OpenAI).mockClear()
 			new TestOpenAiNativeHandler(makeOptions({ openAiNativeBaseUrl: "" }))
 			expect(OpenAI).toHaveBeenCalledWith(expect.objectContaining({ baseURL: undefined }))
 		})

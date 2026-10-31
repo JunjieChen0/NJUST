@@ -81,6 +81,7 @@ import {
 	stripMarkdownCodeFence,
 	trimDuplicateLineSuffix,
 } from "../completionPostProcess"
+import { createMockTextDocument } from "../../../__tests__/helpers/vscodeMocks"
 
 describe("CompletionCache", () => {
 	it("stores and retrieves by key with TTL", () => {
@@ -206,12 +207,12 @@ describe("InlineCompletionProvider", () => {
 		const cline = { getCurrentTask: () => undefined } as any
 		const ext = { extensionPath: "/ext" } as vscode.ExtensionContext
 		const provider = new InlineCompletionProvider(ext, cline)
-		const doc = {
+		const doc = createMockTextDocument({
 			uri: { fsPath: "/p/a.cj" },
 			fileName: "/p/a.cj",
 			languageId: "cangjie",
 			lineAt: () => ({ text: "x" }),
-		} as unknown as vscode.TextDocument
+		})
 		const pos = { line: 0, character: 1 } as vscode.Position
 		const ctx = { triggerKind: vscode.InlineCompletionTriggerKind.Automatic } as vscode.InlineCompletionContext
 		const token = new vscode.CancellationTokenSource()
@@ -233,12 +234,12 @@ describe("InlineCompletionProvider", () => {
 		const cline = { getCurrentTask: () => undefined } as any
 		const ext = { extensionPath: "/ext" } as vscode.ExtensionContext
 		const provider = new InlineCompletionProvider(ext, cline)
-		const doc = {
+		const doc = createMockTextDocument({
 			uri: { fsPath: "/p/a.cj" },
 			fileName: "/p/a.cj",
 			languageId: "cangjie",
 			lineAt: () => ({ text: "x" }),
-		} as unknown as vscode.TextDocument
+		})
 		const pos = { line: 0, character: 1 } as vscode.Position
 		const ctx = { triggerKind: vscode.InlineCompletionTriggerKind.Automatic } as vscode.InlineCompletionContext
 		const token = new vscode.CancellationTokenSource()
@@ -260,12 +261,12 @@ describe("InlineCompletionProvider", () => {
 		const cline = { getCurrentTask: () => undefined } as any
 		const ext = { extensionPath: "/ext" } as vscode.ExtensionContext
 		const provider = new InlineCompletionProvider(ext, cline)
-		const doc = {
+		const doc = createMockTextDocument({
 			uri: { fsPath: "/p/a.ts" },
 			fileName: "/p/a.ts",
 			languageId: "typescript",
 			lineAt: () => ({ text: "x" }),
-		} as unknown as vscode.TextDocument
+		})
 		const pos = { line: 0, character: 1 } as vscode.Position
 		const ctx = { triggerKind: vscode.InlineCompletionTriggerKind.Automatic } as vscode.InlineCompletionContext
 		const token = new vscode.CancellationTokenSource()
@@ -282,12 +283,12 @@ describe("InlineCompletionProvider", () => {
 		const cline = { getCurrentTask: () => undefined } as any
 		const ext = { extensionPath: "/ext" } as vscode.ExtensionContext
 		const provider = new InlineCompletionProvider(ext, cline)
-		const doc = {
+		const doc = createMockTextDocument({
 			uri: { fsPath: "/p/a.ts" },
 			fileName: "/p/a.ts",
 			languageId: "typescript",
 			lineAt: () => ({ text: "same" }),
-		} as unknown as vscode.TextDocument
+		})
 		const pos = { line: 0, character: 4 } as vscode.Position
 		const ctx = { triggerKind: vscode.InlineCompletionTriggerKind.Automatic } as vscode.InlineCompletionContext
 		const token1 = new vscode.CancellationTokenSource()

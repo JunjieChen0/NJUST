@@ -95,6 +95,10 @@ vi.mock("chokidar", () => ({
 	},
 }))
 
+function asMcpHubClient(mock: object): IMcpHubClient {
+	return mock as unknown as IMcpHubClient
+}
+
 describe("McpHub", () => {
 	let mcpHub: McpHubType
 	let mockProvider: Partial<IMcpHubClient>
@@ -1869,7 +1873,7 @@ describe("McpHub", () => {
 			)
 
 			// Create a new McpHub instance with disabled MCP
-			const mcpHub = new McpHub(disabledMockProvider as unknown as IMcpHubClient)
+			const mcpHub = new McpHub(asMcpHubClient(disabledMockProvider))
 
 			// Wait for initialization
 			await vi.advanceTimersByTimeAsync(100)
@@ -1944,7 +1948,7 @@ describe("McpHub", () => {
 			)
 
 			// Create a new McpHub instance with enabled MCP
-			const mcpHub = new McpHub(enabledMockProvider as unknown as IMcpHubClient)
+			const mcpHub = new McpHub(asMcpHubClient(enabledMockProvider))
 
 			// Wait for initialization
 			await vi.advanceTimersByTimeAsync(100)
@@ -1988,7 +1992,7 @@ describe("McpHub", () => {
 			)
 
 			// Create McpHub with disabled MCP
-			const mcpHub = new McpHub(disabledMockProvider as unknown as IMcpHubClient)
+			const mcpHub = new McpHub(asMcpHubClient(disabledMockProvider))
 			await vi.advanceTimersByTimeAsync(100)
 
 			// Clear previous calls
@@ -2034,7 +2038,7 @@ describe("McpHub", () => {
 			)
 
 			// Create McpHub with disabled MCP
-			const mcpHub = new McpHub(disabledMockProvider as unknown as IMcpHubClient)
+			const mcpHub = new McpHub(asMcpHubClient(disabledMockProvider))
 			await vi.advanceTimersByTimeAsync(100)
 
 			// Set isConnecting to false to ensure it's properly reset

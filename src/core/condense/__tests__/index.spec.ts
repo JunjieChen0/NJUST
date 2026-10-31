@@ -709,7 +709,7 @@ describe("summarizeConversation", () => {
 					cachableFields: ["system", "messages"],
 				},
 			}),
-		} as unknown as ApiHandler
+		}
 	})
 
 	// Default system prompt for tests
@@ -1055,7 +1055,7 @@ describe("summarizeConversation", () => {
 			countTokens: vi.fn(),
 			getModel: vi.fn(),
 			// createMessage is missing
-		} as unknown as ApiHandler
+		}
 
 		// Mock console.error to verify error message
 		const originalError = console.error
@@ -1178,7 +1178,7 @@ describe("summarizeConversation with custom settings", () => {
 					cachableFields: ["system", "messages"],
 				},
 			}),
-		} as unknown as ApiHandler
+		}
 	})
 
 	/**
@@ -1325,7 +1325,7 @@ describe("toolUseToText", () => {
 			type: "tool_use",
 			id: "tool-789",
 			name: "execute_command",
-			input: "ls -la" as unknown as Record<string, unknown>,
+			input: "ls -la",
 		}
 
 		const result = toolUseToText(block)

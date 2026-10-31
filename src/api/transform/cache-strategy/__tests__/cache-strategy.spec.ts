@@ -56,6 +56,14 @@ const convertToBedrockConverseMessagesMock = {
 	result: null as any,
 }
 
+function createMockBedrockClient(overrides: Record<string, unknown> = {}): BedrockRuntimeClient {
+	return {
+		send: vi.fn(),
+		config: { region: "us-east-1" },
+		...overrides,
+	} as unknown as BedrockRuntimeClient
+}
+
 describe("Cache Strategy", () => {
 	// SECTION 1: Direct Strategy Implementation Tests
 	describe("Strategy Implementation", () => {
@@ -329,10 +337,7 @@ describe("Cache Strategy", () => {
 				},
 			})
 
-			handler["client"] = {
-				send: mockInvoke,
-				config: { region: "us-east-1" },
-			} as unknown as BedrockRuntimeClient
+			handler["client"] = createMockBedrockClient({ send: mockInvoke, config: { region: "us-east-1" } })
 
 			// Mock the convertToBedrockConverseMessages method to capture the config
 			vitest.spyOn(handler as any, "convertToBedrockConverseMessages").mockImplementation(function (
@@ -478,10 +483,7 @@ describe("Cache Strategy", () => {
 				},
 			})
 
-			handler["client"] = {
-				send: mockInvoke,
-				config: { region: "us-east-1" },
-			} as unknown as BedrockRuntimeClient
+			handler["client"] = createMockBedrockClient({ send: mockInvoke, config: { region: "us-east-1" } })
 
 			// Mock the convertToBedrockConverseMessages method again for the new handler
 			vitest.spyOn(handler as any, "convertToBedrockConverseMessages").mockImplementation(function (
@@ -566,10 +568,7 @@ describe("Cache Strategy", () => {
 				},
 			})
 
-			handler["client"] = {
-				send: mockSend,
-				config: { region: "us-east-1" },
-			} as unknown as BedrockRuntimeClient
+			handler["client"] = createMockBedrockClient({ send: mockSend, config: { region: "us-east-1" } })
 
 			// Call the method that uses convertToBedrockConverseMessages
 			const stream = handler.createMessage(systemPrompt, mockMessages)
@@ -638,10 +637,7 @@ describe("Cache Strategy", () => {
 				})
 			})
 
-			handler["client"] = {
-				send: mockSend,
-				config: { region: "us-east-1" },
-			} as unknown as BedrockRuntimeClient
+			handler["client"] = createMockBedrockClient({ send: mockSend, config: { region: "us-east-1" } })
 
 			// Call the method that uses convertToBedrockConverseMessages
 			const stream = handler.createMessage(systemPrompt, mockMessages)
