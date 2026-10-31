@@ -203,4 +203,5 @@ export function calculateApiCostOpenAI(
 	)
 }
 
-export const parseApiPrice = (price?: string | number) => (price ? parseFloat(String(price)) * 1_000_000 : undefined)
+export const parseApiPrice = (price?: string | number | null) =>
+	price ? parseFloat(String(price)) * 1_000_000 : undefined

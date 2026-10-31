@@ -10,7 +10,7 @@ import { TelemetryService } from "@njust-ai/telemetry"
 export interface MessageEnhancerOptions {
 	text: string
 	apiConfiguration: ProviderSettings
-	customSupportPrompts?: Record<string, unknown>
+	customSupportPrompts?: Record<string, string | undefined>
 	listApiConfigMeta: Array<{ id: string; name?: string }>
 	enhancementApiConfigId?: string
 	includeTaskHistoryInEnhance?: boolean
