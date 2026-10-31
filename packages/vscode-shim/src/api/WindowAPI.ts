@@ -16,6 +16,19 @@ import { TabGroupsAPI } from "./TabGroupsAPI.js"
 import { StatusBarAlignment, ViewColumn } from "../types.js"
 import type { WorkspaceAPI } from "./WorkspaceAPI.js"
 import type { Thenable } from "../types.js"
+
+interface ExtensionHostBridge {
+	registerWebviewProvider(viewId: string, provider: WebviewViewProvider): void
+	isInInitialSetup(): boolean
+	markWebviewReady(): void
+	emit(event: string, message: unknown): void
+	on(event: string, listener: (message: unknown) => void): void
+	unregisterWebviewProvider(viewId: string): void
+}
+
+function getExtensionHostBridge(): ExtensionHostBridge | undefined {
+	return (globalThis as typeof globalThis & { __extensionHost?: ExtensionHostBridge }).__extensionHost
+}
 import type {
 	TextEditor,
 	TextEditorSelectionChangeEvent,
@@ -209,41 +222,21 @@ export class WindowAPI {
 		_options?: WebviewViewProviderOptions,
 	): Disposable {
 		// Store the provider for later use by ExtensionHost
-		if ((global as unknown as { __extensionHost?: unknown }).__extensionHost) {
-			const extensionHost = (
-				global as unknown as {
-					__extensionHost: {
-						registerWebviewProvider: (viewId: string, provider: WebviewViewProvider) => void
-						isInInitialSetup: () => boolean
-						markWebviewReady: () => void
-					}
-				}
-			).__extensionHost
+		const extensionHost = getExtensionHostBridge()
+		if (extensionHost) {
 			extensionHost.registerWebviewProvider(viewId, provider)
 
 			// Set up webview mock that captures messages from the extension
 			const mockWebview = {
 				postMessage: (message: unknown): Thenable<boolean> => {
 					// Forward extension messages to ExtensionHost for CLI consumption
-					if ((global as unknown as { __extensionHost?: unknown }).__extensionHost) {
-						;(
-							global as unknown as {
-								__extensionHost: { emit: (event: string, message: unknown) => void }
-							}
-						).__extensionHost.emit("extensionWebviewMessage", message)
-					}
+					getExtensionHostBridge()?.emit("extensionWebviewMessage", message)
 					return Promise.resolve(true)
 				},
 				onDidReceiveMessage: (listener: (message: unknown) => void) => {
 					// This is how the extension listens for messages from the webview
 					// We need to connect this to our message bridge
-					if ((global as unknown as { __extensionHost?: unknown }).__extensionHost) {
-						;(
-							global as unknown as {
-								__extensionHost: { on: (event: string, listener: (message: unknown) => void) => void }
-							}
-						).__extensionHost.on("webviewMessage", listener)
-					}
+					getExtensionHostBridge()?.on("webviewMessage", listener)
 					return { dispose: () => {} }
 				},
 				asWebviewUri: (uriArg: Uri) => {
@@ -299,13 +292,7 @@ export class WindowAPI {
 		}
 		return {
 			dispose: () => {
-				if ((global as unknown as { __extensionHost?: unknown }).__extensionHost) {
-					;(
-						global as unknown as {
-							__extensionHost: { unregisterWebviewProvider: (viewId: string) => void }
-						}
-					).__extensionHost.unregisterWebviewProvider(viewId)
-				}
+				getExtensionHostBridge()?.unregisterWebviewProvider(viewId)
 			},
 		}
 	}

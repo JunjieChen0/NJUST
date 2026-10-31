@@ -278,7 +278,7 @@ async function configureUndiciProxy(config: ProxyConfig): Promise<void> {
 				originalFetch = globalThis.fetch
 			}
 
-			globalThis.fetch = undiciFetch as unknown as typeof fetch
+			globalThis.fetch = undiciFetch as typeof fetch
 			fetchPatched = true
 			log(`globalThis.fetch patched to undici.fetch (debug proxy mode)`)
 

@@ -7,6 +7,7 @@ import { FoldVertical } from "lucide-react"
 import { supportPrompt } from "@shared/support-prompt"
 
 import { cn } from "@/lib/utils"
+import { getCustomEventValue } from "@src/utils/domEvents"
 import {
 	Input,
 	Select,
@@ -461,9 +462,7 @@ export const ContextManagementSettings = ({
 						resize="vertical"
 						value={getCondensePromptValue()}
 						onInput={(e) => {
-							const value =
-								(e as unknown as CustomEvent)?.detail?.target?.value ??
-								(e.target as HTMLTextAreaElement).value
+							const value = getCustomEventValue(e) ?? (e.target as HTMLTextAreaElement).value
 							updateCondensePrompt(value)
 						}}
 						rows={6}

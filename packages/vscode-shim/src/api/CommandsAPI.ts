@@ -83,8 +83,11 @@ export class CommandsAPI {
 		}
 
 		// Get the workspace API to open the document
-		const workspace = (global as unknown as { vscode?: { workspace?: WorkspaceAPI } }).vscode?.workspace
-		const window = (global as unknown as { vscode?: { window?: WindowAPI } }).vscode?.window
+		const shimApi = (
+			globalThis as typeof globalThis & { vscode?: { workspace?: WorkspaceAPI; window?: WindowAPI } }
+		).vscode
+		const workspace = shimApi?.workspace
+		const window = shimApi?.window
 
 		if (!workspace || !window) {
 			logs.warn("[DIFF] VSCode APIs not available for diff command", "VSCode.Commands")

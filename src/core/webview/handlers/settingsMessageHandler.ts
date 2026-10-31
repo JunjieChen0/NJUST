@@ -305,7 +305,15 @@ async function persistSandboxSettings(
 async function handleUpdateCloudAgentSettings(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
 	const { provider } = context
 	const config = vscode.workspace.getConfiguration(Package.name)
-	const msg = message as unknown as Record<string, unknown>
+	type CloudAgentSettingsMessage = WebviewMessage & {
+		serverUrl?: unknown
+		deferredProtocol?: unknown
+		applyRemoteWorkspaceOps?: unknown
+		confirmRemoteWorkspaceOps?: unknown
+		compileLoopEnabled?: unknown
+		compileLoopMaxRetries?: unknown
+	}
+	const msg = message as CloudAgentSettingsMessage
 	if (msg.serverUrl !== undefined)
 		await config.update("cloudAgent.serverUrl", msg.serverUrl, vscode.ConfigurationTarget.Global)
 	if (msg.deferredProtocol !== undefined)

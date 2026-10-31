@@ -95,18 +95,23 @@ export interface McpHubInternal {
 	isMcpEnabled(): Promise<boolean>
 	deleteConnection(name: string, source?: "global" | "project"): Promise<void>
 	findConnection(serverName: string, source?: "global" | "project"): McpConnection | undefined
-	createPlaceholderConnection(name: string, config: unknown, source: string, reason: string): McpConnection
-	setupFileWatcher(name: string, config: unknown, source: string): void
+	createPlaceholderConnection(
+		name: string,
+		config: unknown,
+		source: "global" | "project",
+		reason: string,
+	): McpConnection
+	setupFileWatcher(name: string, config: unknown, source: "global" | "project"): void
 	removeFileWatchersForServer(serverName: string): void
 	connectToServer(name: string, config: unknown, source?: "global" | "project"): Promise<void>
 	notifyWebviewOfServerChanges(): Promise<void>
-	fetchToolsList(name: string, source?: string): Promise<McpTool[]>
-	fetchResourcesList(name: string, source?: string): Promise<McpResource[]>
-	fetchResourceTemplatesList(name: string, source?: string): Promise<McpResourceTemplate[]>
+	fetchToolsList(name: string, source?: "global" | "project"): Promise<McpTool[]>
+	fetchResourcesList(name: string, source?: "global" | "project"): Promise<McpResource[]>
+	fetchResourceTemplatesList(name: string, source?: "global" | "project"): Promise<McpResourceTemplate[]>
 	showErrorMessage(message: string, error: unknown): void
-	getProjectMcpPath(): Promise<string>
+	getProjectMcpPath(): Promise<string | null>
 	getMcpSettingsFilePath(): Promise<string>
-	validateServerConfig(config: unknown, serverName: string): z.infer<typeof ServerConfigSchema>
+	validateServerConfig(config: unknown, serverName?: string): z.infer<typeof ServerConfigSchema>
 	setProgrammaticUpdateFlag(): void
 	scheduleProgrammaticUpdateFlagReset(): void
 	updateServerConnections(servers: Record<string, unknown>, source: "global" | "project"): Promise<void>
@@ -122,13 +127,13 @@ export enum DisableReason {
 export { ServerConfigSchema } from "./McpHubConfigSchema"
 
 export class McpHub implements IMcpHubService {
-	private providerRef: WeakRef<IMcpHubClient>
+	providerRef: WeakRef<IMcpHubClient>
 	private fileWatcherManager = new McpHubFileWatcherManager()
 	private isDisposed: boolean = false
 	connections: McpConnection[] = []
 	isConnecting: boolean = false
 	private refCount: number = 0 // Reference counter for active clients
-	private sanitizedNameRegistry: Map<string, string> = new Map()
+	sanitizedNameRegistry: Map<string, string> = new Map()
 
 	private readonly configWatchers = new McpConfigWatcherManager({
 		getWorkspaceFolderPath: () => this.providerRef.deref()?.cwd ?? getWorkspacePath(),
@@ -207,7 +212,7 @@ export class McpHub implements IMcpHubService {
 	 * @returns The validated configuration
 	 * @throws Error if the configuration is invalid
 	 */
-	private validateServerConfig(config: unknown, serverName?: string): z.infer<typeof ServerConfigSchema> {
+	validateServerConfig(config: unknown, serverName?: string): z.infer<typeof ServerConfigSchema> {
 		return validateServerConfigStandalone(config as Record<string, unknown>, serverName)
 	}
 
@@ -436,7 +441,7 @@ export class McpHub implements IMcpHubService {
 	 * @param reason The reason for creating a placeholder (mcpDisabled or serverDisabled)
 	 * @returns A placeholder DisconnectedMcpConnection object
 	 */
-	private createPlaceholderConnection(
+	createPlaceholderConnection(
 		name: string,
 		config: z.infer<typeof ServerConfigSchema>,
 		source: "global" | "project",
@@ -462,7 +467,7 @@ export class McpHub implements IMcpHubService {
 	 * Checks if MCP is globally enabled
 	 * @returns Promise<boolean> indicating if MCP is enabled
 	 */
-	private async isMcpEnabled(): Promise<boolean> {
+	async isMcpEnabled(): Promise<boolean> {
 		const provider = this.providerRef.deref()
 		if (!provider) {
 			return true // Default to enabled if provider is not available
@@ -471,12 +476,12 @@ export class McpHub implements IMcpHubService {
 		return state.mcpEnabled ?? true
 	}
 
-	private async connectToServer(
+	async connectToServer(
 		name: string,
 		config: z.infer<typeof ServerConfigSchema>,
 		source: "global" | "project" = "global",
 	): Promise<void> {
-		return connectToServerWithHub(this as unknown as McpHubInternal, name, config, source)
+		return connectToServerWithHub(this, name, config, source)
 	}
 	private appendErrorMessage(connection: McpConnection, error: string, level: "error" | "warn" | "info" = "error") {
 		appendErrorMessageToConnection(connection, error, level)
@@ -538,13 +543,13 @@ export class McpHub implements IMcpHubService {
 	}
 
 	public async fetchToolsList(serverName: string, source?: "global" | "project"): Promise<McpTool[]> {
-		return fetchToolsListWithHub(this as unknown as McpHubInternal, serverName, source)
+		return fetchToolsListWithHub(this, serverName, source)
 	}
 
-	private async fetchResourcesList(serverName: string, source?: "global" | "project"): Promise<McpResource[]> {
-		return fetchResourcesListWithHub(this as unknown as McpHubInternal, serverName, source)
+	async fetchResourcesList(serverName: string, source?: "global" | "project"): Promise<McpResource[]> {
+		return fetchResourcesListWithHub(this, serverName, source)
 	}
-	private async fetchResourceTemplatesList(
+	async fetchResourceTemplatesList(
 		serverName: string,
 		source?: "global" | "project",
 	): Promise<McpResourceTemplate[]> {
@@ -650,7 +655,7 @@ export class McpHub implements IMcpHubService {
 		return updateServerConnectionsWithHub(this.connectionLifecycleHost, newServers, source, manageConnectingState)
 	}
 
-	private setupFileWatcher(
+	setupFileWatcher(
 		name: string,
 		config: z.infer<typeof ServerConfigSchema>,
 		source: "global" | "project" = "global",
@@ -664,7 +669,7 @@ export class McpHub implements IMcpHubService {
 		this.fileWatcherManager.removeAll()
 	}
 
-	private removeFileWatchersForServer(serverName: string) {
+	removeFileWatchersForServer(serverName: string) {
 		this.fileWatcherManager.removeForServer(serverName)
 	}
 
@@ -743,7 +748,7 @@ export class McpHub implements IMcpHubService {
 		disabled: boolean,
 		source?: "global" | "project",
 	): Promise<void> {
-		return toggleServerDisabledWithHub(this as unknown as McpHubInternal, serverName, disabled, source)
+		return toggleServerDisabledWithHub(this, serverName, disabled, source)
 	}
 
 	/**
@@ -756,7 +761,7 @@ export class McpHub implements IMcpHubService {
 		serverName: string,
 		source: "global" | "project" = "global",
 	): Promise<z.infer<typeof ServerConfigSchema>> {
-		return readServerConfigFromFileWithHub(this as unknown as McpHubInternal, serverName, source)
+		return readServerConfigFromFileWithHub(this, serverName, source)
 	}
 
 	/**
@@ -770,7 +775,7 @@ export class McpHub implements IMcpHubService {
 		configUpdate: Record<string, unknown>,
 		source: "global" | "project" = "global",
 	): Promise<void> {
-		return updateServerConfigWithHub(this as unknown as McpHubInternal, serverName, configUpdate, source)
+		return updateServerConfigWithHub(this, serverName, configUpdate, source)
 	}
 
 	public async updateServerTimeout(
@@ -778,11 +783,11 @@ export class McpHub implements IMcpHubService {
 		timeout: number,
 		source?: "global" | "project",
 	): Promise<void> {
-		return updateServerTimeoutWithHub(this as unknown as McpHubInternal, serverName, timeout, source)
+		return updateServerTimeoutWithHub(this, serverName, timeout, source)
 	}
 
 	public async deleteServer(serverName: string, source?: "global" | "project"): Promise<void> {
-		return deleteServerWithHub(this as unknown as McpHubInternal, serverName, source)
+		return deleteServerWithHub(this, serverName, source)
 	}
 	async readResource(serverName: string, uri: string, source?: "global" | "project"): Promise<McpResourceResponse> {
 		return readResourceWithHub(this, serverName, uri, source)

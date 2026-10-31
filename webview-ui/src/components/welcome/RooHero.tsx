@@ -1,5 +1,5 @@
 const getIconUrl = () => {
-	const base = (window as unknown as { IMAGES_BASE_URI?: string }).IMAGES_BASE_URI || ""
+	const base = window.IMAGES_BASE_URI || ""
 	return `${base}/icon.png`
 }
 

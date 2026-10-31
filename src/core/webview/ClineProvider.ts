@@ -265,21 +265,19 @@ export class ClineProvider
 		})
 		// Use Object.defineProperties with arrow function getters to preserve lexical `this`
 		// (object-literal getters would bind `this` to the config object, not ClineProvider).
+		const taskHistoryHostBase: Omit<TaskHistoryHost, "cwd" | "isViewLaunched"> = {
+			context: this.context,
+			contextProxy: this.contextProxy,
+			taskHistoryStore: this.taskHistoryStore,
+			outputChannel: this.outputChannel,
+			stack: this.stack,
+			postMessageToWebview: (msg: ExtensionMessage) => this.postMessageToWebview(msg),
+		}
 		this.taskHistory = new TaskHistoryService(
-			Object.defineProperties(
-				{
-					context: this.context,
-					contextProxy: this.contextProxy as unknown as TaskHistoryHost["contextProxy"],
-					taskHistoryStore: this.taskHistoryStore,
-					outputChannel: this.outputChannel,
-					stack: this.stack,
-					postMessageToWebview: (msg: ExtensionMessage) => this.postMessageToWebview(msg),
-				} as TaskHistoryHost,
-				{
-					cwd: { get: () => this.cwd, enumerable: true, configurable: true },
-					isViewLaunched: { get: () => this.isViewLaunched, enumerable: true, configurable: true },
-				},
-			),
+			Object.defineProperties(taskHistoryHostBase, {
+				cwd: { get: () => this.cwd, enumerable: true, configurable: true },
+				isViewLaunched: { get: () => this.isViewLaunched, enumerable: true, configurable: true },
+			}) as TaskHistoryHost,
 		)
 		this.taskHistory.initialize().catch((error) => {
 			this.log(`Failed to initialize TaskHistoryStore: ${error}`)
@@ -839,10 +837,7 @@ export class ClineProvider
 		const resolvedCwd = cwd || getWorkspacePath()
 		if (!resolvedCwd) return undefined
 		// Re-create if the workspace path changed
-		if (
-			!this._memoryManager ||
-			(this._memoryManager as unknown as { workspaceDir: string }).workspaceDir !== resolvedCwd
-		) {
+		if (!this._memoryManager || this._memoryManager?.workspaceDir !== resolvedCwd) {
 			this._memoryManager = this.services.createMemoryManager(resolvedCwd)
 		}
 		return this._memoryManager

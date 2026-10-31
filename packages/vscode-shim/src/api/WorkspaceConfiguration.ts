@@ -6,7 +6,7 @@ import * as path from "path"
 import { logs } from "../utils/logger.js"
 import { VSCodeMockPaths, ensureDirectoryExists } from "../utils/paths.js"
 import { FileMemento } from "../storage/Memento.js"
-import { ConfigurationTarget } from "../types.js"
+import { ConfigurationTarget, type Memento } from "../types.js"
 import type { ConfigurationInspect } from "../types.js"
 import type { WorkspaceConfiguration } from "../interfaces/workspace.js"
 import type { ExtensionContextImpl } from "../context/ExtensionContext.js"
@@ -66,16 +66,16 @@ export function getRuntimeConfig(fullKey: string): unknown {
  */
 export class MockWorkspaceConfiguration implements WorkspaceConfiguration {
 	private section: string | undefined
-	private globalMemento: FileMemento
-	private workspaceMemento: FileMemento
+	private globalMemento: Memento
+	private workspaceMemento: Memento
 
 	constructor(section?: string, context?: ExtensionContextImpl) {
 		this.section = section
 
 		if (context) {
 			// Use the extension context's mementos
-			this.globalMemento = context.globalState as unknown as FileMemento
-			this.workspaceMemento = context.workspaceState as unknown as FileMemento
+			this.globalMemento = context.globalState
+			this.workspaceMemento = context.workspaceState
 		} else {
 			// Fallback: create our own mementos (shouldn't happen in normal usage)
 			const globalStoragePath = VSCodeMockPaths.getGlobalStorageDir()

@@ -13,7 +13,6 @@ import * as fs from "fs/promises"
 import * as path from "path"
 
 import { type ApiMessage } from "../task-persistence"
-import type { TypedBlock } from "../assistant-message/types"
 import { logger } from "../../shared/logger"
 
 // ─── SessionMemorySummary: structured summary for cross-session persistence ───
@@ -258,8 +257,7 @@ function getMessageText(msg: ApiMessage): string {
 		return msg.content
 			.map((block) => {
 				if (typeof block === "string") return block
-				const b = block as unknown as TypedBlock
-				if (b.type === "text" && typeof b.text === "string") return b.text!
+				if (block.type === "text" && typeof block.text === "string") return block.text
 				return ""
 			})
 			.join("\n")

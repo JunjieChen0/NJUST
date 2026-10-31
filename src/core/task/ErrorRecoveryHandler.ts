@@ -9,7 +9,6 @@ import { appendRetryEvent } from "../errors/retryPersistence"
 import { reactiveCompactMessages } from "../context-management/reactiveCompact"
 import { TaskState } from "./TaskStateMachine"
 import { logger } from "../../shared/logger"
-import type { TypedBlock } from "../assistant-message/types"
 
 import type { Task } from "./Task"
 import { getErrorMessage } from "../../shared/error-utils"
@@ -357,7 +356,7 @@ export class ErrorRecoveryHandler {
 			const msg = history[i]!
 			if (Array.isArray(msg.content)) {
 				const filtered = msg.content.map((block) => {
-					const b = block as unknown as TypedBlock
+					const b = block as { type: string; source?: { type?: string } }
 					if (
 						b.type === "image" ||
 						b.type === "image_url" ||

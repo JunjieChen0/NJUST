@@ -1,7 +1,6 @@
 import { ApiMessage } from "../task-persistence/apiMessages"
 import { contextCollapseMessages } from "./contextCollapse"
 import { logger } from "../../shared/logger"
-import type { TypedBlock } from "../assistant-message/types"
 
 export type PreprocessResult = {
 	messages: ApiMessage[]
@@ -107,13 +106,12 @@ function applyTimeBasedMicrocompact(
 
 		let touched = false
 		const newContent = msg.content.map((block) => {
-			const b = block as unknown as TypedBlock
 			if (
-				b.type === "tool_result" &&
-				!keepSet.has(b.tool_use_id ?? "") &&
-				b.content !== TIME_BASED_CLEARED_MESSAGE
+				block.type === "tool_result" &&
+				!keepSet.has(block.tool_use_id ?? "") &&
+				block.content !== TIME_BASED_CLEARED_MESSAGE
 			) {
-				tokensSaved += typeof b.content === "string" ? b.content.length : 0
+				tokensSaved += typeof block.content === "string" ? block.content.length : 0
 				touched = true
 				return { ...block, content: TIME_BASED_CLEARED_MESSAGE } as typeof block
 			}
@@ -292,20 +290,19 @@ export function preprocessMessages(messages: ApiMessage[], options: PreprocessOp
 			const agePenalty = age >= 18 ? 3 : age >= 10 ? 2 : age >= 5 ? 1 : 0
 			let blockChanged = false
 			const nextBlocks = msg.content.map((block) => {
-				const b = block as unknown as TypedBlock
-				if (b.type !== "tool_result") return block
-				const toolUseId = b.tool_use_id
+				if (block.type !== "tool_result") return block
+				const toolUseId = block.tool_use_id
 				const toolName = (toolUseId && toolUseIdToName?.get(toolUseId)) ?? "unknown_tool"
 				const budget = resolveBudget(toolName, agePenalty)
-				if (typeof b.content === "string") {
-					const compacted = compactByTool(b.content, toolName, budget)
-					if (compacted !== b.content) {
+				if (typeof block.content === "string") {
+					const compacted = compactByTool(block.content, toolName, budget)
+					if (compacted !== block.content) {
 						blockChanged = true
 						return { ...block, content: compacted } as typeof block
 					}
 					return block
 				}
-				const encoded = JSON.stringify(b.content)
+				const encoded = JSON.stringify(block.content)
 				if (encoded.length <= budget) return block
 				blockChanged = true
 				return { ...block, content: compactByTool(encoded, toolName, budget) } as typeof block

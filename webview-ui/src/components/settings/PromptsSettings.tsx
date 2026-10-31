@@ -4,6 +4,7 @@ import { VSCodeTextArea, VSCodeCheckbox } from "@vscode/webview-ui-toolkit/react
 import { supportPrompt, SupportPromptType } from "@shared/support-prompt"
 
 import { vscode } from "@src/utils/vscode"
+import { getCustomEventValue } from "@src/utils/domEvents"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { useExtensionState } from "@src/context/ExtensionStateContext"
 import {
@@ -154,9 +155,7 @@ const PromptsSettings = ({
 						resize="vertical"
 						value={getSupportPromptValue(activeSupportOption)}
 						onInput={(e) => {
-							const value =
-								(e as unknown as CustomEvent)?.detail?.target?.value ??
-								(e.target as HTMLTextAreaElement).value
+							const value = getCustomEventValue(e) ?? (e.target as HTMLTextAreaElement).value
 							updateSupportPrompt(activeSupportOption, value)
 						}}
 						rows={6}

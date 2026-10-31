@@ -87,9 +87,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 	{ isHidden, showAnnouncement, hideAnnouncement },
 	ref,
 ) => {
-	const [audioBaseUri] = useState(() => {
-		return (window as unknown as { AUDIO_BASE_URI?: string }).AUDIO_BASE_URI || ""
-	})
+	const [audioBaseUri] = useState(() => window.AUDIO_BASE_URI || "")
 
 	const { t } = useAppTranslation()
 	const modeShortcutText = `${isMac ? "⌘" : "Ctrl"} + . ${t("chat:forNextMode")}, ${isMac ? "⌘" : "Ctrl"} + Shift + . ${t("chat:forPreviousMode")}`

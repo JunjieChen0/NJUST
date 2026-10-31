@@ -5,14 +5,10 @@ import type { ExtensionMessage } from "@njust-ai/types"
 import { vscode } from "@src/utils/vscode"
 
 function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null {
-	if (typeof globalThis === "undefined") {
+	if (typeof window === "undefined") {
 		return null
 	}
-	const g = globalThis as unknown as {
-		SpeechRecognition?: SpeechRecognitionConstructor
-		webkitSpeechRecognition?: SpeechRecognitionConstructor
-	}
-	return g.SpeechRecognition ?? g.webkitSpeechRecognition ?? null
+	return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null
 }
 
 function toRecognitionLang(uiLanguage: string | undefined): string {
@@ -172,9 +168,7 @@ export function useVoiceInput(
 					interim += piece
 				}
 			}
-			setInputValueRef.current(
-				speechCommittedRef.current + speechFinalsRef.current + interim,
-			)
+			setInputValueRef.current(speechCommittedRef.current + speechFinalsRef.current + interim)
 		}
 		rec.onerror = (event: SpeechRecognitionErrorEvent) => {
 			if (event.error === "aborted" || event.error === "no-speech") {
@@ -231,17 +225,11 @@ export function useVoiceInput(
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
 			mediaStreamRef.current = stream
-			const preferred = [
-				"audio/webm;codecs=opus",
-				"audio/webm",
-				"audio/mp4",
-			]
+			const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]
 			const mimeType = preferred.find((m) => MediaRecorder.isTypeSupported(m)) ?? ""
 			mediaChunksRef.current = []
 			discardNextRecordingRef.current = false
-			const mr = mimeType
-				? new MediaRecorder(stream, { mimeType })
-				: new MediaRecorder(stream)
+			const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
 			mediaMimeRef.current = mr.mimeType || "audio/webm"
 			mr.ondataavailable = (e) => {
 				if (e.data.size > 0) {
@@ -271,14 +259,7 @@ export function useVoiceInput(
 				setLastError("mic-denied")
 			}
 		}
-	}, [
-		canGetUserMedia,
-		canSpeechApi,
-		releaseMediaStream,
-		sendBlobToExtension,
-		startSpeechApi,
-		stopSpeechApi,
-	])
+	}, [canGetUserMedia, canSpeechApi, releaseMediaStream, sendBlobToExtension, startSpeechApi, stopSpeechApi])
 
 	const toggleListening = useCallback(() => {
 		if (phase === "transcribing") {
@@ -331,9 +312,7 @@ export function useVoiceInput(
 				const detail = msg.values?.detail
 				if (typeof key === "string" && key.length > 0) {
 					setLastError(
-						typeof detail === "string" && detail
-							? `${translate(key)} (${detail})`
-							: translate(key),
+						typeof detail === "string" && detail ? `${translate(key)} (${detail})` : translate(key),
 					)
 				} else {
 					setLastError(translate("chat:voiceInput.errorTranscriptionFailed"))

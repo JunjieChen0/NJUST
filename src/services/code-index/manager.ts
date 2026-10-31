@@ -56,15 +56,7 @@ export class CodeIndexManager {
 		if (!CodeIndexManager.instances.has(workspacePath)) {
 			// folder may be undefined when workspacePath was provided but doesn't match
 			// any workspace folder (e.g. cwd passed from a tool). Fall back to file:// URI.
-			const folderUri =
-				folder?.uri ??
-				({
-					fsPath: workspacePath,
-					scheme: "file",
-					authority: "",
-					path: workspacePath,
-					toString: () => `file://${workspacePath}`,
-				} as unknown as vscode.Uri)
+			const folderUri = folder?.uri ?? vscode.Uri.file(workspacePath)
 			CodeIndexManager.instances.set(workspacePath, new CodeIndexManager(workspacePath, folderUri, context))
 		}
 		return CodeIndexManager.instances.get(workspacePath)!

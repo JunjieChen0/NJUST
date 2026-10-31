@@ -25,5 +25,6 @@ export const createClient = ({ url, authToken }: ClientConfig): RooClient => {
 				headers: () => (authToken ? { Authorization: `Bearer ${authToken}` } : {}),
 			}),
 		],
+		// tRPC's proxy type is resolved at runtime from the remote router, so it cannot overlap structurally.
 	}) as unknown as RooClient
 }

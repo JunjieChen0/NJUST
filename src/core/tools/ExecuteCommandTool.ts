@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import * as path from "path"
+import { EventEmitter } from "events"
 import * as vscode from "vscode"
 import { z } from "zod"
 
@@ -23,6 +24,7 @@ import {
 	ExitCodeDetails,
 	RooTerminalCallbacks,
 	RooTerminalProcess,
+	RooTerminalProcessEvents,
 	RooTerminalProcessResultPromise,
 } from "../../integrations/terminal/types"
 import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"
@@ -653,7 +655,7 @@ export async function executeCommandInTerminal(
 	// ── Docker backend: execute in sandbox container ──────────────────────
 	if (sandboxBackend === "docker") {
 		let lastRetrievedIndex = 0
-		const dockerProcess = {
+		const dockerProcess: RooTerminalProcess = Object.assign(new EventEmitter<RooTerminalProcessEvents>(), {
 			command: resolvedCommand,
 			isHot: true,
 			run: async () => {},
@@ -675,7 +677,7 @@ export async function executeCommandInTerminal(
 					lastRetrievedIndex = 0
 				}
 			},
-		} as unknown as RooTerminalProcess
+		})
 		task.terminalProcess = dockerProcess
 
 		const appendDockerOutput = (text: string): void => {

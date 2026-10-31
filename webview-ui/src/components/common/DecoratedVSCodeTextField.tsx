@@ -26,6 +26,7 @@ function VSCodeTextFieldWithNodesInner(
 		(element: ComponentRef<typeof VSCodeTextField>) => {
 			if (!element) return
 
+			// The toolkit's React wrapper renders a custom element at runtime but does not expose its DOM type.
 			const webComponent = element as unknown as WebComponentWithShadowRoot
 			const inputElement =
 				webComponent.shadowRoot?.querySelector?.("input") || webComponent.querySelector?.("input")

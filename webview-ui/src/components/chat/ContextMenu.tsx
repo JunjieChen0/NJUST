@@ -66,8 +66,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
 
 	// get the icons base uri on mount
 	useEffect(() => {
-		const w = window as unknown as Record<string, string | undefined>
-		setMaterialIconsBaseUri(w.MATERIAL_ICONS_BASE_URI ?? "")
+		setMaterialIconsBaseUri(window.MATERIAL_ICONS_BASE_URI ?? "")
 	}, [])
 
 	const renderOptionContent = (option: ContextMenuQueryItem) => {
@@ -294,9 +293,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
 						{searchQuery.length === 1 && (
 							<div className="text-sm">
 								<p className="font-bold text-base text-vscode-foreground mt-1 mb-0.5">Slash Commands</p>
-								<p className="text-xs mt-0.5 -mb-1">
-									{t("settings:slashCommands.description")}
-								</p>
+								<p className="text-xs mt-0.5 -mb-1">{t("settings:slashCommands.description")}</p>
 							</div>
 						)}
 						<button

@@ -191,12 +191,16 @@ export async function getState(host: IWebviewStateHost): Promise<ClineProviderSt
 		providerSettings.apiProvider = apiProvider
 	}
 
-	const baseState = Object.fromEntries(
-		Object.entries(STATE_FIELD_DEFAULTS).map(([key, defaultValue]) => [
-			key,
-			stateValues[key as keyof typeof stateValues] ?? defaultValue,
-		]),
-	) as unknown as Partial<ClineProviderState>
+	const baseState: Partial<ClineProviderState> = {}
+	Object.assign(
+		baseState,
+		Object.fromEntries(
+			Object.entries(STATE_FIELD_DEFAULTS).map(([key, defaultValue]) => [
+				key,
+				stateValues[key as keyof typeof stateValues] ?? defaultValue,
+			]),
+		),
+	)
 
 	const organizationAllowList = ORGANIZATION_ALLOW_ALL
 	const cloudUserInfo = null

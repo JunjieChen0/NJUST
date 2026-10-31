@@ -60,16 +60,25 @@ export interface ICodeIndexManager {
 	/**
 	 * Searches the index
 	 * @param query Query string
-	 * @param limit Maximum number of results to return
+	 * @param directoryPrefix Optional directory prefix to scope the search
 	 * @returns Promise resolving to search results
 	 */
-	searchIndex(query: string, limit: number): Promise<VectorStoreSearchResult[]>
+	searchIndex(query: string, directoryPrefix?: string): Promise<VectorStoreSearchResult[]>
 
 	/**
 	 * Gets the current status of the indexing system
 	 * @returns Current status information
 	 */
-	getCurrentStatus(): { systemStatus: IndexingState; fileStatuses: Record<string, string>; message?: string }
+	getCurrentStatus(): {
+		systemStatus: IndexingState
+		message: string
+		processedItems: number
+		totalItems: number
+		currentItemUnit: string
+		workspacePath: string
+		workspaceEnabled: boolean
+		autoEnableDefault: boolean
+	}
 
 	/**
 	 * Whether the manager has been initialized

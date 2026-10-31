@@ -294,7 +294,7 @@ function isFsPathUnderRoot(filePath: string, root: string): boolean {
 
 /** vscode-languageclient 9.x exposes client-owned diagnostics; typings may omit it. */
 function getLanguageClientDiagnostics(client: LanguageClient): vscode.DiagnosticCollection | undefined {
-	const c = client as unknown as { diagnostics?: vscode.DiagnosticCollection }
+	const c = client as LanguageClient & { diagnostics?: vscode.DiagnosticCollection }
 	return c.diagnostics
 }
 

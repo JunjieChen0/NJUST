@@ -417,7 +417,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// ── Host delegation (lazy init) ──────────────────────────────────────────
 	//
-	// NOTE: These use `this as unknown as Host` rather than `implements Host`
+	// NOTE: These use a `this` double-cast rather than `implements Host`
 	// because Task's actual shape differs from what the interfaces declare:
 	//
 	//   TaskMessageContext    — requires public `_taskMode` / `_taskApiConfigName` /
@@ -438,7 +438,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	//      `taskApiConfigReady` as public members.
 	//   2. Add `implements TaskMessageContext, TaskAskSayHost, TaskExecutorHost,
 	//      TaskLifecycleHost, TaskSubtaskHost` to the class declaration.
-	//   3. Remove the 6 `as unknown as Host` casts (replace with plain `this`).
+	//   3. Remove the 6 double casts (replace with plain `this`).
 	//
 	// The `unknown` in the cast chain eliminates the `any`-poisoning that the
 	// original `any` cast chain caused. The structural mismatches are harmless
@@ -1177,7 +1177,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	private async initiateCloudAgentLoop(userMessage: string, images?: string[]): Promise<void> {
-		const host = createCloudAgentHost(this as unknown as Parameters<typeof createCloudAgentHost>[0])
+		const host = createCloudAgentHost(this as Parameters<typeof createCloudAgentHost>[0])
 		const { CloudAgentOrchestrator } = await import("./CloudAgentOrchestrator")
 		const orchestrator = new CloudAgentOrchestrator(host)
 

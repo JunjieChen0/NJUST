@@ -8,7 +8,6 @@ import type { IClineProviderServices } from "./interfaces/IClineProviderServices
 import type { IBypassStatusBar } from "./interfaces/IBypassStatusBar"
 import type { ICodeIndexManager } from "./code-index/interfaces/manager"
 import type { ISkillsManager, ISkillsManagerHost } from "./skills/interfaces/ISkillsManager"
-import type { SkillsManagerHost } from "./skills/SkillsManager"
 import type { IMemoryManager } from "./memory/interfaces/IMemoryManager"
 import type { IMcpHubClient } from "./mcp/interfaces/IMcpHubClient"
 import type { IMcpHubService } from "./mcp/interfaces/IMcpHubService"
@@ -46,12 +45,11 @@ export class DefaultClineProviderServices implements IClineProviderServices {
 	}
 
 	getAllCodeIndexManagers(): ICodeIndexManager[] {
-		return CodeIndexManager.getAllInstances() as unknown as ICodeIndexManager[]
+		return CodeIndexManager.getAllInstances()
 	}
 
 	createSkillsManager(host: ISkillsManagerHost): ISkillsManager {
-		// ISkillsManagerHost is structurally compatible with SkillsManagerHost
-		this.skillsManager = new SkillsManager(host as unknown as SkillsManagerHost)
+		this.skillsManager = new SkillsManager(host)
 		return this.skillsManager
 	}
 
