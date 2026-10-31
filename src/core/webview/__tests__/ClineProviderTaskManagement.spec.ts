@@ -4,6 +4,7 @@ import { ClineProviderTaskManagement } from "../ClineProviderTaskManagement"
 import type { TaskStackManager } from "../TaskStackManager"
 import type { PendingEditManager } from "../PendingEditManager"
 import type { Task } from "../../task/Task"
+import { createMockTask } from "../../../__tests__/helpers/vscodeMocks"
 
 vi.mock("../../task/Task", () => {
 	const MockTask = vi.fn(function (this: any) {
@@ -138,7 +139,7 @@ describe("ClineProviderTaskManagement", () => {
 		})
 
 		it("cancels current task and rehydrates from history", async () => {
-			const mockTask = {
+			const mockTask = createMockTask({
 				taskId: "test-task",
 				instanceId: "abc",
 				rootTask: undefined,
@@ -150,7 +151,7 @@ describe("ClineProviderTaskManagement", () => {
 				isStreaming: false,
 				didFinishAbortingStream: true,
 				isWaitingForFirstChunk: false,
-			} as unknown as Task
+			})
 
 			mockStack.current = mockTask
 			mockStack.size = 1

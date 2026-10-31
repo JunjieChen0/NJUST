@@ -78,3 +78,24 @@ export function createMockTextDocument(overrides: Record<string, unknown> = {}):
 		...overrides,
 	} as unknown as vscode.TextDocument
 }
+
+export function createMockTask(overrides: Record<string, unknown> = {}): import("../../core/task/Task").Task {
+	return {
+		taskId: "mock-task",
+		instanceId: "mock-instance",
+		cwd: "/mock/workspace",
+		abort: false,
+		abandoned: false,
+		apiConversationHistory: [],
+		clineMessages: [],
+		todoList: [],
+		emit: vi.fn(),
+		on: vi.fn(),
+		off: vi.fn(),
+		say: vi.fn().mockResolvedValue(undefined),
+		ask: vi.fn().mockResolvedValue({ response: "yesButtonClicked" }),
+		abortTask: vi.fn().mockResolvedValue(undefined),
+		cancelCurrentRequest: vi.fn(),
+		...overrides,
+	} as unknown as import("../../core/task/Task").Task
+}

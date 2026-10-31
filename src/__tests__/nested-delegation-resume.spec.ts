@@ -68,9 +68,9 @@ vi.mock("../core/task-persistence", () => ({
 
 import { attemptCompletionTool } from "../core/tools/AttemptCompletionTool"
 import { reopenParentFromDelegationWithProvider, type IDelegationHost } from "../core/webview/ClineProviderDelegation"
-import type { Task } from "../core/task/Task"
 import { readTaskMessages } from "../core/task-persistence/taskMessages"
 import { readApiMessages } from "../core/task-persistence"
+import { createMockTask } from "./helpers/vscodeMocks"
 
 describe("Nested delegation resume (A �?B �?C)", () => {
 	beforeEach(() => {
@@ -183,7 +183,7 @@ describe("Nested delegation resume (A �?B �?C)", () => {
 		vi.mocked(readApiMessages).mockResolvedValue([])
 
 		// Step 1: C completes -> should reopen B automatically
-		const clineC = {
+		const clineC = createMockTask({
 			taskId: "C",
 			parentTask: undefined, // parent ref may or may not exist; metadata path should still work
 			parentTaskId: "B",
@@ -207,7 +207,7 @@ describe("Nested delegation resume (A �?B �?C)", () => {
 			api: undefined,
 			cwd: "/tmp",
 			parentTraceId: undefined,
-		} as unknown as Task
+		})
 
 		const blockC = {
 			type: "tool_use",
@@ -240,7 +240,7 @@ describe("Nested delegation resume (A �?B �?C)", () => {
 		expect(eventNamesAfterC).toContain(NJUST_AIEventName.TaskDelegationResumed)
 
 		// Step 2: B completes -> should reopen A automatically (parent reference missing, must use parentTaskId path)
-		const clineB = {
+		const clineB = createMockTask({
 			taskId: "B",
 			parentTask: undefined, // simulate missing live parent reference
 			parentTaskId: "A", // persisted parent id
@@ -264,7 +264,7 @@ describe("Nested delegation resume (A �?B �?C)", () => {
 			api: undefined,
 			cwd: "/tmp",
 			parentTraceId: undefined,
-		} as unknown as Task
+		})
 
 		const blockB = {
 			type: "tool_use",
