@@ -36,7 +36,7 @@ describe("sourceMapUtils", () => {
 
 		test("should return empty array for empty stack", async () => {
 			expect(await parseStackTrace("")).toEqual([])
-			expect(await parseStackTrace(undefined as unknown as string)).toEqual([])
+			expect(await parseStackTrace(undefined as never)).toEqual([])
 		})
 	})
 
