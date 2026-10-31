@@ -15,6 +15,7 @@ import {
 	ImageNotFoundError,
 	SandboxContainmentError,
 } from "../SandboxErrors"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 /**
  * Unit tests for DockerSandboxRunner.
@@ -122,7 +123,7 @@ type RunnerAccess = {
 }
 
 function runnerAccess(runner: DockerSandboxRunner): RunnerAccess {
-	return runner as unknown as RunnerAccess
+	return asMock<RunnerAccess>(runner)
 }
 
 describe("DockerSandboxRunner", () => {

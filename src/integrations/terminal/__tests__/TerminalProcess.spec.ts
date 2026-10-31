@@ -8,6 +8,7 @@ import { mergePromise } from "../mergePromise"
 import { TerminalProcess } from "../TerminalProcess"
 import { Terminal } from "../Terminal"
 import { TerminalRegistry } from "../TerminalRegistry"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 class TestTerminalProcess extends TerminalProcess {
 	public callTrimRetrievedOutput(): void {
@@ -33,7 +34,7 @@ describe("TerminalProcess", () => {
 
 	beforeEach(() => {
 		// Create properly typed mock terminal
-		mockTerminal = {
+		mockTerminal = asMock<TestVscodeTerminal>({
 			shellIntegration: {
 				executeCommand: vi.fn(),
 			},
@@ -46,7 +47,7 @@ describe("TerminalProcess", () => {
 			hide: vi.fn(),
 			show: vi.fn(),
 			sendText: vi.fn(),
-		} as unknown as TestVscodeTerminal
+		})
 
 		mockTerminalInfo = new Terminal(1, mockTerminal, "./")
 
@@ -98,7 +99,7 @@ describe("TerminalProcess", () => {
 			const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(function () {})
 
 			// Create a terminal without shell integration
-			const noShellTerminal = {
+			const noShellTerminal = asMock<vscode.Terminal>({
 				sendText: vi.fn(),
 				shellIntegration: undefined,
 				name: "No Shell Terminal",
@@ -109,7 +110,7 @@ describe("TerminalProcess", () => {
 				dispose: vi.fn(),
 				hide: vi.fn(),
 				show: vi.fn(),
-			} as unknown as vscode.Terminal
+			})
 
 			// Create new terminal info with the no-shell terminal
 			const noShellTerminalInfo = new Terminal(2, noShellTerminal, "./")

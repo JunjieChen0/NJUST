@@ -11,6 +11,7 @@ import {
 import * as os from "os"
 import * as fs from "fs/promises"
 import * as path from "path"
+import { asMock } from "../../../../../../src/__tests__/helpers/asMock.js"
 
 function createFetchResponse(
 	body: unknown,
@@ -38,13 +39,13 @@ function createStreamFetchResponse(
 			controller.close()
 		},
 	})
-	return {
+	return asMock<Response>({
 		ok,
 		status,
 		body: stream,
 		json: async () => ({}),
 		headers: new Headers(headers),
-	} as unknown as Response
+	})
 }
 
 describe("compareVersions", () => {

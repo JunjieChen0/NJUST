@@ -7,6 +7,7 @@ import type { ProviderSettings } from "@njust-ai/types"
 import { singleCompletionHandler } from "../single-completion-handler"
 import { buildApiHandler, SingleCompletionHandler } from "../../api"
 import { supportPrompt } from "../../shared/support-prompt"
+import { asMock } from "../../__tests__/helpers/asMock"
 
 // Mock the API handler
 vi.mock("../../api", () => ({
@@ -25,18 +26,20 @@ describe("enhancePrompt", () => {
 		vi.clearAllMocks()
 
 		// Mock the API handler with a completePrompt method
-		;(buildApiHandler as any).mockReturnValue({
-			completePrompt: vi.fn().mockResolvedValue("Enhanced prompt"),
-			createMessage: vi.fn(),
-			getModel: vi.fn().mockReturnValue({
-				id: "test-model",
-				info: {
-					maxTokens: 4096,
-					contextWindow: 8192,
-					supportsPromptCache: false,
-				},
+		;(buildApiHandler as any).mockReturnValue(
+			asMock<SingleCompletionHandler>({
+				completePrompt: vi.fn().mockResolvedValue("Enhanced prompt"),
+				createMessage: vi.fn(),
+				getModel: vi.fn().mockReturnValue({
+					id: "test-model",
+					info: {
+						maxTokens: 4096,
+						contextWindow: 8192,
+						supportsPromptCache: false,
+					},
+				}),
 			}),
-		} as unknown as SingleCompletionHandler)
+		)
 	})
 
 	it("enhances prompt using default enhancement prompt when no custom prompt provided", async () => {
@@ -107,18 +110,20 @@ describe("enhancePrompt", () => {
 		}
 
 		// Mock successful enhancement
-		;(buildApiHandler as any).mockReturnValue({
-			completePrompt: vi.fn().mockResolvedValue("Enhanced prompt"),
-			createMessage: vi.fn(),
-			getModel: vi.fn().mockReturnValue({
-				id: "test-model",
-				info: {
-					maxTokens: 4096,
-					contextWindow: 8192,
-					supportsPromptCache: false,
-				},
+		;(buildApiHandler as any).mockReturnValue(
+			asMock<SingleCompletionHandler>({
+				completePrompt: vi.fn().mockResolvedValue("Enhanced prompt"),
+				createMessage: vi.fn(),
+				getModel: vi.fn().mockReturnValue({
+					id: "test-model",
+					info: {
+						maxTokens: 4096,
+						contextWindow: 8192,
+						supportsPromptCache: false,
+					},
+				}),
 			}),
-		} as unknown as SingleCompletionHandler)
+		)
 
 		const result = await singleCompletionHandler(openRouterConfig, "Test prompt")
 
@@ -131,18 +136,20 @@ describe("enhancePrompt", () => {
 	})
 
 	it("propagates API errors", async () => {
-		;(buildApiHandler as any).mockReturnValue({
-			completePrompt: vi.fn().mockRejectedValue(new Error("API Error")),
-			createMessage: vi.fn(),
-			getModel: vi.fn().mockReturnValue({
-				id: "test-model",
-				info: {
-					maxTokens: 4096,
-					contextWindow: 8192,
-					supportsPromptCache: false,
-				},
+		;(buildApiHandler as any).mockReturnValue(
+			asMock<SingleCompletionHandler>({
+				completePrompt: vi.fn().mockRejectedValue(new Error("API Error")),
+				createMessage: vi.fn(),
+				getModel: vi.fn().mockReturnValue({
+					id: "test-model",
+					info: {
+						maxTokens: 4096,
+						contextWindow: 8192,
+						supportsPromptCache: false,
+					},
+				}),
 			}),
-		} as unknown as SingleCompletionHandler)
+		)
 
 		await expect(singleCompletionHandler(mockApiConfig, "Test prompt")).rejects.toThrow("API Error")
 	})

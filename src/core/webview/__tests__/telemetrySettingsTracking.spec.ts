@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { type TelemetrySetting } from "@njust-ai/types"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 describe("Telemetry Settings Tracking", () => {
 	let mockTelemetryService: {
@@ -22,9 +23,7 @@ describe("Telemetry Settings Tracking", () => {
 
 		// Mock the TelemetryService
 		vi.spyOn(TelemetryService, "hasInstance").mockReturnValue(true)
-		vi.spyOn(TelemetryService, "instance", "get").mockReturnValue(
-			mockTelemetryService as unknown as TelemetryService,
-		)
+		vi.spyOn(TelemetryService, "instance", "get").mockReturnValue(asMock<TelemetryService>(mockTelemetryService))
 	})
 
 	describe("when telemetry is turned OFF", () => {
@@ -144,7 +143,7 @@ describe("Telemetry Settings Tracking", () => {
 			// Create a real instance to test the method
 			const service = new TelemetryService()
 			const mockEmit = vi.fn()
-			;(service as unknown as { emit: typeof mockEmit }).emit = mockEmit
+			asMock<{ emit: typeof mockEmit }>(service).emit = mockEmit
 
 			service.captureTelemetrySettingsChanged("enabled", "disabled")
 

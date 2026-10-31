@@ -3,9 +3,10 @@
 import { describe, it, expect } from "vitest"
 import { dedupeReadonlyToolCalls, stableStringify } from "../toolOrchestration"
 import type { ToolUse } from "../../../shared/tools"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 function makeToolUse(id: string, name: string, nativeArgs: Record<string, unknown>): ToolUse {
-	return { type: "tool_use", id, name, partial: false, nativeArgs } as unknown as ToolUse
+	return asMock<ToolUse>({ type: "tool_use", id, name, partial: false, nativeArgs })
 }
 
 describe("stableStringify", () => {

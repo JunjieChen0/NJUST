@@ -15,6 +15,7 @@ import { CustomModesManager } from "../CustomModesManager"
 import { safeWriteJson } from "../../../utils/safeWriteJson"
 
 import type { Mock } from "vitest"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("vscode", () => ({
 	workspace: {
@@ -113,32 +114,30 @@ describe("importExport", () => {
 			TelemetryService.createInstance([])
 		}
 
-		mockProviderSettingsManager = {
+		mockProviderSettingsManager = asMock<ReturnType<typeof vi.mocked<ProviderSettingsManager>>>({
 			export: vi.fn(),
 			import: vi.fn(),
 			listConfig: vi.fn(),
-		} as unknown as ReturnType<typeof vi.mocked<ProviderSettingsManager>>
+		})
 
-		mockContextProxy = {
+		mockContextProxy = asMock<ReturnType<typeof vi.mocked<ContextProxy>>>({
 			setValues: vi.fn(),
 			setValue: vi.fn(),
 			export: vi.fn().mockImplementation(() => Promise.resolve({})),
 			setProviderSettings: vi.fn(),
 			getValue: vi.fn(),
-		} as unknown as ReturnType<typeof vi.mocked<ContextProxy>>
+		})
 
-		mockCustomModesManager = { updateCustomMode: vi.fn() } as unknown as ReturnType<
-			typeof vi.mocked<CustomModesManager>
-		>
+		mockCustomModesManager = asMock<ReturnType<typeof vi.mocked<CustomModesManager>>>({ updateCustomMode: vi.fn() })
 
 		const map = new Map<string, string>()
 
-		mockExtensionContext = {
+		mockExtensionContext = asMock<ReturnType<typeof vi.mocked<vscode.ExtensionContext>>>({
 			secrets: {
 				get: vi.fn().mockImplementation((key: string) => map.get(key)),
 				store: vi.fn().mockImplementation((key: string, value: string) => map.set(key, value)),
 			},
-		} as unknown as ReturnType<typeof vi.mocked<vscode.ExtensionContext>>
+		})
 	})
 
 	describe("importSettings", () => {

@@ -8,6 +8,7 @@ import { isPathOutsideWorkspace } from "../../../utils/pathUtils"
 import { getReadablePath } from "../../../utils/path"
 import { ToolUse, ToolResponse } from "../../../shared/tools"
 import { editTool } from "../EditTool"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("fs/promises", () => ({
 	default: {
@@ -82,9 +83,7 @@ describe("editTool", () => {
 
 	// Mocked functions
 	const mockedFileExistsAtPath = fileExistsAtPath as MockedFunction<typeof fileExistsAtPath>
-	const mockedFsReadFile = fs.readFile as unknown as MockedFunction<
-		(path: string, encoding: string) => Promise<string>
-	>
+	const mockedFsReadFile = asMock<MockedFunction<(path: string, encoding: string) => Promise<string>>>(fs.readFile)
 	const mockedIsPathOutsideWorkspace = isPathOutsideWorkspace as MockedFunction<typeof isPathOutsideWorkspace>
 	const mockedGetReadablePath = getReadablePath as MockedFunction<typeof getReadablePath>
 	const mockedPathResolve = path.resolve as MockedFunction<typeof path.resolve>

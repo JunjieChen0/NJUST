@@ -6,6 +6,7 @@ import { LongTermMemoryService } from "../LongTermMemoryService"
 import { MemoryEmbeddingAdapter } from "../MemoryEmbeddingAdapter"
 import type { IEmbedder } from "../../../code-index/interfaces/embedder"
 import type { ApiHandler } from "../../../../api"
+import { asMock } from "../../../../__tests__/helpers/asMock"
 
 vi.mock("../../../../utils/safeWriteJson", () => ({
 	safeWriteJson: vi.fn().mockResolvedValue(undefined),
@@ -26,10 +27,10 @@ function makeApi(responseJson: string): ApiHandler {
 	const stream = (async function* () {
 		yield { type: "text" as const, text: responseJson }
 	})()
-	return {
+	return asMock<ApiHandler>({
 		createMessage: vi.fn().mockReturnValue(stream),
 		getModel: vi.fn().mockReturnValue({ id: "gpt-4o", info: {} }),
-	} as unknown as ApiHandler
+	})
 }
 
 describe("LongTermMemoryService", () => {

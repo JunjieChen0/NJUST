@@ -8,6 +8,7 @@ import type { IMcpHubClient } from "../interfaces/IMcpHubClient"
 
 import type { McpHub as McpHubType, McpConnection, ConnectedMcpConnection, DisconnectedMcpConnection } from "../McpHub"
 import { ServerConfigSchema, McpHub } from "../McpHub"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Mock fs/promises before importing anything that uses it
 vi.mock("fs/promises", () => ({
@@ -96,7 +97,7 @@ vi.mock("chokidar", () => ({
 }))
 
 function asMcpHubClient(mock: object): IMcpHubClient {
-	return mock as unknown as IMcpHubClient
+	return asMock<IMcpHubClient>(mock)
 }
 
 describe("McpHub", () => {

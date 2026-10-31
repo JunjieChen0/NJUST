@@ -8,6 +8,7 @@ import * as path from "path"
 import { RooToolsMcpServer } from "../RooToolsMcpServer"
 import * as toolExecutors from "../tool-executors"
 import { RooIgnoreController } from "../../../core/ignore/RooIgnoreController"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 interface ServerInternals {
 	httpServer: { address: () => { port: number } }
@@ -19,7 +20,7 @@ interface ServerInternals {
 }
 
 function internals(server: RooToolsMcpServer): ServerInternals {
-	return server as unknown as ServerInternals
+	return asMock<ServerInternals>(server)
 }
 
 describe("RooToolsMcpServer — body size limit", () => {
@@ -143,12 +144,14 @@ describe("RooToolsMcpServer access controllers", () => {
 	})
 
 	function createServer(overrides: Record<string, unknown> = {}): RooToolsMcpServer {
-		return new RooToolsMcpServer({
-			workspacePath: process.cwd(),
-			port: 0,
-			bindAddress: "127.0.0.1",
-			...overrides,
-		} as unknown as ConstructorParameters<typeof RooToolsMcpServer>[0])
+		return new RooToolsMcpServer(
+			asMock<ConstructorParameters<typeof RooToolsMcpServer>[0]>({
+				workspacePath: process.cwd(),
+				port: 0,
+				bindAddress: "127.0.0.1",
+				...overrides,
+			}),
+		)
 	}
 
 	async function connectClient(server: RooToolsMcpServer): Promise<Client> {

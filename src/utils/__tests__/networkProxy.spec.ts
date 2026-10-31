@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import * as vscode from "vscode"
 import { createMockExtensionContext, createMockOutputChannel } from "../../__tests__/helpers/vscodeMocks"
 import { initializeNetworkProxy, getProxyConfig, isProxyEnabled, isDebugMode } from "../networkProxy"
+import { asMock } from "../../__tests__/helpers/asMock"
 
 // Mock global-agent
 vi.mock("global-agent", () => ({
@@ -80,9 +81,7 @@ describe("networkProxy", () => {
 			get: vi.fn().mockReturnValue(""),
 		}
 
-		vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
-			mockConfig as unknown as vscode.WorkspaceConfiguration,
-		)
+		vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(asMock<vscode.WorkspaceConfiguration>(mockConfig))
 
 		mockOutputChannel = createMockOutputChannel({
 			appendLine: vi.fn(),

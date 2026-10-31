@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from "vitest"
 
 import { TaskStackManager } from "../core/webview/TaskStackManager"
 import type { Task } from "../core/task/Task"
+import { asMock } from "./helpers/asMock"
 
 describe("TaskStackManager.pop() delegation awareness", () => {
 	function createMockHost(opts?: { getTaskWithId?: any; updateTaskHistory?: any }) {
@@ -19,7 +20,7 @@ describe("TaskStackManager.pop() delegation awareness", () => {
 	}
 
 	function createMockTask(overrides: Partial<Task> = {}): Task {
-		return {
+		return asMock<Task>({
 			taskId: "task-1",
 			instanceId: "inst-1",
 			parentTaskId: undefined,
@@ -28,7 +29,7 @@ describe("TaskStackManager.pop() delegation awareness", () => {
 			on: vi.fn(),
 			off: vi.fn(),
 			...overrides,
-		} as unknown as Task
+		})
 	}
 
 	it("repairs parent metadata (delegated → active) when a delegated child is removed", async () => {

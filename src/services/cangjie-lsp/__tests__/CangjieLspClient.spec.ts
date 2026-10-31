@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import * as path from "path"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks (must be declared before any top-level variables used in factories)
@@ -1074,7 +1075,7 @@ describe("debounceMiddleware", () => {
 		let callCount = 0
 		const nextFactory = () => {
 			const n = ++callCount
-			return () => `result-${n}` as unknown as vscode.ProviderResult<string>
+			return () => asMock<vscode.ProviderResult<string>>(`result-${n}`)
 		}
 
 		// First request
@@ -1096,7 +1097,7 @@ describe("debounceMiddleware", () => {
 	it("should resolve with fresh data when only one request is made", async () => {
 		const middleware = debounceMiddleware<string>(100)
 
-		const firstPromise = middleware(() => "fresh-result" as unknown as vscode.ProviderResult<string>)
+		const firstPromise = middleware(() => asMock<vscode.ProviderResult<string>>("fresh-result"))
 
 		vi.advanceTimersByTime(150)
 

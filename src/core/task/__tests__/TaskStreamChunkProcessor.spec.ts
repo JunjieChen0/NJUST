@@ -6,6 +6,7 @@ import type { TaskExecutorHost } from "../interfaces/ITaskExecutorHost"
 import type { NativeToolCallParser } from "../../assistant-message/NativeToolCallParser"
 import type { GroundingSource } from "../../../api/transform/stream"
 import type { ToolUse, McpToolUse } from "../../../shared/tools"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -135,7 +136,7 @@ function createMockTask(overrides: Partial<TaskExecutorHost> = {}): TaskExecutor
 }
 
 function createMockToolCallParser(overrides: Partial<NativeToolCallParser> = {}): NativeToolCallParser {
-	return {
+	return asMock<NativeToolCallParser>({
 		processRawChunk: vi.fn().mockReturnValue([]),
 		startStreamingToolCall: vi.fn(),
 		processStreamingChunk: vi.fn().mockReturnValue(null),
@@ -143,7 +144,7 @@ function createMockToolCallParser(overrides: Partial<NativeToolCallParser> = {})
 		finalizeRawChunks: vi.fn().mockReturnValue([]),
 		parseToolCall: vi.fn(),
 		...overrides,
-	} as unknown as NativeToolCallParser
+	})
 }
 
 function createOptions(overrides: Partial<ProcessTaskStreamChunkOptions> = {}): ProcessTaskStreamChunkOptions {

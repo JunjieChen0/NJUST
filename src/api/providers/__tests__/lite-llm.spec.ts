@@ -6,6 +6,7 @@ import { LiteLLMHandler } from "../lite-llm"
 import { ApiHandlerOptions } from "../../../shared/api"
 import { litellmDefaultModelId } from "@njust-ai/core/providers"
 import { litellmDefaultModelInfo } from "@njust-ai/core/providers"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Mock vscode first to avoid import errors
 vi.mock("vscode", () => ({}))
@@ -362,7 +363,7 @@ describe("LiteLLMHandler", () => {
 			})
 
 			const generator = handler.createMessage("You are a helpful assistant", [
-				{ role: "user", content: "Hello" } as unknown as Anthropic.Messages.MessageParam,
+				asMock<Anthropic.Messages.MessageParam>({ role: "user", content: "Hello" }),
 			])
 			for await (const _chunk of generator) {
 				// consume

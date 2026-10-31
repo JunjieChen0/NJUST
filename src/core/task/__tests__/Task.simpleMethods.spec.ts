@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import EventEmitter from "events"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Use vi.hoisted so mock references are available inside hoisted vi.mock factories
 const { mockCombineApiRequests, mockCombineCommandSequences } = vi.hoisted(() => ({
@@ -328,7 +329,7 @@ describe("Task simple/standalone methods", () => {
 	describe("cancelAutoApprovalTimeout", () => {
 		it("clears timeout and sets ref to undefined when timeout is set", () => {
 			const clearTimeoutSpy = vi.spyOn(global, "clearTimeout")
-			const fakeRef = setTimeout(() => {}, 100_000) as unknown as NodeJS.Timeout
+			const fakeRef = asMock<NodeJS.Timeout>(setTimeout(() => {}, 100_000))
 			const task = createPartialTask({ autoApprovalTimeoutRef: fakeRef })
 
 			task.cancelAutoApprovalTimeout()

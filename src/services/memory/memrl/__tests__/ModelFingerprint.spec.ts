@@ -19,6 +19,7 @@ import type { IEmbedder } from "../../../code-index/interfaces/embedder"
 import type { ApiHandler } from "../../../../api"
 import { MEMRL_PRIMARY_DIR, EPISODIC_FILE, LTM_FILE } from "../constants"
 import { currentEmbedFingerprint } from "../memory-embedder"
+import { asMock } from "../../../../__tests__/helpers/asMock"
 
 // Mock the embedder factory module so we can drive the "current" fingerprint.
 vi.mock("../memory-embedder", () => ({
@@ -40,10 +41,10 @@ function makeAdapter(): MemoryEmbeddingAdapter {
 }
 
 function makeApi(): ApiHandler {
-	return {
+	return asMock<ApiHandler>({
 		createMessage: vi.fn().mockReturnValue((async function* () {})()),
 		getModel: vi.fn().mockReturnValue({ id: "test", info: {} }),
-	} as unknown as ApiHandler
+	})
 }
 
 function makeEntry(): EpisodicEntry {

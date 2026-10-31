@@ -3,6 +3,7 @@ import { ProfileStorageService, getProfileStorageService, setProfileStorageServi
 import type { CloudAgentProfile } from "../types/profile"
 import { BUILT_IN_PROFILES } from "../presets/templates"
 import * as vscode from "vscode"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("vscode", () => ({
 	workspace: {
@@ -12,7 +13,7 @@ vi.mock("vscode", () => ({
 
 function createMockMemento(initial: Record<string, unknown> = {}): vscode.Memento {
 	const store = new Map<string, unknown>(Object.entries(initial))
-	return {
+	return asMock<vscode.Memento>({
 		get: vi.fn(function (key: string, defaultValue?: unknown) {
 			if (store.has(key)) return store.get(key)
 			return defaultValue
@@ -24,12 +25,12 @@ function createMockMemento(initial: Record<string, unknown> = {}): vscode.Mement
 				store.set(key, value)
 			}
 		}),
-	} as unknown as vscode.Memento
+	})
 }
 
 function createMockSecretStorage(initial: Record<string, string> = {}): vscode.SecretStorage {
 	const store = new Map<string, string>(Object.entries(initial))
-	return {
+	return asMock<vscode.SecretStorage>({
 		get: vi.fn(async (key: string) => store.get(key)),
 		store: vi.fn(async (key: string, value: string) => {
 			store.set(key, value)
@@ -38,7 +39,7 @@ function createMockSecretStorage(initial: Record<string, string> = {}): vscode.S
 			store.delete(key)
 		}),
 		onDidChange: vi.fn(),
-	} as unknown as vscode.SecretStorage
+	})
 }
 
 function createUserProfile(overrides?: Partial<CloudAgentProfile>): CloudAgentProfile {
@@ -56,13 +57,13 @@ function createUserProfile(overrides?: Partial<CloudAgentProfile>): CloudAgentPr
 }
 
 function createMockWorkspaceConfiguration(overrides: Record<string, unknown> = {}): vscode.WorkspaceConfiguration {
-	return {
+	return asMock<vscode.WorkspaceConfiguration>({
 		get: vi.fn().mockReturnValue(undefined),
 		has: vi.fn().mockReturnValue(false),
 		inspect: vi.fn(),
 		update: vi.fn().mockResolvedValue(undefined),
 		...overrides,
-	} as unknown as vscode.WorkspaceConfiguration
+	})
 }
 
 describe("ProfileStorageService", () => {

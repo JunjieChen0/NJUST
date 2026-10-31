@@ -3,6 +3,7 @@
 import { describe, it, expect, vi } from "vitest"
 import { NJUST_AIEventName } from "@njust-ai/types"
 import { delegateParentAndOpenChildWithProvider, type IDelegationHost } from "../core/webview/ClineProviderDelegation"
+import { asMock } from "./helpers/asMock"
 
 /** Minimal parent task surface used by delegateParentAndOpenChild (flush + lineage). */
 function createDelegationParentStub(overrides: { taskId?: string } = {}) {
@@ -54,7 +55,7 @@ describe("ClineProvider.delegateParentAndOpenChild()", () => {
 			}
 		})
 
-		const provider = {
+		const provider = asMock<IDelegationHost>({
 			emit: providerEmit,
 			getCurrentTask: vi.fn(() => parentTask),
 			stack: {
@@ -65,7 +66,7 @@ describe("ClineProvider.delegateParentAndOpenChild()", () => {
 			updateTaskHistory,
 			handleModeSwitch,
 			log: vi.fn(),
-		} as unknown as IDelegationHost
+		})
 
 		const params = {
 			parentTaskId: "parent-1",
@@ -146,7 +147,7 @@ describe("ClineProvider.delegateParentAndOpenChild()", () => {
 			},
 		})
 
-		const provider = {
+		const provider = asMock<IDelegationHost>({
 			emit: vi.fn(),
 			getCurrentTask: vi.fn(() => parentTask),
 			stack: {
@@ -157,7 +158,7 @@ describe("ClineProvider.delegateParentAndOpenChild()", () => {
 			updateTaskHistory,
 			handleModeSwitch,
 			log: vi.fn(),
-		} as unknown as IDelegationHost
+		})
 
 		await delegateParentAndOpenChildWithProvider(provider, {
 			parentTaskId: "parent-1",
@@ -173,7 +174,7 @@ describe("ClineProvider.delegateParentAndOpenChild()", () => {
 
 	it("unpauses the parent if child creation fails", async () => {
 		const parentTask = createDelegationParentStub()
-		const provider = {
+		const provider = asMock<IDelegationHost>({
 			emit: vi.fn(),
 			getCurrentTask: vi.fn(() => parentTask),
 			stack: { pop: vi.fn() },
@@ -182,7 +183,7 @@ describe("ClineProvider.delegateParentAndOpenChild()", () => {
 			updateTaskHistory: vi.fn(),
 			handleModeSwitch: vi.fn().mockResolvedValue(undefined),
 			log: vi.fn(),
-		} as unknown as IDelegationHost
+		})
 
 		await expect(
 			delegateParentAndOpenChildWithProvider(provider, {

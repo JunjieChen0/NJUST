@@ -6,6 +6,7 @@ import { Anthropic } from "@anthropic-ai/sdk"
 import { MultiPointStrategy } from "../multi-point-strategy"
 import { CacheStrategyConfig, ModelInfo, CachePointPlacement } from "../types"
 import { AwsBedrockHandler } from "../../../providers/bedrock"
+import { asMock } from "../../../../__tests__/helpers/asMock"
 
 // Common test utilities
 const defaultModelInfo: ModelInfo = {
@@ -57,11 +58,11 @@ const convertToBedrockConverseMessagesMock = {
 }
 
 function createMockBedrockClient(overrides: Record<string, unknown> = {}): BedrockRuntimeClient {
-	return {
+	return asMock<BedrockRuntimeClient>({
 		send: vi.fn(),
 		config: { region: "us-east-1" },
 		...overrides,
-	} as unknown as BedrockRuntimeClient
+	})
 }
 
 describe("Cache Strategy", () => {

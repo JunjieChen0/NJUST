@@ -14,6 +14,7 @@ import { unescapeHtmlEntities } from "../../../utils/text-normalization"
 import { TerminalRegistry } from "../../../integrations/terminal/TerminalRegistry"
 import { Terminal } from "../../../integrations/terminal/Terminal"
 import { CommandTimeoutError, SandboxExecutionService } from "../../../services/sandbox"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vitest.mock("@njust-ai/telemetry", () => ({
 	TelemetryService: {
@@ -86,7 +87,7 @@ import * as executeCommandModule from "../ExecuteCommandTool"
 const { executeCommandTool, isSuccessfulCommandResult, validateCangjieImplementCommand } = executeCommandModule
 
 function asSandboxService(service: Record<string, unknown>): SandboxExecutionService {
-	return service as unknown as SandboxExecutionService
+	return asMock<SandboxExecutionService>(service)
 }
 
 describe("validateCangjieImplementCommand", () => {
@@ -180,7 +181,7 @@ describe("executeCommandTool", () => {
 			},
 			supersedePendingAsk: vitest.fn(),
 		}
-		cline = mockCline as unknown as Task
+		cline = asMock<Task>(mockCline)
 
 		mockAskApproval = vitest.fn<AskApproval>().mockResolvedValue(true)
 		mockHandleError = vitest.fn<HandleError>().mockResolvedValue(undefined)

@@ -6,6 +6,7 @@ import { Task } from "../Task"
 import type { ITaskHost } from "../interfaces/ITaskHost"
 import { tokenCountCache } from "../../../utils/tokenCountCache"
 import { buildApiHandler } from "../../../api"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("../../../integrations/terminal/TerminalRegistry", () => ({
 	TerminalRegistry: {
@@ -51,7 +52,7 @@ describe("Task.updateApiConfiguration", () => {
 			log: vi.fn(),
 		}
 		task = new Task({
-			provider: mockProvider as unknown as ITaskHost,
+			provider: asMock<ITaskHost>(mockProvider),
 			apiConfiguration: { apiProvider: "anthropic", apiKey: "a" } as ProviderSettings,
 			startTask: false,
 		})

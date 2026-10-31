@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import http from "http"
 import type { Server } from "http"
+import { asMock } from "../../../../../../src/__tests__/helpers/asMock.js"
 
 const mockSaveToken = vi.hoisted(() => vi.fn(async () => undefined))
 vi.mock("@/lib/storage/index.js", () => ({
@@ -82,7 +83,7 @@ async function startLogin(timeout = 2000): Promise<TestContext> {
 	const testContext: TestContext = {
 		port: 0,
 		state: "",
-		loginPromise: undefined as unknown as ReturnType<typeof login>,
+		loginPromise: asMock<ReturnType<typeof login>>(undefined),
 	}
 
 	const loginPromise = login({ timeout })

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("vscode", () => ({
 	workspace: {
@@ -13,7 +14,7 @@ import * as vscode from "vscode"
 import { inferCangjiePackageFromSrcLayout } from "../cangjieSourceLayout"
 
 function makeUri(fsPath: string) {
-	return { fsPath, toString: () => fsPath } as unknown as Parameters<typeof inferCangjiePackageFromSrcLayout>[0]
+	return asMock<Parameters<typeof inferCangjiePackageFromSrcLayout>[0]>({ fsPath, toString: () => fsPath })
 }
 
 describe("inferCangjiePackageFromSrcLayout", () => {

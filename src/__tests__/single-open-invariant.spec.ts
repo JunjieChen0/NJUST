@@ -8,6 +8,7 @@ import * as ProfileValidatorMod from "../shared/ProfileValidator"
 import type { TaskStackManager } from "../core/webview/TaskStackManager"
 import type { IProviderHost } from "../extension/IProviderHost"
 import { createMockClineProvider } from "./helpers/vscodeMocks"
+import { asMock } from "./helpers/asMock"
 
 // Mock Task class used by ClineProvider to avoid heavy startup
 vi.mock("../core/task/Task", () => {
@@ -45,7 +46,7 @@ describe("Single-open-task invariant", () => {
 
 		const provider = createMockClineProvider({
 			// Simulate an existing task present in stack
-			stack: {
+			stack: asMock<TaskStackManager>({
 				pop: stackPop,
 				push: stackPush,
 				current: { taskId: "existing-1" },
@@ -55,7 +56,7 @@ describe("Single-open-task invariant", () => {
 				getStack: vi.fn().mockReturnValue([{ taskId: "existing-1" }]),
 				bindEventForwarders: vi.fn(),
 				rehydrate: vi.fn().mockResolvedValue(undefined),
-			} as unknown as TaskStackManager,
+			}),
 			setValues: vi.fn(),
 			getState: vi.fn().mockResolvedValue({
 				apiConfiguration: { apiProvider: "anthropic", consecutiveMistakeLimit: 0 },
@@ -98,7 +99,7 @@ describe("Single-open-task invariant", () => {
 
 		const provider = createMockClineProvider({
 			getCurrentTask: vi.fn(() => undefined), // ensure not rehydrating
-			stack: {
+			stack: asMock<TaskStackManager>({
 				pop: stackPop,
 				push: stackPush,
 				current: undefined,
@@ -108,7 +109,7 @@ describe("Single-open-task invariant", () => {
 				getStack: vi.fn().mockReturnValue([]),
 				bindEventForwarders: vi.fn(),
 				rehydrate: vi.fn().mockResolvedValue(undefined),
-			} as unknown as TaskStackManager,
+			}),
 			updateGlobalState,
 			log: vi.fn(),
 			customModesManager: { getCustomModes: vi.fn().mockResolvedValue([]) },
@@ -180,7 +181,7 @@ describe("Single-open-task invariant", () => {
 	it("IPC StartNewTask path closes current before new task", async () => {
 		const stackPop = vi.fn().mockResolvedValue(undefined)
 		const createTask = vi.fn().mockResolvedValue({ taskId: "ipc-1" })
-		const provider = {
+		const provider = asMock<IProviderHost>({
 			context: {} as any,
 			stack: { pop: stackPop },
 			postStateToWebview: vi.fn(),
@@ -196,7 +197,7 @@ describe("Single-open-task invariant", () => {
 				}
 				return provider
 			}),
-		} as unknown as IProviderHost
+		})
 
 		const output = { appendLine: vi.fn() } as any
 		const api = new API(output, provider, undefined, false)

@@ -7,6 +7,7 @@ import { loadRequiredLanguageParsers } from "../../../tree-sitter/languageParser
 import { parseMarkdown } from "../../../tree-sitter/markdownParser"
 import { readFile } from "fs/promises"
 import { Node } from "web-tree-sitter"
+import { asMock } from "../../../../__tests__/helpers/asMock"
 
 // Mock TelemetryService
 vi.mock("../../../../../packages/telemetry/src/TelemetryService", () => ({
@@ -249,7 +250,7 @@ describe("CodeParser", () => {
 
 	describe("_chunkLeafNodeByLines", () => {
 		it("should chunk leaf nodes by lines", async () => {
-			const mockNode = {
+			const mockNode = asMock<Node>({
 				text: `/* This is a long test content string that exceeds 100 characters to test line chunking behavior.
 				line1: const a = 1;
 				line2: const b = 2;
@@ -261,7 +262,7 @@ describe("CodeParser", () => {
 				startPosition: { row: 10 },
 				endPosition: { row: 12 },
 				type: "function",
-			} as unknown as Node
+			})
 
 			const result = await parser["_chunkLeafNodeByLines"](mockNode, "test.js", "hash", new Set())
 			expect(result.length).toBeGreaterThan(0)

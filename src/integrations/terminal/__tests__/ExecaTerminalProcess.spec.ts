@@ -1,6 +1,7 @@
 // npx vitest run integrations/terminal/__tests__/ExecaTerminalProcess.spec.ts
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 const mockPid = 12345
 const mockOutput = vitest.hoisted(() => ({ chunks: ["test output\n"] as Array<string | Uint8Array> }))
@@ -41,7 +42,7 @@ describe("ExecaTerminalProcess", () => {
 		mockOutput.chunks = ["test output\n"]
 		originalEnv = { ...process.env }
 		BaseTerminal.setExecaShellPath(undefined)
-		mockTerminal = {
+		mockTerminal = asMock<RooTerminal>({
 			provider: "execa",
 			id: 1,
 			busy: false,
@@ -55,7 +56,7 @@ describe("ExecaTerminalProcess", () => {
 			getUnretrievedOutput: vitest.fn().mockReturnValue(""),
 			getLastCommand: vitest.fn().mockReturnValue(""),
 			cleanCompletedProcessQueue: vitest.fn(),
-		} as unknown as RooTerminal
+		})
 		terminalProcess = new ExecaTerminalProcess(mockTerminal)
 	})
 

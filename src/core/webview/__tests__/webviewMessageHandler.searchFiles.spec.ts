@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { Mock } from "vitest"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Mock dependencies - must come before imports
 vi.mock("../../../services/search/file-search")
@@ -37,11 +38,9 @@ describe("webviewMessageHandler - searchFiles with RooIgnore filtering", () => {
 		mockDispose = vi.fn()
 
 		// Override the filterPaths method on the prototype
-		;(RooIgnoreController.prototype as unknown as Record<string, Mock>).filterPaths = mockFilterPaths
-		;(RooIgnoreController.prototype as unknown as Record<string, Mock>).initialize = vi
-			.fn()
-			.mockResolvedValue(undefined)
-		;(RooIgnoreController.prototype as unknown as Record<string, Mock>).dispose = mockDispose
+		asMock<Record<string, Mock>>(RooIgnoreController.prototype).filterPaths = mockFilterPaths
+		asMock<Record<string, Mock>>(RooIgnoreController.prototype).initialize = vi.fn().mockResolvedValue(undefined)
+		asMock<Record<string, Mock>>(RooIgnoreController.prototype).dispose = mockDispose
 
 		// Create mock ClineProvider
 		mockClineProvider = createMockClineProvider({

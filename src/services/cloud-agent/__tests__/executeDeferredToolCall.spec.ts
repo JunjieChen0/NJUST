@@ -4,6 +4,7 @@ import type { DeferredToolCall } from "../types"
 import type { IPathValidator, IWriteProtector } from "../interfaces/IPathAccessController"
 import { createAuthContext, type AuthContext } from "../auth-context"
 import { execCommand } from "../../mcp-server/tool-executors"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("../../mcp-server/tool-executors", () => ({
 	execReadFile: vi.fn(() => Promise.resolve("file content")),
@@ -43,16 +44,16 @@ describe("executeDeferredToolCall security", () => {
 		allowPath?: (path: string) => boolean
 		validateCommand?: (command: string) => string | undefined
 	}): IPathValidator {
-		return {
+		return asMock<IPathValidator>({
 			validateAccess: vi.fn(options?.allowPath ?? ((path: string) => !path.includes(".rooignore"))),
 			validateCommand: vi.fn(options?.validateCommand ?? (() => undefined)),
-		} as unknown as IPathValidator
+		})
 	}
 
 	function createWriteProtector(isWriteProtected: (path: string) => boolean): IWriteProtector {
-		return {
+		return asMock<IWriteProtector>({
 			isWriteProtected: vi.fn(async (path: string) => isWriteProtected(path)),
-		} as unknown as IWriteProtector
+		})
 	}
 
 	describe("execute_command passes allowedCommands/deniedCommands", () => {

@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { Mock } from "vitest"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Mock dependencies - must come before imports
 vi.mock("../../../api/providers/fetchers/modelCache")
@@ -848,10 +849,12 @@ describe("webviewMessageHandler - requestCommands", () => {
 		mockGetCommands.mockResolvedValue([])
 
 		const getTaskMode = vi.fn().mockResolvedValue("code")
-		vi.mocked(mockClineProvider.getCurrentTask).mockReturnValue({
-			cwd: "/mock/workspace",
-			getTaskMode,
-		} as unknown as ReturnType<ClineProvider["getCurrentTask"]>)
+		vi.mocked(mockClineProvider.getCurrentTask).mockReturnValue(
+			asMock<ReturnType<ClineProvider["getCurrentTask"]>>({
+				cwd: "/mock/workspace",
+				getTaskMode,
+			}),
+		)
 
 		const getSkillsForMode = vi.fn().mockReturnValue([
 			{
@@ -877,9 +880,11 @@ describe("webviewMessageHandler - requestCommands", () => {
 			},
 		])
 
-		vi.mocked(mockClineProvider.getSkillsManager).mockReturnValue({
-			getSkillsForMode,
-		} as unknown as ReturnType<ClineProvider["getSkillsManager"]>)
+		vi.mocked(mockClineProvider.getSkillsManager).mockReturnValue(
+			asMock<ReturnType<ClineProvider["getSkillsManager"]>>({
+				getSkillsForMode,
+			}),
+		)
 
 		await webviewMessageHandler(mockClineProvider, { type: "requestCommands" })
 
@@ -924,10 +929,12 @@ describe("webviewMessageHandler - requestCommands", () => {
 		])
 
 		const getTaskMode = vi.fn().mockResolvedValue("code")
-		vi.mocked(mockClineProvider.getCurrentTask).mockReturnValue({
-			cwd: "/mock/workspace",
-			getTaskMode,
-		} as unknown as ReturnType<ClineProvider["getCurrentTask"]>)
+		vi.mocked(mockClineProvider.getCurrentTask).mockReturnValue(
+			asMock<ReturnType<ClineProvider["getCurrentTask"]>>({
+				cwd: "/mock/workspace",
+				getTaskMode,
+			}),
+		)
 
 		const getSkillsForMode = vi.fn().mockReturnValue([
 			{
@@ -946,9 +953,11 @@ describe("webviewMessageHandler - requestCommands", () => {
 			},
 		])
 
-		vi.mocked(mockClineProvider.getSkillsManager).mockReturnValue({
-			getSkillsForMode,
-		} as unknown as ReturnType<ClineProvider["getSkillsManager"]>)
+		vi.mocked(mockClineProvider.getSkillsManager).mockReturnValue(
+			asMock<ReturnType<ClineProvider["getSkillsManager"]>>({
+				getSkillsForMode,
+			}),
+		)
 
 		await webviewMessageHandler(mockClineProvider, { type: "requestCommands" })
 
@@ -994,9 +1003,11 @@ describe("webviewMessageHandler - requestCommands", () => {
 			},
 		])
 
-		vi.mocked(mockClineProvider.getCurrentTask).mockReturnValue({
-			cwd: "/mock/workspace",
-		} as unknown as ReturnType<ClineProvider["getCurrentTask"]>)
+		vi.mocked(mockClineProvider.getCurrentTask).mockReturnValue(
+			asMock<ReturnType<ClineProvider["getCurrentTask"]>>({
+				cwd: "/mock/workspace",
+			}),
+		)
 
 		vi.mocked(mockClineProvider.getSkillsManager).mockReturnValue(undefined)
 

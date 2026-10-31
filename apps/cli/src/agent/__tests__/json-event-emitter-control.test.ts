@@ -1,16 +1,19 @@
 import { Writable } from "stream"
 
 import { JsonEventEmitter } from "../json-event-emitter.js"
+import { asMock } from "../../../../../src/__tests__/helpers/asMock.js"
 
 function createMockStdout(): { stdout: NodeJS.WriteStream; lines: () => Record<string, unknown>[] } {
 	const chunks: string[] = []
 
-	const writable = new Writable({
-		write(chunk, _encoding, callback) {
-			chunks.push(chunk.toString())
-			callback()
-		},
-	}) as unknown as NodeJS.WriteStream
+	const writable = asMock<NodeJS.WriteStream>(
+		new Writable({
+			write(chunk, _encoding, callback) {
+				chunks.push(chunk.toString())
+				callback()
+			},
+		}),
+	)
 
 	// Each write is a JSON line terminated by \n
 	const lines = () =>

@@ -9,6 +9,7 @@ import {
 } from "../../../services/cloud-agent/applyCloudWorkspaceOps"
 import { executeDeferredToolCall } from "../../../services/cloud-agent/executeDeferredToolCall"
 import { parseWorkspaceOps } from "../../../services/cloud-agent/parseWorkspaceOps"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("vscode", () => ({
 	workspace: {
@@ -1271,7 +1272,7 @@ describe("CloudAgentOrchestrator", () => {
 		it("audits each op and shows a prominent warning when confirm is false (success)", async () => {
 			const auditAccessor = await import("../../../services/auditAccessor")
 			const fakeLog = vi.fn()
-			const fakeAuditLogger = { log: fakeLog } as unknown as ReturnType<typeof auditAccessor.getAuditLogger>
+			const fakeAuditLogger = asMock<ReturnType<typeof auditAccessor.getAuditLogger>>({ log: fakeLog })
 			const setSpy = vi.spyOn(auditAccessor, "getAuditLogger").mockReturnValue(fakeAuditLogger)
 
 			try {
@@ -1329,7 +1330,7 @@ describe("CloudAgentOrchestrator", () => {
 		it("audits failed ops with outcome=error when confirm is false", async () => {
 			const auditAccessor = await import("../../../services/auditAccessor")
 			const fakeLog = vi.fn()
-			const fakeAuditLogger = { log: fakeLog } as unknown as ReturnType<typeof auditAccessor.getAuditLogger>
+			const fakeAuditLogger = asMock<ReturnType<typeof auditAccessor.getAuditLogger>>({ log: fakeLog })
 			const setSpy = vi.spyOn(auditAccessor, "getAuditLogger").mockReturnValue(fakeAuditLogger)
 
 			try {

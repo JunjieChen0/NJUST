@@ -1,11 +1,12 @@
 import type { ITaskHost } from "../interfaces/ITaskHost"
 import type { ContextProxy } from "../../config/ContextProxy"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 export function createTestProvider(
 	mockContext?: Partial<import("vscode").ExtensionContext>,
 	mockOutputChannel?: Partial<import("vscode").OutputChannel>,
 ): ITaskHost {
-	const context = {
+	const context = asMock<import("vscode").ExtensionContext>({
 		extensionUri: { fsPath: "/test/extension" },
 		globalStorageUri: { fsPath: "/test/storage" },
 		globalState: {
@@ -41,9 +42,9 @@ export function createTestProvider(
 			persistent: true,
 		} as any,
 		...mockContext,
-	} as unknown as import("vscode").ExtensionContext
+	})
 
-	const outputChannel = {
+	const outputChannel = asMock<import("vscode").OutputChannel>({
 		appendLine: vi.fn(),
 		append: vi.fn(),
 		clear: vi.fn(),
@@ -53,9 +54,9 @@ export function createTestProvider(
 		show: vi.fn(),
 		dispose: vi.fn(),
 		...mockOutputChannel,
-	} as unknown as import("vscode").OutputChannel
+	})
 
-	const contextProxy = {
+	const contextProxy = asMock<ContextProxy>({
 		context,
 		outputChannel,
 		getState: vi.fn().mockResolvedValue({}),
@@ -67,9 +68,9 @@ export function createTestProvider(
 		setWorkspaceState: vi.fn().mockResolvedValue(undefined),
 		getGlobalState: vi.fn().mockResolvedValue(undefined),
 		setGlobalState: vi.fn().mockResolvedValue(undefined),
-	} as unknown as ContextProxy
+	})
 
-	return {
+	return asMock<ITaskHost>({
 		contextProxy,
 		context,
 		cwd: "/mock/workspace/path",
@@ -94,5 +95,5 @@ export function createTestProvider(
 		ensureMcpServersDirectoryExists: vi.fn().mockResolvedValue("/test/mcp-servers"),
 		ensureSettingsDirectoryExists: vi.fn().mockResolvedValue("/test/settings"),
 		getExtensionPackageVersion: vi.fn().mockReturnValue("1.0.0"),
-	} as unknown as ITaskHost
+	})
 }

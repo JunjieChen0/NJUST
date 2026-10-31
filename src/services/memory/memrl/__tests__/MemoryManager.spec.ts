@@ -8,6 +8,7 @@ import * as fs from "fs/promises"
 import { MemoryManager } from "../MemoryManager"
 import type { IEmbedder } from "../../../code-index/interfaces/embedder"
 import type { ApiHandler } from "../../../../api"
+import { asMock } from "../../../../__tests__/helpers/asMock"
 
 vi.mock("../../../../utils/safeWriteJson", () => ({
 	safeWriteJson: vi.fn().mockResolvedValue(undefined),
@@ -24,10 +25,10 @@ function makeEmbedder(): IEmbedder {
 }
 
 function makeApi(): ApiHandler {
-	return {
+	return asMock<ApiHandler>({
 		createMessage: vi.fn().mockReturnValue((async function* () {})()),
 		getModel: vi.fn().mockReturnValue({ id: "gpt-4o", info: {} }),
-	} as unknown as ApiHandler
+	})
 }
 
 describe("MemoryManager integration", () => {

@@ -66,7 +66,7 @@ describe("custom-tool utilities", () => {
 
 			const context: CustomToolContext = {
 				mode: "code",
-				task: { taskId: "test-task-id" } as unknown as TaskLike,
+				task: { taskId: "test-task-id" } as never,
 			}
 
 			const result = await tool.execute({ name: "World", count: 42 }, context)

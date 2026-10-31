@@ -18,6 +18,7 @@ import {
 	manageContext,
 	willManageContext,
 } from "../index"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Create a mock ApiHandler for testing
 class MockApiHandler extends BaseProvider {
@@ -1138,9 +1139,9 @@ describe("Context Management", () => {
 
 			const filesReadByRoo = ["src/test.ts", "src/utils.ts"]
 			const cwd = "/test/project"
-			const mockRooIgnoreController = {
+			const mockRooIgnoreController = asMock<import("../../ignore/RooIgnoreController").RooIgnoreController>({
 				filterPaths: vi.fn(),
-			} as unknown as import("../../ignore/RooIgnoreController").RooIgnoreController
+			})
 
 			const result = await manageContext({
 				messages: messagesWithSmallContent,

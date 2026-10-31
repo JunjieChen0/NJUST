@@ -4,6 +4,7 @@ import WorkspaceTracker from "../WorkspaceTracker"
 import type { ITaskHost } from "../../../core/task/interfaces/ITaskHost"
 import { listFiles } from "../../../services/glob/list-files"
 import { getWorkspacePath } from "../../../utils/path"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Mock functions - must be defined before vitest.mock calls
 const mockOnDidCreate = vitest.fn()
@@ -84,9 +85,9 @@ describe("WorkspaceTracker", () => {
 		;(getWorkspacePath as Mock).mockReturnValue("/test/workspace")
 
 		// Create provider mock
-		mockProvider = {
+		mockProvider = asMock<ITaskHost & { postMessageToWebview: Mock }>({
 			postMessageToWebview: vitest.fn().mockResolvedValue(undefined),
-		} as unknown as ITaskHost & { postMessageToWebview: Mock }
+		})
 
 		// Create tracker instance
 		workspaceTracker = new WorkspaceTracker(mockProvider)

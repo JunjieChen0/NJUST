@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { DuckDuckGoSearchProvider, BaiduFreeSearchProvider, SogouFreeSearchProvider } from "../WebSearchProvider"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("../../../core/security/networkGuard", () => ({
 	guardedFetch: vi.fn(),
@@ -68,16 +69,18 @@ describe("WebSearchProvider ReDoS hardening", () => {
 			const padding = "<div>" + "x".repeat(500_001) + "</div>"
 			const html = padding + afterMarker
 
-			globalThis.fetch = vi.fn().mockResolvedValue({
-				ok: true,
-				status: 200,
-				text: () => Promise.resolve(html),
-				headers: new Headers(),
-				[Symbol.iterator]: (() => {
-					const h = new Headers()
-					return h[Symbol.iterator].bind(h)
-				})(),
-			} as unknown as Response)
+			globalThis.fetch = vi.fn().mockResolvedValue(
+				asMock<Response>({
+					ok: true,
+					status: 200,
+					text: () => Promise.resolve(html),
+					headers: new Headers(),
+					[Symbol.iterator]: (() => {
+						const h = new Headers()
+						return h[Symbol.iterator].bind(h)
+					})(),
+				}),
+			)
 
 			const provider = new SogouFreeSearchProvider()
 			const results = await provider.search("test", 10)

@@ -9,6 +9,7 @@ import {
 
 import { AgentLoopState, detectAgentState } from "../agent-state.js"
 import { createMockClient } from "../extension-client.js"
+import { asMock } from "../../../../../src/__tests__/helpers/asMock.js"
 
 type LooseMessage = Omit<Partial<ClineMessage>, "ask" | "say"> & { ask?: string; say?: string }
 
@@ -35,7 +36,7 @@ describe("detectAgentState", () => {
 		})
 
 		it("should return NO_TASK for undefined messages", () => {
-			const state = detectAgentState(undefined as unknown as ClineMessage[])
+			const state = detectAgentState(asMock<ClineMessage[]>(undefined))
 			expect(state.state).toBe(AgentLoopState.NO_TASK)
 		})
 	})
@@ -785,7 +786,7 @@ describe("Edge Cases", () => {
 	describe("State message edge cases", () => {
 		it("should handle state message with empty clineMessages", () => {
 			const { client } = createMockClient()
-			client.handleMessage({ type: "state", state: { clineMessages: [] } } as unknown as ExtensionMessage)
+			client.handleMessage(asMock<ExtensionMessage>({ type: "state", state: { clineMessages: [] } }))
 			expect(client.getCurrentState()).toBe(AgentLoopState.NO_TASK)
 			expect(client.isInitialized()).toBe(true)
 		})

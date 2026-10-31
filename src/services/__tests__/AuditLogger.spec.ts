@@ -5,6 +5,7 @@ import * as os from "os"
 
 import { AuditLogger, type AuditEntry } from "../AuditLogger"
 import { logger as sharedLogger } from "../../shared/logger"
+import { asMock } from "../../__tests__/helpers/asMock"
 
 describe("AuditLogger", () => {
 	let tmpDir: string
@@ -126,7 +127,7 @@ describe("AuditLogger", () => {
 
 			// Force the per-file cap via the internal counter; this is the only
 			// way to exercise the cap path without writing 50k real entries.
-			;(logger as unknown as { entryCount: number }).entryCount = 50_000
+			asMock<{ entryCount: number }>(logger).entryCount = 50_000
 
 			logger.log(makeEntry({ action: "tool.dropped.1" }))
 			logger.log(makeEntry({ action: "tool.dropped.2" }))

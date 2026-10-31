@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NJUST_AIEventName } from "@njust-ai/types"
+import { asMock } from "./helpers/asMock"
 
 /* vscode mock for Task/Provider imports */
 vi.mock("vscode", () => {
@@ -50,7 +51,7 @@ import { readTaskMessages } from "../core/task-persistence/taskMessages"
 import { readApiMessages, saveApiMessages, saveTaskMessages } from "../core/task-persistence"
 
 function createDelegationHost(overrides: Partial<IDelegationHost> = {}): IDelegationHost {
-	return {
+	return asMock<IDelegationHost>({
 		getCurrentTask: vi.fn(),
 		log: vi.fn(),
 		stack: { pop: vi.fn().mockResolvedValue(undefined) },
@@ -62,7 +63,7 @@ function createDelegationHost(overrides: Partial<IDelegationHost> = {}): IDelega
 		contextProxy: { globalStorageUri: { fsPath: "/test/storage" } },
 		createTaskWithHistoryItem: vi.fn(),
 		...overrides,
-	} as unknown as IDelegationHost
+	})
 }
 
 describe("History resume delegation - parent metadata transitions", () => {

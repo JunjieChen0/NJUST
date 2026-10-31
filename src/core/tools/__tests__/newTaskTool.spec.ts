@@ -3,6 +3,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 import type { AskApproval, HandleError, NativeToolArgs, ToolUse } from "../../../shared/tools"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Mock vscode module
 vi.mock("vscode", () => ({
@@ -131,11 +132,11 @@ const withNativeArgs = (block: ToolUse<"new_task">): ToolUse<"new_task"> => ({
 	// Native tool calling: `nativeArgs` is the source of truth for tool execution.
 	// These tests intentionally exercise missing-param behavior, so we allow undefined
 	// values and let the tool's runtime validation handle it.
-	nativeArgs: {
+	nativeArgs: asMock<NativeToolArgs["new_task"]>({
 		mode: block.params.mode,
 		message: block.params.message,
 		todos: block.params.todos,
-	} as unknown as NativeToolArgs["new_task"],
+	}),
 })
 
 describe("newTaskTool", () => {

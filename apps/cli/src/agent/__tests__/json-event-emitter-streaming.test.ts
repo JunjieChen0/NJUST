@@ -2,16 +2,19 @@ import type { ClineMessage } from "@njust-ai/types"
 import { Writable } from "stream"
 
 import { JsonEventEmitter } from "../json-event-emitter.js"
+import { asMock } from "../../../../../src/__tests__/helpers/asMock.js"
 
 function createMockStdout(): { stdout: NodeJS.WriteStream; lines: () => Record<string, unknown>[] } {
 	const chunks: string[] = []
 
-	const writable = new Writable({
-		write(chunk, _encoding, callback) {
-			chunks.push(chunk.toString())
-			callback()
-		},
-	}) as unknown as NodeJS.WriteStream
+	const writable = asMock<NodeJS.WriteStream>(
+		new Writable({
+			write(chunk, _encoding, callback) {
+				chunks.push(chunk.toString())
+				callback()
+			},
+		}),
+	)
 
 	const lines = () =>
 		chunks
@@ -24,10 +27,7 @@ function createMockStdout(): { stdout: NodeJS.WriteStream; lines: () => Record<s
 }
 
 function emitMessage(emitter: JsonEventEmitter, message: ClineMessage): void {
-	;(emitter as unknown as { handleMessage: (msg: ClineMessage, isUpdate: boolean) => void }).handleMessage(
-		message,
-		false,
-	)
+	asMock<{ handleMessage: (msg: ClineMessage, isUpdate: boolean) => void }>(emitter).handleMessage(message, false)
 }
 
 function createAskMessage(overrides: Partial<ClineMessage>): ClineMessage {

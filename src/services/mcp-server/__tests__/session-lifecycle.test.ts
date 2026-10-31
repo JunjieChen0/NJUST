@@ -4,6 +4,7 @@ import nock from "nock"
 
 import { RooToolsMcpServer } from "../RooToolsMcpServer"
 import { SandboxExecutionService } from "../../sandbox"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -87,7 +88,7 @@ interface ServerInternals {
 }
 
 function internals(server: RooToolsMcpServer): ServerInternals {
-	return server as unknown as ServerInternals
+	return asMock<ServerInternals>(server)
 }
 
 function getTransports(server: RooToolsMcpServer): Map<string, FakeEntry> {

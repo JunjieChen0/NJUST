@@ -10,6 +10,7 @@ import { DEFAULT_FLAGS } from "@/types/index.js"
 import { type ExtensionHostOptions, ExtensionHost } from "../extension-host.js"
 import { ExtensionClient } from "../extension-client.js"
 import { AgentLoopState } from "../agent-state.js"
+import { asMock } from "../../../../../src/__tests__/helpers/asMock.js"
 
 vi.mock("@njust-ai/vscode-shim", () => ({
 	createVSCodeAPI: vi.fn(() => ({
@@ -52,14 +53,14 @@ type PrivateHost = Record<string, unknown>
  * Helper to access private members for testing
  */
 function getPrivate<T>(host: ExtensionHost, key: string): T {
-	return (host as unknown as PrivateHost)[key] as T
+	return asMock<PrivateHost>(host)[key] as T
 }
 
 /**
  * Helper to set private members for testing
  */
 function setPrivate(host: ExtensionHost, key: string, value: unknown): void {
-	;(host as unknown as PrivateHost)[key] = value
+	asMock<PrivateHost>(host)[key] = value
 }
 
 /**
@@ -67,7 +68,7 @@ function setPrivate(host: ExtensionHost, key: string, value: unknown): void {
  * This uses a more permissive type to avoid TypeScript errors with private methods
  */
 function callPrivate<T>(host: ExtensionHost, method: string, ...args: unknown[]): T {
-	const fn = (host as unknown as PrivateHost)[method] as ((...a: unknown[]) => T) | undefined
+	const fn = asMock<PrivateHost>(host)[method] as ((...a: unknown[]) => T) | undefined
 	if (!fn) throw new Error(`Method ${method} not found`)
 	return fn.apply(host, args)
 }
@@ -316,10 +317,13 @@ describe("ExtensionHost", () => {
 			const client = getPrivate(host, "client") as ExtensionClient
 
 			// Simulate extension message.
-			host.emit("extensionWebviewMessage", {
-				type: "state",
-				state: { clineMessages: [] },
-			} as unknown as ExtensionMessage)
+			host.emit(
+				"extensionWebviewMessage",
+				asMock<ExtensionMessage>({
+					type: "state",
+					state: { clineMessages: [] },
+				}),
+			)
 
 			// Message listener is set up in activate(), which we can't easily call in unit tests.
 			// But we can verify the client exists and has the handleMessage method.

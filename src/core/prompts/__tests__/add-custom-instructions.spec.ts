@@ -1,6 +1,7 @@
 // npx vitest core/prompts/__tests__/add-custom-instructions.spec.ts
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("os", () => ({
 	default: {
@@ -174,7 +175,7 @@ const mockContext = createMockExtensionContext({
 
 // Instead of extending IMcpHubService, create a mock that implements just what we need
 const createMockIMcpHubService = (withServers: boolean = false): IMcpHubService =>
-	({
+	asMock<IMcpHubService>({
 		getServers: () =>
 			withServers
 				? [
@@ -196,7 +197,7 @@ const createMockIMcpHubService = (withServers: boolean = false): IMcpHubService 
 		toggleToolAlwaysAllow: async () => {},
 		isConnecting: false,
 		connections: [],
-	}) as unknown as IMcpHubService
+	})
 
 describe("addCustomInstructions", () => {
 	beforeEach(() => {

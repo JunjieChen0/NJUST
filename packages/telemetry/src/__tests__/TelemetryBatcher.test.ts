@@ -6,7 +6,7 @@ function createMockLogger(): TelemetryLogger {
 	return {
 		log: vi.fn(),
 		flush: vi.fn().mockResolvedValue(undefined),
-	} as unknown as TelemetryLogger
+	} as never
 }
 
 describe("TelemetryBatcher", () => {

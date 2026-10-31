@@ -2,10 +2,11 @@ import { describe, it, expect, beforeEach } from "vitest"
 
 import type { TaskLike } from "@njust-ai/types"
 import { TaskStack, type TaskStackEntry } from "../TaskStack"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 /** Build a minimal TaskLike stub – only `taskId` is exercised by TaskStack. */
 function mockTask(id: string): TaskLike {
-	return { taskId: id } as unknown as TaskLike
+	return asMock<TaskLike>({ taskId: id })
 }
 
 /** Shorthand for building entries. */

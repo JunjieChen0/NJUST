@@ -52,9 +52,7 @@ describe("CustomToolRegistry", () => {
 				execute: async () => "result",
 			}
 
-			expect(() => registry.register(invalidTool as unknown as CustomToolDefinition)).toThrow(
-				/Invalid tool definition/,
-			)
+			expect(() => registry.register(invalidTool as never)).toThrow(/Invalid tool definition/)
 		})
 
 		it("should allow missing parameters", () => {
@@ -84,9 +82,7 @@ describe("CustomToolRegistry", () => {
 				execute: async () => "result",
 			}
 
-			expect(() => registry.register(invalidTool as unknown as CustomToolDefinition)).toThrow(
-				/Invalid tool definition/,
-			)
+			expect(() => registry.register(invalidTool as never)).toThrow(/Invalid tool definition/)
 		})
 	})
 

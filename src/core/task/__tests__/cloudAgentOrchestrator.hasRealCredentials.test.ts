@@ -3,6 +3,7 @@ import type { CloudAgentProfile } from "../../../services/cloud-agent/types/prof
 import { setDeviceToken } from "../../../services/cloud-agent/deviceToken"
 
 import { CloudAgentOrchestrator } from "../CloudAgentOrchestrator"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -10,7 +11,7 @@ import { CloudAgentOrchestrator } from "../CloudAgentOrchestrator"
  * Access private hasRealCredentials method via type-cast.
  */
 function hasRealCredentials(server: CloudAgentOrchestrator, profile: CloudAgentProfile): boolean {
-	return (server as unknown as { hasRealCredentials: (p: CloudAgentProfile) => boolean }).hasRealCredentials(profile)
+	return asMock<{ hasRealCredentials: (p: CloudAgentProfile) => boolean }>(server).hasRealCredentials(profile)
 }
 
 function createProfile(

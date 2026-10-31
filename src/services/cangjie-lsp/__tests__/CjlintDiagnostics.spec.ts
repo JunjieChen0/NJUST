@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import * as path from "path"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 const {
 	mockExistsSync,
@@ -204,11 +205,11 @@ async function runLintWorkspace(
 // ---------------------------------------------------------------------------
 
 function createLintConfig(overrides: Record<string, unknown> = {}): CangjieLintConfig {
-	return {
+	return asMock<CangjieLintConfig>({
 		isFileExcluded: vi.fn(),
 		filterDiagnostics: vi.fn(() => []),
 		...overrides,
-	} as unknown as CangjieLintConfig
+	})
 }
 
 describe("CjlintDiagnostics", () => {

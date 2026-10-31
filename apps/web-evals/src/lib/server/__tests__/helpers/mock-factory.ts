@@ -1,4 +1,5 @@
 import type { NextRequest, NextResponse } from "next/server"
+import { asMock } from "../../../../../../../src/__tests__/helpers/asMock"
 
 export interface Mocks {
 	headers: Headers
@@ -31,13 +32,13 @@ export function createMockRequest(
 	const headerList = new Headers(headers)
 	const cookieStore = createMockCookies(cookieValues)
 
-	const request = {
+	const request = asMock<NextRequest>({
 		method,
 		url,
 		headers: headerList,
 		cookies: cookieStore,
 		signal: new AbortController().signal,
-	} as unknown as NextRequest
+	})
 
 	return request
 }
@@ -47,7 +48,7 @@ export function createMockNextResponse(): {
 } {
 	return {
 		json: (body: unknown, init?: { status?: number }) => {
-			return { status: init?.status ?? 200, body } as unknown as NextResponse
+			return asMock<NextResponse>({ status: init?.status ?? 200, body })
 		},
 	}
 }

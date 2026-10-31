@@ -1,6 +1,7 @@
 import fs from "fs/promises"
 
 import { validateTerminalShellPath } from "../shell.js"
+import { asMock } from "../../../../../../src/__tests__/helpers/asMock.js"
 
 vi.mock("fs/promises", () => ({
 	default: {
@@ -13,9 +14,11 @@ describe("validateTerminalShellPath", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		vi.mocked(fs.access).mockResolvedValue(undefined)
-		vi.mocked(fs.stat).mockResolvedValue({
-			isFile: () => true,
-		} as unknown as Awaited<ReturnType<typeof fs.stat>>)
+		vi.mocked(fs.stat).mockResolvedValue(
+			asMock<Awaited<ReturnType<typeof fs.stat>>>({
+				isFile: () => true,
+			}),
+		)
 	})
 
 	it("returns invalid for an empty path", async () => {
@@ -44,9 +47,11 @@ describe("validateTerminalShellPath", () => {
 	})
 
 	it("returns invalid when the shell path points to a directory", async () => {
-		vi.mocked(fs.stat).mockResolvedValueOnce({
-			isFile: () => false,
-		} as unknown as Awaited<ReturnType<typeof fs.stat>>)
+		vi.mocked(fs.stat).mockResolvedValueOnce(
+			asMock<Awaited<ReturnType<typeof fs.stat>>>({
+				isFile: () => false,
+			}),
+		)
 		const result = await validateTerminalShellPath("/bin")
 
 		expect(result).toEqual({ valid: false, reason: "shell path must point to a file" })

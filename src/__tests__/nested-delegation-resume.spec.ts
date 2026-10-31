@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NJUST_AIEventName } from "@njust-ai/types"
+import { asMock } from "./helpers/asMock"
 
 // Mock safe-stable-stringify to avoid runtime error
 vi.mock("safe-stable-stringify", () => ({
@@ -163,7 +164,7 @@ describe("Nested delegation resume (A �?B �?C)", () => {
 			return Object.values(historyIndex)
 		})
 
-		const provider = {
+		const provider = asMock<IDelegationHost>({
 			contextProxy: { globalStorageUri: { fsPath: "/tmp" } },
 			getTaskWithId,
 			emit: emitSpy,
@@ -176,7 +177,7 @@ describe("Nested delegation resume (A �?B �?C)", () => {
 			reopenParentFromDelegation: vi.fn(async function (params: any) {
 				return await reopenParentFromDelegationWithProvider(provider, params)
 			}),
-		} as unknown as IDelegationHost
+		})
 
 		// Empty histories for simplicity
 		vi.mocked(readTaskMessages).mockResolvedValue([])

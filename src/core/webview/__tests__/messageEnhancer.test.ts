@@ -6,6 +6,7 @@ import { MessageEnhancer } from "../messageEnhancer"
 import * as singleCompletionHandlerModule from "../../../utils/single-completion-handler"
 import { ProviderSettingsManager } from "../../config/ProviderSettingsManager"
 import { logger } from "../../../shared/logger"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("../../../shared/logger", () => ({
 	logger: {
@@ -25,9 +26,9 @@ vi.mock("@njust-ai/telemetry", () => ({
 }))
 
 function extractTaskHistory(messages: ClineMessage[]): string {
-	return (
-		MessageEnhancer as unknown as { extractTaskHistory: (messages: ClineMessage[]) => string }
-	).extractTaskHistory(messages)
+	return asMock<{ extractTaskHistory: (messages: ClineMessage[]) => string }>(MessageEnhancer).extractTaskHistory(
+		messages,
+	)
 }
 
 describe("MessageEnhancer", () => {

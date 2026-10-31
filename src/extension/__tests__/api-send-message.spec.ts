@@ -4,6 +4,7 @@ import { createMockOutputChannel } from "../../__tests__/helpers/vscodeMocks"
 
 import { API } from "../api"
 import type { IProviderHost } from "../IProviderHost"
+import { asMock } from "../../__tests__/helpers/asMock"
 
 vi.mock("vscode")
 
@@ -22,7 +23,7 @@ describe("API - SendMessage Command", () => {
 
 		mockPostMessageToWebview = vi.fn().mockResolvedValue(undefined)
 
-		mockProvider = {
+		mockProvider = asMock<IProviderHost>({
 			context: {
 				globalStorageUri: { fsPath: "/tmp/mock-extension-storage" } as vscode.Uri,
 			} as vscode.ExtensionContext,
@@ -31,7 +32,7 @@ describe("API - SendMessage Command", () => {
 			getCurrentTaskStack: vi.fn().mockReturnValue([]),
 			getCurrentTask: vi.fn().mockReturnValue(undefined),
 			viewLaunched: true,
-		} as unknown as IProviderHost
+		})
 
 		mockLog = vi.fn()
 

@@ -7,6 +7,7 @@ import * as path from "path"
 import * as fs from "fs/promises"
 import fsSync from "fs"
 import { fileExistsAtPath } from "../../../utils/fs"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Mock dependencies
 vi.mock("fs/promises")
@@ -61,7 +62,7 @@ describe("RooIgnoreController Security Tests", () => {
 		// Setup mocks
 		mockFileExists = fileExistsAtPath as Mock<typeof fileExistsAtPath>
 		mockReadFile = fs.readFile as Mock<typeof fs.readFile>
-		mockRealpathSync = (fsSync as unknown as { realpathSync: Mock }).realpathSync
+		mockRealpathSync = asMock<{ realpathSync: Mock }>(fsSync).realpathSync
 
 		// By default, setup .rooignore to exist with some patterns
 		mockFileExists.mockResolvedValue(true)
@@ -403,7 +404,7 @@ build/
 		it("should deny access on unexpected errors in the outer try-catch (fail-closed)", () => {
 			// Force the ignore library to throw inside the try block.
 			// We do this by stubbing the internal ignoreInstance.ignores method.
-			const ignoreInstance = (controller as unknown as { ignoreInstance: { ignores: Mock } }).ignoreInstance
+			const ignoreInstance = asMock<{ ignoreInstance: { ignores: Mock } }>(controller).ignoreInstance
 			const originalIgnores = ignoreInstance.ignores
 			ignoreInstance.ignores = vi.fn(() => {
 				throw new Error("Unexpected error in ignore check")

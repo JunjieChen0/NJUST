@@ -7,6 +7,7 @@ import { ExtensionContext } from "vscode"
 import type { ProviderSettings } from "@njust-ai/types"
 
 import { ProviderSettingsManager, ProviderProfiles } from "../ProviderSettingsManager"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Mock VSCode ExtensionContext
 const mockSecrets = {
@@ -20,10 +21,10 @@ const mockGlobalState = {
 	update: vi.fn(),
 }
 
-const mockContext = {
+const mockContext = asMock<ExtensionContext>({
 	secrets: mockSecrets,
 	globalState: mockGlobalState,
-} as unknown as ExtensionContext
+})
 
 describe("ProviderSettingsManager", () => {
 	let providerSettingsManager: ProviderSettingsManager

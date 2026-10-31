@@ -5,6 +5,7 @@ import OpenAI from "openai"
 import { OpenAiHandler } from "../openai"
 import { OpenAiNativeHandler } from "../openai-native"
 import type { ApiHandlerOptions } from "../../../shared/api"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 describe("OpenAiHandler native tools", () => {
 	it("includes tools in request when tools are provided via metadata (regression test)", async () => {
@@ -18,25 +19,27 @@ describe("OpenAiHandler native tools", () => {
 
 		// Set openAiCustomModelInfo without any tool capability flags; tools should
 		// still be passed whenever metadata.tools is present.
-		const handler = new OpenAiHandler({
-			openAiApiKey: "test-key",
-			openAiBaseUrl: "https://example.com/v1",
-			openAiModelId: "test-model",
-			openAiCustomModelInfo: {
-				maxTokens: 4096,
-				contextWindow: 128000,
-			},
-		} as unknown as import("../../../shared/api").ApiHandlerOptions)
+		const handler = new OpenAiHandler(
+			asMock<import("../../../shared/api").ApiHandlerOptions>({
+				openAiApiKey: "test-key",
+				openAiBaseUrl: "https://example.com/v1",
+				openAiModelId: "test-model",
+				openAiCustomModelInfo: {
+					maxTokens: 4096,
+					contextWindow: 128000,
+				},
+			}),
+		)
 
 		// Patch the OpenAI client call
-		const mockClient = {
+		const mockClient = asMock<OpenAI>({
 			chat: {
 				completions: {
 					create: mockCreate,
 				},
 			},
-		} as unknown as OpenAI
-		;(handler as unknown as { client: OpenAI }).client = mockClient
+		})
+		asMock<{ client: OpenAI }>(handler).client = mockClient
 
 		const tools: OpenAI.Chat.ChatCompletionTool[] = [
 			{

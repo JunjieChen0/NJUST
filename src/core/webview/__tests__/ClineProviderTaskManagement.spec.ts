@@ -5,6 +5,7 @@ import type { TaskStackManager } from "../TaskStackManager"
 import type { PendingEditManager } from "../PendingEditManager"
 import type { Task } from "../../task/Task"
 import { createMockTask } from "../../../__tests__/helpers/vscodeMocks"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("../../task/Task", () => {
 	const MockTask = vi.fn(function (this: any) {
@@ -25,7 +26,7 @@ describe("ClineProviderTaskManagement", () => {
 	let mockHost: any
 
 	beforeEach(() => {
-		mockStack = {
+		mockStack = asMock<TaskStackManager>({
 			current: undefined,
 			size: 0,
 			taskIds: [],
@@ -33,16 +34,16 @@ describe("ClineProviderTaskManagement", () => {
 			push: vi.fn().mockResolvedValue(undefined),
 			pop: vi.fn().mockResolvedValue(undefined),
 			rehydrate: vi.fn().mockResolvedValue(undefined),
-		} as unknown as TaskStackManager
+		})
 
 		mockTaskHistory = {
 			getRecentTasks: vi.fn().mockReturnValue(["task1", "task2"]),
 		}
 
-		mockPendingEditManager = {
+		mockPendingEditManager = asMock<PendingEditManager>({
 			get: vi.fn().mockReturnValue(undefined),
 			clear: vi.fn(),
-		} as unknown as PendingEditManager
+		})
 
 		mockCustomModesManager = {
 			updateCustomMode: vi.fn().mockResolvedValue(undefined),

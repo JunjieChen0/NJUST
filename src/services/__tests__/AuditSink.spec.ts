@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { AuditSink } from "../AuditSink"
 import type { AuditLogger, AuditEntry } from "../AuditLogger"
 import { ToolHookManager } from "../../core/tools/ToolHookManager"
+import { asMock } from "../../__tests__/helpers/asMock"
 
 describe("AuditSink", () => {
 	let mockLogger: AuditLogger
@@ -12,13 +13,13 @@ describe("AuditSink", () => {
 
 	beforeEach(() => {
 		loggedEntries = []
-		mockLogger = {
+		mockLogger = asMock<AuditLogger>({
 			log: vi.fn((entry: AuditEntry) => {
 				loggedEntries.push(entry)
 			}),
 			flush: vi.fn(),
 			dispose: vi.fn(),
-		} as unknown as AuditLogger
+		})
 
 		// Use a fresh ToolHookManager instance to avoid cross-test pollution
 		hookManager = new ToolHookManager()

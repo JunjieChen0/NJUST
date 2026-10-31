@@ -12,6 +12,7 @@ import { TelemetryService } from "@njust-ai/telemetry"
 
 import { ContextProxy } from "../../config/ContextProxy"
 import { ClineProvider } from "../ClineProvider"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Mock setup
 vi.mock("p-wait-for", () => ({
@@ -514,7 +515,7 @@ describe("ClineProvider Task History Synchronization", () => {
 			expect(initialRecent).toContain("cache-seed")
 
 			// Prime cache and verify internal cache is set.
-			expect((provider.taskHistory as unknown as { _recentTasksCache?: string[] })._recentTasksCache).toEqual(
+			expect(asMock<{ _recentTasksCache?: string[] }>(provider.taskHistory)._recentTasksCache).toEqual(
 				initialRecent,
 			)
 
@@ -529,9 +530,7 @@ describe("ClineProvider Task History Synchronization", () => {
 			)
 
 			// Direct assertion for invalidation side-effect.
-			expect(
-				(provider.taskHistory as unknown as { _recentTasksCache?: string[] })._recentTasksCache,
-			).toBeUndefined()
+			expect(asMock<{ _recentTasksCache?: string[] }>(provider.taskHistory)._recentTasksCache).toBeUndefined()
 
 			const recomputedRecent = provider.getRecentTasks()
 			expect(recomputedRecent).toContain("cache-new")

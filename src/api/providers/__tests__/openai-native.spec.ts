@@ -1,6 +1,7 @@
 // npx vitest run api/providers/__tests__/openai-native.spec.ts
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 const mockCaptureException = vitest.fn()
 
@@ -86,7 +87,7 @@ describe("OpenAiNativeHandler", () => {
 		})
 
 		it("should pass undefined baseURL when openAiNativeBaseUrl is empty string", () => {
-			;(OpenAI as unknown as ReturnType<typeof vitest.fn>).mockClear()
+			asMock<ReturnType<typeof vitest.fn>>(OpenAI).mockClear()
 			new OpenAiNativeHandler({
 				apiModelId: "gpt-4.1",
 				openAiNativeApiKey: "test-key",
@@ -96,7 +97,7 @@ describe("OpenAiNativeHandler", () => {
 		})
 
 		it("should pass custom baseURL when openAiNativeBaseUrl is a valid URL", () => {
-			;(OpenAI as unknown as ReturnType<typeof vitest.fn>).mockClear()
+			asMock<ReturnType<typeof vitest.fn>>(OpenAI).mockClear()
 			new OpenAiNativeHandler({
 				apiModelId: "gpt-4.1",
 				openAiNativeApiKey: "test-key",

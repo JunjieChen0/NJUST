@@ -1,8 +1,9 @@
 import { vi } from "vitest"
 import type * as vscode from "vscode"
+import { asMock } from "./asMock"
 
 export function createMockExtensionContext(overrides: Record<string, unknown> = {}): vscode.ExtensionContext {
-	return {
+	return asMock<vscode.ExtensionContext>({
 		extensionPath: "/test/path",
 		extensionUri: {},
 		globalState: { get: vi.fn(), update: vi.fn(), keys: vi.fn(() => []) },
@@ -12,11 +13,11 @@ export function createMockExtensionContext(overrides: Record<string, unknown> = 
 		extension: { packageJSON: { version: "1.0.0" } },
 		globalStorageUri: { fsPath: "/test/storage/path" },
 		...overrides,
-	} as unknown as vscode.ExtensionContext
+	})
 }
 
 export function createMockOutputChannel(overrides: Record<string, unknown> = {}): vscode.OutputChannel {
-	return {
+	return asMock<vscode.OutputChannel>({
 		name: "test",
 		append: vi.fn(),
 		appendLine: vi.fn(),
@@ -26,11 +27,11 @@ export function createMockOutputChannel(overrides: Record<string, unknown> = {})
 		hide: vi.fn(),
 		dispose: vi.fn(),
 		...overrides,
-	} as unknown as vscode.OutputChannel
+	})
 }
 
 export function createMockWebviewView(overrides: Record<string, unknown> = {}): vscode.WebviewView {
-	return {
+	return asMock<vscode.WebviewView>({
 		webview: {
 			html: "",
 			options: {},
@@ -43,13 +44,13 @@ export function createMockWebviewView(overrides: Record<string, unknown> = {}): 
 		onDidDispose: vi.fn(),
 		onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
 		...overrides,
-	} as unknown as vscode.WebviewView
+	})
 }
 
 export function createMockClineProvider(
 	overrides: Record<string, unknown> = {},
 ): import("../../core/webview/ClineProvider").ClineProvider {
-	return {
+	return asMock<import("../../core/webview/ClineProvider").ClineProvider>({
 		log: vi.fn(),
 		postMessageToWebview: vi.fn().mockResolvedValue(undefined),
 		postStateToWebview: vi.fn().mockResolvedValue(undefined),
@@ -65,22 +66,22 @@ export function createMockClineProvider(
 		},
 		providerSettingsManager: {},
 		...overrides,
-	} as unknown as import("../../core/webview/ClineProvider").ClineProvider
+	})
 }
 
 export function createMockTextDocument(overrides: Record<string, unknown> = {}): vscode.TextDocument {
-	return {
+	return asMock<vscode.TextDocument>({
 		uri: { fsPath: "/test/file.ts" },
 		fileName: "/test/file.ts",
 		languageId: "typescript",
 		lineAt: () => ({ text: "" }),
 		getText: () => "",
 		...overrides,
-	} as unknown as vscode.TextDocument
+	})
 }
 
 export function createMockTask(overrides: Record<string, unknown> = {}): import("../../core/task/Task").Task {
-	return {
+	return asMock<import("../../core/task/Task").Task>({
 		taskId: "mock-task",
 		instanceId: "mock-instance",
 		cwd: "/mock/workspace",
@@ -97,5 +98,5 @@ export function createMockTask(overrides: Record<string, unknown> = {}): import(
 		abortTask: vi.fn().mockResolvedValue(undefined),
 		cancelCurrentRequest: vi.fn(),
 		...overrides,
-	} as unknown as import("../../core/task/Task").Task
+	})
 }

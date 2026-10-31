@@ -12,6 +12,7 @@ import {
 	SandboxUnavailableError,
 } from "../SandboxErrors"
 import { sandboxAudit } from "../SandboxAudit"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Mock VS Code
 vi.mock("vscode", () => ({
@@ -48,11 +49,11 @@ interface ServiceInternals {
 }
 
 function serviceInternals(service: SandboxExecutionService): ServiceInternals {
-	return service as unknown as ServiceInternals
+	return asMock<ServiceInternals>(service)
 }
 
 function makeTerminal(): import("vscode").Terminal {
-	return { sendText: vi.fn(), dispose: vi.fn() } as unknown as import("vscode").Terminal
+	return asMock<import("vscode").Terminal>({ sendText: vi.fn(), dispose: vi.fn() })
 }
 
 describe("SandboxExecutionService", () => {

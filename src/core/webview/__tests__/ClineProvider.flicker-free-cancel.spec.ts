@@ -4,6 +4,7 @@ import { ClineProvider } from "../ClineProvider"
 import { Task } from "../../task/Task"
 import type { ExtensionContext, OutputChannel } from "vscode"
 import type { ProviderSettings, HistoryItem } from "@njust-ai/types"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 // Mock dependencies
 vi.mock("vscode", () => {
@@ -131,7 +132,7 @@ describe("ClineProvider flicker-free cancel", () => {
 		vi.clearAllMocks()
 
 		// Setup mock extension context
-		mockContext = {
+		mockContext = asMock<ExtensionContext>({
 			globalState: {
 				get: vi.fn().mockReturnValue(undefined),
 				update: vi.fn().mockResolvedValue(undefined),
@@ -154,13 +155,13 @@ describe("ClineProvider flicker-free cancel", () => {
 			extension: {
 				packageJSON: { version: "1.0.0" },
 			},
-		} as unknown as ExtensionContext
+		})
 
 		// Setup mock output channel
-		mockOutputChannel = {
+		mockOutputChannel = asMock<OutputChannel>({
 			appendLine: vi.fn(),
 			dispose: vi.fn(),
-		} as unknown as OutputChannel
+		})
 
 		// Setup mock context proxy
 		const mockContextProxy = {

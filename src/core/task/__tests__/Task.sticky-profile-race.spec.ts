@@ -7,6 +7,7 @@ import * as _vscode from "vscode"
 import type { ProviderSettings } from "@njust-ai/types"
 import { Task } from "../Task"
 import type { ITaskHost } from "../interfaces/ITaskHost"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("@njust-ai/telemetry", () => ({
 	TelemetryService: {
@@ -125,7 +126,7 @@ describe("Task - sticky provider profile init race", () => {
 			resolveGetState = resolve
 		})
 
-		const mockProvider = {
+		const mockProvider = asMock<ITaskHost>({
 			context: {
 				globalStorageUri: { fsPath: "/test/storage" },
 			},
@@ -136,7 +137,7 @@ describe("Task - sticky provider profile init race", () => {
 			postStateToWebview: vi.fn().mockResolvedValue(undefined),
 			postStateToWebviewWithoutTaskHistory: vi.fn().mockResolvedValue(undefined),
 			updateTaskHistory: vi.fn().mockResolvedValue(undefined),
-		} as unknown as ITaskHost
+		})
 
 		const task = new Task({
 			provider: mockProvider,
