@@ -8,10 +8,13 @@ import {
 import { Anthropic } from "@anthropic-ai/sdk"
 
 import { BEDROCK_1M_CONTEXT_MODEL_IDS, BEDROCK_SERVICE_TIER_MODEL_IDS } from "@njust-ai/core/providers"
+import type { BedrockModelId } from "@njust-ai/core/providers"
+import type { ModelInfo, ProviderSettings } from "@njust-ai/types"
 
 import { ApiStream } from "../transform/stream"
 import { MultiPointStrategy } from "../transform/cache-strategy/multi-point-strategy"
 import { ModelInfo as CacheModelInfo } from "../transform/cache-strategy/types"
+import type { CachePointPlacement } from "../transform/cache-strategy/types"
 import { convertToBedrockConverseMessages as sharedConverter } from "../transform/bedrock-converse-format"
 import { getApiRequestTimeout } from "./utils/timeout-config"
 import { logger } from "../../utils/logging"
@@ -40,11 +43,51 @@ import {
  *************************************************************************************/
 
 /**
- * Shape of the handler bits the streaming loop touches. Typed as a structural
- * shape that matches AwsBedrockHandler's relevant members without forcing the
- * class to declare a conformance interface.
+ * Shape of the handler bits the streaming loop touches. AwsBedrockHandler
+ * passes an adapter built from its private members so those stay private.
  */
-export type BedrockConverseHandler = UnsafeAny
+export interface BedrockConverseModel {
+	id: BedrockModelId | string
+	info: ModelInfo
+	maxTokens?: number
+	temperature?: number
+	reasoning?: unknown
+	reasoningBudget?: number
+}
+
+export interface BedrockConverseHandler {
+	options: ProviderSettings
+	client: {
+		send(command: unknown, options?: { abortSignal?: AbortSignal }): Promise<unknown>
+	}
+	getModel(): BedrockConverseModel
+	getModelById(modelId: string, modelType?: string): BedrockConverseModel
+	supportsAwsPromptCache(modelConfig: BedrockConverseModel): boolean | undefined
+	convertToBedrockConverseMessages(
+		anthropicMessages: Anthropic.Messages.MessageParam[] | { role: string; content: string }[],
+		systemMessage?: string,
+		usePromptCache?: boolean,
+		modelInfo?: BedrockCacheModelInfo,
+		conversationId?: string,
+	): { system: SystemContentBlock[]; messages: Message[] }
+	parseBaseModelId(modelId: string): string
+	parseArn(arn: string, region?: string): { modelId?: string; modelType?: string }
+	getErrorType(error: unknown): string
+	formatErrorMessage(error: unknown, errorType: string, isStreamContext: boolean): string
+	createEnhancedProviderError(
+		error: unknown,
+		errorMessage: string,
+		operation: "createMessage" | "completePrompt",
+	): Error
+	handleBedrockError(
+		error: unknown,
+		isStreamContext: boolean,
+	): string | Array<{ type: "text"; text: string } | { type: "usage"; inputTokens: number; outputTokens: number }>
+	getCostModelConfig(): BedrockConverseModel
+	setCostModelConfig(model: BedrockConverseModel): void
+	getPreviousCachePointPlacements(conversationId: string): CachePointPlacement[] | undefined
+	setPreviousCachePointPlacements(conversationId: string, placements: CachePointPlacement[]): void
+}
 
 /**
  * Cache-relevant subset of the model info passed to the converse converter.
@@ -207,11 +250,11 @@ export async function* bedrockCreateMessageInner(
 		}, getApiRequestTimeout())
 
 		const command = new ConverseStreamCommand(payload)
-		const response = await handler.client.send(command, {
+		const response = (await handler.client.send(command, {
 			abortSignal: controller.signal,
-		})
+		})) as { stream?: AsyncIterable<unknown> } | undefined
 
-		if (!response.stream) {
+		if (!response?.stream) {
 			clearTimeout(timeoutId)
 			throw new Error("No stream available in the response")
 		}
@@ -265,7 +308,7 @@ export async function* bedrockCreateMessageInner(
 					)
 					if (invokedModel) {
 						invokedModel.id = modelConfig.id
-						handler.costModelConfig = invokedModel
+						handler.setCostModelConfig(invokedModel)
 					}
 
 					// Handle metadata events for the promptRouter.
@@ -423,8 +466,9 @@ export async function* bedrockCreateMessageInner(
 		// For non-throttling errors in streaming context, yield error chunk and return
 		// (don't throw - caller is already iterating the stream)
 		const errorChunks = handler.handleBedrockError(error, true) // true for streaming context
+		const chunks = Array.isArray(errorChunks) ? errorChunks : []
 		// Yield each chunk individually to ensure type compatibility
-		for (const chunk of errorChunks) {
+		for (const chunk of chunks) {
 			yield chunk // Structure matches ApiStream text/usage chunks
 		}
 
@@ -470,10 +514,7 @@ export function bedrockConvertToBedrockConverseMessages(
 	}
 
 	// Get previous cache point placements for this conversation if available
-	const previousPlacements =
-		conversationId && handler.previousCachePointPlacements[conversationId]
-			? handler.previousCachePointPlacements[conversationId]
-			: undefined
+	const previousPlacements = conversationId ? handler.getPreviousCachePointPlacements(conversationId) : undefined
 
 	// Create config for cache strategy
 	const config = {
@@ -490,7 +531,7 @@ export function bedrockConvertToBedrockConverseMessages(
 
 	// Store cache point placements for future use if conversation ID is provided
 	if (conversationId && cacheResult.messageCachePointPlacements) {
-		handler.previousCachePointPlacements[conversationId] = cacheResult.messageCachePointPlacements
+		handler.setPreviousCachePointPlacements(conversationId, cacheResult.messageCachePointPlacements)
 	}
 
 	// Apply cache points to the properly converted messages

@@ -37,9 +37,16 @@ export type ResponsesInputItem =
 	| { type: string; id?: string; encrypted_content?: string; [key: string]: unknown }
 	| Anthropic.Messages.MessageParam
 
+export type ResponsesText = string | { value?: string }
+
+export function toResponseText(text: ResponsesText | undefined): string | undefined {
+	if (typeof text === "string") return text
+	return text?.value
+}
+
 export interface ResponsesOutputItem {
 	type?: string
-	text?: UnsafeAny
+	text?: ResponsesText
 	output_text?: string
 	delta?: string
 	content?: ResponsesOutputItem[]
@@ -97,7 +104,7 @@ interface NonStreamingResponsesClient {
 		create(
 			body: ResponsesRequestBody,
 			options?: { signal?: AbortSignal; headers?: Record<string, string> },
-		): Promise<{ output?: ResponsesOutputItem[]; text?: UnsafeAny }>
+		): Promise<{ output?: ResponsesOutputItem[]; text?: ResponsesText }>
 	}
 }
 
@@ -349,15 +356,17 @@ export abstract class OpenAiNativeHandlerBase extends BaseProvider implements Si
 					if (outputItem.type === "message" && outputItem.content) {
 						for (const content of outputItem.content) {
 							if (content.type === "output_text" && content.text) {
-								return content.text
+								const text = toResponseText(content.text)
+								if (text) return text
 							}
 						}
 					}
 				}
 			}
 
-			if (response?.text) {
-				return response.text
+			const responseText = toResponseText(response?.text)
+			if (responseText) {
+				return responseText
 			}
 
 			return ""

@@ -1,5 +1,5 @@
 import type { ApiStream } from "../../../transform/stream"
-import type { OpenAiNativeModel, ResponsesStreamEvent } from "../base"
+import { toResponseText, type OpenAiNativeModel, type ResponsesStreamEvent } from "../base"
 import type { EventHandlerContext } from "./types"
 
 export async function* handleFallback(
@@ -13,7 +13,8 @@ export async function* handleFallback(
 			if (outputItem.type === "text" && outputItem.content) {
 				for (const content of outputItem.content) {
 					if (content.type === "text" && content.text) {
-						yield { type: "text", text: content.text }
+						const text = toResponseText(content.text)
+						if (text) yield { type: "text", text }
 					}
 				}
 			}

@@ -243,7 +243,7 @@ export class TaskExecutor {
 
 			const [contextMgmtEnvironmentDetails, contextMgmtFilesReadByRoo] = contextManagementWillRun
 				? await Promise.all([
-						getEnvironmentDetails(h as UnsafeAny, true),
+						getEnvironmentDetails(h, true),
 						autoCondenseContext
 							? h.streamProcessor.getFilesReadByRooSafely("attemptApiRequest")
 							: Promise.resolve(undefined),
@@ -608,7 +608,7 @@ export class TaskExecutor {
 				}
 			}
 
-			const environmentDetails = await getEnvironmentDetails(t as UnsafeAny, currentIncludeFileDetails)
+			const environmentDetails = await getEnvironmentDetails(t, currentIncludeFileDetails)
 
 			const contentWithoutEnvDetails = parsedUserContent.filter((block) => {
 				if (block.type === "text" && typeof block.text === "string") {

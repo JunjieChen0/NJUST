@@ -1,4 +1,9 @@
-import type { Message, SystemContentBlock, ToolConfiguration } from "@aws-sdk/client-bedrock-runtime"
+import type {
+	ConverseStreamCommandInput,
+	Message,
+	SystemContentBlock,
+	ToolConfiguration,
+} from "@aws-sdk/client-bedrock-runtime"
 import { z } from "zod"
 
 import type { BedrockModelId, BedrockServiceTier } from "@njust-ai/core/providers"
@@ -29,9 +34,10 @@ export interface BedrockInferenceConfig {
 	temperature?: number
 }
 
-// Define interface for Bedrock additional model request fields
-// This includes thinking configuration, 1M context beta, and other model-specific parameters
-export interface BedrockAdditionalModelFields {
+// Define type for Bedrock additional model request fields
+// This includes thinking configuration, 1M context beta, and other model-specific parameters.
+// The intersection with the SDK's DocumentType keeps it assignable to ConverseStreamCommandInput.
+export type BedrockAdditionalModelFields = NonNullable<ConverseStreamCommandInput["additionalModelRequestFields"]> & {
 	thinking?:
 		| {
 				type: "enabled"
@@ -41,8 +47,6 @@ export interface BedrockAdditionalModelFields {
 				type: "adaptive"
 		  }
 	anthropic_beta?: string[]
-	// AWS DocumentType is an any-like recursive map; a precise index type breaks the SDK assignment.
-	[key: string]: UnsafeAny // Add index signature to be compatible with DocumentType
 }
 
 // Define interface for Bedrock payload

@@ -49,6 +49,8 @@ import {
 	bedrockCreateMessageInner,
 	bedrockConvertToBedrockConverseMessages,
 	type BedrockCacheModelInfo,
+	type BedrockConverseHandler,
+	type BedrockConverseModel,
 } from "./bedrock-converse"
 
 export type { StreamEvent, UsageType } from "./bedrock-types"
@@ -243,7 +245,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			}
 		},
 	): ApiStream {
-		yield* bedrockCreateMessageInner(this, systemPrompt, messages, metadata)
+		yield* bedrockCreateMessageInner(this.converseHandler, systemPrompt, messages, metadata)
 	}
 
 	async completePrompt(prompt: string): Promise<string> {
@@ -264,7 +266,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			const payload = {
 				modelId: modelConfig.id,
 				messages: bedrockConvertToBedrockConverseMessages(
-					this,
+					this.converseHandler,
 					[
 						{
 							role: "user",
@@ -336,6 +338,45 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 	}
 
 	/**
+	 * Adapter exposing the private members the extracted converse helpers need.
+	 */
+	private get converseHandler(): BedrockConverseHandler {
+		return {
+			options: this.options,
+			client: {
+				send: (command, options) => this.client.send(command as never, options),
+			},
+			getModel: () => this.getModel(),
+			getModelById: (modelId, modelType) => this.getModelById(modelId, modelType),
+			supportsAwsPromptCache: (modelConfig) => this.supportsAwsPromptCache(modelConfig),
+			convertToBedrockConverseMessages: (messages, systemMessage, usePromptCache, modelInfo, conversationId) =>
+				this.convertToBedrockConverseMessages(
+					messages,
+					systemMessage,
+					usePromptCache,
+					modelInfo,
+					conversationId,
+				),
+			parseBaseModelId: (modelId) => this.parseBaseModelId(modelId),
+			parseArn: (arn, region) => this.parseArn(arn, region),
+			getErrorType: (error) => this.getErrorType(error),
+			formatErrorMessage: (error, errorType, isStreamContext) =>
+				this.formatErrorMessage(error, errorType, isStreamContext),
+			createEnhancedProviderError: (error, errorMessage, operation) =>
+				this.createEnhancedProviderError(error, errorMessage, operation),
+			handleBedrockError: (error, isStreamContext) => this.handleBedrockError(error, isStreamContext),
+			getCostModelConfig: () => this.costModelConfig,
+			setCostModelConfig: (model: BedrockConverseModel) => {
+				this.costModelConfig = model
+			},
+			getPreviousCachePointPlacements: (conversationId) => this.previousCachePointPlacements[conversationId],
+			setPreviousCachePointPlacements: (conversationId, placements) => {
+				this.previousCachePointPlacements[conversationId] = placements
+			},
+		}
+	}
+
+	/**
 	 * Convert Anthropic messages to Bedrock Converse format
 	 */
 	private convertToBedrockConverseMessages(
@@ -346,7 +387,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 		conversationId?: string, // Optional conversation ID to track cache points across messages
 	): { system: SystemContentBlock[]; messages: Message[] } {
 		return bedrockConvertToBedrockConverseMessages(
-			this,
+			this.converseHandler,
 			anthropicMessages,
 			systemMessage,
 			usePromptCache,

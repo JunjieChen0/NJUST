@@ -49,9 +49,16 @@ export type CodexInputItem =
 	| { type: string; content?: string; id?: string; encrypted_content?: string; [key: string]: unknown }
 	| Anthropic.Messages.MessageParam
 
+export type ResponsesText = string | { value?: string }
+
+export function toResponseText(text: ResponsesText | undefined): string | undefined {
+	if (typeof text === "string") return text
+	return text?.value
+}
+
 export interface ResponsesOutputItem {
 	type?: string
-	text?: UnsafeAny
+	text?: ResponsesText
 	output_text?: string
 	delta?: string
 	content?: ResponsesOutputItem[]

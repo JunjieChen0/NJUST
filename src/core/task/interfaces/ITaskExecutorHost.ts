@@ -18,6 +18,7 @@ import type {
 	ProviderSettings,
 	ToolProgressStatus,
 	TokenUsage,
+	TodoItem,
 } from "@njust-ai/types"
 
 import type { ApiHandler } from "../../../api"
@@ -65,6 +66,8 @@ export interface TaskExecutorApiHost {
 
 /** State machine, sub-delegates, and service references. */
 export interface TaskExecutorDelegatesHost {
+	providerRef: WeakRef<ITaskHost>
+	todoList?: TodoItem[]
 	stateMachine: { force(state: TaskState): void; readonly state: TaskState }
 	hostRef: WeakRef<ITaskHost>
 	requestBuilder: {

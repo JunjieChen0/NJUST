@@ -1,5 +1,5 @@
 import type { ApiStream, ApiStreamUsageChunk } from "../../transform/stream"
-import type { OpenAiCodexModel, ResponsesOutputItem, ResponsesStreamEvent } from "./types"
+import { toResponseText, type OpenAiCodexModel, type ResponsesOutputItem, type ResponsesStreamEvent } from "./types"
 
 /**
  * Mutable state context shared between the handler class and the
@@ -68,9 +68,9 @@ export async function* processEvent(
 		if (
 			!ctx.sawTextDeltaInCurrentResponse &&
 			(part?.type === "text" || part?.type === "output_text") &&
-			(typeof part?.text === "string" || typeof part?.text?.value === "string")
+			(typeof part?.text === "string" || (typeof part?.text === "object" && typeof part.text?.value === "string"))
 		) {
-			const partText = typeof part.text === "string" ? part.text : part.text.value
+			const partText = toResponseText(part.text)
 			if (partText) {
 				ctx.sawTextOutputInCurrentResponse = true
 				yield { type: "text", text: partText }
@@ -152,18 +152,28 @@ export async function* processEvent(
 			// For "done" events, emit fallback text only if none was emitted yet.
 			if (event.type === "response.output_item.added") {
 				if (item.type === "text" && item.text) {
-					ctx.sawTextOutputInCurrentResponse = true
-					yield { type: "text", text: item.text }
+					const text = toResponseText(item.text)
+					if (text) {
+						ctx.sawTextOutputInCurrentResponse = true
+						yield { type: "text", text }
+					}
 				} else if (item.type === "output_text" && item.text) {
-					ctx.sawTextOutputInCurrentResponse = true
-					yield { type: "text", text: item.text }
+					const text = toResponseText(item.text)
+					if (text) {
+						ctx.sawTextOutputInCurrentResponse = true
+						yield { type: "text", text }
+					}
 				} else if (item.type === "reasoning" && item.text) {
-					yield { type: "reasoning", text: item.text }
+					const text = toResponseText(item.text)
+					if (text) yield { type: "reasoning", text }
 				} else if (item.type === "message" && Array.isArray(item.content)) {
 					for (const content of item.content) {
 						if ((content?.type === "text" || content?.type === "output_text") && content?.text) {
-							ctx.sawTextOutputInCurrentResponse = true
-							yield { type: "text", text: content.text }
+							const text = toResponseText(content.text)
+							if (text) {
+								ctx.sawTextOutputInCurrentResponse = true
+								yield { type: "text", text }
+							}
 						}
 					}
 				}
@@ -199,13 +209,19 @@ export async function* processEvent(
 				}
 			} else if (!ctx.sawTextOutputInCurrentResponse) {
 				if ((item.type === "text" || item.type === "output_text") && item.text) {
-					ctx.sawTextOutputInCurrentResponse = true
-					yield { type: "text", text: item.text }
+					const text = toResponseText(item.text)
+					if (text) {
+						ctx.sawTextOutputInCurrentResponse = true
+						yield { type: "text", text }
+					}
 				} else if (item.type === "message" && Array.isArray(item.content)) {
 					for (const content of item.content) {
 						if ((content?.type === "text" || content?.type === "output_text") && content?.text) {
-							ctx.sawTextOutputInCurrentResponse = true
-							yield { type: "text", text: content.text }
+							const text = toResponseText(content.text)
+							if (text) {
+								ctx.sawTextOutputInCurrentResponse = true
+								yield { type: "text", text }
+							}
 						}
 					}
 				}
@@ -227,16 +243,22 @@ export async function* processEvent(
 		if (!ctx.sawTextOutputInCurrentResponse && Array.isArray(event?.response?.output)) {
 			for (const outputItem of event.response.output) {
 				if ((outputItem?.type === "text" || outputItem?.type === "output_text") && outputItem?.text) {
-					ctx.sawTextOutputInCurrentResponse = true
-					yield { type: "text", text: outputItem.text }
-					continue
+					const text = toResponseText(outputItem.text)
+					if (text) {
+						ctx.sawTextOutputInCurrentResponse = true
+						yield { type: "text", text }
+						continue
+					}
 				}
 
 				if (outputItem?.type === "message" && Array.isArray(outputItem.content)) {
 					for (const content of outputItem.content) {
 						if ((content?.type === "text" || content?.type === "output_text") && content?.text) {
-							ctx.sawTextOutputInCurrentResponse = true
-							yield { type: "text", text: content.text }
+							const text = toResponseText(content.text)
+							if (text) {
+								ctx.sawTextOutputInCurrentResponse = true
+								yield { type: "text", text }
+							}
 						}
 					}
 				}

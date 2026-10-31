@@ -27,6 +27,7 @@ import {
 	type ResponsesClientLike,
 	codexErrorResponseSchema,
 	codexResponsesStreamEventSchema,
+	toResponseText,
 } from "./types"
 import { formatConversation } from "./formatConversation"
 import { processEvent, type CodexEventHandlerContext } from "./processEvent"
@@ -505,9 +506,12 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 									if (outputItem.type === "text" && outputItem.content) {
 										for (const content of outputItem.content) {
 											if (content.type === "text" && content.text) {
-												hasContent = true
-												this.sawTextOutputInCurrentResponse = true
-												yield { type: "text", text: content.text }
+												const text = toResponseText(content.text)
+												if (text) {
+													hasContent = true
+													this.sawTextOutputInCurrentResponse = true
+													yield { type: "text", text }
+												}
 											}
 										}
 									}
@@ -577,18 +581,27 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 							} else if (parsed.type === "response.output_item.added") {
 								if (parsed.item) {
 									if (parsed.item.type === "text" && parsed.item.text) {
-										hasContent = true
-										this.sawTextOutputInCurrentResponse = true
-										yield { type: "text", text: parsed.item.text }
+										const text = toResponseText(parsed.item.text)
+										if (text) {
+											hasContent = true
+											this.sawTextOutputInCurrentResponse = true
+											yield { type: "text", text }
+										}
 									} else if (parsed.item.type === "reasoning" && parsed.item.text) {
-										hasContent = true
-										yield { type: "reasoning", text: parsed.item.text }
+										const text = toResponseText(parsed.item.text)
+										if (text) {
+											hasContent = true
+											yield { type: "reasoning", text }
+										}
 									} else if (parsed.item.type === "message" && parsed.item.content) {
 										for (const content of parsed.item.content) {
 											if (content.type === "text" && content.text) {
-												hasContent = true
-												this.sawTextOutputInCurrentResponse = true
-												yield { type: "text", text: content.text }
+												const text = toResponseText(content.text)
+												if (text) {
+													hasContent = true
+													this.sawTextOutputInCurrentResponse = true
+													yield { type: "text", text }
+												}
 											}
 										}
 									}
@@ -622,9 +635,12 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 										if (outputItem.type === "message" && outputItem.content) {
 											for (const content of outputItem.content) {
 												if (content.type === "output_text" && content.text) {
-													hasContent = true
-													this.sawTextOutputInCurrentResponse = true
-													yield { type: "text", text: content.text }
+													const text = toResponseText(content.text)
+													if (text) {
+														hasContent = true
+														this.sawTextOutputInCurrentResponse = true
+														yield { type: "text", text }
+													}
 												}
 											}
 										}

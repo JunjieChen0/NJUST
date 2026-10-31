@@ -5,7 +5,7 @@ import * as vscode from "vscode"
 import pWaitFor from "p-wait-for"
 import delay from "delay"
 
-import { type ExperimentId, DEFAULT_MAX_OPEN_TABS_CONTEXT } from "@njust-ai/types"
+import { type ExperimentId, type ClineMessage, type TodoItem, DEFAULT_MAX_OPEN_TABS_CONTEXT } from "@njust-ai/types"
 
 import { defaultModeSlug } from "../../shared/modes"
 import { logger } from "../../shared/logger"
@@ -19,10 +19,26 @@ import { formatHostExecuteCommandHints } from "../../utils/hostShellCommand"
 import { formatResponse } from "../prompts/responses"
 import { getGitStatus } from "../../utils/git"
 
-import { Task } from "../task/Task"
+import type { ApiHandler } from "../../api"
+import type { FileContextTracker } from "../context-tracking/FileContextTracker"
+import type { RooIgnoreController } from "../ignore/RooIgnoreController"
+import type { ITaskHost } from "../task/interfaces/ITaskHost"
 import { formatReminderSection } from "./reminder"
 
-export async function getEnvironmentDetails(cline: Task, includeFileDetails: boolean = false) {
+/** Structural subset of Task required to build environment details. */
+export interface EnvironmentDetailsHost {
+	providerRef: WeakRef<ITaskHost>
+	readonly cwd: string
+	readonly taskId: string
+	rooIgnoreController?: RooIgnoreController
+	didEditFile: boolean
+	fileContextTracker: Pick<FileContextTracker, "getAndClearRecentlyModifiedFiles">
+	clineMessages: ClineMessage[]
+	api: ApiHandler
+	todoList?: TodoItem[]
+}
+
+export async function getEnvironmentDetails(cline: EnvironmentDetailsHost, includeFileDetails: boolean = false) {
 	let details = ""
 
 	const clineProvider = cline.providerRef.deref()
@@ -265,6 +281,6 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 		state && typeof state.apiConfiguration?.todoListEnabled === "boolean"
 			? state.apiConfiguration.todoListEnabled
 			: true
-	const reminderSection = todoListEnabled ? formatReminderSection(cline.todoList) : ""
+	const reminderSection = todoListEnabled && cline.todoList ? formatReminderSection(cline.todoList) : ""
 	return `====\n# Environment Details\n\n${details.trim()}\n${reminderSection}\n====`
 }

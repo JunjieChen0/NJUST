@@ -5,8 +5,11 @@
  * Extracted from Task.ts as part of Phase 1 decomposition.
  */
 import type { Anthropic } from "@anthropic-ai/sdk"
-import type { ClineMessage } from "@njust-ai/types"
+import type { ClineMessage, TodoItem } from "@njust-ai/types"
+import type { ApiHandler } from "../../../api"
 import type { ApiMessage } from "../../task-persistence"
+import type { FileContextTracker } from "../../context-tracking/FileContextTracker"
+import type { RooIgnoreController } from "../../ignore/RooIgnoreController"
 import type { IsolationLevel } from "../SubTaskOptions"
 import type { ForkedContextConfig, CacheSafeParams } from "../SubTaskOptions"
 import type { ITaskHost } from "./ITaskHost"
@@ -14,6 +17,16 @@ import type { ITaskHost } from "./ITaskHost"
 export interface TaskSubtaskHost {
 	// Identity
 	readonly taskId: string
+	readonly cwd: string
+
+	// State used when building environment details
+	providerRef: WeakRef<ITaskHost>
+	rooIgnoreController?: RooIgnoreController
+	didEditFile: boolean
+	fileContextTracker: FileContextTracker
+	clineMessages: ClineMessage[]
+	api: ApiHandler
+	todoList?: TodoItem[]
 
 	// Mutable state for resumeAfterDelegation
 	idleAsk?: ClineMessage

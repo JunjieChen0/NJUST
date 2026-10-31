@@ -90,7 +90,7 @@ export interface ToolCallbacks {
 // `execute(params)` bivariant. Completing NativeToolArgs or narrowing the fallback makes the
 // conditional resolve to the concrete param union and breaks the registry (contravariance).
 // Removing this `any` requires a registry-type refactor (out of scope for type-escape elimination).
-type ToolParams<TName extends ToolName> = TName extends keyof NativeToolArgs ? NativeToolArgs[TName] : UnsafeAny
+type ToolParams<TName extends ToolName> = TName extends keyof NativeToolArgs ? NativeToolArgs[TName] : unknown
 
 /**
  * Abstract base class for all tools.

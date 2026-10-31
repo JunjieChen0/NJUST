@@ -1,6 +1,6 @@
 import { ApiProviderError } from "@njust-ai/types"
 import type { ApiStream } from "../../../transform/stream"
-import type { OpenAiNativeModel, ResponsesStreamEvent } from "../base"
+import { toResponseText, type OpenAiNativeModel, type ResponsesStreamEvent } from "../base"
 import type { EventHandlerContext } from "./types"
 
 export async function* handleStatusEvent(
@@ -18,16 +18,22 @@ export async function* handleStatusEvent(
 		if (!shouldSkipTextExtraction && Array.isArray(event?.response?.output)) {
 			for (const outputItem of event.response.output) {
 				if ((outputItem?.type === "text" || outputItem?.type === "output_text") && outputItem?.text) {
-					ctx.sawTextOutputInCurrentResponse = true
-					yield { type: "text", text: outputItem.text }
-					continue
+					const text = toResponseText(outputItem.text)
+					if (text) {
+						ctx.sawTextOutputInCurrentResponse = true
+						yield { type: "text", text }
+						continue
+					}
 				}
 
 				if (outputItem?.type === "message" && Array.isArray(outputItem.content)) {
 					for (const content of outputItem.content) {
 						if ((content?.type === "text" || content?.type === "output_text") && content?.text) {
-							ctx.sawTextOutputInCurrentResponse = true
-							yield { type: "text", text: content.text }
+							const text = toResponseText(content.text)
+							if (text) {
+								ctx.sawTextOutputInCurrentResponse = true
+								yield { type: "text", text }
+							}
 						}
 					}
 				}

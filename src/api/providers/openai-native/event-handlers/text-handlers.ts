@@ -1,5 +1,5 @@
 import type { ApiStream } from "../../../transform/stream"
-import type { ResponsesStreamEvent } from "../base"
+import { toResponseText, type ResponsesStreamEvent } from "../base"
 import type { EventHandlerContext } from "./types"
 
 export async function* handleTextEvent(event: ResponsesStreamEvent, ctx: EventHandlerContext): ApiStream {
@@ -35,9 +35,9 @@ export async function* handleTextEvent(event: ResponsesStreamEvent, ctx: EventHa
 		if (
 			!ctx.sawTextDeltaInCurrentResponse &&
 			(part?.type === "text" || part?.type === "output_text") &&
-			(typeof part?.text === "string" || typeof part?.text?.value === "string")
+			(typeof part?.text === "string" || (typeof part?.text === "object" && typeof part.text?.value === "string"))
 		) {
-			const partText = typeof part.text === "string" ? part.text : part.text.value
+			const partText = toResponseText(part.text)
 			if (partText) {
 				ctx.sawTextOutputInCurrentResponse = true
 				yield { type: "text", text: partText }
