@@ -28,6 +28,22 @@ import { TelemetryService } from "@njust-ai/telemetry"
 const MAX_EXPONENTIAL_BACKOFF_SECONDS = TIMING.MAX_EXPONENTIAL_BACKOFF_MS / 1000
 const FORCED_CONTEXT_REDUCTION_PERCENT = LIMITS.FORCED_CONTEXT_REDUCTION_PERCENT
 
+type ContentOrReasoning = Anthropic.Messages.ContentBlockParam | ReasoningBlock
+
+type ProviderErrorInfo = {
+	status?: number
+	statusCode?: number
+	message?: string
+	code?: string
+	errorDetails?: Array<
+		Record<string, unknown> & { retryDelay?: { match?: (pattern: RegExp) => RegExpMatchArray | null } }
+	>
+}
+
+function asErrorInfo(error: unknown): ProviderErrorInfo {
+	return error && typeof error === "object" ? (error as ProviderErrorInfo) : {}
+}
+
 /**
  * TaskStreamProcessor handles stream-related helper logic extracted from Task.ts,
  * including rate limiting, exponential backoff, context window recovery,
@@ -63,8 +79,7 @@ export class TaskStreamProcessor {
 		state: { listApiConfigMeta?: Array<{ id?: string; name?: string }>; currentApiConfigName?: string } | undefined,
 	): string {
 		return (
-			state?.listApiConfigMeta?.find((profile: UnsafeAny) => profile.name === state?.currentApiConfigName)?.id ??
-			"default"
+			state?.listApiConfigMeta?.find((profile) => profile.name === state?.currentApiConfigName)?.id ?? "default"
 		)
 	}
 
@@ -127,7 +142,8 @@ export class TaskStreamProcessor {
 	 * Integrates with PersistentRetryManager for cross-request retry tracking
 	 * and timeout degradation.
 	 */
-	async backoffAndAnnounce(retryAttempt: number, error: UnsafeAny): Promise<void> {
+	async backoffAndAnnounce(retryAttempt: number, error: unknown): Promise<void> {
+		const err = asErrorInfo(error)
 		try {
 			// Determine error category for persistent retry tracking
 			const errorCategory = this.inferErrorCategory(error)
@@ -164,7 +180,7 @@ export class TaskStreamProcessor {
 			}
 
 			// Drain token bucket on 429 (enforce proactive backoff)
-			if (error?.status === 429) {
+			if (err.status === 429) {
 				const providerKey = this.task.apiConfiguration?.apiProvider ?? "default"
 				try {
 					const { TokenBucketRateLimiter } = await import(
@@ -177,9 +193,9 @@ export class TaskStreamProcessor {
 			}
 
 			// Prefer RetryInfo on 429 if present
-			if (error?.status === 429) {
-				const retryInfo = error?.errorDetails?.find(
-					(d: UnsafeAny) => d["@type"] === "type.googleapis.com/google.rpc.RetryInfo",
+			if (err.status === 429) {
+				const retryInfo = err.errorDetails?.find(
+					(d) => d["@type"] === "type.googleapis.com/google.rpc.RetryInfo",
 				)
 				const match = retryInfo?.retryDelay?.match?.(/^(\d+)s$/)
 				if (match) {
@@ -198,14 +214,14 @@ export class TaskStreamProcessor {
 
 			// Build header text; fall back to error message if none provided
 			let headerText
-			if (error.status) {
+			if (err.status) {
 				// Include both status code (for ChatRow parsing) and detailed message (for error details)
 				// Format: "<status>\n<message>" allows ChatRow to extract status via parseInt(text.substring(0,3))
 				// while preserving the full error message in errorDetails for debugging
-				const errorMessage = error?.message || "Unknown error"
-				headerText = `${error.status}\n${errorMessage}`
-			} else if (error?.message) {
-				headerText = error.message
+				const errorMessage = err.message || "Unknown error"
+				headerText = `${err.status}\n${errorMessage}`
+			} else if (err.message) {
+				headerText = err.message
 			} else {
 				headerText = "Unknown error"
 			}
@@ -256,21 +272,22 @@ export class TaskStreamProcessor {
 	 * Infer the error category from an error object for persistent retry tracking.
 	 * Uses status codes and error messages as heuristics.
 	 */
-	private inferErrorCategory(error: UnsafeAny): string {
+	private inferErrorCategory(error: unknown): string {
 		if (!error) {
 			return "unknown"
 		}
 
-		const status = error.status ?? error.statusCode
-		const message = (error.message ?? "").toLowerCase()
+		const err = asErrorInfo(error)
+		const status = err.status ?? err.statusCode
+		const message = (err.message ?? "").toLowerCase()
 
 		// Timeout detection
 		if (
 			message.includes("timeout") ||
 			message.includes("timed out") ||
 			message.includes("etimedout") ||
-			error.code === "ETIMEDOUT" ||
-			error.code === "ESOCKETTIMEDOUT"
+			err.code === "ETIMEDOUT" ||
+			err.code === "ESOCKETTIMEDOUT"
 		) {
 			return "timeout"
 		}
@@ -280,8 +297,8 @@ export class TaskStreamProcessor {
 			message.includes("econnreset") ||
 			message.includes("econnrefused") ||
 			message.includes("epipe") ||
-			error.code === "ECONNRESET" ||
-			error.code === "ECONNREFUSED"
+			err.code === "ECONNRESET" ||
+			err.code === "ECONNREFUSED"
 		) {
 			return "connection"
 		}
@@ -453,10 +470,22 @@ export class TaskStreamProcessor {
 			type: "reasoning"
 			encrypted_content: string
 			id?: string
-			summary?: UnsafeAny[]
+			summary?: Array<{ type?: string; text?: string }>
 		}
 
-		const cleanConversationHistory: (Anthropic.Messages.MessageParam | ReasoningItemForRequest)[] = []
+		type AssistantMessageWithReasoningDetails = Anthropic.Messages.MessageParam & {
+			reasoning_details?: unknown[]
+		}
+
+		type AssistantMessageWithReasoningContent = Anthropic.Messages.MessageParam & {
+			reasoning_content?: string
+		}
+
+		const cleanConversationHistory: (
+			| Anthropic.Messages.MessageParam
+			| ReasoningItemForRequest
+			| AssistantMessageWithReasoningDetails
+		)[] = []
 
 		for (const msg of messages) {
 			// Standalone reasoning: send encrypted, skip plain text
@@ -476,12 +505,12 @@ export class TaskStreamProcessor {
 			if (msg.role === "assistant") {
 				const rawContent = msg.content
 
-				const contentArray: Anthropic.Messages.ContentBlockParam[] = Array.isArray(rawContent)
-					? (rawContent as Anthropic.Messages.ContentBlockParam[])
+				const contentArray: ContentOrReasoning[] = Array.isArray(rawContent)
+					? (rawContent as ContentOrReasoning[])
 					: rawContent !== undefined
 						? ([
 								{ type: "text", text: rawContent } satisfies Anthropic.Messages.TextBlockParam,
-							] as Anthropic.Messages.ContentBlockParam[])
+							] as ContentOrReasoning[])
 						: []
 
 				const [first, ...rest] = contentArray
@@ -497,7 +526,7 @@ export class TaskStreamProcessor {
 					} else if (contentArray.length === 1 && contentArray[0]!.type === "text") {
 						assistantContent = (contentArray[0]! as Anthropic.Messages.TextBlockParam).text
 					} else {
-						assistantContent = contentArray
+						assistantContent = contentArray as Anthropic.Messages.MessageParam["content"]
 					}
 
 					// Create message with reasoning_details property
@@ -505,23 +534,19 @@ export class TaskStreamProcessor {
 						role: "assistant",
 						content: assistantContent,
 						reasoning_details: msgWithDetails.reasoning_details,
-					} as UnsafeAny)
+					})
 
 					continue
 				}
 
 				// Embedded reasoning: encrypted (send) or plain text (skip)
-				const hasEncryptedReasoning =
-					first &&
-					(first as UnsafeAny as ReasoningBlock).type === "reasoning" &&
-					typeof (first as UnsafeAny as ReasoningBlock).encrypted_content === "string"
-				const hasPlainTextReasoning =
-					first &&
-					(first as UnsafeAny as ReasoningBlock).type === "reasoning" &&
-					typeof (first as UnsafeAny as ReasoningBlock).text === "string"
+				const encryptedReasoningBlock =
+					first?.type === "reasoning" && typeof first.encrypted_content === "string" ? first : undefined
+				const plainTextReasoningBlock =
+					first?.type === "reasoning" && typeof first.text === "string" ? first : undefined
 
-				if (hasEncryptedReasoning) {
-					const reasoningBlock = first as UnsafeAny as ReasoningBlock
+				if (encryptedReasoningBlock) {
+					const reasoningBlock = encryptedReasoningBlock
 
 					// Send as separate reasoning item (OpenAI Native)
 					cleanConversationHistory.push({
@@ -539,7 +564,7 @@ export class TaskStreamProcessor {
 					} else if (rest.length === 1 && rest[0]!.type === "text") {
 						assistantContent = (rest[0]! as Anthropic.Messages.TextBlockParam).text
 					} else {
-						assistantContent = rest
+						assistantContent = rest as Anthropic.Messages.MessageParam["content"]
 					}
 
 					cleanConversationHistory.push({
@@ -548,7 +573,7 @@ export class TaskStreamProcessor {
 					} satisfies Anthropic.Messages.MessageParam)
 
 					continue
-				} else if (hasPlainTextReasoning) {
+				} else if (plainTextReasoningBlock) {
 					// Check if the model's preserveReasoning flag is set
 					// If true, include the reasoning block in API requests
 					// If false/undefined, strip it out (stored for history only, not sent back to API)
@@ -557,7 +582,7 @@ export class TaskStreamProcessor {
 
 					if (shouldPreserveForApi) {
 						// Include reasoning block in the content sent to API
-						assistantContent = contentArray
+						assistantContent = contentArray as Anthropic.Messages.MessageParam["content"]
 					} else {
 						// Strip reasoning out - stored for history only, not sent back to API
 						if (rest.length === 0) {
@@ -565,7 +590,7 @@ export class TaskStreamProcessor {
 						} else if (rest.length === 1 && rest[0]!.type === "text") {
 							assistantContent = (rest[0]! as Anthropic.Messages.TextBlockParam).text
 						} else {
-							assistantContent = rest
+							assistantContent = rest as Anthropic.Messages.MessageParam["content"]
 						}
 					}
 
@@ -575,7 +600,7 @@ export class TaskStreamProcessor {
 					const msgWithReasoning = msg as ApiMessage & { reasoning_content?: string }
 					const topLevelReasoning = msgWithReasoning.reasoning_content
 					if (topLevelReasoning && typeof topLevelReasoning === "string" && topLevelReasoning.trim()) {
-						const msgObj: UnsafeAny = {
+						const msgObj: AssistantMessageWithReasoningContent = {
 							role: "assistant",
 							content: assistantContent,
 						}
@@ -602,7 +627,7 @@ export class TaskStreamProcessor {
 				const topLevelReasoning = msgWithReasoning.reasoning_content
 				if (topLevelReasoning && typeof topLevelReasoning === "string" && topLevelReasoning.trim()) {
 					const shouldPreserveForApi = this.task.api.getModel().info.preserveReasoning === true
-					const msgObj: UnsafeAny = {
+					const msgObj: AssistantMessageWithReasoningContent = {
 						role: msg.role,
 						content: msg.content as Anthropic.Messages.ContentBlockParam[] | string,
 					}

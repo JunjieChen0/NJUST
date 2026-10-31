@@ -28,6 +28,7 @@ import type { SystemPromptParts } from "../../prompts/system"
 import type { FileContextTracker } from "../../context-tracking/FileContextTracker"
 import type { PersistentRetryManager } from "../PersistentRetry"
 import type { TaskState } from "../TaskStateMachine"
+import type { RooIgnoreController } from "../../ignore/RooIgnoreController"
 import type { ToolUse } from "../../../shared/tools"
 import type { ITaskHost } from "./ITaskHost"
 import type { ITaskDiffViewProvider } from "./ITaskDiffViewProvider"
@@ -117,7 +118,7 @@ export interface TaskExecutorDelegatesHost {
 	}
 	persistentRetryHandler: PersistentRetryManager | undefined
 	parentTask: { getTokenUsage(): TokenUsage } | undefined
-	rooIgnoreController: { dispose(): void } | undefined
+	rooIgnoreController: RooIgnoreController | undefined
 	toolExecution: {
 		dispose(): void
 		streamingExecutor: { shouldEagerExecute(task: { didRejectTool: boolean }, block: ToolUse): string | null }

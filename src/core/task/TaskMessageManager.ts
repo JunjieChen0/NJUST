@@ -83,6 +83,33 @@ export interface TaskMessageContext {
 	}
 }
 
+type ReasoningLikeBlock = {
+	type: "reasoning"
+	text?: string
+	summary?: unknown[]
+	encrypted_content?: string
+	id?: string
+}
+
+type ThinkingBlockShape = { type: "thinking"; thinking: string; signature: string }
+
+type ThoughtSignatureBlockShape = { type: "thoughtSignature"; thoughtSignature: string }
+
+type ExtendedContentBlock =
+	| Anthropic.Messages.ContentBlockParam
+	| ReasoningLikeBlock
+	| ThinkingBlockShape
+	| ThoughtSignatureBlockShape
+
+type MessageWithTs = {
+	role: string
+	content: ExtendedContentBlock[] | string
+	ts?: number
+	id?: string
+	reasoning_content?: string
+	reasoning_details?: unknown[]
+}
+
 export class TaskMessageManager {
 	constructor(private ctx: TaskMessageContext) {}
 
@@ -123,7 +150,7 @@ export class TaskMessageManager {
 			const isAnthropicProtocol = apiProtocol === "anthropic"
 
 			// Start from the original assistant message
-			const messageWithTs: UnsafeAny = {
+			const messageWithTs: MessageWithTs = {
 				...message,
 				...(responseId ? { id: responseId } : {}),
 				ts: Date.now(),
@@ -140,7 +167,7 @@ export class TaskMessageManager {
 				// Anthropic provider with extended thinking: Store as proper `thinking` block
 				// This format passes through anthropic-filter.ts and is properly round-tripped
 				// for interleaved thinking with tool use (required by Anthropic API)
-				const thinkingBlock = {
+				const thinkingBlock: ThinkingBlockShape = {
 					type: "thinking",
 					thinking: reasoning,
 					signature: thoughtSignature,
@@ -158,7 +185,7 @@ export class TaskMessageManager {
 				}
 			} else if (reasoning && !reasoningDetails) {
 				// Other providers (non-Anthropic): Store as generic reasoning block
-				const reasoningBlock = {
+				const reasoningBlock: ReasoningLikeBlock = {
 					type: "reasoning",
 					text: reasoning,
 					summary: reasoningSummary ?? [],
@@ -182,7 +209,7 @@ export class TaskMessageManager {
 				}
 			} else if (reasoningData?.encrypted_content) {
 				// OpenAI Native encrypted reasoning
-				const reasoningBlock = {
+				const reasoningBlock: ReasoningLikeBlock = {
 					type: "reasoning",
 					summary: [],
 					encrypted_content: reasoningData.encrypted_content,
@@ -205,7 +232,7 @@ export class TaskMessageManager {
 			// content block so converters can attach it back to the correct provider-specific fields.
 			// Note: For Anthropic extended thinking, the signature is already included in the thinking block above.
 			if (thoughtSignature && !isAnthropicProtocol) {
-				const thoughtSignatureBlock = {
+				const thoughtSignatureBlock: ThoughtSignatureBlockShape = {
 					type: "thoughtSignature",
 					thoughtSignature,
 				}
@@ -222,7 +249,7 @@ export class TaskMessageManager {
 				}
 			}
 
-			this.ctx.apiConversationHistory.push(messageWithTs)
+			this.ctx.apiConversationHistory.push(messageWithTs as ApiMessage)
 		} else {
 			// For user messages, validate tool_result IDs ONLY when the immediately previous *effective* message
 			// is an assistant message.
@@ -254,7 +281,7 @@ export class TaskMessageManager {
 
 			const validatedMessage = validateAndFixToolResultIds(messageToAdd, historyForValidation)
 			const messageWithTs = { ...validatedMessage, ts: Date.now() }
-			this.ctx.apiConversationHistory.push(messageWithTs)
+			this.ctx.apiConversationHistory.push(messageWithTs as ApiMessage)
 		}
 
 		await this.saveApiConversationHistory()

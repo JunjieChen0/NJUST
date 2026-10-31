@@ -13,8 +13,6 @@ import pWaitFor from "p-wait-for"
 import type { TaskExecutorHost } from "./interfaces/ITaskExecutorHost"
 import type { ApiStream, GroundingSource } from "../../api/transform/stream"
 import type { ToolUse, McpToolUse } from "../../shared/tools"
-import type { TypedBlock } from "../assistant-message/types"
-
 import { NativeToolCallParser } from "../assistant-message/NativeToolCallParser"
 import { processTaskStreamChunk, finalizePendingStreamingToolCalls } from "./TaskStreamChunkProcessor"
 import { TaskState } from "./TaskStateMachine"
@@ -723,19 +721,17 @@ export async function finalizeStreamResponse(config: FinalizeConfig): Promise<Fi
 			})
 		} catch (_timeoutErr) {
 			const pendingToolBlocks = t.assistantMessageContent.filter(
-				(b: UnsafeAny) =>
+				(b): b is ToolUse | McpToolUse =>
 					(b.type === "tool_use" || b.type === "mcp_tool_use") &&
-					b.id &&
+					!!b.id &&
 					!t.userMessageContent.some(
-						(r: UnsafeAny) => r.type === "tool_result" && r.tool_use_id === sanitizeToolUseId(b.id),
+						(r) => r.type === "tool_result" && r.tool_use_id === sanitizeToolUseId(b.id!),
 					),
 			)
 
 			const isAttemptCompletionWaitingForUser =
-				pendingToolBlocks.some((b: UnsafeAny) => b.name === "attempt_completion") &&
-				t.clineMessages.some(
-					(m: UnsafeAny) => m.type === "ask" && m.ask === "completion_result" && !m.isAnswered,
-				)
+				pendingToolBlocks.some((b) => b.name === "attempt_completion") &&
+				t.clineMessages.some((m) => m.type === "ask" && m.ask === "completion_result" && !m.isAnswered)
 
 			if (isAttemptCompletionWaitingForUser) {
 				logger.info(
@@ -773,7 +769,7 @@ export async function finalizeStreamResponse(config: FinalizeConfig): Promise<Fi
 					})
 				}
 
-				markUserContentReadyIfDrained(t as UnsafeAny)
+				markUserContentReadyIfDrained(t)
 				t.userMessageContentReady = true
 			}
 		}
@@ -810,15 +806,15 @@ export async function finalizeStreamResponse(config: FinalizeConfig): Promise<Fi
 				await t.say("error", "MODEL_NO_TOOLS_USED")
 				t.consecutiveMistakeCount++
 
-				const lastUserMsg = t.apiConversationHistory.filter((m: UnsafeAny) => m.role === "user").pop()
+				const lastUserMsg = t.apiConversationHistory.filter((m) => m.role === "user").pop()
 				const wasInterrupted =
 					lastUserMsg &&
 					Array.isArray(lastUserMsg.content) &&
 					lastUserMsg.content.some(
 						(block) =>
-							(block as TypedBlock).type === "tool_result" &&
-							typeof (block as TypedBlock).content === "string" &&
-							((block as TypedBlock).content as string).includes("interrupted"),
+							block.type === "tool_result" &&
+							typeof block.content === "string" &&
+							block.content.includes("interrupted"),
 					)
 
 				t.userMessageContent.push({

@@ -11,8 +11,25 @@
  * inspired by Claude Code's Fork isolation mode.
  */
 
+import type { Anthropic } from "@anthropic-ai/sdk"
+
 import type { SubTaskOptions, ForkedContextConfig, CacheSafeParams } from "./SubTaskOptions"
 import { DEFAULT_FORKED_CONTEXT_CONFIG } from "./SubTaskOptions"
+
+type MessageContent = Anthropic.Messages.MessageParam["content"]
+
+type ConversationMessage = { role: string; content: MessageContent }
+
+function extractTextContent(content: MessageContent): string {
+	if (typeof content === "string") return content
+	if (Array.isArray(content)) {
+		return content
+			.filter((block): block is Anthropic.Messages.TextBlockParam => block.type === "text")
+			.map((block) => block.text)
+			.join("\n")
+	}
+	return ""
+}
 
 export interface ForkedContext {
 	/** Task description/objective */
@@ -117,26 +134,12 @@ export interface TaskForkContext {
  * - Key context limited to summaryMaxTokens (approx chars * 0.25)
  */
 export function generateParentContextSummary(
-	parentMessages: Array<{ role: string; content: UnsafeAny }>,
+	parentMessages: ConversationMessage[],
 	summaryMaxTokens: number = 10_000,
 	config: ForkedContextConfig = DEFAULT_FORKED_CONTEXT_CONFIG,
 ): string {
 	const maxChars = summaryMaxTokens * 4 // rough token-to-char ratio
 	const parts: string[] = []
-
-	// Extract text content from message content (handles both string and array formats)
-	const getTextContent = (content: UnsafeAny): string => {
-		if (typeof content === "string") return content
-		if (Array.isArray(content)) {
-			return content
-				.filter(
-					(block: { type: string; text?: string }) => block.type === "text" && typeof block.text === "string",
-				)
-				.map((block: { type: string; text?: string }) => block.text!)
-				.join("\n")
-		}
-		return ""
-	}
 
 	// Take only the most recent messages
 	const recentMessages = parentMessages.slice(-config.maxRecentMessages)
@@ -147,7 +150,7 @@ export function generateParentContextSummary(
 	const keyDecisions: string[] = []
 
 	for (const msg of recentMessages) {
-		const text = getTextContent(msg.content)
+		const text = extractTextContent(msg.content)
 		if (!text) continue
 
 		if (config.includeFileChanges) {
@@ -211,7 +214,7 @@ export function generateParentContextSummary(
  */
 export interface CacheAwareForkContext {
 	/** Messages to use as the fork's initial conversation */
-	messages: Array<{ role: string; content: UnsafeAny }>
+	messages: ConversationMessage[]
 	/** Cache-safe params for the forked agent to reuse */
 	cacheSafeParams: CacheSafeParams
 }
@@ -236,7 +239,7 @@ export function buildCacheAwareForkContext(
 	// Build the fork's initial message array:
 	// 1. Parent's full conversation prefix (byte-identical for cache hit)
 	// 2. Single user message with the task description (only new content)
-	const messages: Array<{ role: string; content: UnsafeAny }> = []
+	const messages: ConversationMessage[] = []
 
 	if (forkContextMessages && forkContextMessages.length > 0) {
 		messages.push(...forkContextMessages)
@@ -257,7 +260,7 @@ export function buildCacheAwareForkContext(
 export function buildForkPlaceholderResult(
 	toolUseId: string,
 	message: string = "Fork started -- processing in background",
-): { role: string; content: UnsafeAny } {
+): ConversationMessage {
 	return {
 		role: "user",
 		content: [
@@ -277,24 +280,10 @@ export function buildForkPlaceholderResult(
  */
 export function generateTaskResultSummary(
 	taskId: string,
-	messages: Array<{ role: string; content: UnsafeAny }>,
+	messages: ConversationMessage[],
 	maxResultChars: number = 2000,
 ): string {
 	const parts: string[] = [`[Subtask ${taskId} completed]`]
-
-	// Extract text content helper
-	const getTextContent = (content: UnsafeAny): string => {
-		if (typeof content === "string") return content
-		if (Array.isArray(content)) {
-			return content
-				.filter(
-					(block: { type: string; text?: string }) => block.type === "text" && typeof block.text === "string",
-				)
-				.map((block: { type: string; text?: string }) => block.text!)
-				.join("\n")
-		}
-		return ""
-	}
 
 	// Collect files modified
 	const filesModified = new Set<string>()
@@ -302,7 +291,7 @@ export function generateTaskResultSummary(
 	let finalConclusion = ""
 
 	for (const msg of messages) {
-		const text = getTextContent(msg.content)
+		const text = extractTextContent(msg.content)
 		if (!text) continue
 
 		// Extract file modifications
@@ -327,7 +316,7 @@ export function generateTaskResultSummary(
 	// Get last assistant message as the final conclusion
 	for (let i = messages.length - 1; i >= 0; i--) {
 		if (messages[i]!.role === "assistant") {
-			finalConclusion = getTextContent(messages[i]!.content)
+			finalConclusion = extractTextContent(messages[i]!.content)
 			break
 		}
 	}

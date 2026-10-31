@@ -269,7 +269,7 @@ export class TaskExecutor {
 					environmentDetails: contextMgmtEnvironmentDetails,
 					filesReadByRoo: contextMgmtFilesReadByRoo,
 					cwd: h.cwd,
-					rooIgnoreController: h.rooIgnoreController as UnsafeAny,
+					rooIgnoreController: h.rooIgnoreController,
 					enableMicroCompact: true,
 					cacheReadTokens,
 					cacheAwareTotalTokens,
@@ -342,7 +342,7 @@ export class TaskExecutor {
 		const approvalResult = await h.autoApprovalHandler.checkAutoApprovalLimits(
 			state,
 			h.combineMessages(h.clineMessages.slice(1)),
-			async (type: UnsafeAny, data: UnsafeAny) => h.ask(type, data),
+			async (type, data) => h.ask(type, data),
 		)
 
 		if (!approvalResult.shouldProceed) {
@@ -414,13 +414,13 @@ export class TaskExecutor {
 
 		const stream = h.api.createMessage(
 			systemPrompt,
-			cleanConversationHistory as UnsafeAny as Anthropic.Messages.MessageParam[],
+			cleanConversationHistory as Anthropic.Messages.MessageParam[],
 			metadata,
 		)
 		h.stateMachine.force(TaskState.STREAMING)
 
 		// Wrap with backpressure controller to prevent unbounded buffering
-		const controlledStream = new BackpressureController(stream as UnsafeAny as AsyncGenerator<UnsafeAny>, 1000, 250)
+		const controlledStream = new BackpressureController(stream, 1000, 250)
 		const iterator = controlledStream[Symbol.asyncIterator]()
 
 		// Listener that clears the current-request controller ref on abort.
@@ -452,11 +452,9 @@ export class TaskExecutor {
 			const firstChunk = await Promise.race([firstChunkPromise, abortPromise])
 			await clearRetryEvents(h.globalStoragePath, h.taskId)
 			const firstValue = firstChunk.value
-			if ((firstValue as Record<string, UnsafeAny>)?.type === "error") {
-				const errMsg =
-					(firstValue as Record<string, UnsafeAny>)?.message ||
-					(firstValue as Record<string, UnsafeAny>)?.error ||
-					"API stream error"
+			const errorChunk = firstValue as { type?: string; message?: string; error?: string }
+			if (errorChunk?.type === "error") {
+				const errMsg = errorChunk.message || errorChunk.error || "API stream error"
 				throw new Error(String(errMsg))
 			}
 			yield firstValue
