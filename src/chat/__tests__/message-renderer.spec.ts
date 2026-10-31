@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
-import type { ClineMessage, UnsafeAny } from "@njust-ai/types"
+import type { ClineMessage } from "@njust-ai/types"
 import { renderClineMessage, type RenderSink } from "../message-renderer"
 
 function createMockSink(): RenderSink & { markdownCalls: string[]; progressCalls: string[] } {
@@ -17,13 +17,15 @@ function createMockSink(): RenderSink & { markdownCalls: string[]; progressCalls
 	}
 }
 
-function makeMessage(overrides: Partial<ClineMessage>): ClineMessage {
+type LooseMessage = Omit<Partial<ClineMessage>, "say" | "ask"> & { say?: string; ask?: string }
+
+function makeMessage(overrides: LooseMessage): ClineMessage {
 	return {
 		id: "test-msg",
 		ts: Date.now(),
 		type: "say",
 		...overrides,
-	}
+	} as ClineMessage
 }
 
 describe("renderClineMessage", () => {
@@ -94,7 +96,7 @@ describe("renderClineMessage", () => {
 
 		it("silently skips unknown say types", () => {
 			const sink = createMockSink()
-			renderClineMessage(sink, makeMessage({ type: "say", say: "api_req_started" as UnsafeAny }))
+			renderClineMessage(sink, makeMessage({ type: "say", say: "api_req_started" }))
 			expect(sink.markdownCalls).toEqual([])
 			expect(sink.progressCalls).toEqual([])
 		})
@@ -131,7 +133,7 @@ describe("renderClineMessage", () => {
 
 		it("silently skips unknown ask types", () => {
 			const sink = createMockSink()
-			renderClineMessage(sink, makeMessage({ type: "ask", ask: "command" as UnsafeAny }))
+			renderClineMessage(sink, makeMessage({ type: "ask", ask: "command" }))
 			expect(sink.markdownCalls).toEqual([])
 			expect(sink.progressCalls).toEqual([])
 		})

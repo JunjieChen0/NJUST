@@ -3,7 +3,7 @@ import * as vscode from "vscode"
 import { CodeActionId, CodeActionName } from "@njust-ai/types"
 
 import { getCodeActionCommand } from "../utils/commands"
-import { EditorUtils } from "../integrations/editor/EditorUtils"
+import { EditorUtils, type DiagnosticData } from "../integrations/editor/EditorUtils"
 import { handleCodeAction } from "./providerActionDispatcher"
 
 export const registerCodeActions = (context: vscode.ExtensionContext) => {
@@ -22,7 +22,7 @@ const registerCodeAction = (context: vscode.ExtensionContext, command: CodeActio
 			let selectedText: string
 			let startLine: number | undefined
 			let endLine: number | undefined
-			let diagnostics: UnsafeAny[] | undefined
+			let diagnostics: DiagnosticData[] | undefined
 
 			if (args.length > 1) {
 				;[filePath, selectedText, startLine, endLine, diagnostics] = args

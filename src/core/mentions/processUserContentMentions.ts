@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk"
 
 import { parseMentions, MentionContentBlock } from "./index"
 import { FileContextTracker } from "../context-tracking/FileContextTracker"
+import type { RooIgnoreController } from "../ignore/RooIgnoreController"
 import type { SkillLookup } from "../../services/skills/skillInvocation"
 
 // Internal aliases for the Anthropic content block subtypes used during processing.
@@ -47,7 +48,7 @@ export async function processUserContentMentions({
 	userContent: Anthropic.Messages.ContentBlockParam[]
 	cwd: string
 	fileContextTracker: FileContextTracker
-	rooIgnoreController?: UnsafeAny
+	rooIgnoreController?: RooIgnoreController
 	showRooIgnoredFiles?: boolean
 	includeDiagnosticMessages?: boolean
 	maxDiagnosticMessages?: number

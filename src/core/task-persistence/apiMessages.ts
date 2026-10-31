@@ -12,17 +12,33 @@ import { logger } from "../../shared/logger"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
 
+export type ApiReasoningSummary = {
+	type?: string
+	text?: string
+}
+
+export type ApiReasoningDetail = {
+	type?: string
+	text?: string
+	summary?: string
+	data?: string
+	signature?: string | null
+	id?: string | null
+	format?: string
+	index?: number
+}
+
 export type ApiMessage = Anthropic.MessageParam & {
 	ts?: number
 	isSummary?: boolean
 	id?: string
 	// For reasoning items stored in API history
 	type?: "reasoning"
-	summary?: UnsafeAny[]
+	summary?: ApiReasoningSummary[]
 	encrypted_content?: string
 	text?: string
 	// For OpenRouter reasoning_details array format (used by Gemini 3, etc.)
-	reasoning_details?: UnsafeAny[]
+	reasoning_details?: ApiReasoningDetail[]
 	// For DeepSeek/Z.ai interleaved thinking: reasoning_content that must be preserved during tool call sequences
 	// See: https://api-docs.deepseek.com/guides/thinking_mode#tool-calls
 	reasoning_content?: string

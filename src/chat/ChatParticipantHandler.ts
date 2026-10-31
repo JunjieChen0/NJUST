@@ -71,7 +71,7 @@ export class ChatParticipantHandler {
 			const previousMessages = this.buildContextFromHistory(chatContext)
 			const fullPrompt = previousMessages ? `${previousMessages}\n\nUser: ${request.prompt}` : request.prompt
 
-			await this.provider.handleModeSwitch(modeSlug as UnsafeAny)
+			await this.provider.handleModeSwitch(modeSlug)
 
 			const task = await this.provider.createTask(fullPrompt)
 			const taskId = task.taskId

@@ -1,6 +1,10 @@
 import { APIError } from "openai"
 
-export function checkContextWindowExceededError(error: UnsafeAny): boolean {
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+	return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : undefined
+}
+
+export function checkContextWindowExceededError(error: unknown): boolean {
 	return (
 		checkIsOpenAIContextWindowError(error) ||
 		checkIsOpenRouterContextWindowError(error) ||
@@ -8,16 +12,17 @@ export function checkContextWindowExceededError(error: UnsafeAny): boolean {
 	)
 }
 
-function checkIsOpenRouterContextWindowError(error: UnsafeAny): boolean {
+function checkIsOpenRouterContextWindowError(error: unknown): boolean {
 	try {
-		if (!error || typeof error !== "object") {
+		const err = asRecord(error)
+		if (!err) {
 			return false
 		}
 
-		// Use Record<string, any> for proper type narrowing
-		const err = error as Record<string, UnsafeAny>
-		const status = err.status ?? err.code ?? err.error?.status ?? err.response?.status
-		const message: string = String(err.message || err.error?.message || "")
+		const nestedError = asRecord(err.error)
+		const response = asRecord(err.response)
+		const status = err.status ?? err.code ?? nestedError?.status ?? response?.status
+		const message: string = String(err.message || nestedError?.message || "")
 
 		// Known OpenAI/OpenRouter-style signal (code 400 and message includes "context length")
 		const CONTEXT_ERROR_PATTERNS = [
@@ -34,7 +39,7 @@ function checkIsOpenRouterContextWindowError(error: UnsafeAny): boolean {
 }
 
 // Docs: https://platform.openai.com/docs/guides/error-codes/api-errors
-function checkIsOpenAIContextWindowError(error: UnsafeAny): boolean {
+function checkIsOpenAIContextWindowError(error: unknown): boolean {
 	try {
 		// Check for LengthFinishReasonError
 		if (error && typeof error === "object" && "name" in error && error.name === "LengthFinishReasonError") {
@@ -54,19 +59,20 @@ function checkIsOpenAIContextWindowError(error: UnsafeAny): boolean {
 	}
 }
 
-function checkIsAnthropicContextWindowError(response: UnsafeAny): boolean {
+function checkIsAnthropicContextWindowError(response: unknown): boolean {
 	try {
 		// Type guard to safely access properties
-		if (!response || typeof response !== "object") {
+		const res = asRecord(response)
+		if (!res) {
 			return false
 		}
 
-		// Use type assertions with proper checks
-		const res = response as Record<string, UnsafeAny>
+		const nestedError = asRecord(res.error)
+		const errorBody = asRecord(nestedError?.error)
 
 		// Check for Anthropic-specific error structure with more specific validation
-		if (res.error?.error?.type === "invalid_request_error") {
-			const message: string = String(res.error?.error?.message || "")
+		if (errorBody?.type === "invalid_request_error") {
+			const message: string = String(errorBody.message || "")
 
 			// More specific patterns for context window errors
 			const contextWindowPatterns = [
@@ -80,7 +86,7 @@ function checkIsAnthropicContextWindowError(response: UnsafeAny): boolean {
 			]
 
 			// Additional check for Anthropic-specific error codes
-			const errorCode = res.error?.error?.code
+			const errorCode = errorBody.code
 			if (errorCode === "context_length_exceeded" || errorCode === "invalid_request_error") {
 				return contextWindowPatterns.some((pattern) => pattern.test(message))
 			}

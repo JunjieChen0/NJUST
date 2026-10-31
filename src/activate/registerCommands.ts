@@ -76,7 +76,7 @@ const getCommandsMap = ({
 	context,
 	outputChannel,
 	provider,
-}: RegisterCommandOptions): Record<CommandId, UnsafeAny> => ({
+}: RegisterCommandOptions): Record<CommandId, (...args: never[]) => unknown> => ({
 	activationCompleted: () => {},
 	plusButtonClicked: async () => {
 		const visibleProvider = getVisibleProviderOrLog(outputChannel)

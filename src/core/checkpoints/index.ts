@@ -6,6 +6,7 @@ import { TelemetryService } from "@njust-ai/telemetry"
 import { logger } from "../../shared/logger"
 
 import type { Task } from "../task/Task"
+import type { ITaskHost } from "../task/interfaces/ITaskHost"
 
 import { getWorkspacePath } from "../../utils/path"
 import { checkGitInstalled } from "../../utils/git"
@@ -123,7 +124,7 @@ export async function getCheckpointService(task: Task, { interval = 250 }: { int
 		}
 		return service
 	} catch (err) {
-		if ((err as Record<string, UnsafeAny>).name === "TimeoutError" && task.enableCheckpoints) {
+		if ((err as { name?: unknown }).name === "TimeoutError" && task.enableCheckpoints) {
 			sendCheckpointInitWarn(task, "INIT_TIMEOUT", task.checkpointTimeout)
 		}
 		log(`[Task#getCheckpointService] ${getErrorMessage(err)}`)
@@ -138,7 +139,7 @@ async function checkGitInstallation(
 	task: Task,
 	service: RepoPerTaskCheckpointService,
 	log: (message: string) => void,
-	provider: UnsafeAny,
+	provider: ITaskHost | undefined,
 ) {
 	try {
 		const gitInstalled = await checkGitInstalled()
@@ -171,7 +172,7 @@ async function checkGitInstallation(
 			try {
 				sendCheckpointInitWarn(task)
 				// Always update the current checkpoint hash in the webview, including the suppress flag
-				provider?.postMessageToWebview({
+				void provider?.postMessageToWebview({
 					type: "currentCheckpointUpdated",
 					text: to,
 					suppressMessage: !!suppressMessage,

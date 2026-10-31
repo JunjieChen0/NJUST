@@ -36,7 +36,7 @@ export function changeLanguage(language: string): void {
  * @param options Options for interpolation or pluralization
  * @returns The translated string
  */
-export function t(key: string, options?: Record<string, UnsafeAny>): string {
+export function t(key: string, options?: Record<string, unknown>): string {
 	return i18next.t(key, options)
 }
 

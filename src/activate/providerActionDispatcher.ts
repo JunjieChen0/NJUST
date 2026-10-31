@@ -5,6 +5,7 @@ import {
 	type CodeActionName,
 	type TerminalActionId,
 	type TerminalActionPromptType,
+	type ExtensionMessage,
 } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
 
@@ -17,7 +18,7 @@ import { findLast } from "../shared/array"
 export interface IProviderActionTarget {
 	readonly view?: { visible?: boolean }
 	getState(): Promise<{ customSupportPrompts?: Record<string, string | undefined> }>
-	postMessageToWebview(message: UnsafeAny): Promise<void>
+	postMessageToWebview(message: ExtensionMessage): Promise<void>
 	createTask(
 		text: string,
 		images?: string[],

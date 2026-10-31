@@ -78,7 +78,7 @@ import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "../../shared/api-constants"
  * - >= 32k  tokens → 3000
  * - >= 16k  tokens → 2400
  * - < 16k  tokens → max(800, min(DEFAULT, floor(window * 0.08)))
- * - UnsafeAny / < 4096 → DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET (4800)
+ * - unknown / < 4096 → DEFAULT_CANGJIE_CONTEXT_TOKEN_BUDGET (4800)
  *
  * The result of this function is *not* the final budget — it feeds into
  * `resolveCangjieContextTokenBudget`, which allows the user's VS Code
@@ -535,27 +535,7 @@ function positionalToConfig(
 	}
 }
 
-export async function SYSTEM_PROMPT_PARTS(cfg: SystemPromptConfig): Promise<SystemPromptParts>
-/** @deprecated Use the config-object overload. */
-export async function SYSTEM_PROMPT_PARTS(
-	context: vscode.ExtensionContext,
-	cwd: string,
-	supportsComputerUse: boolean,
-	mcpHub?: IMcpHubService,
-	diffStrategy?: DiffStrategy,
-	mode?: Mode,
-	customModePrompts?: CustomModePrompts,
-	customModes?: ModeConfig[],
-	globalCustomInstructions?: string,
-	experiments?: Record<string, boolean>,
-	language?: string,
-	rooIgnoreInstructions?: string,
-	settings?: SystemPromptSettings,
-	todoList?: TodoItem[],
-	modelId?: string,
-	skillsManager?: ISkillsManager,
-): Promise<SystemPromptParts>
-export async function SYSTEM_PROMPT_PARTS(
+async function systemPromptPartsFromArgs(
 	contextOrCfg: vscode.ExtensionContext | SystemPromptConfig,
 	cwd?: string,
 	supportsComputerUse?: boolean,
@@ -597,6 +577,64 @@ export async function SYSTEM_PROMPT_PARTS(
 	return generatePrompt(cfg)
 }
 
+export async function SYSTEM_PROMPT_PARTS(cfg: SystemPromptConfig): Promise<SystemPromptParts>
+/** @deprecated Use the config-object overload. */
+export async function SYSTEM_PROMPT_PARTS(
+	context: vscode.ExtensionContext,
+	cwd: string,
+	supportsComputerUse: boolean,
+	mcpHub?: IMcpHubService,
+	diffStrategy?: DiffStrategy,
+	mode?: Mode,
+	customModePrompts?: CustomModePrompts,
+	customModes?: ModeConfig[],
+	globalCustomInstructions?: string,
+	experiments?: Record<string, boolean>,
+	language?: string,
+	rooIgnoreInstructions?: string,
+	settings?: SystemPromptSettings,
+	todoList?: TodoItem[],
+	modelId?: string,
+	skillsManager?: ISkillsManager,
+): Promise<SystemPromptParts>
+export async function SYSTEM_PROMPT_PARTS(
+	contextOrCfg: vscode.ExtensionContext | SystemPromptConfig,
+	cwd?: string,
+	supportsComputerUse?: boolean,
+	mcpHub?: IMcpHubService,
+	diffStrategy?: DiffStrategy,
+	mode?: Mode,
+	customModePrompts?: CustomModePrompts,
+	customModes?: ModeConfig[],
+	globalCustomInstructions?: string,
+	experiments?: Record<string, boolean>,
+	language?: string,
+	rooIgnoreInstructions?: string,
+	settings?: SystemPromptSettings,
+	todoList?: TodoItem[],
+	modelId?: string,
+	skillsManager?: ISkillsManager,
+): Promise<SystemPromptParts> {
+	return systemPromptPartsFromArgs(
+		contextOrCfg,
+		cwd,
+		supportsComputerUse,
+		mcpHub,
+		diffStrategy,
+		mode,
+		customModePrompts,
+		customModes,
+		globalCustomInstructions,
+		experiments,
+		language,
+		rooIgnoreInstructions,
+		settings,
+		todoList,
+		modelId,
+		skillsManager,
+	)
+}
+
 export async function SYSTEM_PROMPT(cfg: SystemPromptConfig): Promise<string>
 /** @deprecated Use the config-object overload. */
 export async function SYSTEM_PROMPT(
@@ -635,10 +673,10 @@ export async function SYSTEM_PROMPT(
 	modelId?: string,
 	skillsManager?: ISkillsManager,
 ): Promise<string> {
-	const parts = await SYSTEM_PROMPT_PARTS(
-		contextOrCfg as UnsafeAny,
-		cwd as UnsafeAny,
-		supportsComputerUse as UnsafeAny,
+	const parts = await systemPromptPartsFromArgs(
+		contextOrCfg,
+		cwd,
+		supportsComputerUse,
 		mcpHub,
 		diffStrategy,
 		mode,

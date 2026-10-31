@@ -121,7 +121,7 @@ const FILE_PATH_FIELDS = [
 	"output_file",
 ]
 
-function looksLikePath(s: UnsafeAny): s is string {
+function looksLikePath(s: unknown): s is string {
 	if (typeof s !== "string") return false
 	return s.includes("/") || s.includes("\\") || s.includes(".")
 }
@@ -132,8 +132,8 @@ function extractToolInfo(messages: ApiMessage[]): { names: Set<string>; count: n
 	for (const msg of messages) {
 		if (!Array.isArray(msg.content)) continue
 		for (const block of msg.content) {
-			if (block.type === "tool_use" && (block as Record<string, UnsafeAny>).name) {
-				names.add((block as Record<string, UnsafeAny>).name)
+			if (block.type === "tool_use" && block.name) {
+				names.add(block.name)
 				count++
 			}
 		}
@@ -147,11 +147,13 @@ function extractFilePaths(messages: ApiMessage[]): Set<string> {
 		if (!Array.isArray(msg.content)) continue
 		for (const block of msg.content) {
 			if (block.type !== "tool_use") continue
-			const input = (block as Record<string, UnsafeAny>).input
+			const input = block.input
 			if (!input || typeof input !== "object") continue
+			const inputRecord = input as Record<string, unknown>
 			for (const field of FILE_PATH_FIELDS) {
-				if (looksLikePath(input[field])) {
-					paths.add(input[field])
+				const value = inputRecord[field]
+				if (looksLikePath(value)) {
+					paths.add(value)
 				}
 			}
 		}
@@ -167,8 +169,8 @@ function concatTextBlocks(messages: ApiMessage[], role: "user" | "assistant"): s
 			parts.push(msg.content)
 		} else if (Array.isArray(msg.content)) {
 			for (const block of msg.content) {
-				if (block.type === "text" && (block as Record<string, UnsafeAny>).text) {
-					parts.push((block as Record<string, UnsafeAny>).text)
+				if (block.type === "text" && block.text) {
+					parts.push(block.text)
 				}
 			}
 		}
@@ -189,7 +191,7 @@ function hasWriteOperation(messages: ApiMessage[]): boolean {
 		if (!Array.isArray(msg.content)) continue
 		for (const block of msg.content) {
 			if (block.type === "tool_use") {
-				const name = ((block as Record<string, UnsafeAny>).name ?? "") as string
+				const name = block.name ?? ""
 				if (/write_to_file|apply_diff|insert_content|search_and_replace/.test(name)) return true
 			}
 		}

@@ -32,9 +32,9 @@ export function computeUnifiedDiffStats(diff?: string): DiffStats | null {
 		let removed = 0
 
 		for (const p of patches) {
-			for (const h of (p as Record<string, UnsafeAny>).hunks ?? []) {
+			for (const h of p.hunks ?? []) {
 				for (const l of h.lines ?? []) {
-					const ch = (l as string)[0]
+					const ch = l[0]
 					if (ch === "+") added++
 					else if (ch === "-") removed++
 				}

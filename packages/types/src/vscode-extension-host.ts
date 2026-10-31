@@ -131,6 +131,8 @@ export interface ExtensionMessage {
 		type: "WAIT_TIMEOUT" | "INIT_TIMEOUT"
 		timeout: number
 	}
+	/** For currentCheckpointUpdated: whether the chat message should be shown in the webview */
+	suppressMessage?: boolean
 	action?:
 		| "chatButtonClicked"
 		| "settingsButtonClicked"

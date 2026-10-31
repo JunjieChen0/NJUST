@@ -57,7 +57,7 @@ export function buildToolDescription(block: ToolUse, customModes?: ModeConfig[])
 			if (block.nativeArgs) {
 				return (toolRegistry.get("read_file") as ReadFileTool).getReadFileToolDescription(
 					block.name,
-					block.nativeArgs as UnsafeAny,
+					block.nativeArgs as { path?: string },
 				)
 			}
 			return (toolRegistry.get("read_file") as ReadFileTool).getReadFileToolDescription(block.name, block.params)

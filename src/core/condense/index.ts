@@ -306,7 +306,7 @@ async function compactWithPTLRetry(
 			return { summary: "", cost: c, outputTokens: t }
 		} catch (err) {
 			const errMsg = getErrorMessage(err)
-			const errStatus = (err as Record<string, UnsafeAny>)?.status ?? 0
+			const errStatus = (err as { status?: unknown })?.status ?? 0
 			const isPTL =
 				errStatus === 413 ||
 				errStatus === 400 ||
@@ -470,7 +470,12 @@ export async function summarizeConversation(options: SummarizeConversationOption
 			let errorDetails = ""
 			if (error instanceof Error) {
 				errorDetails = `Error: ${error.message}`
-				const anyError = error as UnsafeAny as Record<string, UnsafeAny>
+				const anyError = error as Error & {
+					status?: unknown
+					code?: unknown
+					response?: unknown
+					body?: unknown
+				}
 				if (anyError.status) {
 					errorDetails += `\n\nHTTP Status: ${anyError.status}`
 				}

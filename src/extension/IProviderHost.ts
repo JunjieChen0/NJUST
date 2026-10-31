@@ -1,5 +1,11 @@
 import type * as vscode from "vscode"
-import type { ProviderSettings, ProviderSettingsEntry, CreateTaskOptions, HistoryItem } from "@njust-ai/types"
+import type {
+	ProviderSettings,
+	ProviderSettingsEntry,
+	CreateTaskOptions,
+	HistoryItem,
+	ExtensionMessage,
+} from "@njust-ai/types"
 import type { ContextProxy } from "../core/config/ContextProxy"
 import type { ProviderSettingsManager } from "../core/config/ProviderSettingsManager"
 import type { Task } from "../core/task/Task"
@@ -26,7 +32,7 @@ export interface IProviderHost {
 	createTaskWithHistoryItem(historyItem: HistoryItem, options?: unknown): Promise<Task | undefined>
 	cancelTask(): Promise<void>
 	postStateToWebview(): Promise<void>
-	postMessageToWebview(message: UnsafeAny): Promise<void>
+	postMessageToWebview(message: ExtensionMessage): Promise<void>
 	getProviderProfileEntries(): ProviderSettingsEntry[]
 	getProviderProfileEntry(name: string): ProviderSettingsEntry | undefined
 	upsertProviderProfile(name: string, profile: ProviderSettings, activate?: boolean): Promise<string | undefined>
@@ -34,5 +40,6 @@ export interface IProviderHost {
 	activateProviderProfile(args: { name: string }): Promise<void>
 	readonly stack: { pop(options?: unknown): Promise<void> }
 
-	on(event: string, listener: (...args: UnsafeAny[]) => void): this
+	// Dynamic event boundary: payload types are enforced by the emitting EventEmitter.
+	on(event: string, listener: (...args: any[]) => void): this
 }

@@ -1,11 +1,11 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as vscode from "vscode"
-import i18next from "i18next"
+import i18next, { type Resource } from "i18next"
 import { logger } from "../shared/logger"
 
 // Build translations object
-const translations: Record<string, Record<string, UnsafeAny>> = {}
+const translations: Resource = {}
 
 // Determine if running in test environment
 const isTestEnv = process.env.NODE_ENV === "test"

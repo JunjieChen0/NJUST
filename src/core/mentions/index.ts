@@ -272,7 +272,7 @@ export async function parseMentions(
 async function getFileOrFolderContentWithMetadata(
 	mentionPath: string,
 	cwd: string,
-	rooIgnoreController?: UnsafeAny,
+	rooIgnoreController?: RooIgnoreController,
 	showRooIgnoredFiles: boolean = false,
 	fileContextTracker?: FileContextTracker,
 ): Promise<MentionContentBlock> {
