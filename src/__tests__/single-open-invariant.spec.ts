@@ -7,6 +7,7 @@ import { API } from "../extension/api"
 import * as ProfileValidatorMod from "../shared/ProfileValidator"
 import type { TaskStackManager } from "../core/webview/TaskStackManager"
 import type { IProviderHost } from "../extension/IProviderHost"
+import { createMockClineProvider } from "./helpers/vscodeMocks"
 
 // Mock Task class used by ClineProvider to avoid heavy startup
 vi.mock("../core/task/Task", () => {
@@ -42,7 +43,7 @@ describe("Single-open-task invariant", () => {
 		const stackPop = vi.fn().mockResolvedValue(undefined)
 		const stackPush = vi.fn().mockResolvedValue(undefined)
 
-		const provider = {
+		const provider = createMockClineProvider({
 			// Simulate an existing task present in stack
 			stack: {
 				pop: stackPop,
@@ -78,7 +79,7 @@ describe("Single-open-task invariant", () => {
 					return {}
 				}),
 			},
-		} as unknown as ClineProvider
+		})
 		;(provider as any).taskCoordinator = {
 			createTask: (...args: any[]) => (ClineProvider.prototype as any).createTaskInternal.call(provider, ...args),
 		}
@@ -95,7 +96,7 @@ describe("Single-open-task invariant", () => {
 		const stackPush = vi.fn().mockResolvedValue(undefined)
 		const updateGlobalState = vi.fn().mockResolvedValue(undefined)
 
-		const provider = {
+		const provider = createMockClineProvider({
 			getCurrentTask: vi.fn(() => undefined), // ensure not rehydrating
 			stack: {
 				pop: stackPop,
@@ -146,7 +147,7 @@ describe("Single-open-task invariant", () => {
 				emit: vi.fn(),
 			}),
 			applyPendingEditIfPresent: vi.fn().mockResolvedValue(undefined),
-		} as unknown as ClineProvider
+		})
 
 		;(provider as any).taskManagement = new ClineProviderTaskManagement({
 			...(provider as any),

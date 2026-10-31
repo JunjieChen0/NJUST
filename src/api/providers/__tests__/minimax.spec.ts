@@ -37,7 +37,7 @@ describe("MiniMaxHandler", () => {
 
 	beforeEach(() => {
 		vitest.clearAllMocks()
-		const anthropicInstance = (Anthropic as unknown as any)()
+		const anthropicInstance = new Anthropic({} as never)
 		mockCreate = anthropicInstance.messages.create
 	})
 

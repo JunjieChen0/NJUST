@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest"
 
-import * as vscode from "vscode"
+import { createMockOutputChannel } from "../../__tests__/helpers/vscodeMocks"
 
 import { createOutputChannelLogger, createDualLogger } from "../outputChannelLogger"
 import { logger } from "../../shared/logger"
@@ -15,9 +15,9 @@ vitest.mock("../../shared/logger", () => ({
 }))
 
 // Mock VSCode output channel
-const mockOutputChannel = {
+const mockOutputChannel = createMockOutputChannel({
 	appendLine: vitest.fn(),
-} as unknown as vscode.OutputChannel
+})
 
 describe("outputChannelLogger", () => {
 	beforeEach(() => {

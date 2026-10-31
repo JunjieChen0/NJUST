@@ -28,8 +28,8 @@ describe("estimateContextTokens", () => {
 	})
 
 	it("returns 0 for falsy input", () => {
-		expect(estimateContextTokens(null as unknown as string)).toBe(0)
-		expect(estimateContextTokens(undefined as unknown as string)).toBe(0)
+		expect(estimateContextTokens(null as never)).toBe(0)
+		expect(estimateContextTokens(undefined as never)).toBe(0)
 	})
 
 	describe("ASCII words", () => {

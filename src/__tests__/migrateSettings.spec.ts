@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest"
 
 import * as vscode from "vscode"
+import { createMockExtensionContext, createMockOutputChannel } from "./helpers/vscodeMocks"
 import * as path from "path"
 import * as fs from "fs/promises"
 import { fileExistsAtPath } from "../utils/fs"
@@ -38,19 +39,19 @@ describe("Settings Migration", () => {
 		vitest.clearAllMocks()
 
 		// Mock output channel
-		mockOutputChannel = {
+		mockOutputChannel = createMockOutputChannel({
 			appendLine: vitest.fn(),
 			append: vitest.fn(),
 			clear: vitest.fn(),
 			show: vitest.fn(),
 			hide: vitest.fn(),
 			dispose: vitest.fn(),
-		} as unknown as vscode.OutputChannel
+		})
 
 		// Mock extension context
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			globalStorageUri: { fsPath: mockStoragePath },
-		} as unknown as vscode.ExtensionContext
+		})
 
 		// Set global outputChannel for all tests
 		;(global as any).outputChannel = mockOutputChannel

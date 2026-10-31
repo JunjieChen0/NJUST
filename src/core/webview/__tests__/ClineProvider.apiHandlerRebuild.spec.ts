@@ -3,6 +3,11 @@
 import { describe, expect, vi, beforeEach, it } from "vitest"
 
 import * as vscode from "vscode"
+import {
+	createMockExtensionContext,
+	createMockOutputChannel,
+	createMockWebviewView,
+} from "../../../__tests__/helpers/vscodeMocks"
 
 import { TelemetryService } from "@njust-ai/telemetry"
 import { getModelId } from "@njust-ai/types"
@@ -174,7 +179,7 @@ describe("ClineProvider - API Handler Rebuild Guard", () => {
 
 		const secrets: Record<string, string | undefined> = {}
 
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			extensionPath: "/test/path",
 			extensionUri: {} as vscode.Uri,
 			globalState: {
@@ -199,17 +204,17 @@ describe("ClineProvider - API Handler Rebuild Guard", () => {
 			globalStorageUri: {
 				fsPath: "/test/storage/path",
 			},
-		} as unknown as vscode.ExtensionContext
+		})
 
-		mockOutputChannel = {
+		mockOutputChannel = createMockOutputChannel({
 			appendLine: vi.fn(),
 			clear: vi.fn(),
 			dispose: vi.fn(),
-		} as unknown as vscode.OutputChannel
+		})
 
 		mockPostMessage = vi.fn()
 
-		mockWebviewView = {
+		mockWebviewView = createMockWebviewView({
 			webview: {
 				postMessage: mockPostMessage,
 				html: "",
@@ -227,7 +232,7 @@ describe("ClineProvider - API Handler Rebuild Guard", () => {
 					dispose: vi.fn(),
 				}
 			}),
-		} as unknown as vscode.WebviewView
+		})
 
 		provider = new ClineProvider(mockContext, mockOutputChannel, "sidebar", new ContextProxy(mockContext))
 

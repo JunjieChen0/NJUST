@@ -1,13 +1,13 @@
 import { vi } from "vitest"
 import type { MessageHandlerContext } from "../../handlers/MessageRouter"
-import type { ClineProvider } from "../../ClineProvider"
+import { createMockClineProvider } from "../../../../__tests__/helpers/vscodeMocks"
 
 /**
  * Creates a minimal MessageHandlerContext mock for handler unit tests.
  * Only mocks methods that handlers actually call — extend as needed.
  */
 export function createMockContext(overrides?: Partial<MessageHandlerContext>): MessageHandlerContext {
-	const provider = {
+	const provider = createMockClineProvider({
 		postMessageToWebview: vi.fn().mockResolvedValue(undefined),
 		postStateToWebview: vi.fn().mockResolvedValue(undefined),
 		getStateToPostToWebview: vi.fn().mockResolvedValue({}),
@@ -68,7 +68,7 @@ export function createMockContext(overrides?: Partial<MessageHandlerContext>): M
 				update: vi.fn().mockResolvedValue(undefined),
 			},
 		},
-	} as unknown as ClineProvider
+	})
 
 	const context: MessageHandlerContext = {
 		provider,

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import * as vscode from "vscode"
+import { createMockExtensionContext } from "../../__tests__/helpers/vscodeMocks"
 
 const {
 	existsSyncMock,
@@ -175,7 +176,7 @@ describe("registerCangjieTestCommands sandbox execution", () => {
 	})
 
 	function getRunTestCommand(): (testName: string, fileUri?: vscode.Uri) => Promise<void> {
-		const context = { subscriptions: [] } as unknown as vscode.ExtensionContext
+		const context = createMockExtensionContext({ subscriptions: [] })
 		registerCangjieTestCommands(context)
 		return registeredCommands.get("njust-ai.cangjieRunTest") as (
 			testName: string,

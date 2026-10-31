@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type * as vscode from "vscode"
+import { createMockExtensionContext } from "../../../__tests__/helpers/vscodeMocks"
 
 vi.mock("vscode", () => ({
 	workspace: {
@@ -115,12 +116,12 @@ function createMockProvider(): IMcpHubClient {
 }
 
 function createMockContext(): vscode.ExtensionContext {
-	return {
+	return createMockExtensionContext({
 		globalState: {
 			update: vi.fn().mockResolvedValue(undefined),
 			get: vi.fn().mockReturnValue(undefined),
 		},
-	} as unknown as vscode.ExtensionContext
+	})
 }
 
 describe("McpServerManager", () => {

@@ -6,6 +6,7 @@ import * as os from "os"
 import * as path from "path"
 
 import * as vscode from "vscode"
+import { createMockExtensionContext } from "../../../__tests__/helpers/vscodeMocks"
 import { Anthropic } from "@anthropic-ai/sdk"
 
 import type { GlobalState, ProviderSettings, ModelInfo } from "@njust-ai/types"
@@ -398,7 +399,7 @@ describe("Cline", () => {
 			fsPath: path.join(os.tmpdir(), "test-storage"),
 		}
 
-		mockExtensionContext = {
+		mockExtensionContext = createMockExtensionContext({
 			globalState: {
 				get: vi.fn(function (key: keyof GlobalState) {
 					if (key === "taskHistory") {
@@ -441,7 +442,7 @@ describe("Cline", () => {
 					version: "1.0.0",
 				},
 			},
-		} as unknown as vscode.ExtensionContext
+		})
 
 		// Setup mock output channel
 		mockOutputChannel = {
@@ -2188,7 +2189,7 @@ describe("Queued message processing after condense", () => {
 
 	function createProvider(): any {
 		const storageUri = { fsPath: path.join(os.tmpdir(), "test-storage") }
-		const ctx = {
+		const ctx = createMockExtensionContext({
 			globalState: {
 				get: vi.fn().mockImplementation((_key: keyof GlobalState) => undefined),
 				update: vi.fn().mockResolvedValue(undefined),
@@ -2207,7 +2208,7 @@ describe("Queued message processing after condense", () => {
 			},
 			extensionUri: { fsPath: "/mock/extension/path" },
 			extension: { packageJSON: { version: "1.0.0" } },
-		} as unknown as vscode.ExtensionContext
+		})
 
 		const output = {
 			appendLine: vi.fn(),
@@ -2314,7 +2315,7 @@ describe("pushToolResultToUserContent", () => {
 		}
 
 		const storageUri = { fsPath: path.join(os.tmpdir(), "test-storage") }
-		const mockExtensionContext = {
+		const mockExtensionContext = createMockExtensionContext({
 			globalState: {
 				get: vi.fn().mockImplementation((_key: keyof GlobalState) => undefined),
 				update: vi.fn().mockResolvedValue(undefined),
@@ -2333,7 +2334,7 @@ describe("pushToolResultToUserContent", () => {
 			},
 			extensionUri: { fsPath: "/mock/extension/path" },
 			extension: { packageJSON: { version: "1.0.0" } },
-		} as unknown as vscode.ExtensionContext
+		})
 
 		const mockOutputChannel = {
 			name: "test-output",

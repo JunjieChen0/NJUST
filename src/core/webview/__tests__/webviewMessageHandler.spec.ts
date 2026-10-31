@@ -54,7 +54,7 @@ const mockGetAccountId = vi.mocked(openAiCodexOAuthManager.getAccountId)
 const mockFetchOpenAiCodexRateLimitInfo = vi.mocked(fetchOpenAiCodexRateLimitInfo)
 
 // Mock ClineProvider
-const mockClineProvider = {
+const mockClineProvider = createMockClineProvider({
 	getState: vi.fn(),
 	postMessageToWebview: vi.fn(),
 	customModesManager: {
@@ -80,7 +80,7 @@ const mockClineProvider = {
 	createTaskWithHistoryItem: vi.fn(),
 	getSkillsManager: vi.fn(),
 	cwd: "/mock/workspace",
-} as unknown as ClineProvider
+})
 
 import { t } from "../../../i18n"
 
@@ -165,6 +165,7 @@ vi.mock("../../mentions/resolveImageMentions", () => ({
 }))
 
 import { resolveImageMentions } from "../../mentions/resolveImageMentions"
+import { createMockClineProvider } from "../../../__tests__/helpers/vscodeMocks"
 
 describe("webviewMessageHandler - requestLmStudioModels", () => {
 	beforeEach(() => {

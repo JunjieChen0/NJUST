@@ -2,6 +2,11 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import * as vscode from "vscode"
+import {
+	createMockExtensionContext,
+	createMockOutputChannel,
+	createMockWebviewView,
+} from "../../../__tests__/helpers/vscodeMocks"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { ClineProvider } from "../ClineProvider"
 import { ContextProxy } from "../../config/ContextProxy"
@@ -260,7 +265,7 @@ describe("ClineProvider - Sticky Provider Profile", () => {
 
 		const secrets: Record<string, string | undefined> = {}
 
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			extensionPath: "/test/path",
 			extensionUri: {} as vscode.Uri,
 			globalState: {
@@ -294,17 +299,17 @@ describe("ClineProvider - Sticky Provider Profile", () => {
 			globalStorageUri: {
 				fsPath: "/test/storage/path",
 			},
-		} as unknown as vscode.ExtensionContext
+		})
 
-		mockOutputChannel = {
+		mockOutputChannel = createMockOutputChannel({
 			appendLine: vi.fn(),
 			clear: vi.fn(),
 			dispose: vi.fn(),
-		} as unknown as vscode.OutputChannel
+		})
 
 		mockPostMessage = vi.fn()
 
-		mockWebviewView = {
+		mockWebviewView = createMockWebviewView({
 			webview: {
 				postMessage: mockPostMessage,
 				html: "",
@@ -323,7 +328,7 @@ describe("ClineProvider - Sticky Provider Profile", () => {
 					dispose: vi.fn(),
 				}
 			}),
-		} as unknown as vscode.WebviewView
+		})
 
 		provider = new ClineProvider(mockContext, mockOutputChannel, "sidebar", new ContextProxy(mockContext))
 

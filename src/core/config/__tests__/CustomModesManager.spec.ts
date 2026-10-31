@@ -7,6 +7,7 @@ import * as fs from "fs/promises"
 
 import * as yaml from "yaml"
 import * as vscode from "vscode"
+import { createMockExtensionContext } from "../../../__tests__/helpers/vscodeMocks"
 
 import type { ModeConfig } from "@njust-ai/types"
 
@@ -53,7 +54,7 @@ describe("CustomModesManager", () => {
 
 	beforeEach(() => {
 		mockOnUpdate = vi.fn()
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			globalState: {
 				get: vi.fn(),
 				update: vi.fn(),
@@ -63,7 +64,7 @@ describe("CustomModesManager", () => {
 			globalStorageUri: {
 				fsPath: mockStoragePath,
 			},
-		} as unknown as vscode.ExtensionContext
+		})
 
 		// mockWorkspacePath is now defined at the top level
 		mockWorkspaceFolders = [{ uri: { fsPath: mockWorkspacePath } }]

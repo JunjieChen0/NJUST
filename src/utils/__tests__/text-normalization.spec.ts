@@ -75,7 +75,7 @@ describe("Text normalization utilities", () => {
 
 		it("handles empty or undefined input", () => {
 			expect(unescapeHtmlEntities("")).toBe("")
-			expect(unescapeHtmlEntities(undefined as unknown as string)).toBe(undefined)
+			expect(unescapeHtmlEntities(undefined as never)).toBe(undefined)
 		})
 
 		it("unescapes square bracket entities (numeric)", () => {

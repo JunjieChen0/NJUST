@@ -25,7 +25,7 @@ describe("SambaNovaHandler", () => {
 
 	beforeEach(() => {
 		vitest.clearAllMocks()
-		mockCreate = (OpenAI as unknown as any)().chat.completions.create
+		mockCreate = new OpenAI({} as never).chat.completions.create
 		handler = new SambaNovaHandler({ sambaNovaApiKey: "test-sambanova-api-key" })
 	})
 

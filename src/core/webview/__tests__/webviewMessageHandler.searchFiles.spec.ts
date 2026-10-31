@@ -10,6 +10,7 @@ vi.mock("../../ignore/RooIgnoreController")
 import { webviewMessageHandler } from "../webviewMessageHandler"
 import type { ClineProvider } from "../ClineProvider"
 import { RooIgnoreController } from "../../ignore/RooIgnoreController"
+import { createMockClineProvider } from "../../../__tests__/helpers/vscodeMocks"
 
 const mockSearchWorkspaceFiles = vi.fn()
 
@@ -43,13 +44,13 @@ describe("webviewMessageHandler - searchFiles with RooIgnore filtering", () => {
 		;(RooIgnoreController.prototype as unknown as Record<string, Mock>).dispose = mockDispose
 
 		// Create mock ClineProvider
-		mockClineProvider = {
+		mockClineProvider = createMockClineProvider({
 			getState: vi.fn(),
 			postMessageToWebview: vi.fn(),
 			getCurrentTask: vi.fn(),
 			searchWorkspaceFiles: mockSearchWorkspaceFiles,
 			cwd: "/mock/workspace",
-		} as unknown as ClineProvider
+		})
 	})
 
 	it("should filter results using RooIgnoreController when showRooIgnoredFiles is false", async () => {
@@ -168,11 +169,11 @@ describe("webviewMessageHandler - searchFiles with RooIgnore filtering", () => {
 
 	it("should handle error when no workspace path is available", async () => {
 		// Create provider without cwd
-		mockClineProvider = {
+		mockClineProvider = createMockClineProvider({
 			...mockClineProvider,
 			cwd: undefined,
 			getCurrentTask: vi.fn().mockReturnValue(null),
-		} as unknown as ClineProvider
+		})
 
 		await webviewMessageHandler(mockClineProvider, {
 			type: "searchFiles",

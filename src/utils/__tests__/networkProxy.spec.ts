@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 import * as vscode from "vscode"
+import { createMockExtensionContext, createMockOutputChannel } from "../../__tests__/helpers/vscodeMocks"
 import { initializeNetworkProxy, getProxyConfig, isProxyEnabled, isDebugMode } from "../networkProxy"
 
 // Mock global-agent
@@ -31,7 +32,7 @@ describe("networkProxy", () => {
 
 	// Helper to create mock context with configurable extensionMode
 	function createMockContext(mode: vscode.ExtensionMode = vscode.ExtensionMode.Production): vscode.ExtensionContext {
-		return {
+		return createMockExtensionContext({
 			extensionMode: mode,
 			subscriptions: [],
 			extensionPath: "/test/path",
@@ -63,7 +64,7 @@ describe("networkProxy", () => {
 			environmentVariableCollection: {} as vscode.GlobalEnvironmentVariableCollection,
 			extension: {} as vscode.Extension<unknown>,
 			languageModelAccessInformation: {} as vscode.LanguageModelAccessInformation,
-		} as unknown as vscode.ExtensionContext
+		})
 	}
 
 	beforeEach(() => {
@@ -83,7 +84,7 @@ describe("networkProxy", () => {
 			mockConfig as unknown as vscode.WorkspaceConfiguration,
 		)
 
-		mockOutputChannel = {
+		mockOutputChannel = createMockOutputChannel({
 			appendLine: vi.fn(),
 			append: vi.fn(),
 			clear: vi.fn(),
@@ -92,7 +93,7 @@ describe("networkProxy", () => {
 			dispose: vi.fn(),
 			name: "Test",
 			replace: vi.fn(),
-		} as unknown as vscode.OutputChannel
+		})
 	})
 
 	describe("initializeNetworkProxy", () => {

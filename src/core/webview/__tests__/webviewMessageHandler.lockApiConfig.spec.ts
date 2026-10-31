@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { webviewMessageHandler } from "../webviewMessageHandler"
-import type { ClineProvider } from "../ClineProvider"
+import { createMockClineProvider } from "../../../__tests__/helpers/vscodeMocks"
 
 describe("webviewMessageHandler - lockApiConfigAcrossModes", () => {
 	let mockProvider: {
@@ -46,7 +46,7 @@ describe("webviewMessageHandler - lockApiConfigAcrossModes", () => {
 	})
 
 	it("sets lockApiConfigAcrossModes to true and posts state without mode config fan-out", async () => {
-		await webviewMessageHandler(mockProvider as unknown as ClineProvider, {
+		await webviewMessageHandler(createMockClineProvider(mockProvider), {
 			type: "lockApiConfigAcrossModes",
 			bool: true,
 		})
@@ -57,7 +57,7 @@ describe("webviewMessageHandler - lockApiConfigAcrossModes", () => {
 	})
 
 	it("sets lockApiConfigAcrossModes to false without applying to all modes", async () => {
-		await webviewMessageHandler(mockProvider as unknown as ClineProvider, {
+		await webviewMessageHandler(createMockClineProvider(mockProvider), {
 			type: "lockApiConfigAcrossModes",
 			bool: false,
 		})

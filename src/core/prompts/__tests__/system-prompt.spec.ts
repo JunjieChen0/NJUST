@@ -45,7 +45,7 @@ vi.mock("os-name", () => ({
 
 vi.mock("fs/promises")
 
-import * as vscode from "vscode"
+import { createMockExtensionContext } from "../../../__tests__/helpers/vscodeMocks"
 
 import { ModeConfig } from "@njust-ai/types"
 
@@ -149,7 +149,7 @@ vi.mock("../../../utils/shell", () => ({
 }))
 
 // Create a mock ExtensionContext
-const mockContext = {
+const mockContext = createMockExtensionContext({
 	extensionPath: "/mock/extension/path",
 	globalStoragePath: "/mock/storage/path",
 	storagePath: "/mock/storage/path",
@@ -172,7 +172,7 @@ const mockContext = {
 			version: "1.0.0",
 		},
 	},
-} as unknown as vscode.ExtensionContext
+})
 
 // Instead of extending IMcpHubService, create a mock that implements just what we need
 const createMockIMcpHubService = (withServers: boolean = false): IMcpHubService =>

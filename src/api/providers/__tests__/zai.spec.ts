@@ -32,7 +32,7 @@ describe("ZAiHandler", () => {
 
 	beforeEach(() => {
 		vitest.clearAllMocks()
-		mockCreate = (OpenAI as unknown as any)().chat.completions.create
+		mockCreate = new OpenAI({} as never).chat.completions.create
 	})
 
 	describe("International Z AI", () => {

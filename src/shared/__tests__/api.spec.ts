@@ -446,7 +446,7 @@ describe("shouldUseReasoningEffort", () => {
 		const model: ModelInfo = {
 			contextWindow: 100_000,
 			supportsPromptCache: true,
-			supportsReasoningEffort: ["disable", "low", "medium", "high"] as unknown as any,
+			supportsReasoningEffort: ["disable", "low", "medium", "high"],
 		}
 		const settings: ProviderSettings = { enableReasoningEffort: true, reasoningEffort: "disable" as any }
 		expect(shouldUseReasoningEffort({ model, settings })).toBe(false)
@@ -456,7 +456,7 @@ describe("shouldUseReasoningEffort", () => {
 		const model: ModelInfo = {
 			contextWindow: 100_000,
 			supportsPromptCache: true,
-			supportsReasoningEffort: ["none", "minimal", "low", "medium", "high"] as unknown as any,
+			supportsReasoningEffort: ["none", "minimal", "low", "medium", "high"],
 		}
 		const settings: ProviderSettings = { enableReasoningEffort: true, reasoningEffort: "none" as any }
 		expect(shouldUseReasoningEffort({ model, settings })).toBe(true)
@@ -466,7 +466,7 @@ describe("shouldUseReasoningEffort", () => {
 		const model: ModelInfo = {
 			contextWindow: 100_000,
 			supportsPromptCache: true,
-			supportsReasoningEffort: ["none", "minimal", "low", "medium", "high"] as unknown as any,
+			supportsReasoningEffort: ["none", "minimal", "low", "medium", "high"],
 		}
 		const settings: ProviderSettings = { enableReasoningEffort: true, reasoningEffort: "minimal" as any }
 		expect(shouldUseReasoningEffort({ model, settings })).toBe(true)

@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import * as os from "os"
 import * as path from "path"
 import * as vscode from "vscode"
+import { createMockExtensionContext, createMockOutputChannel } from "../../../__tests__/helpers/vscodeMocks"
 
 import type { GlobalState, ProviderSettings } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
@@ -223,7 +224,7 @@ describe("Task persistence", () => {
 
 		const storageUri = { fsPath: path.join(os.tmpdir(), "test-storage") }
 
-		mockExtensionContext = {
+		mockExtensionContext = createMockExtensionContext({
 			globalState: {
 				get: vi.fn().mockImplementation((_key: keyof GlobalState) => undefined),
 				update: vi.fn().mockImplementation((_key, _value) => Promise.resolve()),
@@ -242,16 +243,16 @@ describe("Task persistence", () => {
 			},
 			extensionUri: { fsPath: "/mock/extension/path" },
 			extension: { packageJSON: { version: "1.0.0" } },
-		} as unknown as vscode.ExtensionContext
+		})
 
-		mockOutputChannel = {
+		mockOutputChannel = createMockOutputChannel({
 			appendLine: vi.fn(),
 			append: vi.fn(),
 			clear: vi.fn(),
 			show: vi.fn(),
 			hide: vi.fn(),
 			dispose: vi.fn(),
-		} as unknown as vscode.OutputChannel
+		})
 
 		mockProvider = createTestProvider(mockExtensionContext, mockOutputChannel) as ITaskHost & Record<string, any>
 

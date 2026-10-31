@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import * as os from "os"
 import * as path from "path"
 import * as vscode from "vscode"
+import { createMockExtensionContext } from "../../../__tests__/helpers/vscodeMocks"
 
 import type { GlobalState, ProviderSettings } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
@@ -166,7 +167,7 @@ describe("Grace Retry Error Handling", () => {
 			fsPath: path.join(os.tmpdir(), "test-storage"),
 		}
 
-		mockExtensionContext = {
+		mockExtensionContext = createMockExtensionContext({
 			globalState: {
 				get: vi.fn().mockImplementation((_key: keyof GlobalState) => undefined),
 				update: vi.fn().mockImplementation((_key, _value) => Promise.resolve()),
@@ -191,7 +192,7 @@ describe("Grace Retry Error Handling", () => {
 					version: "1.0.0",
 				},
 			},
-		} as unknown as vscode.ExtensionContext
+		})
 
 		mockOutputChannel = {
 			appendLine: vi.fn(),

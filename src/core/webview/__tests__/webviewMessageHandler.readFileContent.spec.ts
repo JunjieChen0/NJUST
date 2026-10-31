@@ -63,12 +63,12 @@ vi.mock("../../mentions/resolveImageMentions", () => ({
 }))
 
 import { webviewMessageHandler } from "../webviewMessageHandler"
-import type { ClineProvider } from "../ClineProvider"
 import * as fs from "fs/promises"
+import { createMockClineProvider } from "../../../__tests__/helpers/vscodeMocks"
 
 const MOCK_CWD = "/mock/workspace/project"
 
-const mockProvider = {
+const mockProvider = createMockClineProvider({
 	getState: vi.fn(),
 	postMessageToWebview: vi.fn(),
 	customModesManager: {
@@ -93,7 +93,7 @@ const mockProvider = {
 	getTaskWithId: vi.fn(),
 	createTaskWithHistoryItem: vi.fn(),
 	cwd: MOCK_CWD,
-} as unknown as ClineProvider
+})
 
 describe("webviewMessageHandler - readFileContent path traversal prevention", () => {
 	beforeEach(() => {

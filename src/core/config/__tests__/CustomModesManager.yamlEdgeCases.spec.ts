@@ -7,6 +7,7 @@ import * as fs from "fs/promises"
 
 import * as yaml from "yaml"
 import * as vscode from "vscode"
+import { createMockExtensionContext } from "../../../__tests__/helpers/vscodeMocks"
 
 import { fileExistsAtPath } from "../../../utils/fs"
 import { getWorkspacePath } from "../../../utils/path"
@@ -50,7 +51,7 @@ describe("CustomModesManager - YAML Edge Cases", () => {
 
 	beforeEach(() => {
 		mockOnUpdate = vi.fn()
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			globalState: {
 				get: vi.fn(),
 				update: vi.fn(),
@@ -60,7 +61,7 @@ describe("CustomModesManager - YAML Edge Cases", () => {
 			globalStorageUri: {
 				fsPath: mockStoragePath,
 			},
-		} as unknown as vscode.ExtensionContext
+		})
 
 		mockWorkspaceFolders = [{ uri: { fsPath: "/mock/workspace" } }]
 		;(vscode.workspace as any).workspaceFolders = mockWorkspaceFolders

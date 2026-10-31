@@ -43,6 +43,7 @@ import {
 	handleMoveSkill,
 	handleOpenSkillFile,
 } from "../skillsMessageHandler"
+import { createMockClineProvider } from "../../../__tests__/helpers/vscodeMocks"
 
 describe("skillsMessageHandler", () => {
 	const mockLog = vi.fn()
@@ -66,11 +67,11 @@ describe("skillsMessageHandler", () => {
 				}
 			: undefined
 
-		return {
+		return createMockClineProvider({
 			log: mockLog,
 			postMessageToWebview: mockPostMessageToWebview,
 			getSkillsManager: () => skillsManager,
-		} as unknown as ClineProvider
+		})
 	}
 
 	const mockSkills: SkillMetadata[] = [

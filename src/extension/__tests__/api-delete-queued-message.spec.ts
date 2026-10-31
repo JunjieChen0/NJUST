@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import * as vscode from "vscode"
+import { createMockOutputChannel } from "../../__tests__/helpers/vscodeMocks"
 
 import { API } from "../api"
 import type { IProviderHost } from "../IProviderHost"
@@ -14,9 +15,9 @@ describe("API - DeleteQueuedMessage Command", () => {
 	let mockLog: ReturnType<typeof vi.fn>
 
 	beforeEach(() => {
-		mockOutputChannel = {
+		mockOutputChannel = createMockOutputChannel({
 			appendLine: vi.fn(),
-		} as unknown as vscode.OutputChannel
+		})
 
 		mockRemoveMessage = vi.fn().mockReturnValue(true)
 

@@ -45,6 +45,7 @@ import type { ClineProvider } from "../ClineProvider"
 import type { ClineMessage } from "@njust-ai/types"
 import type { ApiMessage } from "../../task-persistence/apiMessages"
 import { MessageManager } from "../../message-manager"
+import { createMockClineProvider } from "../../../__tests__/helpers/vscodeMocks"
 
 describe("webviewMessageHandler - Edit Message with Timestamp Fallback", () => {
 	let mockClineProvider: ClineProvider
@@ -65,7 +66,7 @@ describe("webviewMessageHandler - Edit Message with Timestamp Fallback", () => {
 		mockCurrentTask.messageManager = new MessageManager(mockCurrentTask)
 
 		// Create mock provider
-		mockClineProvider = {
+		mockClineProvider = createMockClineProvider({
 			getCurrentTask: vi.fn().mockReturnValue(mockCurrentTask),
 			postMessageToWebview: vi.fn(),
 			contextProxy: {
@@ -78,7 +79,7 @@ describe("webviewMessageHandler - Edit Message with Timestamp Fallback", () => {
 				maxImageFileSize: 5,
 				maxTotalImageSize: 20,
 			}),
-		} as unknown as ClineProvider
+		})
 	})
 
 	it("should not modify API history when apiConversationHistoryIndex is -1", async () => {

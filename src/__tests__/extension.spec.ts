@@ -3,6 +3,7 @@
 import { describe, expect, vi, beforeEach, it } from "vitest"
 
 import type * as vscode from "vscode"
+import { createMockExtensionContext } from "./helpers/vscodeMocks"
 import * as fsModule from "fs"
 import * as dotenvxModule from "@dotenvx/dotenvx"
 
@@ -378,7 +379,7 @@ describe("extension.ts", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 
-		mockContext = {
+		mockContext = createMockExtensionContext({
 			extensionPath: "/test/path",
 			globalState: {
 				get: vi.fn().mockReturnValue(undefined),
@@ -388,7 +389,7 @@ describe("extension.ts", () => {
 			storageUri: { fsPath: "/test/storage", scheme: "file", path: "/test/storage" },
 			subscriptions: [],
 			secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn(), onDidChange: vi.fn() },
-		} as unknown as vscode.ExtensionContext
+		})
 	})
 
 	it("does not call dotenvx.config when optional .env does not exist", async () => {

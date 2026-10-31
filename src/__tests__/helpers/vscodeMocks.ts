@@ -45,3 +45,25 @@ export function createMockWebviewView(overrides: Record<string, unknown> = {}): 
 		...overrides,
 	} as unknown as vscode.WebviewView
 }
+
+export function createMockClineProvider(
+	overrides: Record<string, unknown> = {},
+): import("../../core/webview/ClineProvider").ClineProvider {
+	return {
+		log: vi.fn(),
+		postMessageToWebview: vi.fn().mockResolvedValue(undefined),
+		postStateToWebview: vi.fn().mockResolvedValue(undefined),
+		refreshWorkspace: vi.fn().mockResolvedValue(undefined),
+		getState: vi.fn().mockResolvedValue({}),
+		getCurrentTask: vi.fn(),
+		getSkillsManager: vi.fn(),
+		getMcpHub: vi.fn(),
+		contextProxy: {
+			getValue: vi.fn(),
+			setValue: vi.fn().mockResolvedValue(undefined),
+			globalStorageUri: { fsPath: "/test/storage" },
+		},
+		providerSettingsManager: {},
+		...overrides,
+	} as unknown as import("../../core/webview/ClineProvider").ClineProvider
+}
