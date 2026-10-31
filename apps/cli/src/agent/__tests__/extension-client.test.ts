@@ -10,8 +10,15 @@ import {
 import { AgentLoopState, detectAgentState } from "../agent-state.js"
 import { createMockClient } from "../extension-client.js"
 
-function createMessage(overrides: Partial<ClineMessage>): ClineMessage {
-	return { id: `msg-${Date.now()}-${Math.random()}`, ts: Date.now() + Math.random() * 1000, type: "say", ...overrides }
+type LooseMessage = Omit<Partial<ClineMessage>, "ask" | "say"> & { ask?: string; say?: string }
+
+function createMessage(overrides: LooseMessage): ClineMessage {
+	return {
+		id: `msg-${Date.now()}-${Math.random()}`,
+		ts: Date.now() + Math.random() * 1000,
+		type: "say",
+		...overrides,
+	} as ClineMessage
 }
 
 function createStateMessage(messages: ClineMessage[], mode?: string): ExtensionMessage {
@@ -788,8 +795,7 @@ describe("Edge Cases", () => {
 
 			client.handleMessage({
 				type: "state",
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				state: {} as any,
+				state: {},
 			})
 
 			// Should not crash, state should remain unchanged.
@@ -799,8 +805,7 @@ describe("Edge Cases", () => {
 		it("should handle state message with missing state field", () => {
 			const { client } = createMockClient()
 
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			client.handleMessage({ type: "state" } as any)
+			client.handleMessage({ type: "state" })
 
 			// Should not crash
 			expect(client.getCurrentState()).toBe(AgentLoopState.NO_TASK)
@@ -833,16 +838,14 @@ describe("Edge Cases", () => {
 
 	describe("Unknown message types", () => {
 		it("should handle unknown ask types gracefully", () => {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const messages = [createMessage({ type: "ask", ask: "unknown_type" as any, partial: false })]
+			const messages = [createMessage({ type: "ask", ask: "unknown_type", partial: false })]
 			const state = detectAgentState(messages)
 			// Unknown ask type should default to RUNNING.
 			expect(state.state).toBe(AgentLoopState.RUNNING)
 		})
 
 		it("should handle unknown say types gracefully", () => {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const messages = [createMessage({ say: "unknown_say_type" as any })]
+			const messages = [createMessage({ say: "unknown_say_type" })]
 			const state = detectAgentState(messages)
 			expect(state.state).toBe(AgentLoopState.RUNNING)
 		})

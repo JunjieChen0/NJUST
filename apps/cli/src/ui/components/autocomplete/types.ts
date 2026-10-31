@@ -50,7 +50,7 @@ export interface AutocompleteTrigger<T extends AutocompleteItem = AutocompleteIt
 	 * @param lineText - The current line of text
 	 * @returns Detection result with query and position, or null if trigger not active
 	 */
-	detectTrigger: (lineText: string) => TriggerDetectionResult | null
+	detectTrigger(lineText: string): TriggerDetectionResult | null
 
 	/**
 	 * Search/filter results based on query.
@@ -58,7 +58,7 @@ export interface AutocompleteTrigger<T extends AutocompleteItem = AutocompleteIt
 	 * @param query - The search query
 	 * @returns Array of matching items
 	 */
-	search: (query: string) => T[] | Promise<T[]>
+	search(query: string): T[] | Promise<T[]>
 
 	/**
 	 * Get current results without triggering a new search.
@@ -67,7 +67,7 @@ export interface AutocompleteTrigger<T extends AutocompleteItem = AutocompleteIt
 	 * @param query - The search query for filtering
 	 * @returns Array of matching items from current data
 	 */
-	refreshResults?: (query: string) => T[] | Promise<T[]>
+	refreshResults?(query: string): T[] | Promise<T[]>
 
 	/**
 	 * Render a single item in the picker dropdown.
@@ -75,7 +75,7 @@ export interface AutocompleteTrigger<T extends AutocompleteItem = AutocompleteIt
 	 * @param isSelected - Whether this item is currently selected
 	 * @returns React node to render
 	 */
-	renderItem: (item: T, isSelected: boolean) => ReactNode
+	renderItem(item: T, isSelected: boolean): ReactNode
 
 	/**
 	 * Generate the replacement text when an item is selected.
@@ -84,7 +84,7 @@ export interface AutocompleteTrigger<T extends AutocompleteItem = AutocompleteIt
 	 * @param triggerIndex - Position of trigger character in line
 	 * @returns The new line text with selection inserted
 	 */
-	getReplacementText: (item: T, lineText: string, triggerIndex: number) => string
+	getReplacementText(item: T, lineText: string, triggerIndex: number): string
 
 	/**
 	 * Message to show when no results match.

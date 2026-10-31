@@ -24,6 +24,7 @@ import { convertToolsForResponsesApi } from "./tools"
 import { dispatchEvent, type EventHandlerContext } from "./event-handlers"
 import { parseSseStream, type SseParserContext } from "./sse-parser"
 
+// TS requires mixin constructors to use a rest `any[]` parameter; this is a language constraint.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any>(Base: T) {
 	abstract class ResponsesApiImpl extends Base {

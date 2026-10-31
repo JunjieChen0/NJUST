@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, type FC } from "react"
 import { ScatterChart, Scatter, XAxis, YAxis, Customized, Cross, LabelList } from "recharts"
 
 import { formatCurrency } from "@/lib"
@@ -241,13 +241,17 @@ export const Plot = ({ tableData }: PlotProps) => {
 	)
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const renderQuadrant = (props: any) => (
+interface QuadrantProps {
+	width?: number
+	height?: number
+}
+
+const renderQuadrant: FC<QuadrantProps> = ({ width = 0, height = 0 }) => (
 	<Cross
-		width={props.width}
-		height={props.height}
-		x={props.width / 2 + 35}
-		y={props.height / 2 - 15}
+		width={width}
+		height={height}
+		x={width / 2 + 35}
+		y={height / 2 - 15}
 		top={0}
 		left={0}
 		stroke="currentColor"
@@ -255,9 +259,16 @@ const renderQuadrant = (props: any) => (
 	/>
 )
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const renderCustomLabel = (props: any, position: LabelPosition) => {
-	const { x, y, value } = props
+interface CustomLabelProps {
+	x?: number | string
+	y?: number | string
+	value?: number | string
+}
+
+const renderCustomLabel = (props: CustomLabelProps, position: LabelPosition) => {
+	const x = typeof props.x === "number" ? props.x : Number(props.x ?? 0)
+	const y = typeof props.y === "number" ? props.y : Number(props.y ?? 0)
+	const value = props.value == null ? "" : String(props.value)
 	const maxWidth = 80 // Maximum width in pixels - adjust as needed.
 
 	const truncateText = (text: string, maxChars: number = 20) => {

@@ -1,6 +1,7 @@
 import { type ModelInfo, type ReasoningEffortExtended, type ServiceTier } from "@njust-ai/types"
 import { type OpenAiNativeModel } from "./base"
 
+// TS requires mixin constructors to use a rest `any[]` parameter; this is a language constraint.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function ReasoningMixin<T extends abstract new (...args: any[]) => any>(Base: T) {
 	abstract class ReasoningBase extends Base {

@@ -392,7 +392,9 @@ async function handleRenameApiConfiguration(context: MessageHandlerContext, mess
 	const { provider } = context
 	if (message.values && message.apiConfiguration) {
 		try {
-			const { oldName, newName } = message.values
+			const oldName = typeof message.values.oldName === "string" ? message.values.oldName : undefined
+			const newName = typeof message.values.newName === "string" ? message.values.newName : undefined
+			if (!oldName || !newName) return
 			if (oldName === newName) return
 			const { id } = await provider.providerSettingsManager.getProfile({ name: oldName })
 			await provider.providerSettingsManager.saveConfig(newName, { ...message.apiConfiguration, id })
@@ -480,7 +482,7 @@ async function handleFlushRouterModels(_context: MessageHandlerContext, message:
 async function handleRequestRouterModels(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
 	const { provider } = context
 	const { apiConfiguration } = await provider.getState()
-	const requestedProvider = message?.values?.provider
+	const requestedProvider = typeof message?.values?.provider === "string" ? message.values.provider : undefined
 	const providerFilter = requestedProvider ? toRouterName(requestedProvider) : undefined
 	const shouldRefresh = message?.values?.refresh === true
 
@@ -655,8 +657,12 @@ async function handleRequestRouterModels(context: MessageHandlerContext, message
 		},
 	]
 
-	const litellmApiKey = apiConfiguration.litellmApiKey || message?.values?.litellmApiKey
-	const litellmBaseUrl = apiConfiguration.litellmBaseUrl || message?.values?.litellmBaseUrl
+	const litellmApiKey =
+		apiConfiguration.litellmApiKey ||
+		(typeof message?.values?.litellmApiKey === "string" ? message.values.litellmApiKey : undefined)
+	const litellmBaseUrl =
+		apiConfiguration.litellmBaseUrl ||
+		(typeof message?.values?.litellmBaseUrl === "string" ? message.values.litellmBaseUrl : undefined)
 	if (litellmApiKey && litellmBaseUrl) {
 		if (message?.values?.litellmApiKey || message?.values?.litellmBaseUrl) {
 			await flushModels({ provider: "litellm", apiKey: litellmApiKey, baseUrl: litellmBaseUrl }, true)
@@ -766,11 +772,13 @@ async function handleRequestRooModels(context: MessageHandlerContext, _message: 
 
 async function handleRequestOpenAiModels(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
 	const { provider } = context
-	if (message?.values?.baseUrl && message?.values?.apiKey) {
+	const baseUrl = message?.values?.baseUrl
+	const apiKey = message?.values?.apiKey
+	if (typeof baseUrl === "string" && typeof apiKey === "string") {
 		const openAiModels = await getOpenAiModels(
-			message.values.baseUrl,
-			message.values.apiKey,
-			message.values.openAiHeaders,
+			baseUrl,
+			apiKey,
+			message?.values?.openAiHeaders as Record<string, string> | undefined,
 		)
 		void provider.postMessageToWebview({ type: "openAiModels", openAiModels })
 	}
@@ -924,7 +932,10 @@ async function handleRequestOpenAiCodexRateLimits(
 		const accountId = await openAiCodexOAuthManager.getAccountId()
 		const { fetchOpenAiCodexRateLimitInfo } = await import("../../../integrations/openai-codex/rate-limits")
 		const rateLimits = await fetchOpenAiCodexRateLimitInfo(accessToken, { accountId })
-		void provider.postMessageToWebview({ type: "openAiCodexRateLimits", values: rateLimits })
+		void provider.postMessageToWebview({
+			type: "openAiCodexRateLimits",
+			values: rateLimits ? { ...rateLimits } : undefined,
+		})
 	} catch (error) {
 		const errorMessage = getErrorMessage(error)
 		provider.log(`Error fetching OpenAI Codex rate limits: ${errorMessage}`)

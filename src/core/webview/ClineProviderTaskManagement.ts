@@ -8,7 +8,15 @@
 import pWaitFor from "p-wait-for"
 import * as vscode from "vscode"
 
-import { type HistoryItem, type CreateTaskOptions, type NJUST_AISettings, TelemetryEventName } from "@njust-ai/types"
+import {
+	type HistoryItem,
+	type CreateTaskOptions,
+	type NJUST_AISettings,
+	type ModeConfig,
+	type ProviderSettings,
+	type OrganizationAllowList,
+	TelemetryEventName,
+} from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
 
 import { Package } from "../../shared/package"
@@ -27,16 +35,13 @@ export interface ClineProviderTaskManagementHost {
 	readonly stack: TaskStackManager
 	readonly taskHistory: { getRecentTasks(): string[] }
 	readonly pendingEditManager: PendingEditManager
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	readonly customModesManager: { updateCustomMode(slug: string, mode: any): Promise<void> }
+	readonly customModesManager: { updateCustomMode(slug: string, mode: ModeConfig): Promise<void> }
 	readonly taskCreationCallback: (task: Task) => void
 	readonly provider: ClineProvider
 
 	getState(): Promise<{
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		apiConfiguration: any
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		organizationAllowList: any
+		apiConfiguration: ProviderSettings
+		organizationAllowList: OrganizationAllowList
 		enableCheckpoints: boolean
 		checkpointTimeout: number
 		experiments: Record<string, boolean>

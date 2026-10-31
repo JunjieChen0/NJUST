@@ -77,8 +77,8 @@ function callPrivate<T>(host: ExtensionHost, method: string, ...args: unknown[])
  * This uses a more permissive type to avoid TypeScript errors with vi.spyOn on private methods
  */
 function spyOnPrivate(host: ExtensionHost, method: string) {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	return vi.spyOn(host as any, method)
+	type SpyTarget = ExtensionHost & Record<string, (...args: unknown[]) => unknown>
+	return vi.spyOn(host as SpyTarget, method)
 }
 
 describe("ExtensionHost", () => {

@@ -61,8 +61,7 @@ export function consolidateCommands(messages: ClineMessage[]): ClineMessage[] {
 
 			if (responses.length > 0) {
 				// Parse the JSON from the message text
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const jsonObj = safeJsonParse<any>(msg.text || "{}", {})
+				const jsonObj = safeJsonParse<Record<string, unknown>>(msg.text || "{}", {}) ?? {}
 
 				// Add the response to the JSON object
 				jsonObj.response = responses.join("\n")

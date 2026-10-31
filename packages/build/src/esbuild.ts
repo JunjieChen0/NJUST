@@ -264,16 +264,16 @@ export function generatePackageJson({
 	overrideJson,
 	substitution,
 }: {
-	packageJson: Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
-	overrideJson: Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+	packageJson: Record<string, unknown>
+	overrideJson: Record<string, unknown>
 	substitution: [string, string]
 }) {
 	const { viewsContainers, views, commands, menus, submenus, keybindings, configuration } =
 		contributesSchema.parse(contributes)
 	const [from, to] = substitution
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const result: Record<string, any> = {
+	type GeneratedPackageJson = Record<string, unknown> & { contributes: Record<string, unknown> }
+	const result: GeneratedPackageJson = {
 		...packageJson,
 		...overrideJson,
 		contributes: {
@@ -297,17 +297,23 @@ export function generatePackageJson({
 	return result
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function transformArrayRecord<T>(obj: Record<string, any[]>, from: string, to: string, props: string[]): T {
+function transformArrayRecord<T extends object>(
+	obj: Record<string, object[]>,
+	from: string,
+	to: string,
+	props: string[],
+): T {
 	return Object.entries(obj).reduce(
 		(acc, [key, ary]) => ({
 			...acc,
 			[key.replaceAll(from, to)]: ary.map((item) => {
-				const transformedItem = { ...item }
+				const record = item as Record<string, unknown>
+				const transformedItem: Record<string, unknown> = { ...record }
 
 				for (const prop of props) {
-					if (prop in item && typeof item[prop] === "string") {
-						transformedItem[prop] = item[prop].replaceAll(from, to)
+					const value = record[prop]
+					if (typeof value === "string") {
+						transformedItem[prop] = value.replaceAll(from, to)
 					}
 				}
 
@@ -318,16 +324,18 @@ function transformArrayRecord<T>(obj: Record<string, any[]>, from: string, to: s
 	)
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function transformArray<T>(arr: any[], from: string, to: string, idProp: string): T[] {
-	return arr.map(({ [idProp]: id, ...rest }) => ({
-		[idProp]: id.replaceAll(from, to),
-		...rest,
-	}))
+function transformArray<T extends object>(arr: object[], from: string, to: string, idProp: string): T[] {
+	return arr.map((raw) => {
+		const item = raw as Record<string, unknown>
+		const { [idProp]: id, ...rest } = item
+		return {
+			[idProp]: typeof id === "string" ? id.replaceAll(from, to) : id,
+			...rest,
+		}
+	}) as T[]
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function transformRecord<T>(obj: Record<string, any>, from: string, to: string): T {
+function transformRecord<T extends object>(obj: Record<string, unknown>, from: string, to: string): T {
 	return Object.entries(obj).reduce(
 		(acc, [key, value]) => ({
 			...acc,

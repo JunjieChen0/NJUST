@@ -125,8 +125,8 @@ export interface ExtensionMessage {
 	text?: string
 	/** For fileContent: { path, content, error? } */
 	fileContent?: { path: string; content: string | null; error?: string }
-	payload?: any // eslint-disable-line @typescript-eslint/no-explicit-any
-	plan?: any // eslint-disable-line @typescript-eslint/no-explicit-any
+	payload?: unknown
+	plan?: unknown
 	checkpointWarning?: {
 		type: "WAIT_TIMEOUT" | "INIT_TIMEOUT"
 		timeout: number
@@ -171,8 +171,7 @@ export interface ExtensionMessage {
 	slug?: string
 	success?: boolean
 	/** Generic payload for extension messages that use `values` */
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	values?: Record<string, any>
+	values?: Record<string, unknown>
 	requestId?: string
 	promptText?: string
 	results?:
@@ -180,7 +179,7 @@ export interface ExtensionMessage {
 		| { name: string; description?: string; argumentHint?: string; source: "global" | "project" | "built-in" }[]
 	error?: string
 	setting?: string
-	value?: any // eslint-disable-line @typescript-eslint/no-explicit-any
+	value?: unknown
 	hasContent?: boolean
 	userInfo?: CloudUserInfo
 	organizationAllowList?: OrganizationAllowList
@@ -188,7 +187,7 @@ export interface ExtensionMessage {
 	errors?: string[]
 	visibility?: ShareVisibility
 	rulesFolderPath?: string
-	settings?: any // eslint-disable-line @typescript-eslint/no-explicit-any
+	settings?: unknown
 	messageTs?: number
 	hasCheckpoint?: boolean
 	context?: string
@@ -417,8 +416,7 @@ export type ClineAskResponse = "yesButtonClicked" | "noButtonClicked" | "message
 export type AudioType = "notification" | "celebration" | "progress_loop"
 
 export interface UpdateTodoListPayload {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	todos: any[]
+	todos: TodoItem[]
 }
 
 export type EditQueuedMessagePayload = Pick<QueuedMessage, "id" | "text" | "images">
@@ -617,8 +615,7 @@ export interface WebviewMessage {
 	customPrompt?: PromptComponent
 	dataUrls?: string[]
 	/** Generic payload for webview messages that use `values` */
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	values?: Record<string, any>
+	values?: Record<string, unknown>
 	query?: string
 	setting?: string
 	slug?: string
@@ -642,15 +639,13 @@ export interface WebviewMessage {
 	messageTs?: number
 	restoreCheckpoint?: boolean
 	historyPreviewCollapsed?: boolean
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	settings?: any
+	settings?: unknown
 	url?: string // For openExternal
 	state?: string // For OAuth state parameter (openRouterOAuthState)
 	codeVerifier?: string // For OAuth PKCE code_verifier (openRouterOAuthState)
 	oauthProvider?: "openrouter" | "requesty" // Which provider initiated the OAuth flow
 	oauthBaseUrl?: string // The base URL configured at OAuth initiation (for callback binding)
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	config?: Record<string, any>
+	config?: Record<string, unknown>
 	visibility?: ShareVisibility // For share visibility
 	hasContent?: boolean // For checkRulesDirectoryResult
 	checkOnly?: boolean // For deleteCustomMode check

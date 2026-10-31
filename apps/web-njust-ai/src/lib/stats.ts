@@ -19,6 +19,13 @@ export async function getGitHubStars() {
 	}
 }
 
+interface MarketplaceReview {
+	reviewer?: { displayName?: string }
+	rating?: number
+	text?: string
+	date?: string
+}
+
 export async function getVSCodeReviews() {
 	try {
 		const res = await fetch("https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery", {
@@ -43,24 +50,28 @@ export async function getVSCodeReviews() {
 			signal: AbortSignal.timeout(STATS_FETCH_TIMEOUT_MS),
 		})
 		const data = await res.json()
-		const reviews = data?.results?.[0]?.extensions?.[0]?.reviews
+		const reviews: MarketplaceReview[] | undefined = data?.results?.[0]?.extensions?.[0]?.reviews
 
 		if (!reviews) {
 			console.error("VSCode API: Missing reviews in response")
 			return []
 		}
 
-		/* eslint-disable  @typescript-eslint/no-explicit-any */
-		return reviews.map((review: any) => ({
+		return reviews.map((review) => ({
 			name: review.reviewer?.displayName || "Anonymous",
 			rating: review.rating,
 			content: review.text,
-			date: new Date(review.date).toLocaleDateString(),
+			date: new Date(review.date ?? "").toLocaleDateString(),
 		}))
 	} catch (error) {
 		console.error("Error fetching VSCode reviews:", error)
 		return []
 	}
+}
+
+interface MarketplaceStatistic {
+	statisticName?: string
+	value: number
 }
 
 export async function getVSCodeDownloads() {
@@ -87,15 +98,14 @@ export async function getVSCodeDownloads() {
 			signal: AbortSignal.timeout(STATS_FETCH_TIMEOUT_MS),
 		})
 		const data = await res.json()
-		const statistics = data?.results?.[0]?.extensions?.[0]?.statistics
+		const statistics: MarketplaceStatistic[] | undefined = data?.results?.[0]?.extensions?.[0]?.statistics
 
 		if (!statistics) {
 			console.error("VSCode API: Missing statistics in response")
 			return null
 		}
 
-		/* eslint-disable  @typescript-eslint/no-explicit-any */
-		const installStat = statistics.find((stat: any) => stat.statisticName === "install")
+		const installStat = statistics.find((stat) => stat.statisticName === "install")
 		if (!installStat) {
 			console.error("VSCode API: Install count not found")
 			return null

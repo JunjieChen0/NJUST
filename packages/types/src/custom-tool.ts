@@ -47,12 +47,14 @@ export interface CustomToolDefinition {
 	/**
 	 * The function that executes the tool.
 	 *
+	 * Use `defineCustomTool` (or `TypedCustomToolDefinition`) for inferring
+	 * argument types from the parameter schema.
+	 *
 	 * @param args - The validated arguments
 	 * @param context - Execution context with session and message info
 	 * @returns A string result to return to the AI
 	 */
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	execute: (args: any, context: CustomToolContext) => Promise<string>
+	execute(args: unknown, context: CustomToolContext): Promise<string>
 }
 
 export interface SerializedCustomToolDefinition {

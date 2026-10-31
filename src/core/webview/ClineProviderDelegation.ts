@@ -1,6 +1,12 @@
 import * as vscode from "vscode"
 
-import { NJUST_AIEventName, type ClineMessage, type TodoItem, TelemetryEventName } from "@njust-ai/types"
+import {
+	NJUST_AIEventName,
+	type ClineMessage,
+	type HistoryItem,
+	type TodoItem,
+	TelemetryEventName,
+} from "@njust-ai/types"
 
 import { logger } from "../../shared/logger"
 import { getErrorMessage } from "../../shared/error-utils"
@@ -16,14 +22,11 @@ export interface IDelegationHost {
 	stack: { pop(options?: { skipDelegationRepair?: boolean }): Promise<void> }
 	handleModeSwitch(mode: string): Promise<void>
 	createTask(text: string, images?: string[], parentTask?: Task, options?: unknown): Promise<Task>
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	getTaskWithId(id: string): Promise<{ historyItem: any }>
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	updateTaskHistory(item: any, options?: unknown): Promise<unknown[]>
+	getTaskWithId(id: string): Promise<{ historyItem: HistoryItem }>
+	updateTaskHistory(item: HistoryItem, options?: unknown): Promise<unknown[]>
 	emit(event: string, ...args: unknown[]): boolean
 	readonly contextProxy: { globalStorageUri: { fsPath: string } }
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	createTaskWithHistoryItem(historyItem: any, options?: { startTask?: boolean }): Promise<Task | undefined>
+	createTaskWithHistoryItem(historyItem: HistoryItem, options?: { startTask?: boolean }): Promise<Task | undefined>
 }
 
 export function appendDelegationCompletionToApiMessages(

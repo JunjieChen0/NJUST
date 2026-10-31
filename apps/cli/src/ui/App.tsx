@@ -127,10 +127,8 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		return getContextWindow(routerModels, apiConfiguration)
 	}, [routerModels, apiConfiguration])
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const autocompleteRef = useRef<AutocompleteInputHandle<any>>(null)
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const followupAutocompleteRef = useRef<AutocompleteInputHandle<any>>(null)
+	const autocompleteRef = useRef<AutocompleteInputHandle>(null)
+	const followupAutocompleteRef = useRef<AutocompleteInputHandle>(null)
 
 	// Stable refs for autocomplete data - prevents useMemo from recreating triggers on every data change
 	const fileSearchResultsRef = useRef(fileSearchResults)
@@ -304,8 +302,7 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 	// IMPORTANT: We use refs here to avoid recreating triggers every time data changes.
 	// This prevents the UI flash caused by: data change -> memo recreation -> re-render with stale state
 	// The getResults/getCommands/getModes/getHistory callbacks always read from refs to get fresh data.
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const autocompleteTriggers = useMemo((): AutocompleteTrigger<any>[] => {
+	const autocompleteTriggers = useMemo((): AutocompleteTrigger<AutocompleteItem>[] => {
 		const fileTrigger = createFileTrigger({
 			onSearch: handleFileSearch,
 			getResults: () => {

@@ -64,7 +64,7 @@ export const TerminalSettings = ({
 			case "vsCodeSetting":
 				switch (message.setting) {
 					case "terminal.integrated.inheritEnv":
-						setInheritEnv(message.value ?? true)
+						setInheritEnv(typeof message.value === "boolean" ? message.value : true)
 						break
 					default:
 						break

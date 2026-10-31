@@ -17,8 +17,7 @@ export interface RooClient {
 }
 
 export const createClient = ({ url, authToken }: ClientConfig): RooClient => {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	return createTRPCProxyClient<any>({
+	return createTRPCProxyClient({
 		links: [
 			httpBatchLink({
 				url: `${url}/trpc`,

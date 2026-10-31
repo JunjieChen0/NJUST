@@ -401,8 +401,7 @@ export class ClineProvider
 		event: K,
 		listener: (...args: TaskProviderEvents[K]) => void | Promise<void>,
 	): this {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		return super.on(event, listener as any)
+		return super.on(event, listener as never)
 	}
 
 	/**
@@ -412,8 +411,7 @@ export class ClineProvider
 		event: K,
 		listener: (...args: TaskProviderEvents[K]) => void | Promise<void>,
 	): this {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		return super.off(event, listener as any)
+		return super.off(event, listener as never)
 	}
 
 	public async initializeCloudProfileSyncWhenReady(): Promise<void> {}

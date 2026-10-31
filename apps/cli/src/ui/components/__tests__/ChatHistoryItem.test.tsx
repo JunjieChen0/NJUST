@@ -293,10 +293,9 @@ describe("ChatHistoryItem", () => {
 		it("returns null for unknown role", () => {
 			const message = {
 				id: "9",
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				role: "unknown" as any,
+				role: "unknown" as string,
 				content: "Test",
-			}
+			} as TUIMessage
 
 			const { lastFrame } = render(<ChatHistoryItem message={message} />)
 			expect(lastFrame()).toBe("")
