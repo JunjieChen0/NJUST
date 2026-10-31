@@ -4,10 +4,12 @@
  * Defines the minimal surface TaskSubtaskHandler needs from its owning Task.
  * Extracted from Task.ts as part of Phase 1 decomposition.
  */
+import type { Anthropic } from "@anthropic-ai/sdk"
 import type { ClineMessage } from "@njust-ai/types"
 import type { ApiMessage } from "../../task-persistence"
 import type { IsolationLevel } from "../SubTaskOptions"
 import type { ForkedContextConfig, CacheSafeParams } from "../SubTaskOptions"
+import type { ITaskHost } from "./ITaskHost"
 
 export interface TaskSubtaskHost {
 	// Identity
@@ -31,12 +33,12 @@ export interface TaskSubtaskHost {
 	apiConversationHistory: ApiMessage[]
 
 	// Provider reference
-	hostRef: { deref(): UnsafeAny }
+	hostRef: { deref(): ITaskHost | undefined }
 
 	// Task methods
 	getSavedApiConversationHistory(): Promise<ApiMessage[]>
 	saveApiConversationHistory(): Promise<boolean>
-	initiateTaskLoop(userMessage: UnsafeAny[]): Promise<void>
+	initiateTaskLoop(userMessage: Anthropic.Messages.ContentBlockParam[]): Promise<void>
 
 	// Event emitter
 	emit(event: string, ...args: unknown[]): boolean

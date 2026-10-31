@@ -8,6 +8,7 @@ import { startAllPrefetch } from "../prefetch"
 import { setLastGlobalApiRequestTime, getLastGlobalApiRequestTime as getGlobalApiTime } from "./globalApiTiming"
 
 import { Anthropic } from "@anthropic-ai/sdk"
+import type OpenAI from "openai"
 import debounce from "lodash.debounce"
 
 import {
@@ -175,7 +176,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	 * Cached tool definitions to avoid rebuilding for the same mode.
 	 * Shared from parent to child via inheritCacheFromParent.
 	 */
-	public cachedToolDefinitions?: { mode: string; tools: UnsafeAny[]; time: number }
+	public cachedToolDefinitions?: { mode: string; tools: OpenAI.Chat.ChatCompletionTool[]; time: number }
 
 	/** MemRL: episodic hints retrieved before this task run, injected into system prompt. */
 	public memrlEpisodicHints: string = ""
@@ -440,7 +441,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	//   3. Remove the 6 `as unknown as Host` casts (replace with plain `this`).
 	//
 	// The `unknown` in the cast chain eliminates the `any`-poisoning that the
-	// original `as UnsafeAny as` caused. The structural mismatches are harmless
+	// original `any` cast chain caused. The structural mismatches are harmless
 	// at runtime via the cast — this is a type-safety debt, not a correctness bug.
 
 	/** @internal Persistence/CRUD operations on messages — delegates to TaskMessageManager. */
@@ -929,7 +930,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		text?: string,
 		images?: string[],
 		partial?: boolean,
-		checkpoint?: Record<string, UnsafeAny>,
+		checkpoint?: Record<string, unknown>,
 		progressStatus?: ToolProgressStatus,
 		options: {
 			isNonInteractive?: boolean
@@ -1319,11 +1320,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	// Delegated to TaskStreamProcessor
-	private buildCleanConversationHistory(
-		messages: ApiMessage[],
-	): Array<
+	private buildCleanConversationHistory(messages: ApiMessage[]): Array<
 		| Anthropic.Messages.MessageParam
-		| { type: "reasoning"; encrypted_content?: string; id?: string; summary?: UnsafeAny[] }
+		| {
+				type: "reasoning"
+				encrypted_content?: string
+				id?: string
+				summary?: Array<{ type?: string; text?: string }>
+		  }
 	> {
 		return this.streamProcessor.buildCleanConversationHistory(messages)
 	}

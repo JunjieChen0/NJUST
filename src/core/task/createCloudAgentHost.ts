@@ -4,6 +4,7 @@
  */
 import { EventEmitter } from "events"
 import type { ICloudAgentHost } from "./interfaces/ICloudAgentHost"
+import type { ITaskHost } from "./interfaces/ITaskHost"
 import { t } from "../../i18n"
 
 /** Minimal shape of Task needed to build a cloud agent host. */
@@ -21,7 +22,7 @@ interface CloudAgentTaskRef {
 		images?: string[],
 	): Promise<void>
 	ask: ICloudAgentHost["ask"]
-	hostRef: { deref(): UnsafeAny }
+	hostRef: { deref(): ITaskHost | undefined }
 }
 
 export function createCloudAgentHost(task: CloudAgentTaskRef & EventEmitter): ICloudAgentHost {

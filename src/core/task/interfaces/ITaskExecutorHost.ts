@@ -14,6 +14,7 @@ import type {
 	ClineAsk,
 	ContextCondense,
 	ContextTruncation,
+	GlobalState,
 	ProviderSettings,
 	ToolProgressStatus,
 	TokenUsage,
@@ -27,6 +28,7 @@ import type { SystemPromptParts } from "../../prompts/system"
 import type { FileContextTracker } from "../../context-tracking/FileContextTracker"
 import type { PersistentRetryManager } from "../PersistentRetry"
 import type { TaskState } from "../TaskStateMachine"
+import type { ToolUse } from "../../../shared/tools"
 import type { ITaskHost } from "./ITaskHost"
 import type { ITaskDiffViewProvider } from "./ITaskDiffViewProvider"
 
@@ -69,12 +71,21 @@ export interface TaskExecutorDelegatesHost {
 		getSystemPromptParts(): Promise<SystemPromptParts>
 		getSystemPrompt(): Promise<string>
 		condenseContext(): Promise<void>
-		inheritCacheFromParent(parent: UnsafeAny): void
+		inheritCacheFromParent(parent: unknown): void
 	}
 	streamProcessor: {
 		maybeWaitForProviderRateLimit(retryAttempt: number): Promise<void>
 		backoffAndAnnounce(retryAttempt: number, error: unknown): Promise<void>
-		buildCleanConversationHistory(messages: ApiMessage[]): UnsafeAny[]
+		buildCleanConversationHistory(messages: ApiMessage[]): Array<
+			| Anthropic.Messages.MessageParam
+			| {
+					type: "reasoning"
+					text?: string
+					encrypted_content?: string
+					id?: string
+					summary?: Array<{ type?: string; text?: string }>
+			  }
+		>
 		getCurrentProfileId(
 			state:
 				| { listApiConfigMeta?: Array<{ id?: string; name?: string }>; currentApiConfigName?: string }
@@ -95,7 +106,7 @@ export interface TaskExecutorDelegatesHost {
 	}
 	autoApprovalHandler: {
 		checkAutoApprovalLimits(
-			state: UnsafeAny,
+			state: GlobalState | undefined,
 			messages: ClineMessage[],
 			askFn: (type: ClineAsk, data?: string) => Promise<{ response: string; text?: string; images?: string[] }>,
 		): Promise<{ shouldProceed: boolean }>
@@ -109,7 +120,7 @@ export interface TaskExecutorDelegatesHost {
 	rooIgnoreController: { dispose(): void } | undefined
 	toolExecution: {
 		dispose(): void
-		streamingExecutor: { shouldEagerExecute(task: UnsafeAny, block: UnsafeAny): string | null }
+		streamingExecutor: { shouldEagerExecute(task: { didRejectTool: boolean }, block: ToolUse): string | null }
 	}
 	compactFailureCount: number
 }
@@ -162,7 +173,7 @@ export interface TaskExecutorMessagingHost {
 		text?: string,
 		images?: string[],
 		partial?: boolean,
-		checkpoint?: Record<string, UnsafeAny>,
+		checkpoint?: Record<string, unknown>,
 		progressStatus?: ToolProgressStatus,
 		options?: { isNonInteractive?: boolean },
 		contextCondense?: ContextCondense,

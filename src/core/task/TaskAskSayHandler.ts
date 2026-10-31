@@ -141,7 +141,7 @@ export class TaskAskSayHandler {
 							if (message) {
 								this.host.interactiveAsk = message
 								this.host.emit(NJUST_AIEventName.TaskInteractive, this.host.taskId)
-								provider?.postMessageToWebview({ type: "interactionRequired" })
+								void provider?.postMessageToWebview({ type: "interactionRequired" })
 							}
 						}, statusMutationTimeout),
 					)
@@ -287,7 +287,7 @@ export class TaskAskSayHandler {
 		text?: string,
 		images?: string[],
 		partial?: boolean,
-		checkpoint?: Record<string, UnsafeAny>,
+		checkpoint?: Record<string, unknown>,
 		progressStatus?: ToolProgressStatus,
 		options: {
 			isNonInteractive?: boolean

@@ -27,6 +27,14 @@ import type { Task } from "./Task"
 import { logger } from "../../shared/logger"
 import { TelemetryService } from "@njust-ai/telemetry"
 
+function readBooleanSetting(state: unknown, key: string, fallback: boolean): boolean {
+	if (state && typeof state === "object") {
+		const value = (state as Record<string, unknown>)[key]
+		if (typeof value === "boolean") return value
+	}
+	return fallback
+}
+
 export function resolveLastUserMessageTextForCangjieHint(
 	history: ApiMessage[],
 	initialTask?: string,
@@ -248,8 +256,7 @@ export class TaskRequestBuilder {
 					contextWindow: modelInfo?.contextWindow,
 					taskId: this.task.taskId,
 					turnIndex: Math.max(0, this.task.apiConversationHistory.length - 1),
-					enableTurnAwarePromptPruning:
-						(state as Record<string, UnsafeAny>)?.enableTurnAwarePromptPruning ?? true,
+					enableTurnAwarePromptPruning: readBooleanSetting(state, "enableTurnAwarePromptPruning", true),
 					lastUserMessageForCangjieHint: lastUserForCangjie,
 					memrlEpisodicHints: this.task.memrlEpisodicHints,
 					memrlLtmRules: this.task.memrlLtmRules,

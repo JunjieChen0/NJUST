@@ -10,6 +10,7 @@
  * - Failed subtasks: preserve error reason + suggested alternatives
  */
 
+import type { Anthropic } from "@anthropic-ai/sdk"
 import type { ApiMessage } from "../task-persistence/apiMessages"
 
 export interface SubtaskResult {
@@ -56,12 +57,12 @@ function estimateTokens(text: string): number {
  * Extract text content from an ApiMessage content field.
  * Handles both plain string and Anthropic content-block array formats.
  */
-function getTextContent(content: UnsafeAny): string {
+function getTextContent(content: Anthropic.Messages.MessageParam["content"]): string {
 	if (typeof content === "string") return content
 	if (Array.isArray(content)) {
-		return (content as Array<{ type: string; text?: string }>)
-			.filter((block) => block.type === "text" && typeof block.text === "string")
-			.map((block) => block.text!)
+		return content
+			.filter((block): block is Anthropic.Messages.TextBlockParam => block.type === "text")
+			.map((block) => block.text)
 			.join("\n")
 	}
 	return ""

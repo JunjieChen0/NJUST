@@ -1,3 +1,5 @@
+import type { ClineSay } from "@njust-ai/types"
+
 export interface TaskDiffSaveResult {
 	newProblemsMessage: string | undefined
 	userEdits: string | undefined
@@ -21,7 +23,11 @@ export interface ITaskDiffViewProvider {
 		diagnosticsEnabled?: boolean,
 		writeDelayMs?: number,
 	): Promise<TaskDiffSaveResult>
-	pushToolWriteResult(task: UnsafeAny, cwd: string, isNewFile: boolean): Promise<string>
+	pushToolWriteResult(
+		task: { say(type: ClineSay, text?: string): Promise<unknown> },
+		cwd: string,
+		isNewFile: boolean,
+	): Promise<string>
 	revertChanges(): Promise<void>
 	reset(): Promise<void>
 	scrollToFirstDiff(): void
@@ -46,7 +52,11 @@ export class NullTaskDiffViewProvider implements ITaskDiffViewProvider {
 		return { newProblemsMessage: undefined, userEdits: undefined, finalContent: content }
 	}
 
-	async pushToolWriteResult(_task: UnsafeAny, _cwd: string, isNewFile: boolean): Promise<string> {
+	async pushToolWriteResult(
+		_task: { say(type: ClineSay, text?: string): Promise<unknown> },
+		_cwd: string,
+		isNewFile: boolean,
+	): Promise<string> {
 		return JSON.stringify({
 			path: "",
 			operation: isNewFile ? "created" : "modified",

@@ -8,12 +8,16 @@ import type {
 	ClineAsk,
 	ClineAskResponse,
 	ClineMessage,
-	ToolProgressStatus,
 	ContextCondense,
 	ContextTruncation,
+	ExtensionMessage,
+	HistoryItem,
+	ProviderSettings,
 	ToolName,
+	ToolProgressStatus,
 } from "@njust-ai/types"
 import type { TaskMessageManager } from "../TaskMessageManager"
+import type { ITaskHost } from "./ITaskHost"
 
 export interface QueuedMessage {
 	text?: string
@@ -55,8 +59,8 @@ export interface TaskAskSayHost {
 	// Notifier
 	readonly notifier?: {
 		postStateToWebviewWithoutTaskHistory(): Promise<void>
-		postMessageToWebview(message: UnsafeAny): Promise<void>
-		updateTaskHistory(item: UnsafeAny): Promise<unknown>
+		postMessageToWebview(message: ExtensionMessage): Promise<void>
+		updateTaskHistory(item: HistoryItem): Promise<HistoryItem[]>
 	}
 
 	// Message persistence (via msgMgr)
@@ -72,14 +76,14 @@ export interface TaskAskSayHost {
 	checkpointSave(allowEmpty?: boolean, suppressChatRow?: boolean): Promise<unknown>
 
 	// Provider reference (for state access)
-	hostRef: { deref(): UnsafeAny }
+	hostRef: { deref(): ITaskHost | undefined }
 
 	// Helper methods needed by handler
 	cancelAutoApprovalTimeout(): void
 	approveAsk(opts?: { text?: string; images?: string[] }): void
 	denyAsk(opts?: { text?: string; images?: string[] }): void
 	supersedePendingAsk(): void
-	updateApiConfiguration(newApiConfiguration: UnsafeAny): void
+	updateApiConfiguration(newApiConfiguration: ProviderSettings): void
 	formatResponse: {
 		toolError(error: string): string
 		missingToolParameterError(paramName: string): string

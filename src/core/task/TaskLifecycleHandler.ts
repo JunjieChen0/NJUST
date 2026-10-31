@@ -89,7 +89,7 @@ export interface TaskLifecycleHost {
 	getEnabledMcpToolsCount(): Promise<{ enabledToolCount: number; enabledServerCount: number }>
 	getTaskMode(): Promise<string>
 	initiateCloudAgentLoop(message: string, images?: string[]): Promise<void>
-	initiateTaskLoop(userContent: UnsafeAny[]): Promise<void>
+	initiateTaskLoop(userContent: Anthropic.Messages.ContentBlockParam[]): Promise<void>
 	getSavedClineMessages(): Promise<ClineMessage[]>
 	getSavedApiConversationHistory(): Promise<ApiMessage[]>
 	overwriteClineMessages(messages: ClineMessage[]): Promise<void>
@@ -182,7 +182,7 @@ export class TaskLifecycleHandler {
 
 			const lastRelevantMessageIndex = findLastIndex(
 				modifiedClineMessages,
-				(m: UnsafeAny) => !(m.ask === "resume_task" || m.ask === "resume_completed_task"),
+				(m) => !(m.ask === "resume_task" || m.ask === "resume_completed_task"),
 			)
 
 			if (lastRelevantMessageIndex !== -1) {
@@ -200,7 +200,7 @@ export class TaskLifecycleHandler {
 
 			const lastApiReqStartedIndex = findLastIndex(
 				modifiedClineMessages,
-				(m: UnsafeAny) => m.type === "say" && m.say === "api_req_started",
+				(m) => m.type === "say" && m.say === "api_req_started",
 			)
 
 			if (lastApiReqStartedIndex !== -1) {
@@ -224,7 +224,7 @@ export class TaskLifecycleHandler {
 			const lastClineMessage = t.clineMessages
 				.slice()
 				.reverse()
-				.find((m: UnsafeAny) => !(m.ask === "resume_task" || m.ask === "resume_completed_task"))
+				.find((m) => !(m.ask === "resume_task" || m.ask === "resume_completed_task"))
 
 			let askType: ClineAsk
 			if (lastClineMessage?.ask === "completion_result") {

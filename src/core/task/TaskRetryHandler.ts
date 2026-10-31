@@ -13,7 +13,7 @@ interface RetryApiRequest {
 
 export async function* handleAttemptApiRequestError(options: {
 	host: TaskExecutorHost
-	error: UnsafeAny
+	error: unknown
 	retryAttempt: number
 	autoApprovalEnabled: boolean | undefined
 	unattendedRetryEnabled: boolean
@@ -105,7 +105,7 @@ export async function* handleAttemptApiRequestError(options: {
 
 export async function handleMidStreamFailure(options: {
 	task: TaskExecutorHost
-	error: UnsafeAny
+	error: unknown
 	currentRetryAttempt: number
 	currentUserContent: Anthropic.Messages.ContentBlockParam[]
 	stack: Array<{

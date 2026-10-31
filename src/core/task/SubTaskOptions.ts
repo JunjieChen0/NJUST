@@ -3,6 +3,8 @@
  * Inspired by Claude Code's Fork mode and specialized sub-agents.
  */
 
+import type { Anthropic } from "@anthropic-ai/sdk"
+
 export type SubAgentType =
 	| "explore" // Code exploration: read-only tools, focused on search and understanding
 	| "implement" // Implementation: full write permissions
@@ -89,7 +91,7 @@ export interface CacheSafeParams {
 	/** Parent's tool definitions (exact same ToolUseBlock params) */
 	toolDefinitions?: string
 	/** Parent's conversation messages up to the fork point */
-	forkContextMessages?: Array<{ role: string; content: UnsafeAny }>
+	forkContextMessages?: Array<{ role: string; content: Anthropic.Messages.MessageParam["content"] }>
 }
 
 /** Configuration for forked context generation */

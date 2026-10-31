@@ -1,4 +1,4 @@
-import type { GroundingSource } from "../../api/transform/stream"
+import type { ApiStreamChunk, ApiStreamUsageChunk, GroundingSource } from "../../api/transform/stream"
 import { NativeToolCallParser } from "../assistant-message/NativeToolCallParser"
 import type { TaskExecutorHost } from "./interfaces/ITaskExecutorHost"
 import type { ToolUse, McpToolUse } from "../../shared/tools"
@@ -13,14 +13,14 @@ type FinalizeToolUse = (task: TaskExecutorHost, id: string, finalToolUse: ToolUs
 
 export interface ProcessTaskStreamChunkOptions {
 	task: TaskExecutorHost
-	chunk: UnsafeAny
+	chunk: ApiStreamChunk
 	toolCallParser: NativeToolCallParser
 	requestProfileId: string
 	pendingGroundingSources: GroundingSource[]
 	finalizeToolUse: FinalizeToolUse
 	appendReasoningText(text: string): string
 	appendAssistantText(text: string): string
-	addUsage(chunk: UnsafeAny): void
+	addUsage(chunk: ApiStreamUsageChunk): void
 }
 
 function presentAssistantMessage(task: TaskExecutorHost): void {
