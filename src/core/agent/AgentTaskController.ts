@@ -1,6 +1,8 @@
+import type { ClineMessage } from "@njust-ai/types"
+
 export interface AgentTaskLike {
 	taskId: string
-	clineMessages?: UnsafeAny[]
+	clineMessages?: ClineMessage[]
 	didFinishAbortingStream?: boolean
 	abandoned?: boolean
 	abortTask?: () => Promise<void>

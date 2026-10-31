@@ -157,7 +157,7 @@ export class PlanEngine {
 			const dependencyContext = this.buildDependencyContext(plan, step)
 			const stepPrompt = this.buildStepPrompt(step, dependencyContext, plan)
 
-			await this.provider.handleModeSwitch(step.mode as UnsafeAny)
+			await this.provider.handleModeSwitch(step.mode)
 			const task = await this.provider.createTask(stepPrompt)
 			step.taskId = task.taskId
 
@@ -230,21 +230,28 @@ export class PlanEngine {
 		return jsonMatch ? jsonMatch[0] : text
 	}
 
-	private buildPlanFromJson(json: UnsafeAny): Plan {
+	private buildPlanFromJson(input: unknown): Plan {
 		const planId = uuidv7()
-		const steps: PlanStep[] = (json.steps || []).map((s: UnsafeAny, index: number) => ({
-			id: `${planId}-step-${index}`,
-			index,
-			description: s.description || `Step ${index + 1}`,
-			mode: s.mode || "code",
-			dependencies: (s.dependencies || []).map((d: number) => `${planId}-step-${d}`),
-			status: "pending" as PlanStepStatus,
-		}))
+		const json = input && typeof input === "object" ? (input as Record<string, unknown>) : {}
+		const rawSteps = Array.isArray(json.steps) ? json.steps : []
+		const steps: PlanStep[] = rawSteps.map((rawStep, index) => {
+			const step = rawStep && typeof rawStep === "object" ? (rawStep as Record<string, unknown>) : {}
+			const dependencies = Array.isArray(step.dependencies) ? step.dependencies : []
+			return {
+				id: `${planId}-step-${index}`,
+				index,
+				description:
+					typeof step.description === "string" && step.description ? step.description : `Step ${index + 1}`,
+				mode: typeof step.mode === "string" && step.mode ? step.mode : "code",
+				dependencies: dependencies.map((d: unknown) => `${planId}-step-${d}`),
+				status: "pending" as PlanStepStatus,
+			}
+		})
 
 		return {
 			id: planId,
-			title: json.title || "Execution Plan",
-			description: json.description || "",
+			title: typeof json.title === "string" && json.title ? json.title : "Execution Plan",
+			description: typeof json.description === "string" ? json.description : "",
 			steps,
 			status: "draft",
 			createdAt: Date.now(),

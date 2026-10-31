@@ -1,5 +1,6 @@
 import { v7 as uuidv7 } from "uuid"
 import EventEmitter from "events"
+import type { Anthropic } from "@anthropic-ai/sdk"
 
 import type { SharedContext, AgentInfo } from "./types"
 import { generateParentContextSummary } from "../task/SubTaskContextBuilder"
@@ -10,7 +11,7 @@ import { getErrorMessage } from "../../shared/error-utils"
 import type { AgentLogSink, AgentTaskController, AgentTaskLike } from "./AgentTaskController"
 import { waitForTaskCompletion } from "./sharedTaskWait"
 
-type ApiMessage = { role: string; content: UnsafeAny; ts?: number }
+type ApiMessage = { role: string; content: Anthropic.Messages.MessageParam["content"]; ts?: number }
 
 interface SubtaskResult {
 	agentId: string
@@ -239,7 +240,7 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 			const contextPrefix = this.buildSharedContextPrompt()
 			const fullMessage = contextPrefix ? `${contextPrefix}\n\nTask:\n${spec.message}` : spec.message
 
-			await this.provider.handleModeSwitch(spec.mode as UnsafeAny)
+			await this.provider.handleModeSwitch(spec.mode)
 			const task = await this.provider.createTask(fullMessage)
 
 			agent.taskId = task.taskId

@@ -12,7 +12,7 @@
 import * as fs from "fs/promises"
 import type { Dirent } from "fs"
 import * as path from "path"
-import type { AgentDefinition, CustomAgentDefinition, PluginAgentDefinition } from "./types"
+import type { AgentDefinition, BaseAgentDefinition, CustomAgentDefinition, PluginAgentDefinition } from "./types"
 import { BUILT_IN_AGENTS } from "./builtInAgents"
 
 // ── Agent cache ──
@@ -34,7 +34,7 @@ export function clearPluginAgents(): void {
 
 // ── YAML frontmatter parsing (lightweight, no dependency) ──
 
-interface AgentFrontmatter {
+type AgentFrontmatter = {
 	agentType?: string
 	description?: string
 	tools?: string[]
@@ -64,7 +64,7 @@ function parseFrontmatter(content: string): { fm: AgentFrontmatter; body: string
 		const kv = line.match(/^(\w[\w-]*)\s*:\s*(.+)$/)
 		if (!kv) continue
 		const key = kv[1]!
-		let value: UnsafeAny = kv[2]!.trim()
+		let value: string | number | boolean | string[] = kv[2]!.trim()
 
 		// Parse lists: "['a', 'b']" or "a, b, c"
 		if (value.startsWith("[") && value.endsWith("]")) {
@@ -81,7 +81,7 @@ function parseFrontmatter(content: string): { fm: AgentFrontmatter; body: string
 		// Parse booleans
 		else if (value === "true") value = true
 		else if (value === "false") value = false
-		;(fm as UnsafeAny)[key] = value
+		;(fm as Record<string, unknown>)[key] = value
 	}
 
 	return { fm, body }
@@ -121,14 +121,14 @@ async function loadMarkdownAgents(
 			source,
 			tools,
 			disallowedTools: fm.disallowedTools,
-			permissionMode: fm.permissionMode as UnsafeAny,
+			permissionMode: fm.permissionMode as BaseAgentDefinition["permissionMode"],
 			model: fm.model,
 			maxTurns: fm.maxTurns,
 			background: fm.background,
-			isolation: fm.isolation as UnsafeAny,
+			isolation: fm.isolation as BaseAgentDefinition["isolation"],
 			skills: fm.skills,
 			mcpServers: fm.mcpServers,
-			memory: fm.memory as UnsafeAny,
+			memory: fm.memory as BaseAgentDefinition["memory"],
 			systemPrompt: body.trim(),
 			priority,
 			filePath,
