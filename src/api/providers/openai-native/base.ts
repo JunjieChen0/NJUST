@@ -39,9 +39,12 @@ export type ResponsesInputItem =
 
 export type ResponsesText = string | { value?: string }
 
-export function toResponseText(text: ResponsesText | undefined): string | undefined {
+export function toResponseText(text: unknown): string | undefined {
 	if (typeof text === "string") return text
-	return text?.value
+	if (text && typeof text === "object" && "value" in text && typeof text.value === "string") {
+		return text.value
+	}
+	return undefined
 }
 
 export interface ResponsesOutputItem {
@@ -95,16 +98,6 @@ export interface ResponsesClientLike {
 			body: ResponsesRequestBody,
 			options?: { signal?: AbortSignal; headers?: Record<string, string> },
 		): Promise<AsyncIterable<ResponsesStreamEvent>>
-	}
-}
-
-/** Non-streaming response shape used in completePrompt */
-interface NonStreamingResponsesClient {
-	responses: {
-		create(
-			body: ResponsesRequestBody,
-			options?: { signal?: AbortSignal; headers?: Record<string, string> },
-		): Promise<{ output?: ResponsesOutputItem[]; text?: ResponsesText }>
 	}
 }
 
@@ -344,8 +337,8 @@ export abstract class OpenAiNativeHandlerBase extends BaseProvider implements Si
 				requestBody.prompt_cache_retention = promptCacheRetention
 			}
 
-			const response = await (this.client as unknown as NonStreamingResponsesClient).responses.create(
-				requestBody,
+			const response = await this.client.responses.create(
+				requestBody as OpenAI.Responses.ResponseCreateParamsNonStreaming,
 				{
 					signal: this.abortController.signal,
 				},

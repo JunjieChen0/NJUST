@@ -9,7 +9,7 @@ import { countTokensDetailed, type TokenCountResult } from "../../utils/countTok
 import { isMcpTool } from "../../utils/mcp-name"
 import { computeBackoffMs, delayMs, DEFAULT_API_RETRY_OPTIONS, type ApiRetryOptions } from "../retry/ApiRetryStrategy"
 import { analyzeErrorForRetry } from "../retry/ApiErrorClassifier"
-import { RETRY_WRAPPER_APPLIED } from "../retry/ApiRetryWrapper"
+import { isRetryWrapped } from "../retry/ApiRetryWrapper"
 import { getApiEventBus } from "../retry/event-bus"
 
 export const CONTENT_CHUNK_TYPES: ReadonlySet<string> = new Set([
@@ -236,7 +236,7 @@ export abstract class BaseProvider implements ApiHandler {
 	): Promise<T> {
 		// When wrapApiHandler Proxy already wraps this handler, skip the inner
 		// retry loop to prevent N×N double-retry amplification.
-		if ((this as unknown as Record<symbol, boolean>)[RETRY_WRAPPER_APPLIED]) {
+		if (isRetryWrapped(this)) {
 			return operation()
 		}
 

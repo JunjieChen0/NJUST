@@ -116,7 +116,7 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 	 * The handler class itself satisfies CodexEventHandlerContext structurally.
 	 */
 	private get eventHandlerContext(): CodexEventHandlerContext {
-		return this as unknown as CodexEventHandlerContext
+		return this
 	}
 
 	// -------------------------------------------------------------------------

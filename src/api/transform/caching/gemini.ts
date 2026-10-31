@@ -2,6 +2,10 @@ import OpenAI from "openai"
 
 import type { CacheableTextPart } from "./types"
 
+type CacheableSystemMessage = Omit<OpenAI.Chat.ChatCompletionSystemMessageParam, "content"> & {
+	content: CacheableTextPart[]
+}
+
 export function addCacheBreakpoints(
 	systemPrompt: string,
 	messages: OpenAI.Chat.ChatCompletionMessageParam[],
@@ -11,10 +15,11 @@ export function addCacheBreakpoints(
 	const result = [...messages]
 
 	// *Always* cache the system prompt.
-	result[0] = {
+	const systemMessage: CacheableSystemMessage = {
 		role: "system",
 		content: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
-	} as unknown as OpenAI.Chat.ChatCompletionMessageParam
+	}
+	result[0] = systemMessage
 
 	// Add breakpoints every N user messages based on frequency.
 	let count = 0

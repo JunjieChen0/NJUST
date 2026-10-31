@@ -50,8 +50,8 @@ export abstract class CacheStrategy {
 	/**
 	 * Create a cache point content block
 	 */
-	protected createCachePoint(): ContentBlock {
-		return { cachePoint: { type: "default" } } as unknown as ContentBlock
+	protected createCachePoint(): ContentBlock.CachePointMember {
+		return { cachePoint: { type: "default" } }
 	}
 
 	/**
@@ -64,15 +64,15 @@ export abstract class CacheStrategy {
 			const content: ContentBlock[] = Array.isArray(message.content)
 				? message.content.map((block) => {
 						if (typeof block === "string") {
-							return { text: block } as unknown as ContentBlock
+							return { text: block }
 						}
 						if ("text" in block) {
-							return { text: block.text } as unknown as ContentBlock
+							return { text: block.text }
 						}
 						// Handle other content types if needed
-						return { text: "[Unsupported Content]" } as unknown as ContentBlock
+						return { text: "[Unsupported Content]" }
 					})
-				: [{ text: message.content } as unknown as ContentBlock]
+				: [{ text: message.content }]
 
 			return {
 				role,

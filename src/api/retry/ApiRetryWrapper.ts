@@ -13,7 +13,15 @@ export type RetryWrapperOptions = Partial<ApiRetryOptions>
  * and BaseProvider.withRetry() are on the same call path.
  * When set on a handler instance, withRetry() in BaseProvider becomes a passthrough.
  */
-export const RETRY_WRAPPER_APPLIED = Symbol("retryWrapperApplied")
+const retryWrappedHandlers = new WeakSet<object>()
+
+export function markRetryWrapped(handler: object): void {
+	retryWrappedHandlers.add(handler)
+}
+
+export function isRetryWrapped(handler: object): boolean {
+	return retryWrappedHandlers.has(handler)
+}
 
 /**
  * Wraps an AsyncGenerator so that failures on the *first* `next()` call
@@ -89,7 +97,7 @@ export function wrapApiHandler(
 ): ApiHandler & Partial<SingleCompletionHandler> {
 	// Mark handler so BaseProvider.withRetry() can detect the outer wrapper
 	// and skip its own retry loop (preventing N×N double-retry amplification).
-	;(handler as unknown as Record<symbol, boolean>)[RETRY_WRAPPER_APPLIED] = true
+	markRetryWrapped(handler)
 
 	const providerName = handler.constructor.name
 

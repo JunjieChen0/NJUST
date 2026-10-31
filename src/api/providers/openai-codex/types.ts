@@ -51,9 +51,12 @@ export type CodexInputItem =
 
 export type ResponsesText = string | { value?: string }
 
-export function toResponseText(text: ResponsesText | undefined): string | undefined {
+export function toResponseText(text: unknown): string | undefined {
 	if (typeof text === "string") return text
-	return text?.value
+	if (text && typeof text === "object" && "value" in text && typeof text.value === "string") {
+		return text.value
+	}
+	return undefined
 }
 
 export interface ResponsesOutputItem {
