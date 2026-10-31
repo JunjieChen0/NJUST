@@ -3,7 +3,7 @@ import * as os from "os"
 import { Package } from "../../../shared/package"
 import { t } from "../../../i18n"
 import { openAiCodexOAuthManager } from "../../../integrations/openai-codex/oauth"
-import { codexCompleteResponseSchema } from "./types"
+import { codexCompleteResponseSchema, type ResponsesRequestBody } from "./types"
 
 const CODEX_API_BASE_URL = "https://chatgpt.com/backend-api/codex"
 
@@ -36,7 +36,7 @@ export async function buildCodexHeaders(
  * Extracted from OpenAiCodexHandler.completePrompt.
  */
 export async function executeNonStreamingRequest(
-	requestBody: UnsafeAny,
+	requestBody: ResponsesRequestBody,
 	accessToken: string,
 	sessionId: string,
 	signal: AbortSignal,

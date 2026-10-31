@@ -6,7 +6,7 @@ export function convertToolsForResponsesApi(tools: OpenAI.Chat.ChatCompletionToo
 	type: "function"
 	name: string
 	description?: string
-	parameters?: Record<string, UnsafeAny>
+	parameters?: Record<string, unknown>
 	strict?: boolean
 }> {
 	return tools

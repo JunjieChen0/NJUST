@@ -294,7 +294,7 @@ export abstract class OpenAiNativeHandlerBase extends BaseProvider implements Si
 			const { verbosity } = model
 			const reasoningEffort = this.getReasoningEffort(model)
 
-			const requestBody: UnsafeAny = {
+			const requestBody: ResponsesRequestBody = {
 				model: model.id,
 				input: [
 					{

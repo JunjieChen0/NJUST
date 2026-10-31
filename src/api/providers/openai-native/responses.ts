@@ -130,7 +130,7 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 			}
 
 			try {
-				const stream = await (this.client as UnsafeAny as ResponsesClientLike).responses.create(requestBody, {
+				const stream = await (this.client as ResponsesClientLike).responses.create(requestBody, {
 					signal: this.abortController.signal,
 					headers: requestHeaders,
 				})
@@ -149,11 +149,11 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 						yield outChunk
 					}
 				}
-			} catch (sdkErr: UnsafeAny) {
-				const err = sdkErr as Record<string, UnsafeAny>
+			} catch (sdkErr: unknown) {
+				const err = sdkErr as { code?: unknown; status?: unknown; name?: unknown }
 				const errMessage = getErrorMessage(sdkErr)
-				const errCode = err.code as string | undefined
-				const errStatus = err.status as number | undefined
+				const errCode = typeof err.code === "string" ? err.code : undefined
+				const errStatus = typeof err.status === "number" ? err.status : undefined
 				const isConnectionError =
 					errCode === "ECONNREFUSED" ||
 					errCode === "ECONNRESET" ||
@@ -184,13 +184,13 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 			const formattedInput: ResponsesInputItem[] = []
 
 			for (const message of messages) {
-				if ((message as Record<string, UnsafeAny>).type === "reasoning") {
+				if ((message as { type?: string }).type === "reasoning") {
 					formattedInput.push(message)
 					continue
 				}
 
 				if (message.role === "user") {
-					const content: Record<string, UnsafeAny>[] = []
+					const content: Record<string, unknown>[] = []
 					const toolResults: ResponsesInputItem[] = []
 
 					if (typeof message.content === "string") {
@@ -230,7 +230,7 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 						formattedInput.push(...toolResults)
 					}
 				} else if (message.role === "assistant") {
-					const content: Record<string, UnsafeAny>[] = []
+					const content: Record<string, unknown>[] = []
 					const toolCalls: ResponsesInputItem[] = []
 
 					if (typeof message.content === "string") {

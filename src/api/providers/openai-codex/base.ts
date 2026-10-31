@@ -291,7 +291,7 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 						timeout: getApiRequestTimeout(),
 					})
 
-				const stream = await (client as UnsafeAny as ResponsesClientLike).responses.create(requestBody, {
+				const stream = await (client as ResponsesClientLike).responses.create(requestBody, {
 					signal: this.abortController.signal,
 					headers: codexHeaders,
 				})
@@ -761,7 +761,7 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 
 			const reasoningEffort = this.getReasoningEffort(model)
 
-			const requestBody: UnsafeAny = {
+			const requestBody: ResponsesRequestBody = {
 				model: model.id,
 				input: [
 					{

@@ -16,13 +16,13 @@ export function formatConversation(
 
 	for (const message of messages) {
 		// Check if this is a reasoning item
-		if ((message as Record<string, UnsafeAny>).type === "reasoning") {
+		if ((message as { type?: string }).type === "reasoning") {
 			formattedInput.push(message)
 			continue
 		}
 
 		if (message.role === "user") {
-			const content: Record<string, UnsafeAny>[] = []
+			const content: Record<string, unknown>[] = []
 			const toolResults: CodexInputItem[] = []
 
 			if (typeof message.content === "string") {
@@ -64,7 +64,7 @@ export function formatConversation(
 				formattedInput.push(...toolResults)
 			}
 		} else if (message.role === "assistant") {
-			const content: Record<string, UnsafeAny>[] = []
+			const content: Record<string, unknown>[] = []
 			const toolCalls: CodexInputItem[] = []
 
 			if (typeof message.content === "string") {
