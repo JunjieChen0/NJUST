@@ -161,7 +161,7 @@ export class CustomModesManager {
 	/**
 	 * Parse YAML content with enhanced error handling and preprocessing
 	 */
-	private parseYamlSafely(content: string, filePath: string): UnsafeAny {
+	private parseYamlSafely(content: string, filePath: string): unknown {
 		// Clean the content
 		let cleanedContent = stripBom(content)
 		cleanedContent = this.cleanInvisibleCharacters(cleanedContent)
@@ -203,7 +203,7 @@ export class CustomModesManager {
 			const settings = this.parseYamlSafely(content, filePath)
 
 			// Ensure settings has customModes property
-			if (!settings || typeof settings !== "object" || !settings.customModes) {
+			if (!settings || typeof settings !== "object" || !("customModes" in settings) || !settings.customModes) {
 				return []
 			}
 
@@ -232,12 +232,12 @@ export class CustomModesManager {
 			return result.data.customModes.map((mode) => ({
 				...mode,
 				source,
-				roleDefinition: mode.roleDefinition ? sanitizeModeContent(mode.roleDefinition) : undefined,
+				roleDefinition: sanitizeModeContent(mode.roleDefinition),
 				customInstructions: mode.customInstructions ? sanitizeModeContent(mode.customInstructions) : undefined,
-			})) as UnsafeAny
+			}))
 		} catch (error) {
 			// Only log if the error wasn't already handled in parseYamlSafely
-			if (!(error as Record<string, UnsafeAny>).alreadyHandled) {
+			if (!(error as { alreadyHandled?: unknown }).alreadyHandled) {
 				const errorMsg = `Failed to load modes from ${filePath}: ${getErrorMessage(error)}`
 				logger.error("CustomModesManager", errorMsg)
 			}
@@ -299,7 +299,7 @@ export class CustomModesManager {
 
 				const errorMessage = t("common:customModes.errors.invalidFormat")
 
-				let config: UnsafeAny
+				let config: unknown
 
 				try {
 					config = this.parseYamlSafely(content, settingsPath)
@@ -503,10 +503,12 @@ export class CustomModesManager {
 			content = yaml.stringify({ customModes: [] }, { lineWidth: 0 })
 		}
 
-		let settings
+		type ParsedModesFile = { customModes?: ModeConfig[] } & Record<string, unknown>
+
+		let settings: ParsedModesFile
 
 		try {
-			settings = this.parseYamlSafely(content, filePath)
+			settings = this.parseYamlSafely(content, filePath) as ParsedModesFile
 		} catch {
 			// Error already logged in parseYamlSafely
 			settings = { customModes: [] }
@@ -669,7 +671,7 @@ export class CustomModesManager {
 						const roomodesModes = roomodesData?.customModes || []
 
 						// Check if this specific mode exists in .roomodes
-						const modeInRoomodes = roomodesModes.find((m: UnsafeAny) => m.slug === slug)
+						const modeInRoomodes = roomodesModes.find((m: { slug?: unknown }) => m.slug === slug)
 						if (!modeInRoomodes) {
 							return false // Mode not found anywhere
 						}
@@ -764,7 +766,7 @@ export class CustomModesManager {
 							const roomodesModes = roomodesData?.customModes || []
 
 							// Find the mode in .roomodes
-							mode = roomodesModes.find((m: UnsafeAny) => m.slug === slug)
+							mode = roomodesModes.find((m: { slug?: unknown }) => m.slug === slug)
 						}
 					} catch (error) {
 						logger.debug("CustomModesManager", "failed to parse .roomodes", error)

@@ -167,7 +167,7 @@ export class ProviderSettingsManager {
 					// Cast to string for comparison since "claude-code" is no longer a valid ProviderName
 					if ((apiConfig.apiProvider as string) !== "claude-code") continue
 
-					const config = apiConfig as UnsafeAny as Record<string, UnsafeAny>
+					const config = apiConfig as Record<string, unknown>
 					if ("claudeCodePath" in config) {
 						delete config.claudeCodePath
 						isDirty = true
@@ -249,10 +249,11 @@ export class ProviderSettingsManager {
 		try {
 			for (const [_name, apiConfig] of Object.entries(providerProfiles.apiConfigs)) {
 				// Use type assertion to access the deprecated property safely
-				const configAny = apiConfig as UnsafeAny
+				const configAny = apiConfig as ProviderSettingsWithId & { openAiHostHeader?: unknown }
 
 				// Check if openAiHostHeader exists but openAiHeaders doesn't
 				if (
+					typeof configAny.openAiHostHeader === "string" &&
 					configAny.openAiHostHeader &&
 					(!apiConfig.openAiHeaders || Object.keys(apiConfig.openAiHeaders || {}).length === 0)
 				) {
@@ -390,7 +391,7 @@ export class ProviderSettingsManager {
 				// For active providers, filter out settings from other providers.
 				// For retired providers, preserve full profile fields (including legacy
 				// provider-specific keys) to avoid data loss �?passthrough() keeps
-				// UnsafeAny keys that strict parse() would strip.
+				// Unknown keys that strict parse() would strip.
 				const filteredConfig =
 					typeof config.apiProvider === "string" && isRetiredProvider(config.apiProvider)
 						? providerSettingsWithIdSchema.loose().parse(config)
@@ -636,7 +637,7 @@ export class ProviderSettingsManager {
 						typeof sanitizedConfig === "object" &&
 						sanitizedConfig !== null &&
 						"apiProvider" in sanitizedConfig
-							? (sanitizedConfig as Record<string, UnsafeAny>).apiProvider
+							? (sanitizedConfig as Record<string, unknown>).apiProvider
 							: undefined
 					const schema =
 						typeof providerValue === "string" && isRetiredProvider(providerValue)
@@ -667,17 +668,17 @@ export class ProviderSettingsManager {
 	}
 
 	/**
-	 * Sanitizes a provider config by resetting UnsafeAny apiProvider values.
+	 * Sanitizes a provider config by resetting invalid apiProvider values.
 	 * Retired providers are preserved.
 	 * This handles cases where a user had a provider selected that was later removed
 	 * from the extension (e.g., "glama").
 	 */
-	private sanitizeProviderConfig(apiConfig: UnsafeAny): UnsafeAny {
+	private sanitizeProviderConfig(apiConfig: unknown): unknown {
 		if (typeof apiConfig !== "object" || apiConfig === null) {
 			return apiConfig
 		}
 
-		const config = apiConfig as Record<string, UnsafeAny>
+		const config = apiConfig as Record<string, unknown>
 
 		const apiProvider = config.apiProvider
 
@@ -688,7 +689,7 @@ export class ProviderSettingsManager {
 		) {
 			logger.info(
 				"ProviderSettingsManager",
-				`[ProviderSettingsManager] Sanitizing UnsafeAny provider "${config.apiProvider}" - resetting to undefined`,
+				`[ProviderSettingsManager] Sanitizing invalid provider "${String(config.apiProvider)}" - resetting to undefined`,
 			)
 			// Return a new config object without the invalid apiProvider
 			// This effectively resets the profile so the user can select a valid provider
@@ -789,7 +790,7 @@ export class ProviderSettingsManager {
 						const updatedProfile: ProviderSettingsWithId = { ...cloudProfile }
 						for (const [key, value] of Object.entries(existingProfile)) {
 							if (isSecretStateKey(key) && value !== undefined) {
-								;(updatedProfile as UnsafeAny)[key] = value
+								;(updatedProfile as Record<string, unknown>)[key] = value
 							}
 						}
 
@@ -866,7 +867,7 @@ export class ProviderSettingsManager {
 						// Remove any secret keys from cloud profile
 						for (const key of Object.keys(newProfile)) {
 							if (isSecretStateKey(key)) {
-								delete (newProfile as UnsafeAny)[key]
+								delete (newProfile as Record<string, unknown>)[key]
 							}
 						}
 

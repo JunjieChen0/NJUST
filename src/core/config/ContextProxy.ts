@@ -246,7 +246,7 @@ export class ContextProxy {
 	}
 
 	/**
-	 * Migrates UnsafeAny apiProvider values by clearing them from storage.
+	 * Migrates invalid apiProvider values by clearing them from storage.
 	 * Retired providers are preserved so users can keep historical configuration.
 	 */
 	private async migrateInvalidApiProvider() {
@@ -272,7 +272,7 @@ export class ContextProxy {
 	private async migrateImageGenerationSettings() {
 		try {
 			// Check if there's an old nested structure
-			const oldNestedSettings = this.originalContext.globalState.get<UnsafeAny>(
+			const oldNestedSettings = this.originalContext.globalState.get<Record<string, unknown>>(
 				"openRouterImageGenerationSettings",
 			)
 
@@ -280,22 +280,25 @@ export class ContextProxy {
 				logger.info("Migrating old nested image generation settings to flattened structure")
 
 				// Migrate the API key if it exists and we don't already have one
-				if (oldNestedSettings.openRouterApiKey && !this.secretCache.openRouterImageApiKey) {
-					await this.originalContext.secrets.store(
-						"openRouterImageApiKey",
-						oldNestedSettings.openRouterApiKey,
-					)
-					this.secretCache.openRouterImageApiKey = oldNestedSettings.openRouterApiKey
+				const oldApiKey = oldNestedSettings.openRouterApiKey
+				if (typeof oldApiKey === "string" && oldApiKey && !this.secretCache.openRouterImageApiKey) {
+					await this.originalContext.secrets.store("openRouterImageApiKey", oldApiKey)
+					this.secretCache.openRouterImageApiKey = oldApiKey
 					logger.info("Migrated openRouterImageApiKey to secrets")
 				}
 
 				// Migrate the selected model if it exists and we don't already have one
-				if (oldNestedSettings.selectedModel && !this.stateCache.openRouterImageGenerationSelectedModel) {
+				const oldSelectedModel = oldNestedSettings.selectedModel
+				if (
+					typeof oldSelectedModel === "string" &&
+					oldSelectedModel &&
+					!this.stateCache.openRouterImageGenerationSelectedModel
+				) {
 					await this.originalContext.globalState.update(
 						"openRouterImageGenerationSelectedModel",
-						oldNestedSettings.selectedModel,
+						oldSelectedModel,
 					)
-					this.stateCache.openRouterImageGenerationSelectedModel = oldNestedSettings.selectedModel
+					this.stateCache.openRouterImageGenerationSelectedModel = oldSelectedModel
 					logger.info("Migrated openRouterImageGenerationSelectedModel to global state")
 				}
 
@@ -458,7 +461,7 @@ export class ContextProxy {
 	}
 
 	/**
-	 * Sanitizes provider values by resetting UnsafeAny apiProvider values.
+	 * Sanitizes provider values by resetting invalid apiProvider values.
 	 * Active and retired providers are preserved.
 	 */
 	private sanitizeProviderValues(values: NJUST_AISettings): NJUST_AISettings {
@@ -469,7 +472,7 @@ export class ContextProxy {
 		let sanitizedValues = values
 		for (const key of legacyKeys) {
 			if (key in sanitizedValues) {
-				const copy = { ...sanitizedValues } as Record<string, UnsafeAny>
+				const copy = { ...sanitizedValues } as Record<string, unknown>
 				delete copy[key as string]
 				sanitizedValues = copy as NJUST_AISettings
 			}
@@ -537,7 +540,7 @@ export class ContextProxy {
 	}
 
 	public async setValues(values: NJUST_AISettings) {
-		const entries = Object.entries(values) as [NJUST_AISettingsKey, UnsafeAny][]
+		const entries = Object.entries(values) as [NJUST_AISettingsKey, NJUST_AISettings[NJUST_AISettingsKey]][]
 		const results = await Promise.allSettled(entries.map(([key, value]) => this.setValue(key, value)))
 		for (const [index, result] of results.entries()) {
 			if (result.status === "rejected") {
