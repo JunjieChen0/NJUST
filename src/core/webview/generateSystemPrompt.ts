@@ -9,24 +9,27 @@ import { MultiSearchReplaceDiffStrategy } from "../diff/strategies/multi-search-
 import { Package } from "../../shared/package"
 
 import { logger } from "../../shared/logger"
+import type { CustomModePrompts, Experiments, ModeConfig, ProviderSettings } from "@njust-ai/types"
 import { TelemetryEventName } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
+import type { IMcpHubService } from "../../services/mcp/interfaces/IMcpHubService"
+import type { ISkillsManager } from "../../services/skills/interfaces/ISkillsManager"
 
 export interface ISystemPromptHost {
 	getState(): Promise<{
-		apiConfiguration: UnsafeAny
-		customModePrompts?: UnsafeAny
+		apiConfiguration: ProviderSettings
+		customModePrompts?: CustomModePrompts
 		customInstructions?: string | undefined
 		mcpEnabled: boolean
-		experiments: UnsafeAny
+		experiments: Experiments
 		language?: string
 		enableSubfolderRules: boolean | undefined
 	}>
 	readonly cwd: string
 	readonly context: vscode.ExtensionContext
-	getMcpHub(): UnsafeAny
-	getSkillsManager(): UnsafeAny
-	getCustomModes(): Promise<UnsafeAny[]>
+	getMcpHub(): IMcpHubService | undefined
+	getSkillsManager(): ISkillsManager | undefined
+	getCustomModes(): Promise<ModeConfig[]>
 	getCurrentTask(): { rooIgnoreController?: { getInstructions(): string | undefined } } | undefined
 }
 

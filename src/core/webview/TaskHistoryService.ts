@@ -34,8 +34,8 @@ export interface TaskHistoryHost {
 	readonly context: vscode.ExtensionContext
 	readonly contextProxy: {
 		readonly globalStorageUri: vscode.Uri
-		getValue<K extends string>(key: K): UnsafeAny
-		setValue<K extends string>(key: K, value: UnsafeAny): Promise<void>
+		getValue(key: string): unknown
+		setValue(key: string, value: unknown): Promise<void>
 	}
 	readonly taskHistoryStore: TaskHistoryStore
 	readonly outputChannel: vscode.OutputChannel
@@ -183,19 +183,14 @@ export class TaskHistoryService {
 		const { historyItem, apiConversationHistory } = await this.getTaskWithId(id)
 		const fileName = getTaskFileName(historyItem.ts)
 		const homedir = (await import("os")).homedir()
-		const defaultUri = await resolveDefaultSaveUri(
-			this.host.contextProxy as UnsafeAny,
-			"lastTaskExportPath",
-			fileName,
-			{
-				useWorkspace: false,
-				fallbackDir: path.join(homedir, "Downloads"),
-			},
-		)
+		const defaultUri = await resolveDefaultSaveUri(this.host.contextProxy, "lastTaskExportPath", fileName, {
+			useWorkspace: false,
+			fallbackDir: path.join(homedir, "Downloads"),
+		})
 		const saveUri = await downloadTask(historyItem.ts, apiConversationHistory, defaultUri)
 
 		if (saveUri) {
-			await saveLastExportPath(this.host.contextProxy as UnsafeAny, "lastTaskExportPath", saveUri)
+			await saveLastExportPath(this.host.contextProxy, "lastTaskExportPath", saveUri)
 		}
 	}
 
@@ -400,7 +395,7 @@ export class TaskHistoryService {
 		}
 
 		const items = this.host.taskHistoryStore.getAll()
-		this.host.contextProxy.setValue("taskHistory", items).catch((err: UnsafeAny) => {
+		this.host.contextProxy.setValue("taskHistory", items).catch((err) => {
 			this.log(`[flushGlobalStateWriteThrough] Failed: ${getErrorMessage(err)}`)
 		})
 	}

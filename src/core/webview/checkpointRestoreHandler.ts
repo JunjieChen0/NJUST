@@ -6,6 +6,7 @@ import { t } from "../../i18n"
 import { logger } from "../../shared/logger"
 import { getErrorMessage } from "../../shared/error-utils"
 import { TelemetryEventName } from "@njust-ai/types"
+import type { HistoryItem } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
 
 export interface ICheckpointRestoreHost {
@@ -20,8 +21,8 @@ export interface ICheckpointRestoreHost {
 		},
 	): void
 	readonly contextProxy: { globalStorageUri: { fsPath: string } }
-	getTaskWithId(id: string): Promise<{ historyItem: UnsafeAny }>
-	createTaskWithHistoryItem(historyItem: UnsafeAny): Promise<Task | undefined>
+	getTaskWithId(id: string): Promise<{ historyItem: HistoryItem }>
+	createTaskWithHistoryItem(historyItem: HistoryItem): Promise<Task | undefined>
 	getCurrentTask(): Task | undefined
 }
 
