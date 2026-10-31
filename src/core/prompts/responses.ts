@@ -143,7 +143,7 @@ If you require additional information from the user, use the ask_followup_questi
 		absolutePath: string,
 		files: string[],
 		didHitLimit: boolean,
-		rooIgnoreController: RooIgnoreController | undefined,
+		rooIgnoreController: Pick<RooIgnoreController, "validateAccess"> | undefined,
 		showRooIgnoredFiles: boolean,
 		rooProtectedController?: RooProtectedController,
 	): Promise<string> => {

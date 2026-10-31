@@ -4,7 +4,7 @@ import pWaitFor from "p-wait-for"
 import delay from "delay"
 import type { Mock } from "vitest"
 
-import { getEnvironmentDetails } from "../getEnvironmentDetails"
+import { getEnvironmentDetails, type EnvironmentDetailsHost } from "../getEnvironmentDetails"
 import { getFullModeDetails } from "../../prompts/getFullModeDetails"
 import { isToolAllowedForMode } from "../../tools/validateToolUse"
 import { getApiMetrics } from "../../../shared/getApiMetrics"
@@ -12,13 +12,8 @@ import { listFiles } from "../../../services/glob/list-files"
 import { TerminalRegistry } from "../../../integrations/terminal/TerminalRegistry"
 import { Terminal } from "../../../integrations/terminal/Terminal"
 import { arePathsEqual } from "../../../utils/path"
-import { FileContextTracker } from "../../context-tracking/FileContextTracker"
-import { ApiHandler } from "../../../api/index"
-import type { ITaskHost } from "../../task/interfaces/ITaskHost"
-import { RooIgnoreController } from "../../ignore/RooIgnoreController"
 import { formatResponse } from "../../prompts/responses"
 import { getGitStatus } from "../../../utils/git"
-import { Task } from "../../task/Task"
 
 vi.mock("vscode", () => ({
 	window: {
@@ -65,7 +60,7 @@ describe("getEnvironmentDetails", () => {
 		getCurrentWorkingDirectory: Mock
 	}
 
-	let mockCline: Partial<Task>
+	let mockCline: EnvironmentDetailsHost
 	let mockProvider: any
 	let mockState: any
 
@@ -94,30 +89,18 @@ describe("getEnvironmentDetails", () => {
 			didEditFile: false,
 			fileContextTracker: {
 				getAndClearRecentlyModifiedFiles: vi.fn().mockReturnValue([]),
-			} as unknown as FileContextTracker,
+			},
 			rooIgnoreController: {
 				filterPaths: vi.fn((paths: string[]) => paths),
-				cwd: mockCwd,
-				ignoreInstance: {},
-				disposables: [],
-				rooIgnoreContent: "",
-				isPathIgnored: vi.fn(),
-				getIgnoreContent: vi.fn(),
-				updateIgnoreContent: vi.fn(),
-				addToIgnore: vi.fn(),
-				removeFromIgnore: vi.fn(),
-				dispose: vi.fn(),
-			} as unknown as RooIgnoreController,
+				validateAccess: vi.fn(() => true),
+			},
 			clineMessages: [],
 			api: {
 				getModel: vi.fn().mockReturnValue({ id: "test-model", info: { contextWindow: 100000 } }),
-				createMessage: vi.fn(),
-				countTokens: vi.fn(),
-			} as unknown as ApiHandler,
+			},
 			providerRef: {
 				deref: vi.fn().mockReturnValue(mockProvider),
-				[Symbol.toStringTag]: "WeakRef",
-			} as unknown as WeakRef<ITaskHost>,
+			},
 		}
 
 		// Mock other dependencies.
@@ -142,7 +125,7 @@ describe("getEnvironmentDetails", () => {
 	})
 
 	it("should return basic environment details", async () => {
-		const result = await getEnvironmentDetails(mockCline as Task)
+		const result = await getEnvironmentDetails(mockCline)
 
 		expect(result).toContain("# Environment Details")
 		expect(result).toContain("====")
@@ -166,7 +149,7 @@ describe("getEnvironmentDetails", () => {
 	})
 
 	it("should include file details when includeFileDetails is true", async () => {
-		const result = await getEnvironmentDetails(mockCline as Task, true)
+		const result = await getEnvironmentDetails(mockCline, true)
 		expect(result).toContain("# Current Workspace Directory")
 		expect(result).toContain("Files")
 
@@ -182,14 +165,14 @@ describe("getEnvironmentDetails", () => {
 	})
 
 	it("should not include file details when includeFileDetails is false", async () => {
-		await getEnvironmentDetails(mockCline as Task, false)
+		await getEnvironmentDetails(mockCline, false)
 		expect(listFiles).not.toHaveBeenCalled()
 		expect(formatResponse.formatFilesList).not.toHaveBeenCalled()
 	})
 
 	it("should handle desktop directory specially", async () => {
 		;(arePathsEqual as Mock).mockReturnValue(true)
-		const result = await getEnvironmentDetails(mockCline as Task, true)
+		const result = await getEnvironmentDetails(mockCline, true)
 		expect(result).toContain("Desktop files not shown automatically")
 		expect(listFiles).not.toHaveBeenCalled()
 	})
@@ -200,7 +183,7 @@ describe("getEnvironmentDetails", () => {
 			maxWorkspaceFiles: 0,
 		})
 
-		const result = await getEnvironmentDetails(mockCline as Task, true)
+		const result = await getEnvironmentDetails(mockCline, true)
 
 		expect(listFiles).not.toHaveBeenCalled()
 		expect(result).toContain("Workspace files context disabled")
@@ -213,7 +196,7 @@ describe("getEnvironmentDetails", () => {
 			"modified2.ts",
 		])
 
-		const result = await getEnvironmentDetails(mockCline as Task)
+		const result = await getEnvironmentDetails(mockCline)
 
 		expect(result).toContain("# Recently Modified Files")
 		expect(result).toContain("modified1.ts")
@@ -231,7 +214,7 @@ describe("getEnvironmentDetails", () => {
 		;(TerminalRegistry.getTerminals as Mock).mockReturnValue([mockActiveTerminal])
 		;(TerminalRegistry.getUnretrievedOutput as Mock).mockReturnValue("Test output")
 
-		const result = await getEnvironmentDetails(mockCline as Task)
+		const result = await getEnvironmentDetails(mockCline)
 
 		expect(result).toContain("# Actively Running Terminals")
 		expect(result).toContain("## Terminal terminal-1 (Active)")
@@ -240,7 +223,7 @@ describe("getEnvironmentDetails", () => {
 		expect(result).toContain("Test output")
 
 		mockCline.didEditFile = true
-		await getEnvironmentDetails(mockCline as Task)
+		await getEnvironmentDetails(mockCline)
 		expect(vi.mocked(delay)).toHaveBeenCalledWith(300)
 
 		expect(vi.mocked(pWaitFor)).toHaveBeenCalled()
@@ -264,7 +247,7 @@ describe("getEnvironmentDetails", () => {
 			active ? [] : [mockInactiveTerminal],
 		)
 
-		const result = await getEnvironmentDetails(mockCline as Task)
+		const result = await getEnvironmentDetails(mockCline)
 
 		expect(result).toContain("# Inactive Terminals with Completed Process Output")
 		expect(result).toContain("## Terminal terminal-2 (Inactive)")
@@ -301,7 +284,7 @@ describe("getEnvironmentDetails", () => {
 		)
 		;(TerminalRegistry.getUnretrievedOutput as Mock).mockReturnValue("Server started")
 
-		const result = await getEnvironmentDetails(mockCline as Task)
+		const result = await getEnvironmentDetails(mockCline)
 
 		// Check active terminal working directory
 		expect(result).toContain("## Terminal terminal-1 (Active)")
@@ -321,7 +304,7 @@ describe("getEnvironmentDetails", () => {
 		// Mock provider to return null.
 		mockCline.providerRef!.deref = vi.fn().mockReturnValue(null)
 
-		const result = await getEnvironmentDetails(mockCline as Task)
+		const result = await getEnvironmentDetails(mockCline)
 
 		// Verify the function still returns a result.
 		expect(result).toContain("# Environment Details")
@@ -332,7 +315,7 @@ describe("getEnvironmentDetails", () => {
 			getState: vi.fn().mockResolvedValue(null),
 		})
 
-		const result2 = await getEnvironmentDetails(mockCline as Task)
+		const result2 = await getEnvironmentDetails(mockCline)
 
 		// Verify the function still returns a result.
 		expect(result2).toContain("# Environment Details")
@@ -353,15 +336,15 @@ describe("getEnvironmentDetails", () => {
 		;(TerminalRegistry.getBackgroundTerminals as Mock).mockReturnValue([])
 		;(mockCline.fileContextTracker!.getAndClearRecentlyModifiedFiles as Mock).mockReturnValue([])
 
-		await expect(getEnvironmentDetails(mockCline as Task)).resolves.not.toThrow()
+		await expect(getEnvironmentDetails(mockCline)).resolves.not.toThrow()
 	})
 	it("should include REMINDERS section when todoListEnabled is true", async () => {
 		mockProvider.getState.mockResolvedValue({
 			...mockState,
 			apiConfiguration: { todoListEnabled: true },
 		})
-		const cline = { ...mockCline, todoList: [{ content: "test", status: "pending" }] }
-		const result = await getEnvironmentDetails(cline as Task)
+		const cline = { ...mockCline, todoList: [{ id: "1", content: "test", status: "pending" }] }
+		const result = await getEnvironmentDetails(cline)
 		expect(result).toContain("REMINDERS")
 	})
 
@@ -370,8 +353,8 @@ describe("getEnvironmentDetails", () => {
 			...mockState,
 			apiConfiguration: { todoListEnabled: false },
 		})
-		const cline = { ...mockCline, todoList: [{ content: "test", status: "pending" }] }
-		const result = await getEnvironmentDetails(cline as Task)
+		const cline = { ...mockCline, todoList: [{ id: "1", content: "test", status: "pending" }] }
+		const result = await getEnvironmentDetails(cline)
 		expect(result).not.toContain("REMINDERS")
 	})
 
@@ -380,8 +363,8 @@ describe("getEnvironmentDetails", () => {
 			...mockState,
 			apiConfiguration: {},
 		})
-		const cline = { ...mockCline, todoList: [{ content: "test", status: "pending" }] }
-		const result = await getEnvironmentDetails(cline as Task)
+		const cline = { ...mockCline, todoList: [{ id: "1", content: "test", status: "pending" }] }
+		const result = await getEnvironmentDetails(cline)
 		expect(result).toContain("REMINDERS")
 	})
 	it("should include git status when maxGitStatusFiles > 0", async () => {
@@ -391,7 +374,7 @@ describe("getEnvironmentDetails", () => {
 			maxGitStatusFiles: 10,
 		})
 
-		const result = await getEnvironmentDetails(mockCline as Task)
+		const result = await getEnvironmentDetails(mockCline)
 
 		expect(result).toContain("# Git Status")
 		expect(result).toContain("## main")
@@ -404,7 +387,7 @@ describe("getEnvironmentDetails", () => {
 			maxGitStatusFiles: 0,
 		})
 
-		const result = await getEnvironmentDetails(mockCline as Task)
+		const result = await getEnvironmentDetails(mockCline)
 
 		expect(result).not.toContain("# Git Status")
 		expect(getGitStatus).not.toHaveBeenCalled()
@@ -416,7 +399,7 @@ describe("getEnvironmentDetails", () => {
 			maxGitStatusFiles: undefined,
 		})
 
-		const result = await getEnvironmentDetails(mockCline as Task)
+		const result = await getEnvironmentDetails(mockCline)
 
 		expect(result).not.toContain("# Git Status")
 		expect(getGitStatus).not.toHaveBeenCalled()
@@ -429,7 +412,7 @@ describe("getEnvironmentDetails", () => {
 			maxGitStatusFiles: 10,
 		})
 
-		const result = await getEnvironmentDetails(mockCline as Task)
+		const result = await getEnvironmentDetails(mockCline)
 
 		expect(result).not.toContain("# Git Status")
 		expect(getGitStatus).toHaveBeenCalledWith(mockCwd, 10)
@@ -442,7 +425,7 @@ describe("getEnvironmentDetails", () => {
 			maxGitStatusFiles: 5,
 		})
 
-		await getEnvironmentDetails(mockCline as Task)
+		await getEnvironmentDetails(mockCline)
 
 		expect(getGitStatus).toHaveBeenCalledWith(mockCwd, 5)
 	})

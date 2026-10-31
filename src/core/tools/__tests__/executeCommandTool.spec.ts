@@ -1,6 +1,6 @@
 // npx vitest run src/core/tools/__tests__/executeCommandTool.spec.ts
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, type Mock } from "vitest"
 
 import type { ToolUsage } from "@njust-ai/types"
 import fs from "fs/promises"
@@ -85,8 +85,8 @@ vitest.mock("../../prompts/responses")
 import * as executeCommandModule from "../ExecuteCommandTool"
 const { executeCommandTool, isSuccessfulCommandResult, validateCangjieImplementCommand } = executeCommandModule
 
-function asTestType<T>(value: unknown): T {
-	return value as T
+function asSandboxService(service: Record<string, unknown>): SandboxExecutionService {
+	return service as unknown as SandboxExecutionService
 }
 
 describe("validateCangjieImplementCommand", () => {
@@ -125,9 +125,10 @@ describe("isSuccessfulCommandResult", () => {
 describe("executeCommandTool", () => {
 	// Setup common test variables
 	let mockCline: any & { consecutiveMistakeCount: number; didRejectTool: boolean }
-	let mockAskApproval: any
-	let mockHandleError: any
-	let mockPushToolResult: any
+	let cline: Task
+	let mockAskApproval: Mock<AskApproval>
+	let mockHandleError: Mock<HandleError>
+	let mockPushToolResult: Mock<PushToolResult>
 	let mockToolUse: ToolUse<"execute_command">
 	const originalCliRuntime = process.env.NJUST_AI_CLI_RUNTIME
 
@@ -179,10 +180,11 @@ describe("executeCommandTool", () => {
 			},
 			supersedePendingAsk: vitest.fn(),
 		}
+		cline = mockCline as unknown as Task
 
-		mockAskApproval = vitest.fn().mockResolvedValue(true)
-		mockHandleError = vitest.fn().mockResolvedValue(undefined)
-		mockPushToolResult = vitest.fn()
+		mockAskApproval = vitest.fn<AskApproval>().mockResolvedValue(true)
+		mockHandleError = vitest.fn<HandleError>().mockResolvedValue(undefined)
+		mockPushToolResult = vitest.fn<PushToolResult>()
 
 		// Setup vscode config mock
 		const mockConfig = {
@@ -265,10 +267,10 @@ describe("executeCommandTool", () => {
 			mockToolUse.nativeArgs = { command: "echo test" }
 
 			// Execute directly via execute() to isolate tool logic from BaseTool.handle()
-			await executeCommandTool.execute({ command: "echo test" }, mockCline as unknown as Task, {
-				askApproval: mockAskApproval as unknown as AskApproval,
-				handleError: mockHandleError as unknown as HandleError,
-				pushToolResult: mockPushToolResult as unknown as PushToolResult,
+			await executeCommandTool.execute({ command: "echo test" }, cline, {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
 			})
 
 			// Verify
@@ -284,15 +286,11 @@ describe("executeCommandTool", () => {
 			mockToolUse.nativeArgs = { command: "echo test", cwd: "/custom/path" }
 
 			// Execute directly via execute() to isolate tool logic from BaseTool.handle()
-			await executeCommandTool.execute(
-				{ command: "echo test", cwd: "/custom/path" },
-				mockCline as unknown as Task,
-				{
-					askApproval: mockAskApproval as unknown as AskApproval,
-					handleError: mockHandleError as unknown as HandleError,
-					pushToolResult: mockPushToolResult as unknown as PushToolResult,
-				},
-			)
+			await executeCommandTool.execute({ command: "echo test", cwd: "/custom/path" }, cline, {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
+			})
 
 			// Verify - confirm the command was approved and result was pushed
 			// The custom path handling is tested in integration tests
@@ -317,10 +315,10 @@ describe("executeCommandTool", () => {
 				return Promise.resolve(undefined)
 			})
 
-			await executeCommandTool.execute({ command: "cjpm build 2>&1" }, asTestType<Task>(mockCline), {
-				askApproval: asTestType<AskApproval>(mockAskApproval),
-				handleError: asTestType<HandleError>(mockHandleError),
-				pushToolResult: asTestType<PushToolResult>(mockPushToolResult),
+			await executeCommandTool.execute({ command: "cjpm build 2>&1" }, cline, {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
 			})
 
 			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(
@@ -352,10 +350,10 @@ describe("executeCommandTool", () => {
 				return Promise.reject(new Error("missing"))
 			})
 
-			await executeCommandTool.execute({ command: "cjpm build 2>&1" }, asTestType<Task>(mockCline), {
-				askApproval: asTestType<AskApproval>(mockAskApproval),
-				handleError: asTestType<HandleError>(mockHandleError),
-				pushToolResult: asTestType<PushToolResult>(mockPushToolResult),
+			await executeCommandTool.execute({ command: "cjpm build 2>&1" }, cline, {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
 			})
 
 			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(projectRoot, "test-task-id", "execa", {
@@ -376,10 +374,10 @@ describe("executeCommandTool", () => {
 				},
 			})
 
-			await executeCommandTool.execute({ command: "cjpm check" }, asTestType<Task>(mockCline), {
-				askApproval: asTestType<AskApproval>(mockAskApproval),
-				handleError: asTestType<HandleError>(mockHandleError),
-				pushToolResult: asTestType<PushToolResult>(mockPushToolResult),
+			await executeCommandTool.execute({ command: "cjpm check" }, cline, {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
 			})
 
 			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(
@@ -398,11 +396,11 @@ describe("executeCommandTool", () => {
 
 			await executeCommandTool.execute(
 				{ command: 'powershell -Command "cd d:\\cangjie\\Cangjie-Examples\\HTTP; cjpm build"' },
-				asTestType<Task>(mockCline),
+				cline,
 				{
-					askApproval: asTestType<AskApproval>(mockAskApproval),
-					handleError: asTestType<HandleError>(mockHandleError),
-					pushToolResult: asTestType<PushToolResult>(mockPushToolResult),
+					askApproval: mockAskApproval,
+					handleError: mockHandleError,
+					pushToolResult: mockPushToolResult,
 				},
 			)
 
@@ -428,11 +426,11 @@ describe("executeCommandTool", () => {
 
 			await executeCommandTool.execute(
 				{ command: "cd /d D:\\cangjie\\Cangjie-Examples\\HTTP && cjpm build" },
-				asTestType<Task>(mockCline),
+				cline,
 				{
-					askApproval: asTestType<AskApproval>(mockAskApproval),
-					handleError: asTestType<HandleError>(mockHandleError),
-					pushToolResult: asTestType<PushToolResult>(mockPushToolResult),
+					askApproval: mockAskApproval,
+					handleError: mockHandleError,
+					pushToolResult: mockPushToolResult,
 				},
 			)
 
@@ -453,15 +451,11 @@ describe("executeCommandTool", () => {
 			}
 			;(vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: "/test/workspace" } }]
 
-			await executeCommandTool.execute(
-				{ command: "cjpm build 2>&1", cwd: "packages/http" },
-				asTestType<Task>(mockCline),
-				{
-					askApproval: asTestType<AskApproval>(mockAskApproval),
-					handleError: asTestType<HandleError>(mockHandleError),
-					pushToolResult: asTestType<PushToolResult>(mockPushToolResult),
-				},
-			)
+			await executeCommandTool.execute({ command: "cjpm build 2>&1", cwd: "packages/http" }, cline, {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
+			})
 
 			expect(TerminalRegistry.getOrCreateTerminal).toHaveBeenCalledWith(
 				expect.stringContaining("packages"),
@@ -479,10 +473,10 @@ describe("executeCommandTool", () => {
 			mockToolUse.nativeArgs = { command: "echo test" }
 
 			// Execute
-			await executeCommandTool.handle(mockCline as unknown as Task, mockToolUse, {
-				askApproval: mockAskApproval as unknown as AskApproval,
-				handleError: mockHandleError as unknown as HandleError,
-				pushToolResult: mockPushToolResult as unknown as PushToolResult,
+			await executeCommandTool.handle(cline, mockToolUse, {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
 			})
 
 			// Verify
@@ -505,10 +499,10 @@ describe("executeCommandTool", () => {
 			;(formatResponse.rooIgnoreError as any).mockReturnValue(mockRooIgnoreError)
 
 			// Execute
-			await executeCommandTool.handle(mockCline as unknown as Task, mockToolUse, {
-				askApproval: mockAskApproval as unknown as AskApproval,
-				handleError: mockHandleError as unknown as HandleError,
-				pushToolResult: mockPushToolResult as unknown as PushToolResult,
+			await executeCommandTool.handle(cline, mockToolUse, {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
 			})
 
 			// Verify
@@ -583,7 +577,7 @@ describe("executeCommandTool", () => {
 			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
 			mockCline.supersedePendingAsk = vitest.fn()
 
-			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+			const execution = executeCommandModule.executeCommandInTerminal(cline, {
 				executionId: "background-timeout",
 				command: "long-running-command",
 				agentTimeout: 10,
@@ -617,7 +611,7 @@ describe("executeCommandTool", () => {
 			}
 			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
 
-			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+			const execution = executeCommandModule.executeCommandInTerminal(cline, {
 				executionId: "background-user-timeout",
 				command: "long-running-command",
 				agentTimeout: 10,
@@ -652,9 +646,9 @@ describe("executeCommandTool", () => {
 			}
 			const getInstance = vitest
 				.spyOn(SandboxExecutionService, "getInstance")
-				.mockReturnValue(service as unknown as SandboxExecutionService)
+				.mockReturnValue(asSandboxService(service))
 
-			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+			const execution = executeCommandModule.executeCommandInTerminal(cline, {
 				executionId: "docker-background",
 				command: "long-running-command",
 				agentTimeout: 10,
@@ -695,9 +689,9 @@ describe("executeCommandTool", () => {
 			}
 			const getInstance = vitest
 				.spyOn(SandboxExecutionService, "getInstance")
-				.mockReturnValue(service as unknown as SandboxExecutionService)
+				.mockReturnValue(asSandboxService(service))
 
-			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+			const execution = executeCommandModule.executeCommandInTerminal(cline, {
 				executionId: "docker-hard-timeout",
 				command: "long-running-command",
 				agentTimeout: 10_000,
@@ -724,12 +718,12 @@ describe("executeCommandTool", () => {
 			}
 			const getInstance = vitest
 				.spyOn(SandboxExecutionService, "getInstance")
-				.mockReturnValue(service as unknown as SandboxExecutionService)
+				.mockReturnValue(asSandboxService(service))
 
-			await executeCommandTool.execute({ command: "export FOO=bar" }, mockCline as unknown as Task, {
-				askApproval: mockAskApproval as unknown as AskApproval,
-				handleError: mockHandleError as unknown as HandleError,
-				pushToolResult: mockPushToolResult as unknown as PushToolResult,
+			await executeCommandTool.execute({ command: "export FOO=bar" }, cline, {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
 			})
 
 			const audit = {
@@ -787,7 +781,7 @@ describe("executeCommandTool", () => {
 			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
 
 			try {
-				const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+				const execution = executeCommandModule.executeCommandInTerminal(cline, {
 					executionId: "scoped-host-process",
 					command: "long-running-command",
 				})
@@ -814,10 +808,10 @@ describe("executeCommandTool", () => {
 			}
 			const getInstance = vitest
 				.spyOn(SandboxExecutionService, "getInstance")
-				.mockReturnValue(service as unknown as SandboxExecutionService)
+				.mockReturnValue(asSandboxService(service))
 			;(TerminalRegistry.getOrCreateTerminal as any).mockRejectedValueOnce(terminalError)
 
-			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+			const execution = executeCommandModule.executeCommandInTerminal(cline, {
 				executionId: "terminal-acquisition-error",
 				command: "echo test",
 			})
@@ -858,10 +852,10 @@ describe("executeCommandTool", () => {
 			})
 			const getInstance = vitest
 				.spyOn(SandboxExecutionService, "getInstance")
-				.mockReturnValue(service as unknown as SandboxExecutionService)
+				.mockReturnValue(asSandboxService(service))
 			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
 
-			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+			const execution = executeCommandModule.executeCommandInTerminal(cline, {
 				executionId: "terminal-show-error",
 				command: "echo test",
 			})
@@ -895,10 +889,10 @@ describe("executeCommandTool", () => {
 			})
 			const getInstance = vitest
 				.spyOn(SandboxExecutionService, "getInstance")
-				.mockReturnValue(service as unknown as SandboxExecutionService)
+				.mockReturnValue(asSandboxService(service))
 			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
 
-			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+			const execution = executeCommandModule.executeCommandInTerminal(cline, {
 				executionId: "terminal-cwd-error",
 				command: "echo test",
 			})
@@ -931,10 +925,10 @@ describe("executeCommandTool", () => {
 			}
 			const getInstance = vitest
 				.spyOn(SandboxExecutionService, "getInstance")
-				.mockReturnValue(service as unknown as SandboxExecutionService)
+				.mockReturnValue(asSandboxService(service))
 			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
 
-			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+			const execution = executeCommandModule.executeCommandInTerminal(cline, {
 				executionId: "terminal-run-error",
 				command: "echo test",
 			})
@@ -974,10 +968,10 @@ describe("executeCommandTool", () => {
 			}
 			const getInstance = vitest
 				.spyOn(SandboxExecutionService, "getInstance")
-				.mockReturnValue(service as unknown as SandboxExecutionService)
+				.mockReturnValue(asSandboxService(service))
 			;(TerminalRegistry.getOrCreateTerminal as any).mockResolvedValueOnce(terminal)
 
-			const execution = executeCommandModule.executeCommandInTerminal(mockCline as unknown as Task, {
+			const execution = executeCommandModule.executeCommandInTerminal(cline, {
 				executionId: "terminal-registration-error",
 				command: "echo test",
 			})

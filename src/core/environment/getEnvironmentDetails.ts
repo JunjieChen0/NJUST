@@ -27,14 +27,14 @@ import { formatReminderSection } from "./reminder"
 
 /** Structural subset of Task required to build environment details. */
 export interface EnvironmentDetailsHost {
-	providerRef: WeakRef<ITaskHost>
+	providerRef: { deref(): ITaskHost | undefined }
 	readonly cwd: string
 	readonly taskId: string
-	rooIgnoreController?: RooIgnoreController
+	rooIgnoreController?: Pick<RooIgnoreController, "filterPaths" | "validateAccess">
 	didEditFile: boolean
 	fileContextTracker: Pick<FileContextTracker, "getAndClearRecentlyModifiedFiles">
 	clineMessages: ClineMessage[]
-	api: ApiHandler
+	api: Pick<ApiHandler, "getModel">
 	todoList?: TodoItem[]
 }
 

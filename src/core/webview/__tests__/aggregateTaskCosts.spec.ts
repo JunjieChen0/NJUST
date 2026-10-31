@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { aggregateTaskCostsRecursive } from "../aggregateTaskCosts.js"
 import type { HistoryItem } from "@njust-ai/types"
 
+type LooseHistory = Record<string, Partial<HistoryItem> & { id: string }>
+
+function historyLookup(history: LooseHistory) {
+	return vi.fn(async (id: string) => history[id] as HistoryItem | undefined)
+}
+
 describe("aggregateTaskCostsRecursive", () => {
 	let consoleWarnSpy: ReturnType<typeof vi.spyOn>
 
@@ -10,15 +16,15 @@ describe("aggregateTaskCostsRecursive", () => {
 	})
 
 	it("should calculate cost for task with no children", async () => {
-		const mockHistory: Record<string, HistoryItem> = {
+		const mockHistory: LooseHistory = {
 			"task-1": {
 				id: "task-1",
 				totalCost: 1.5,
 				childIds: [],
-			} as unknown as HistoryItem,
+			},
 		}
 
-		const getTaskHistory = vi.fn(async (id: string) => mockHistory[id])
+		const getTaskHistory = historyLookup(mockHistory)
 
 		const result = await aggregateTaskCostsRecursive("task-1", getTaskHistory)
 
@@ -29,15 +35,15 @@ describe("aggregateTaskCostsRecursive", () => {
 	})
 
 	it("should calculate cost for task with undefined childIds", async () => {
-		const mockHistory: Record<string, HistoryItem> = {
+		const mockHistory: LooseHistory = {
 			"task-1": {
 				id: "task-1",
 				totalCost: 2.0,
 				// childIds is undefined
-			} as unknown as HistoryItem,
+			},
 		}
 
-		const getTaskHistory = vi.fn(async (id: string) => mockHistory[id])
+		const getTaskHistory = historyLookup(mockHistory)
 
 		const result = await aggregateTaskCostsRecursive("task-1", getTaskHistory)
 
@@ -48,20 +54,20 @@ describe("aggregateTaskCostsRecursive", () => {
 	})
 
 	it("should aggregate parent with one child", async () => {
-		const mockHistory: Record<string, HistoryItem> = {
+		const mockHistory: LooseHistory = {
 			parent: {
 				id: "parent",
 				totalCost: 1.0,
 				childIds: ["child-1"],
-			} as unknown as HistoryItem,
+			},
 			"child-1": {
 				id: "child-1",
 				totalCost: 0.5,
 				childIds: [],
-			} as unknown as HistoryItem,
+			},
 		}
 
-		const getTaskHistory = vi.fn(async (id: string) => mockHistory[id])
+		const getTaskHistory = historyLookup(mockHistory)
 
 		const result = await aggregateTaskCostsRecursive("parent", getTaskHistory)
 
@@ -75,30 +81,30 @@ describe("aggregateTaskCostsRecursive", () => {
 	})
 
 	it("should aggregate parent with multiple children", async () => {
-		const mockHistory: Record<string, HistoryItem> = {
+		const mockHistory: LooseHistory = {
 			parent: {
 				id: "parent",
 				totalCost: 1.0,
 				childIds: ["child-1", "child-2", "child-3"],
-			} as unknown as HistoryItem,
+			},
 			"child-1": {
 				id: "child-1",
 				totalCost: 0.5,
 				childIds: [],
-			} as unknown as HistoryItem,
+			},
 			"child-2": {
 				id: "child-2",
 				totalCost: 0.75,
 				childIds: [],
-			} as unknown as HistoryItem,
+			},
 			"child-3": {
 				id: "child-3",
 				totalCost: 0.25,
 				childIds: [],
-			} as unknown as HistoryItem,
+			},
 		}
 
-		const getTaskHistory = vi.fn(async (id: string) => mockHistory[id])
+		const getTaskHistory = historyLookup(mockHistory)
 
 		const result = await aggregateTaskCostsRecursive("parent", getTaskHistory)
 
@@ -109,25 +115,25 @@ describe("aggregateTaskCostsRecursive", () => {
 	})
 
 	it("should recursively aggregate multi-level hierarchy", async () => {
-		const mockHistory: Record<string, HistoryItem> = {
+		const mockHistory: LooseHistory = {
 			parent: {
 				id: "parent",
 				totalCost: 1.0,
 				childIds: ["child"],
-			} as unknown as HistoryItem,
+			},
 			child: {
 				id: "child",
 				totalCost: 0.5,
 				childIds: ["grandchild"],
-			} as unknown as HistoryItem,
+			},
 			grandchild: {
 				id: "grandchild",
 				totalCost: 0.25,
 				childIds: [],
-			} as unknown as HistoryItem,
+			},
 		}
 
-		const getTaskHistory = vi.fn(async (id: string) => mockHistory[id])
+		const getTaskHistory = historyLookup(mockHistory)
 
 		const result = await aggregateTaskCostsRecursive("parent", getTaskHistory)
 
@@ -151,20 +157,20 @@ describe("aggregateTaskCostsRecursive", () => {
 	})
 
 	it("should detect and prevent circular references", async () => {
-		const mockHistory: Record<string, HistoryItem> = {
+		const mockHistory: LooseHistory = {
 			"task-a": {
 				id: "task-a",
 				totalCost: 1.0,
 				childIds: ["task-b"],
-			} as unknown as HistoryItem,
+			},
 			"task-b": {
 				id: "task-b",
 				totalCost: 0.5,
 				childIds: ["task-a"], // Circular reference back to task-a
-			} as unknown as HistoryItem,
+			},
 		}
 
-		const getTaskHistory = vi.fn(async (id: string) => mockHistory[id])
+		const getTaskHistory = historyLookup(mockHistory)
 
 		const result = await aggregateTaskCostsRecursive("task-a", getTaskHistory)
 
@@ -178,15 +184,15 @@ describe("aggregateTaskCostsRecursive", () => {
 	})
 
 	it("should handle missing task gracefully", async () => {
-		const mockHistory: Record<string, HistoryItem> = {
+		const mockHistory: LooseHistory = {
 			parent: {
 				id: "parent",
 				totalCost: 1.0,
 				childIds: ["nonexistent-child"],
-			} as unknown as HistoryItem,
+			},
 		}
 
-		const getTaskHistory = vi.fn(async (id: string) => mockHistory[id])
+		const getTaskHistory = historyLookup(mockHistory)
 
 		const result = await aggregateTaskCostsRecursive("parent", getTaskHistory)
 
@@ -199,9 +205,9 @@ describe("aggregateTaskCostsRecursive", () => {
 	})
 
 	it("should return zero costs for completely missing task", async () => {
-		const mockHistory: Record<string, HistoryItem> = {}
+		const mockHistory: LooseHistory = {}
 
-		const getTaskHistory = vi.fn(async (id: string) => mockHistory[id])
+		const getTaskHistory = historyLookup(mockHistory)
 
 		const result = await aggregateTaskCostsRecursive("nonexistent", getTaskHistory)
 
@@ -213,15 +219,15 @@ describe("aggregateTaskCostsRecursive", () => {
 	})
 
 	it("should handle task with null totalCost", async () => {
-		const mockHistory: Record<string, HistoryItem> = {
+		const mockHistory: LooseHistory = {
 			"task-1": {
 				id: "task-1",
-				totalCost: null as unknown as number, // Explicitly null (invalid type in prod)
+				totalCost: null!, // Explicitly null (invalid type in prod)
 				childIds: [],
-			} as unknown as HistoryItem,
+			},
 		}
 
-		const getTaskHistory = vi.fn(async (id: string) => mockHistory[id])
+		const getTaskHistory = historyLookup(mockHistory)
 
 		const result = await aggregateTaskCostsRecursive("task-1", getTaskHistory)
 
@@ -231,15 +237,15 @@ describe("aggregateTaskCostsRecursive", () => {
 	})
 
 	it("should handle task with undefined totalCost", async () => {
-		const mockHistory: Record<string, HistoryItem> = {
+		const mockHistory: LooseHistory = {
 			"task-1": {
 				id: "task-1",
 				// totalCost is undefined
 				childIds: [],
-			} as unknown as HistoryItem,
+			},
 		}
 
-		const getTaskHistory = vi.fn(async (id: string) => mockHistory[id])
+		const getTaskHistory = historyLookup(mockHistory)
 
 		const result = await aggregateTaskCostsRecursive("task-1", getTaskHistory)
 
@@ -249,35 +255,35 @@ describe("aggregateTaskCostsRecursive", () => {
 	})
 
 	it("should handle complex hierarchy with mixed costs", async () => {
-		const mockHistory: Record<string, HistoryItem> = {
+		const mockHistory: LooseHistory = {
 			root: {
 				id: "root",
 				totalCost: 2.5,
 				childIds: ["child-1", "child-2"],
-			} as unknown as HistoryItem,
+			},
 			"child-1": {
 				id: "child-1",
 				totalCost: 1.2,
 				childIds: ["grandchild-1", "grandchild-2"],
-			} as unknown as HistoryItem,
+			},
 			"child-2": {
 				id: "child-2",
 				totalCost: 0.8,
 				childIds: [],
-			} as unknown as HistoryItem,
+			},
 			"grandchild-1": {
 				id: "grandchild-1",
 				totalCost: 0.3,
 				childIds: [],
-			} as unknown as HistoryItem,
+			},
 			"grandchild-2": {
 				id: "grandchild-2",
 				totalCost: 0.15,
 				childIds: [],
-			} as unknown as HistoryItem,
+			},
 		}
 
-		const getTaskHistory = vi.fn(async (id: string) => mockHistory[id])
+		const getTaskHistory = historyLookup(mockHistory)
 
 		const result = await aggregateTaskCostsRecursive("root", getTaskHistory)
 
@@ -290,30 +296,30 @@ describe("aggregateTaskCostsRecursive", () => {
 	})
 
 	it("should handle siblings without cross-contamination", async () => {
-		const mockHistory: Record<string, HistoryItem> = {
+		const mockHistory: LooseHistory = {
 			parent: {
 				id: "parent",
 				totalCost: 1.0,
 				childIds: ["sibling-1", "sibling-2"],
-			} as unknown as HistoryItem,
+			},
 			"sibling-1": {
 				id: "sibling-1",
 				totalCost: 0.5,
 				childIds: ["nephew"],
-			} as unknown as HistoryItem,
+			},
 			"sibling-2": {
 				id: "sibling-2",
 				totalCost: 0.3,
 				childIds: ["nephew"], // Same child ID as sibling-1
-			} as unknown as HistoryItem,
+			},
 			nephew: {
 				id: "nephew",
 				totalCost: 0.1,
 				childIds: [],
-			} as unknown as HistoryItem,
+			},
 		}
 
-		const getTaskHistory = vi.fn(async (id: string) => mockHistory[id])
+		const getTaskHistory = historyLookup(mockHistory)
 
 		const result = await aggregateTaskCostsRecursive("parent", getTaskHistory)
 
