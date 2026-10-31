@@ -8,6 +8,8 @@ import { logger } from "../../shared/logger"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
 import type { McpHubInternal } from "./McpHub"
+import type { ServerConfigSchema } from "./McpHubConfigSchema"
+import type { z } from "zod"
 
 export async function toggleServerDisabledWithHub(
 	hub: McpHubInternal,
@@ -70,7 +72,7 @@ export async function readServerConfigFromFileWithHub(
 	hub: McpHubInternal,
 	serverName: string,
 	source: "global" | "project" = "global",
-): Promise<UnsafeAny> {
+): Promise<z.infer<typeof ServerConfigSchema>> {
 	// Determine which config file to read
 	let configPath: string
 	if (source === "project") {
@@ -116,7 +118,7 @@ export async function readServerConfigFromFileWithHub(
 export async function updateServerConfigWithHub(
 	hub: McpHubInternal,
 	serverName: string,
-	configUpdate: Record<string, UnsafeAny>,
+	configUpdate: Record<string, unknown>,
 	source: "global" | "project" = "global",
 ): Promise<void> {
 	// Determine which config file to update

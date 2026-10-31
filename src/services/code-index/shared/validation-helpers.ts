@@ -88,25 +88,30 @@ export function getErrorMessageForStatus(status: number | undefined, embedderTyp
 /**
  * Extracts status code from various error formats
  */
-export function extractStatusCode(error: UnsafeAny): number | undefined {
+export function extractStatusCode(error: unknown): number | undefined {
+	const e =
+		error && typeof error === "object"
+			? (error as { status?: unknown; response?: { status?: unknown }; message?: unknown })
+			: undefined
+
 	// Direct status property
-	if (error?.status) return error.status
+	if (typeof e?.status === "number") return e.status
 
 	// Response status property
-	if (error?.response?.status) return error.response.status
+	if (typeof e?.response?.status === "number") return e.response.status
 
 	// Extract from error message (e.g., "HTTP 404: Not Found")
-	if (error?.message) {
-		const match = error.message.match(/HTTP (\d+):/)
+	if (typeof e?.message === "string") {
+		const match = e.message.match(/HTTP (\d+):/)
 		if (match) {
-			return parseInt(match[1], 10)
+			return parseInt(match[1]!, 10)
 		}
 	}
 
 	// Use serialize-error as fallback for complex objects
-	const serialized = serializeError(error)
-	if (serialized?.status) return serialized.status
-	if (serialized?.response?.status) return serialized.response.status
+	const serialized = serializeError(error) as { status?: unknown; response?: { status?: unknown } } | undefined
+	if (typeof serialized?.status === "number") return serialized.status
+	if (typeof serialized?.response?.status === "number") return serialized.response.status
 
 	return undefined
 }
@@ -114,8 +119,8 @@ export function extractStatusCode(error: UnsafeAny): number | undefined {
 /**
  * Extracts error message from various error formats
  */
-export function extractErrorMessage(error: UnsafeAny): string {
-	if (error?.message) {
+export function extractErrorMessage(error: unknown): string {
+	if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
 		return error.message
 	}
 
@@ -123,7 +128,7 @@ export function extractErrorMessage(error: UnsafeAny): string {
 		return error
 	}
 
-	if (error && typeof error === "object" && "toString" in error) {
+	if (error && typeof error === "object") {
 		try {
 			return String(error)
 		} catch {
@@ -132,8 +137,8 @@ export function extractErrorMessage(error: UnsafeAny): string {
 	}
 
 	// Use serialize-error as fallback for complex objects
-	const serialized = serializeError(error)
-	if (serialized?.message) {
+	const serialized = serializeError(error) as { message?: unknown } | undefined
+	if (typeof serialized?.message === "string") {
 		return serialized.message
 	}
 
@@ -145,10 +150,10 @@ export function extractErrorMessage(error: UnsafeAny): string {
  * Returns a consistent error response based on the error type
  */
 export function handleValidationError(
-	error: UnsafeAny,
+	error: unknown,
 	embedderType: string,
 	customHandlers?: {
-		beforeStandardHandling?: (error: UnsafeAny) => { valid: boolean; error: string } | undefined
+		beforeStandardHandling?: (error: unknown) => { valid: boolean; error: string } | undefined
 	},
 ): { valid: boolean; error: string } {
 	// Serialize the error to ensure we have access to all properties
@@ -215,7 +220,7 @@ export async function withValidationErrorHandling<T extends { valid: boolean; er
 /**
  * Formats an embedding error message based on the error type and context
  */
-export function formatEmbeddingError(error: UnsafeAny, maxRetries: number): Error {
+export function formatEmbeddingError(error: unknown, maxRetries: number): Error {
 	const errorMessage = extractErrorMessage(error)
 	const statusCode = extractStatusCode(error)
 

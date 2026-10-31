@@ -15,7 +15,6 @@ import { logger } from "../../../shared/logger"
 
 interface EmbeddingItem {
 	embedding: string | number[]
-	[key: string]: UnsafeAny
 }
 
 interface OpenAIEmbeddingResponse {

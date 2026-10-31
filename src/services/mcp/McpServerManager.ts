@@ -1,3 +1,4 @@
+import type { ExtensionMessage } from "@njust-ai/types"
 import * as vscode from "vscode"
 import { McpHub } from "./McpHub"
 import type { IMcpHubClient } from "./interfaces/IMcpHubClient"
@@ -68,7 +69,7 @@ export class McpServerManager {
 	/**
 	 * Notify all registered providers of server state changes.
 	 */
-	static notifyProviders(message: UnsafeAny): void {
+	static notifyProviders(message: ExtensionMessage): void {
 		this.providers.forEach((provider) => {
 			provider.postMessageToWebview(message).catch((error) => {
 				logger.error("McpServerManager", "Failed to notify provider:", error)

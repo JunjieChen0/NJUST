@@ -35,7 +35,7 @@ const DEFAULT_CONFIGS: Record<string, BucketConfig> = {
 }
 
 export class TokenBucketRateLimiter {
-	private static _instance: TokenBucketRateLimiter
+	private static _instance: TokenBucketRateLimiter | undefined
 	private buckets = new Map<string, BucketState>()
 	private configs: Record<string, BucketConfig>
 	// Per-provider refill timers. Previously this was a single field, which
@@ -72,7 +72,7 @@ export class TokenBucketRateLimiter {
 		if (TokenBucketRateLimiter._instance) {
 			TokenBucketRateLimiter._instance.dispose()
 		}
-		TokenBucketRateLimiter._instance = undefined as UnsafeAny
+		TokenBucketRateLimiter._instance = undefined
 	}
 
 	private getConfig(key: string): BucketConfig {

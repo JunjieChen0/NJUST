@@ -13,11 +13,20 @@ export interface TransportCallbacks {
 	onReconnectExhausted?: (name: string) => void | Promise<void>
 }
 
+export interface TransportServerConfig {
+	command?: string
+	args?: string[]
+	env?: Record<string, string>
+	cwd?: string
+	url?: string
+	headers?: Record<string, string>
+}
+
 export interface ITransportStrategy {
 	readonly type: string
 	createTransport(
 		name: string,
-		config: Record<string, UnsafeAny>,
+		config: TransportServerConfig,
 		callbacks: TransportCallbacks,
 	): Promise<StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport>
 }

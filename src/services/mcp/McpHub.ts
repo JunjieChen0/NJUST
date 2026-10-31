@@ -106,7 +106,7 @@ export interface McpHubInternal {
 	showErrorMessage(message: string, error: unknown): void
 	getProjectMcpPath(): Promise<string>
 	getMcpSettingsFilePath(): Promise<string>
-	validateServerConfig(config: unknown, serverName: string): { valid: boolean; message?: string }
+	validateServerConfig(config: unknown, serverName: string): z.infer<typeof ServerConfigSchema>
 	setProgrammaticUpdateFlag(): void
 	scheduleProgrammaticUpdateFlagReset(): void
 	updateServerConnections(servers: Record<string, unknown>, source: "global" | "project"): Promise<void>
@@ -216,7 +216,7 @@ export class McpHub implements IMcpHubService {
 	 * @param message The error message prefix
 	 * @param error The error object
 	 */
-	private showErrorMessage(message: string, error: unknown): void {
+	showErrorMessage(message: string, error: unknown): void {
 		logger.error("McpHub", `${message}:`, error)
 	}
 
@@ -349,7 +349,7 @@ export class McpHub implements IMcpHubService {
 	}
 
 	// Get project-level MCP configuration path
-	private async getProjectMcpPath(): Promise<string | null> {
+	async getProjectMcpPath(): Promise<string | null> {
 		const workspacePath = this.providerRef.deref()?.cwd ?? getWorkspacePath()
 		const projectMcpDir = path.join(workspacePath, NJUST_AI_CONFIG_DIR)
 		const projectMcpPath = path.join(projectMcpDir, "mcp.json")

@@ -5,7 +5,9 @@ import { TelemetryEventName } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { mergeSafeEnv } from "../../../utils/env"
 
-import type { ITransportStrategy, TransportCallbacks } from "./ITransportStrategy"
+import type { ChildProcess } from "child_process"
+
+import type { ITransportStrategy, TransportCallbacks, TransportServerConfig } from "./ITransportStrategy"
 
 const MAX_STREAM_RECONNECT = 6
 
@@ -14,7 +16,7 @@ export class StdioTransportStrategy implements ITransportStrategy {
 
 	async createTransport(
 		name: string,
-		config: Record<string, UnsafeAny>,
+		config: TransportServerConfig,
 		callbacks: TransportCallbacks,
 	): Promise<StdioClientTransport> {
 		// On Windows, wrap commands with cmd.exe to handle non-exe executables like npx.ps1
@@ -24,10 +26,10 @@ export class StdioTransportStrategy implements ITransportStrategy {
 		const isWindows = process.platform === "win32"
 
 		// Check if command is already cmd.exe to avoid double-wrapping
-		const isAlreadyWrapped = config.command.toLowerCase() === "cmd.exe" || config.command.toLowerCase() === "cmd"
+		const isAlreadyWrapped = config.command!.toLowerCase() === "cmd.exe" || config.command!.toLowerCase() === "cmd"
 
-		const command = isWindows && !isAlreadyWrapped ? "cmd.exe" : config.command
-		const args = isWindows && !isAlreadyWrapped ? ["/c", config.command, ...(config.args || [])] : config.args
+		const command = isWindows && !isAlreadyWrapped ? "cmd.exe" : config.command!
+		const args = isWindows && !isAlreadyWrapped ? ["/c", config.command!, ...(config.args || [])] : config.args
 
 		const mergedEnv = mergeSafeEnv(getDefaultEnvironment(), config.env || {}, name)
 		const env: Record<string, string> = {}
@@ -114,7 +116,7 @@ export class StdioTransportStrategy implements ITransportStrategy {
 		await transport.start()
 
 		// Prevent the child process from blocking VS Code exit.
-		const childProcess = (transport as Record<string, UnsafeAny>).process
+		const childProcess = (transport as { process?: ChildProcess }).process
 		if (childProcess && typeof childProcess.unref === "function") {
 			childProcess.unref()
 			childProcess.on("exit", (code: number | null, signal: string | null) => {

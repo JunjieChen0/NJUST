@@ -2,14 +2,14 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 
 import { logger } from "../../../shared/logger"
 
-import type { ITransportStrategy, TransportCallbacks } from "./ITransportStrategy"
+import type { ITransportStrategy, TransportCallbacks, TransportServerConfig } from "./ITransportStrategy"
 
 export class SseTransportStrategy implements ITransportStrategy {
 	readonly type = "sse"
 
 	async createTransport(
 		name: string,
-		config: Record<string, UnsafeAny>,
+		config: TransportServerConfig,
 		callbacks: TransportCallbacks,
 	): Promise<SSEClientTransport> {
 		// MCP server URLs are user-configured — the user explicitly trusts these endpoints.
@@ -44,7 +44,7 @@ export class SseTransportStrategy implements ITransportStrategy {
 			},
 		}
 
-		const transport = new SSEClientTransport(new URL(config.url), sseOptions)
+		const transport = new SSEClientTransport(new URL(config.url!), sseOptions)
 
 		transport.onerror = async (error) => {
 			logger.error("McpHub", `SSE transport error for "${name}":`, error)

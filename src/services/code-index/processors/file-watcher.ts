@@ -223,10 +223,10 @@ export class FileWatcher implements IFileWatcher {
 						currentFile: path,
 					})
 				}
-			} catch (error: UnsafeAny) {
+			} catch (error: unknown) {
 				const _errorMessage = getErrorMessage(error)
-				const err = error as Record<string, UnsafeAny>
-				const response = err.response as Record<string, UnsafeAny> | undefined
+				const err = error as { status?: unknown; statusCode?: unknown; response?: { status?: unknown } }
+				const response = err.response
 				const _errorStatus = err.status || response?.status || err.statusCode
 
 				// Mark all paths as error

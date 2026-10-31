@@ -115,7 +115,7 @@ export class CodeIndexOllamaEmbedder implements IEmbedder {
 			return {
 				embeddings: embeddings,
 			}
-		} catch (error: UnsafeAny) {
+		} catch (error: unknown) {
 			// Log the original error for debugging purposes
 			logger.error("OllamaEmbedder", "Ollama embedding failed:", error)
 			try {
@@ -124,7 +124,7 @@ export class CodeIndexOllamaEmbedder implements IEmbedder {
 				/* best-effort */
 			}
 
-			const err = error as Record<string, UnsafeAny>
+			const err = error as { name?: unknown; message?: unknown; code?: unknown }
 
 			// Handle specific error types with better messages
 			if (err.name === "AbortError") {
@@ -184,11 +184,11 @@ export class CodeIndexOllamaEmbedder implements IEmbedder {
 				}
 
 				// Check if the specific model exists
-				const modelsData = await modelsResponse.json()
-				const models = modelsData.models || []
+				const modelsData = (await modelsResponse.json()) as { models?: Array<{ name?: string }> }
+				const models: Array<{ name?: string }> = modelsData.models || []
 
 				// Check both with and without :latest suffix
-				const modelExists = models.some((m: UnsafeAny) => {
+				const modelExists = models.some((m) => {
 					const modelName = m.name || ""
 					return (
 						modelName === this.defaultModelId ||
@@ -198,7 +198,7 @@ export class CodeIndexOllamaEmbedder implements IEmbedder {
 				})
 
 				if (!modelExists) {
-					const availableModels = models.map((m: UnsafeAny) => m.name).join(", ")
+					const availableModels = models.map((m) => m.name).join(", ")
 					return {
 						valid: false,
 						error: t("embeddings:ollama.modelNotFound", {
@@ -239,24 +239,28 @@ export class CodeIndexOllamaEmbedder implements IEmbedder {
 			},
 			"ollama",
 			{
-				beforeStandardHandling: (error: UnsafeAny) => {
+				beforeStandardHandling: (error: unknown) => {
+					const e = error as { message?: unknown; code?: unknown; name?: unknown }
 					// Handle Ollama-specific connection errors
 					// Check for fetch failed errors which indicate Ollama is not running
 					if (
-						error?.message?.includes("fetch failed") ||
-						error?.code === "ECONNREFUSED" ||
-						error?.message?.includes("ECONNREFUSED")
+						(typeof e?.message === "string" && e.message.includes("fetch failed")) ||
+						e?.code === "ECONNREFUSED" ||
+						(typeof e?.message === "string" && e.message.includes("ECONNREFUSED"))
 					) {
 						return {
 							valid: false,
 							error: t("embeddings:ollama.serviceNotRunning", { baseUrl: this.baseUrl }),
 						}
-					} else if (error?.code === "ENOTFOUND" || error?.message?.includes("ENOTFOUND")) {
+					} else if (
+						e?.code === "ENOTFOUND" ||
+						(typeof e?.message === "string" && e.message.includes("ENOTFOUND"))
+					) {
 						return {
 							valid: false,
 							error: t("embeddings:ollama.hostNotFound", { baseUrl: this.baseUrl }),
 						}
-					} else if (error?.name === "AbortError") {
+					} else if (e?.name === "AbortError") {
 						// Handle timeout
 						return {
 							valid: false,

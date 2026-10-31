@@ -9,10 +9,21 @@ import { logger } from "../../shared/logger"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
 
-type McpHubInternal = UnsafeAny
+import type { McpConnection } from "./McpHub"
+
+/** Narrow structural view of the hub used by tool-permission helpers (public members only). */
+interface McpToolConfigHub {
+	findConnection(serverName: string, source?: "global" | "project"): McpConnection | undefined
+	getMcpSettingsFilePath(): Promise<string>
+	getProjectMcpPath(): Promise<string | null>
+	notifyWebviewOfServerChanges(): Promise<void>
+	scheduleProgrammaticUpdateFlagReset(): void
+	setProgrammaticUpdateFlag(): void
+	showErrorMessage(message: string, error: unknown): void
+}
 
 export async function fetchToolsListWithHub(
-	hub: McpHubInternal,
+	hub: McpToolConfigHub,
 	serverName: string,
 	source?: "global" | "project",
 ): Promise<McpTool[]> {
@@ -34,20 +45,22 @@ export async function fetchToolsListWithHub(
 
 		// Read from the appropriate config file based on the actual source
 		try {
-			let serverConfigData: Record<string, UnsafeAny> = {}
+			let serverConfigData: {
+				mcpServers?: Record<string, { alwaysAllow?: string[]; disabledTools?: string[] }>
+			} = {}
 			if (actualSource === "project") {
 				// Get project MCP config path
 				const projectMcpPath = await hub.getProjectMcpPath()
 				if (projectMcpPath) {
 					configPath = projectMcpPath
 					const content = await fs.readFile(configPath, "utf-8")
-					serverConfigData = JSON.parse(content)
+					serverConfigData = JSON.parse(content) as typeof serverConfigData
 				}
 			} else {
 				// Get global MCP settings path
 				configPath = await hub.getMcpSettingsFilePath()
 				const content = await fs.readFile(configPath, "utf-8")
-				serverConfigData = JSON.parse(content)
+				serverConfigData = JSON.parse(content) as typeof serverConfigData
 			}
 			if (serverConfigData) {
 				alwaysAllowConfig = serverConfigData.mcpServers?.[serverName]?.alwaysAllow || []
@@ -107,7 +120,7 @@ export async function fetchToolsListWithHub(
 }
 
 export async function fetchResourcesListWithHub(
-	hub: McpHubInternal,
+	hub: McpToolConfigHub,
 	serverName: string,
 	source?: "global" | "project",
 ): Promise<McpResource[]> {
@@ -124,7 +137,7 @@ export async function fetchResourcesListWithHub(
 }
 
 export async function updateServerToolListWithHub(
-	hub: McpHubInternal,
+	hub: McpToolConfigHub,
 	serverName: string,
 	source: "global" | "project",
 	toolName: string,
@@ -201,7 +214,7 @@ export async function updateServerToolListWithHub(
 }
 
 export async function toggleToolAlwaysAllowWithHub(
-	hub: McpHubInternal,
+	hub: McpToolConfigHub,
 	serverName: string,
 	source: "global" | "project",
 	toolName: string,
@@ -219,7 +232,7 @@ export async function toggleToolAlwaysAllowWithHub(
 }
 
 export async function toggleToolEnabledForPromptWithHub(
-	hub: McpHubInternal,
+	hub: McpToolConfigHub,
 	serverName: string,
 	source: "global" | "project",
 	toolName: string,

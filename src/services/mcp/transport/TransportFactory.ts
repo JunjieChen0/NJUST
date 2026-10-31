@@ -2,7 +2,7 @@ import type { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdi
 import type { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 
-import type { ITransportStrategy, TransportCallbacks } from "./ITransportStrategy"
+import type { ITransportStrategy, TransportCallbacks, TransportServerConfig } from "./ITransportStrategy"
 import { StdioTransportStrategy } from "./StdioTransportStrategy"
 import { SseTransportStrategy } from "./SseTransportStrategy"
 import { StreamableHttpTransportStrategy } from "./StreamableHttpTransportStrategy"
@@ -24,7 +24,7 @@ export class TransportFactory {
 	async create(
 		name: string,
 		type: string,
-		config: Record<string, UnsafeAny>,
+		config: TransportServerConfig,
 		callbacks: TransportCallbacks,
 	): Promise<StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport> {
 		const strategy = this.strategies.get(type)

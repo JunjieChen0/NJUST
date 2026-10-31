@@ -2,20 +2,20 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 
 import { logger } from "../../../shared/logger"
 
-import type { ITransportStrategy, TransportCallbacks } from "./ITransportStrategy"
+import type { ITransportStrategy, TransportCallbacks, TransportServerConfig } from "./ITransportStrategy"
 
 export class StreamableHttpTransportStrategy implements ITransportStrategy {
 	readonly type = "streamable-http"
 
 	async createTransport(
 		name: string,
-		config: Record<string, UnsafeAny>,
+		config: TransportServerConfig,
 		callbacks: TransportCallbacks,
 	): Promise<StreamableHTTPClientTransport> {
 		// MCP server URLs are user-configured — the user explicitly trusts these endpoints.
 		// SSRF guards are intentionally NOT applied here (see SseTransportStrategy for rationale).
 
-		const transport = new StreamableHTTPClientTransport(new URL(config.url), {
+		const transport = new StreamableHTTPClientTransport(new URL(config.url!), {
 			requestInit: {
 				headers: config.headers,
 			},
