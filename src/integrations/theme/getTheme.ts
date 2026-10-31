@@ -23,7 +23,9 @@ const defaultThemes: Record<string, string> = {
 	"Visual Studio Light": "light_vs",
 }
 
-function parseThemeString(themeString: string | undefined): UnsafeAny {
+type JsonObject = { [key: string]: unknown }
+
+function parseThemeString(themeString: string | undefined): JsonObject {
 	themeString = themeString
 		?.split("\n")
 		.filter((line) => {
@@ -31,6 +33,10 @@ function parseThemeString(themeString: string | undefined): UnsafeAny {
 		})
 		.join("\n")
 	return JSON.parse(themeString ?? "{}")
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+	return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 export async function getTheme() {
@@ -65,7 +71,7 @@ export async function getTheme() {
 		// Strip comments from theme
 		let parsed = parseThemeString(currentTheme)
 
-		if (parsed.include) {
+		if (typeof parsed.include === "string") {
 			const includeThemeString = await fs.readFile(
 				path.join(getExtensionUri().fsPath, "integrations", "theme", "default-themes", parsed.include),
 				"utf-8",
@@ -78,15 +84,14 @@ export async function getTheme() {
 			return undefined
 		}
 
-		const converted = convertTheme(parsed)
+		// Theme JSON is user-supplied; malformed shapes throw inside convertTheme and are caught below.
+		const converted = convertTheme(parsed as JsonObject & Parameters<typeof convertTheme>[0])
 
-		converted.base = (
-			["vs", "hc-black"].includes(converted.base)
-				? converted.base
-				: colorTheme.includes("Light")
-					? "vs"
-					: "vs-dark"
-		) as UnsafeAny
+		converted.base = ["vs", "hc-black"].includes(converted.base)
+			? converted.base
+			: colorTheme.includes("Light")
+				? "vs"
+				: "vs-dark"
 
 		return converted
 	} catch {
@@ -95,14 +100,13 @@ export async function getTheme() {
 	return undefined
 }
 
-type JsonObject = { [key: string]: UnsafeAny }
 export function mergeJson(
 	first: JsonObject,
 	second: JsonObject,
 	mergeBehavior?: "merge" | "overwrite",
-	mergeKeys?: { [key: string]: (a: UnsafeAny, b: UnsafeAny) => boolean },
-): UnsafeAny {
-	const copyOfFirst = JSON.parse(JSON.stringify(first))
+	mergeKeys?: { [key: string]: (a: unknown, b: unknown) => boolean },
+): JsonObject {
+	const copyOfFirst: JsonObject = JSON.parse(JSON.stringify(first))
 
 	try {
 		for (const key in second) {
@@ -119,9 +123,9 @@ export function mergeJson(
 				// Array
 				if (mergeKeys?.[key]) {
 					// Merge keys are used to determine whether an item form the second object should override one from the first
-					const keptFromFirst: UnsafeAny[] = []
-					firstValue.forEach((item: UnsafeAny) => {
-						if (!secondValue.some((item2: UnsafeAny) => mergeKeys[key]!(item, item2))) {
+					const keptFromFirst: unknown[] = []
+					firstValue.forEach((item) => {
+						if (!secondValue.some((item2) => mergeKeys[key]!(item, item2))) {
 							keptFromFirst.push(item)
 						}
 					})
@@ -129,7 +133,7 @@ export function mergeJson(
 				} else {
 					copyOfFirst[key] = [...firstValue, ...secondValue]
 				}
-			} else if (typeof secondValue === "object" && typeof firstValue === "object") {
+			} else if (isJsonObject(secondValue) && isJsonObject(firstValue)) {
 				// Object
 				copyOfFirst[key] = mergeJson(firstValue, secondValue, mergeBehavior)
 			} else {

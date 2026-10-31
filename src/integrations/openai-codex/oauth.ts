@@ -18,7 +18,7 @@ export const openAiCodexOAuthManager = {
 		return false
 	},
 
-	initialize(_context: UnsafeAny, _messageCallback: (message: string) => void): void {
+	initialize(_context: unknown, _messageCallback: (message: string) => void): void {
 		// Stub - no-op
 	},
 

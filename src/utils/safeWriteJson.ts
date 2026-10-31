@@ -29,12 +29,12 @@ export interface SafeWriteJsonOptions {
  * - Supports pretty-printing with indentation while maintaining streaming efficiency.
  *
  * @param {string} filePath - The absolute path to the target file.
- * @param {any} data - The data to serialize to JSON and write.
+ * @param {unknown} data - The data to serialize to JSON and write.
  * @param {SafeWriteJsonOptions} options - Optional configuration for JSON formatting.
  * @returns {Promise<void>}
  */
 
-async function safeWriteJson(filePath: string, data: UnsafeAny, options?: SafeWriteJsonOptions): Promise<void> {
+async function safeWriteJson(filePath: string, data: unknown, options?: SafeWriteJsonOptions): Promise<void> {
 	const absoluteFilePath = path.resolve(filePath)
 	let releaseLock = async () => {} // Initialized to a no-op
 
@@ -48,7 +48,7 @@ async function safeWriteJson(filePath: string, data: UnsafeAny, options?: SafeWr
 
 		// Verify directory exists after creation attempt
 		await fs.access(dirPath)
-	} catch (dirError: UnsafeAny) {
+	} catch (dirError) {
 		logger.error("SafeWriteJson", `Failed to create or access directory for ${absoluteFilePath}:`, dirError)
 		throw dirError
 	}
@@ -103,7 +103,7 @@ async function safeWriteJson(filePath: string, data: UnsafeAny, options?: SafeWr
 				`.${path.basename(absoluteFilePath)}.bak_${Date.now()}_${Math.random().toString(36).substring(2)}.tmp`,
 			)
 			await fs.rename(absoluteFilePath, actualTempBackupFilePath)
-		} catch (accessError: UnsafeAny) {
+		} catch (accessError) {
 			const errCode = (accessError as NodeJS.ErrnoException)?.code
 			if (errCode !== "ENOENT") {
 				throw accessError
@@ -208,7 +208,7 @@ async function safeWriteJson(filePath: string, data: UnsafeAny, options?: SafeWr
  * @param prettyPrint Whether to format the JSON with indentation.
  * @returns Promise<void>
  */
-async function _streamDataToFile(targetPath: string, data: UnsafeAny, prettyPrint = false): Promise<void> {
+async function _streamDataToFile(targetPath: string, data: unknown, prettyPrint = false): Promise<void> {
 	// Stream data to avoid high memory usage for large JSON objects.
 	const fileWriteStream = fsSync.createWriteStream(targetPath, { encoding: "utf8" })
 

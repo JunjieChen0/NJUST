@@ -570,9 +570,13 @@ export class DiffViewProvider {
 					() => {
 						// Command executed successfully, now wait for the editor to appear
 					},
-					(err: UnsafeAny) => {
+					(err) => {
 						cleanup()
-						reject(new Error(`Failed to execute diff command for ${uri.fsPath}: ${err.message}`))
+						reject(
+							new Error(
+								`Failed to execute diff command for ${uri.fsPath}: ${err instanceof Error ? err.message : String(err)}`,
+							),
+						)
 					},
 				)
 		})
