@@ -288,7 +288,6 @@ export class AgentOrchestrator extends EventEmitter<OrchestratorEvents> {
 			timeoutMs: TIMING.AGENT_TASK_TIMEOUT_MS,
 			timeoutMessage: "Agent task timed out after 10 minutes",
 			completedMessage: "Completed",
-			noResultMessage: "Completed (no explicit result)",
 		})
 	}
 

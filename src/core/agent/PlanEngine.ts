@@ -196,7 +196,6 @@ export class PlanEngine {
 		return waitForTaskCompletion(task, {
 			timeoutMessage: "Task execution timed out",
 			completedMessage: "Task completed",
-			noResultMessage: "Task completed (no explicit result)",
 		})
 	}
 

@@ -10,7 +10,7 @@ export interface WaitForTaskCompletionOptions {
 	maxPolls?: number
 	timeoutMessage?: string
 	completedMessage?: string
-	noResultMessage?: string
+	cancelledMessage?: string
 }
 
 export function waitForTaskCompletion(
@@ -23,7 +23,7 @@ export function waitForTaskCompletion(
 		maxPolls = DEFAULT_MAX_POLLS,
 		timeoutMessage = "Task execution timed out",
 		completedMessage = "Task completed",
-		noResultMessage = "Task completed (no explicit result)",
+		cancelledMessage = "Task was cancelled",
 	} = options
 
 	return new Promise((resolve, reject) => {
@@ -56,12 +56,10 @@ export function waitForTaskCompletion(
 					clearInterval(pollInterval)
 					clearTimeout(timeout)
 
+					// An aborted/abandoned task never succeeded, even without an
+					// error message (e.g. user cancellation); dependents must not run.
 					const errorMsg = messages.find((m) => m.type === "say" && m.say === "error")
-					if (errorMsg) {
-						reject(new Error(errorMsg.text || "Task failed"))
-					} else {
-						resolve(noResultMessage)
-					}
+					reject(new Error(errorMsg?.text || cancelledMessage))
 					return
 				}
 			} catch (error) {

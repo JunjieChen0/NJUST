@@ -228,4 +228,36 @@ describe("PlanEngine", () => {
 		expect(executed.steps[0]).toMatchObject({ status: "failed", error: "tool failed" })
 		expect(executed.steps[1]).toMatchObject({ status: "pending" })
 	})
+
+	it("treats a step cancelled without an error message as failed, not completed", async () => {
+		const planJson = {
+			title: "Cancel plan",
+			description: "Cancelled prerequisite",
+			steps: [
+				{ description: "Prerequisite", mode: "code", dependencies: [] },
+				{ description: "Dependent", mode: "code", dependencies: [0] },
+			],
+		}
+		queueTask(
+			provider,
+			makeTask({
+				clineMessages: [{ type: "say", say: "completion_result", text: JSON.stringify(planJson) }],
+			}),
+			createdPrompts,
+		)
+		queueTask(provider, makeTask({ didFinishAbortingStream: true, clineMessages: [] }), createdPrompts)
+		const engine = new PlanEngine(provider, outputChannel)
+
+		const pendingPlan = engine.generatePlan({ task: "cancel branch" })
+		await flushPoll()
+		const plan = await pendingPlan
+
+		const pendingExecution = engine.executePlan(plan.id)
+		await flushPoll()
+		const executed = await pendingExecution
+
+		expect(executed.steps[0]?.status).toBe("failed")
+		expect(executed.steps[0]?.error).toMatch(/cancel/i)
+		expect(executed.steps[1]).toMatchObject({ status: "pending" })
+	})
 })
