@@ -38,6 +38,17 @@ export interface UniversalTaskResponse {
 	cost?: number
 	/** 原始响应，用于透传未知字段 */
 	raw?: Record<string, unknown>
+	/**
+	 * 解析后的业务数据（REST：响应体本身；MCP：content[].text 内的 JSON）。
+	 * 业务字段（如 workspace_ops）应从这里读取，而不是 raw。
+	 */
+	payload?: Record<string, unknown>
+}
+
+/** 单次 MCP 工具调用的取消与超时选项 */
+export interface McpCallOptions {
+	signal?: AbortSignal
+	timeoutMs?: number
 }
 
 export type EndpointType = "health" | "run" | "deferredStart" | "deferredResume" | "deferredAbort" | "compile"
@@ -88,7 +99,7 @@ export interface IProtocolAdapter {
 	setCallbackHandler?(handler: McpCallbackHandler): void
 
 	/** 调用 MCP 工具（仅 MCP 适配器需要） */
-	callTool?(name: string, args: Record<string, unknown>): Promise<UniversalTaskResponse>
+	callTool?(name: string, args: Record<string, unknown>, options?: McpCallOptions): Promise<UniversalTaskResponse>
 
 	/** 解析编译响应（仅 MCP 适配器需要） */
 	parseCompileResponse?(data: Record<string, unknown>): { success: boolean; output: string }

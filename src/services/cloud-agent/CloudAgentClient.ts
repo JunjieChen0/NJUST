@@ -17,7 +17,7 @@ import type {
 import type { CloudAgentProfile } from "./types/profile"
 import { AdapterFactory } from "./adapters/AdapterFactory"
 import type { IProtocolAdapterFactory } from "./adapters/IProtocolAdapterFactory"
-import type { IProtocolAdapter, McpCallbackHandler, UniversalTaskResponse } from "./adapters/types"
+import type { IProtocolAdapter, McpCallbackHandler, McpCallOptions, UniversalTaskResponse } from "./adapters/types"
 import { MCP_TOOLS } from "./adapters/McpProtocolAdapter"
 import { normalizeServerUrl } from "./urlUtils"
 import { guardedFetch, assertHeadersSafe } from "../../core/security/networkGuard"
@@ -252,6 +252,11 @@ export class CloudAgentClient {
 		}
 	}
 
+	/** Cancellation and timeout for a single MCP tool call (user setting + task abort). */
+	private mcpCallOptions(): McpCallOptions {
+		return { signal: this.options.signal, timeoutMs: this.options.requestTimeoutMs }
+	}
+
 	private mergeAbortAndTimeout(): { signal?: AbortSignal; cleanup: () => void } {
 		const baseSignal = this.options?.signal
 		const timeoutMs = this.options?.requestTimeoutMs
@@ -439,15 +444,18 @@ export class CloudAgentClient {
 
 		// 2. 根据协议类型选择调用方式
 		if (this.adapter.protocolType === "mcp") {
-			data = await this.withMcpAdapter((adapter) => adapter.callTool!(MCP_TOOLS.SUBMIT_TASK, body))
+			data = await this.withMcpAdapter((adapter) =>
+				adapter.callTool!(MCP_TOOLS.SUBMIT_TASK, body, this.mcpCallOptions()),
+			)
 		} else {
 			// REST 路径（现有逻辑不变）
 			const endpoint = this.adapter.getEndpoint("run")
 			data = await this.retryExecutor.execute(
 				async () => {
+					// Keep timeout/abort armed until the body is fully read.
 					const { signal, cleanup } = this.mergeAbortAndTimeout()
-					let resp: Response
 					try {
+						let resp: Response
 						try {
 							resp = await this.safeFetch(`${this.serverUrl}${endpoint}`, {
 								method: "POST",
@@ -458,21 +466,21 @@ export class CloudAgentClient {
 						} catch (e) {
 							throw enrichFetchError(e)
 						}
+
+						if (!resp.ok) {
+							const errText = await readResponseBodyWithLimit(resp, 100 * 1024)
+							const slice = errText.slice(0, 500)
+							const err = new Error(
+								`Cloud Agent error (HTTP ${resp.status}): ${slice}${apiKeyHintFor401(resp.status, slice)}`,
+							)
+							;(err as Error & { status?: number }).status = resp.status
+							throw err
+						}
+
+						return await this.parseUniversalResponse(resp)
 					} finally {
 						cleanup()
 					}
-
-					if (!resp.ok) {
-						const errText = await readResponseBodyWithLimit(resp, 100 * 1024)
-						const slice = errText.slice(0, 500)
-						const err = new Error(
-							`Cloud Agent error (HTTP ${resp.status}): ${slice}${apiKeyHintFor401(resp.status, slice)}`,
-						)
-						;(err as Error & { status?: number }).status = resp.status
-						throw err
-					}
-
-					return this.parseUniversalResponse(resp)
 				},
 				shouldRetryCloudAgent,
 				(info) =>
@@ -481,7 +489,9 @@ export class CloudAgentClient {
 		}
 
 		// 3. 处理 workspace_ops（两种协议共用）
-		const { operations: workspaceOps, error: workspaceOpsError } = parseWorkspaceOps(data.raw)
+		// Read business fields from the parsed payload: for MCP, `raw` is the
+		// outer ToolResult envelope and does not carry workspace_ops.
+		const { operations: workspaceOps, error: workspaceOpsError } = parseWorkspaceOps(data.payload ?? data.raw)
 		if (workspaceOpsError !== undefined) {
 			logger.warn("CloudAgentClient", `Invalid workspace_ops in /v1/run response: ${workspaceOpsError}`)
 		}
@@ -497,6 +507,7 @@ export class CloudAgentClient {
 		await this.callbacks.onDone(data.ok ? "Task completed" : "Task failed")
 
 		return {
+			ok: !!data.ok,
 			memorySummary: data.memorySummary || "",
 			tokensIn: data.tokensIn ?? 0,
 			tokensOut: data.tokensOut ?? 0,
@@ -513,10 +524,14 @@ export class CloudAgentClient {
 	async compile(sessionId: string, workspacePath?: string): Promise<CloudCompileResult> {
 		if (this.adapter.protocolType === "mcp") {
 			return this.withMcpAdapter(async (adapter) => {
-				const result = await adapter.callTool!(MCP_TOOLS.COMPILE, {
-					session_id: sessionId,
-					workspace_path: workspacePath,
-				})
+				const result = await adapter.callTool!(
+					MCP_TOOLS.COMPILE,
+					{
+						session_id: sessionId,
+						workspace_path: workspacePath,
+					},
+					this.mcpCallOptions(),
+				)
 				return adapter.parseCompileResponse!(result.raw ?? {})
 			})
 		}
@@ -531,9 +546,10 @@ export class CloudAgentClient {
 		const endpoint = this.adapter.getEndpoint("compile")
 		return this.retryExecutor.execute(
 			async () => {
+				// Keep timeout/abort armed until the body is fully read.
 				const { signal, cleanup } = this.mergeAbortAndTimeout()
-				let resp: Response
 				try {
+					let resp: Response
 					try {
 						resp = await this.safeFetch(`${this.serverUrl}${endpoint}`, {
 							method: "POST",
@@ -544,32 +560,32 @@ export class CloudAgentClient {
 					} catch (e) {
 						throw enrichFetchError(e)
 					}
+
+					if (!resp.ok) {
+						const errText = await readResponseBodyWithLimit(resp, 100 * 1024)
+						const slice = errText.slice(0, 500)
+						const err = new Error(
+							`Cloud Agent compile error (HTTP ${resp.status}): ${slice}${apiKeyHintFor401(resp.status, slice)}`,
+						)
+						;(err as Error & { status?: number }).status = resp.status
+						throw err
+					}
+
+					// Use streaming read with hard byte limit (same as parseUniversalResponse)
+					const text = await readResponseBodyWithLimit(resp, MAX_RESPONSE_BODY_BYTES)
+					let data: CloudCompileResponse
+					try {
+						data = JSON.parse(text) as CloudCompileResponse
+					} catch {
+						throw new Error(
+							`Cloud Agent: compile response is not valid JSON (HTTP ${resp.status}): ${text.slice(0, 400)}${text.length > 400 ? "…" : ""}`,
+						)
+					}
+
+					return { success: data.success, output: data.output ?? "" }
 				} finally {
 					cleanup()
 				}
-
-				if (!resp.ok) {
-					const errText = await readResponseBodyWithLimit(resp, 100 * 1024)
-					const slice = errText.slice(0, 500)
-					const err = new Error(
-						`Cloud Agent compile error (HTTP ${resp.status}): ${slice}${apiKeyHintFor401(resp.status, slice)}`,
-					)
-					;(err as Error & { status?: number }).status = resp.status
-					throw err
-				}
-
-				// Use streaming read with hard byte limit (same as parseUniversalResponse)
-				const text = await readResponseBodyWithLimit(resp, MAX_RESPONSE_BODY_BYTES)
-				let data: CloudCompileResponse
-				try {
-					data = JSON.parse(text) as CloudCompileResponse
-				} catch {
-					throw new Error(
-						`Cloud Agent: compile response is not valid JSON (HTTP ${resp.status}): ${text.slice(0, 400)}${text.length > 400 ? "…" : ""}`,
-					)
-				}
-
-				return { success: data.success, output: data.output ?? "" }
 			},
 			shouldRetryCloudAgent,
 			(info) => logger.warn("CloudAgentClient", `compile retry #${info.attempt + 1} after ${info.delayMs}ms`),
@@ -583,9 +599,11 @@ export class CloudAgentClient {
 	private async fetchDeferred(endpoint: string, body: Record<string, unknown>): Promise<DeferredResponse> {
 		return this.retryExecutor.execute(
 			async () => {
+				// Keep timeout/abort armed until the body is fully read.
 				const { signal, cleanup } = this.mergeAbortAndTimeout()
-				let resp: Response
+				let universal: UniversalTaskResponse
 				try {
+					let resp: Response
 					try {
 						resp = await this.safeFetch(`${this.serverUrl}${endpoint}`, {
 							method: "POST",
@@ -596,21 +614,21 @@ export class CloudAgentClient {
 					} catch (e) {
 						throw enrichFetchError(e)
 					}
+
+					if (!resp.ok) {
+						const errText = await readResponseBodyWithLimit(resp, 100 * 1024)
+						const slice = errText.slice(0, 500)
+						const err = new Error(
+							`Cloud Agent deferred error (HTTP ${resp.status}): ${slice}${apiKeyHintFor401(resp.status, slice)}`,
+						)
+						;(err as Error & { status?: number }).status = resp.status
+						throw err
+					}
+
+					universal = await this.parseUniversalResponse(resp)
 				} finally {
 					cleanup()
 				}
-
-				if (!resp.ok) {
-					const errText = await readResponseBodyWithLimit(resp, 100 * 1024)
-					const slice = errText.slice(0, 500)
-					const err = new Error(
-						`Cloud Agent deferred error (HTTP ${resp.status}): ${slice}${apiKeyHintFor401(resp.status, slice)}`,
-					)
-					;(err as Error & { status?: number }).status = resp.status
-					throw err
-				}
-
-				const universal = await this.parseUniversalResponse(resp)
 				// 转换为 DeferredResponse（snake_case 字段名）
 				return {
 					run_id: universal.runId,

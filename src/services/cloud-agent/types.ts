@@ -22,6 +22,8 @@ export interface CloudRunResponse {
 }
 
 export interface CloudRunResult {
+	/** Whether the server reported the task as successful (`ok` in the response). */
+	ok: boolean
 	memorySummary: string
 	tokensIn: number
 	tokensOut: number

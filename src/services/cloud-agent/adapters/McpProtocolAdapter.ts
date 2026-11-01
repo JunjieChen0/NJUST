@@ -1,12 +1,19 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js"
 import { z } from "zod"
 
 import type { CloudAgentProfile, AuthConfig as CloudAgentAuthConfig } from "../types/profile"
 import type { DeferredToolCall } from "../types"
 import { logger } from "../../../shared/logger"
 import { getErrorMessage } from "../../../shared/error-utils"
-import type { IProtocolAdapter, UniversalTaskRequest, UniversalTaskResponse, EndpointType } from "./types"
+import type {
+	IProtocolAdapter,
+	UniversalTaskRequest,
+	UniversalTaskResponse,
+	EndpointType,
+	McpCallOptions,
+} from "./types"
 
 // ── Custom cloud-agent notification schemas (non-standard MCP methods) ──────
 const CloudAgentTextNotification = z.object({
@@ -204,6 +211,7 @@ export class McpProtocolAdapter implements IProtocolAdapter {
 			tokensOut: parsed.tokens_out as number,
 			cost: parsed.cost as number,
 			raw: data,
+			payload: parsed,
 		}
 	}
 
@@ -224,48 +232,35 @@ export class McpProtocolAdapter implements IProtocolAdapter {
 	// ─── MCP 工具调用 ──────────────────────────────────────────────
 
 	/** 调用 MCP 工具并返回解析后的通用响应。自动连接。 */
-	async callTool(name: string, args: Record<string, unknown>): Promise<UniversalTaskResponse> {
+	async callTool(
+		name: string,
+		args: Record<string, unknown>,
+		options: McpCallOptions = {},
+	): Promise<UniversalTaskResponse> {
 		if (!this.connected) {
 			await this.connect()
 		}
 
-		// Enforce an upper bound on a single tool call so a server that never
-		// responds cannot block the orchestrator forever. The timeout is
-		// rewritten to a clear message rather than surfacing a bare AbortError.
-		const timeoutMs = DEFAULT_CALL_TOOL_TIMEOUT_MS
-		let timeoutId: ReturnType<typeof setTimeout> | undefined
-		const timeoutPromise = new Promise<never>((_, reject) => {
-			timeoutId = setTimeout(
-				() => reject(new Error(`MCP callTool("${name}") timed out after ${timeoutMs}ms`)),
-				timeoutMs,
-			)
-		})
+		// Upper bound on a single tool call so a server that never responds
+		// cannot block the orchestrator forever. On timeout or abort the SDK
+		// sends notifications/cancelled, so the server can stop its work too.
+		const timeoutMs = options.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : DEFAULT_CALL_TOOL_TIMEOUT_MS
 
 		try {
-			const result = await Promise.race([
-				this.client.callTool({
-					name,
-					arguments: args,
-				}),
-				timeoutPromise,
-			])
-
+			const result = await this.client.callTool({ name, arguments: args }, undefined, {
+				signal: options.signal,
+				timeout: timeoutMs,
+			})
 			return this.parseResponseBody(result as Record<string, unknown>)
 		} catch (error) {
-			// On timeout the underlying callTool promise is orphaned (the SDK
-			// has no per-request cancel). Log an actionable warning so the
-			// orphaned server-side work is visible; the transport itself is
-			// released later by withMcpAdapter's error-path disconnect().
-			if (error instanceof Error && /timed out/i.test(error.message)) {
+			if (error instanceof McpError && error.code === ErrorCode.RequestTimeout) {
 				logger.warn(
 					"McpProtocolAdapter",
-					`callTool("${name}") timed out — the server may still be processing the abandoned request. ` +
-						`The connection will be torn down on return.`,
+					`callTool("${name}") timed out after ${timeoutMs}ms; cancellation sent`,
 				)
+				throw new Error(`MCP callTool("${name}") timed out after ${timeoutMs}ms`)
 			}
 			throw error
-		} finally {
-			if (timeoutId) clearTimeout(timeoutId)
 		}
 	}
 

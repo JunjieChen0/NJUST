@@ -112,6 +112,7 @@ export class RestProtocolAdapter implements IProtocolAdapter {
 			tokensOut: normalized.tokens_out,
 			cost: normalized.cost,
 			raw: data,
+			payload: data,
 		}
 	}
 

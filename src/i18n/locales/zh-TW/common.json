@@ -168,7 +168,10 @@
 			"not_initialized": "ProfileStorageService 尚未初始化。請確認在 extension.ts 中先呼叫 setProfileStorageService()。",
 			"profile_not_configured": "未設定活躍的 Cloud Agent Profile。",
 			"server_url_empty": "Cloud Agent Profile 的 serverUrl 不能為空。請在設定中配置。",
-			"task_failed": "Cloud Agent 任務失敗。"
+			"task_failed": "Cloud Agent 任務失敗。",
+			"workspace_ops_failed": "Cloud Agent 的檔案修改未能全部套用。",
+			"workspace_ops_rejected": "有 {{count}} 個 Cloud Agent 檔案修改被拒絕或被攔截，未套用。",
+			"compile_still_failing": "套用 Cloud Agent 的修改後，本機編譯仍然失敗。"
 		},
 		"run_code": {
 			"matlab_live_script_unsupported": "不支援 MATLAB Live Script (.mlx)。",

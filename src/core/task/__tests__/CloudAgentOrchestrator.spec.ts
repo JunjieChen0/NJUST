@@ -36,9 +36,13 @@ function createMockHost(overrides: Partial<ICloudAgentHost> = {}): ICloudAgentHo
 		rooIgnoreController: undefined,
 		rooProtectedController: undefined,
 		say: vi.fn().mockResolvedValue(undefined),
-		ask: vi.fn().mockResolvedValue({ response: "yesButtonClicked" }),
+		// Default user: approves everything but does not retry failed runs.
+		ask: vi.fn(async (type: string) => ({
+			response: type === "api_req_failed" ? "noButtonClicked" : "yesButtonClicked",
+		})) as unknown as ICloudAgentHost["ask"],
 		emit: vi.fn().mockReturnValue(true),
 		setCurrentRequestAbortController: vi.fn(),
+		markCompleted: vi.fn(),
 		...overrides,
 	}
 }
@@ -70,6 +74,7 @@ const { mockClientInstance, CloudAgentClientMock } = vi.hoisted(() => {
 		connect: vi.fn().mockResolvedValue(undefined),
 		disconnect: vi.fn().mockResolvedValue(undefined),
 		submitTask: vi.fn().mockResolvedValue({
+			ok: true,
 			memorySummary: "done",
 			tokensIn: 100,
 			tokensOut: 200,
@@ -175,6 +180,7 @@ describe("CloudAgentOrchestrator", () => {
 		mockClientInstance.connect.mockResolvedValue(undefined)
 		mockClientInstance.disconnect.mockResolvedValue(undefined)
 		mockClientInstance.submitTask.mockResolvedValue({
+			ok: true,
 			memorySummary: "done",
 			tokensIn: 100,
 			tokensOut: 200,
@@ -195,6 +201,228 @@ describe("CloudAgentOrchestrator", () => {
 			ok: true,
 		})
 		mockClientInstance.compile.mockResolvedValue({ success: true, output: "" })
+	})
+
+	describe("task completion lifecycle", () => {
+		it("marks the task completed after a successful legacy run", async () => {
+			mockVscodeConfig({ "cloudAgent.deferredProtocol": false })
+			const host = createMockHost()
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(host.markCompleted).toHaveBeenCalledTimes(1)
+		})
+
+		it("marks the task completed when the deferred loop finishes", async () => {
+			const host = createMockHost()
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(host.markCompleted).toHaveBeenCalledTimes(1)
+		})
+
+		it("does not mark completed when the legacy request fails", async () => {
+			mockVscodeConfig({ "cloudAgent.deferredProtocol": false })
+			mockClientInstance.submitTask.mockRejectedValueOnce(new Error("server down"))
+			const host = createMockHost()
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(host.markCompleted).not.toHaveBeenCalled()
+		})
+
+		it("does not mark completed when the task was aborted", async () => {
+			mockVscodeConfig({ "cloudAgent.deferredProtocol": false })
+			const host = createMockHost({ abort: true })
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(host.markCompleted).not.toHaveBeenCalled()
+		})
+
+		/** The CLI recognises the end of a task by these two asks. */
+		const asked = (host: ICloudAgentHost, type: string) =>
+			vi.mocked(host.ask).mock.calls.some(([askType]) => askType === type)
+
+		it("ends a successful run with a completion_result ask", async () => {
+			mockVscodeConfig({ "cloudAgent.deferredProtocol": false })
+			const host = createMockHost()
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(asked(host, "completion_result")).toBe(true)
+			expect(asked(host, "api_req_failed")).toBe(false)
+		})
+
+		it("treats a legacy ok:false response as failure", async () => {
+			mockVscodeConfig({ "cloudAgent.deferredProtocol": false })
+			mockClientInstance.submitTask.mockResolvedValueOnce({
+				ok: false,
+				memorySummary: "",
+				tokensIn: 0,
+				tokensOut: 0,
+				cost: 0,
+				workspaceOps: [],
+			})
+			const host = createMockHost()
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(host.markCompleted).not.toHaveBeenCalled()
+			expect(asked(host, "api_req_failed")).toBe(true)
+			expect(asked(host, "completion_result")).toBe(false)
+		})
+
+		it("treats a deferred ok:false response as failure", async () => {
+			mockClientInstance.deferredResume.mockResolvedValueOnce({ run_id: "run-1", status: "done", ok: false })
+			const host = createMockHost()
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(host.markCompleted).not.toHaveBeenCalled()
+			expect(asked(host, "api_req_failed")).toBe(true)
+		})
+
+		it("treats failed workspace operations as failure", async () => {
+			mockVscodeConfig({ "cloudAgent.deferredProtocol": false, "cloudAgent.compileLoop.enabled": false })
+			mockClientInstance.submitTask.mockResolvedValueOnce({
+				ok: true,
+				memorySummary: "",
+				tokensIn: 0,
+				tokensOut: 0,
+				cost: 0,
+				workspaceOps: [{ op: "write_file", path: "a.ts", content: "x" }],
+			})
+			vi.mocked(applySingleCloudWorkspaceOp).mockResolvedValueOnce({ ok: false, message: "disk full" })
+			const host = createMockHost()
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(host.markCompleted).not.toHaveBeenCalled()
+			expect(asked(host, "api_req_failed")).toBe(true)
+		})
+
+		/** Script the user's answers per ask type; unscripted asks get the default user. */
+		function scriptAsks(host: ICloudAgentHost, script: Record<string, Array<Record<string, unknown>>>) {
+			vi.mocked(host.ask).mockImplementation((async (type: string) => {
+				const next = script[type]?.shift()
+				if (next) return next
+				return { response: type === "api_req_failed" ? "noButtonClicked" : "yesButtonClicked" }
+			}) as never)
+		}
+
+		it("resubmits the run when the user clicks retry after a failure", async () => {
+			mockVscodeConfig({ "cloudAgent.deferredProtocol": false })
+			mockClientInstance.submitTask.mockRejectedValueOnce(new Error("server down"))
+			const host = createMockHost()
+			scriptAsks(host, { api_req_failed: [{ response: "yesButtonClicked" }] })
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(mockClientInstance.submitTask).toHaveBeenCalledTimes(2)
+			expect(mockClientInstance.submitTask).toHaveBeenLastCalledWith(
+				"test-task-id",
+				"hello",
+				expect.anything(),
+				undefined,
+			)
+			expect(host.markCompleted).toHaveBeenCalledTimes(1)
+		})
+
+		it("stops after a failure when the user does not retry", async () => {
+			mockVscodeConfig({ "cloudAgent.deferredProtocol": false })
+			mockClientInstance.submitTask.mockRejectedValueOnce(new Error("server down"))
+			const host = createMockHost()
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(mockClientInstance.submitTask).toHaveBeenCalledTimes(1)
+			expect(host.markCompleted).not.toHaveBeenCalled()
+		})
+
+		it("submits follow-up feedback given after a completed run", async () => {
+			mockVscodeConfig({ "cloudAgent.deferredProtocol": false })
+			const host = createMockHost()
+			scriptAsks(host, {
+				completion_result: [{ response: "messageResponse", text: "also add tests", images: ["img"] }],
+			})
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(host.say).toHaveBeenCalledWith("user_feedback", "also add tests", ["img"])
+			expect(mockClientInstance.submitTask).toHaveBeenCalledTimes(2)
+			expect(mockClientInstance.submitTask).toHaveBeenLastCalledWith(
+				"test-task-id",
+				"also add tests",
+				expect.anything(),
+				["img"],
+			)
+		})
+
+		it("treats a failed write in an intermediate deferred round as failure", async () => {
+			mockVscodeConfig({ "cloudAgent.compileLoop.enabled": false })
+			mockClientInstance.deferredStart.mockResolvedValueOnce({
+				run_id: "run-1",
+				status: "pending",
+				pending_tools: [],
+			})
+			vi.mocked(parseWorkspaceOps).mockReturnValueOnce({
+				operations: [{ op: "write_file", path: "a.ts", content: "x" }],
+				error: undefined,
+			})
+			vi.mocked(applySingleCloudWorkspaceOp).mockResolvedValueOnce({ ok: false, message: "disk full" } as never)
+			mockClientInstance.deferredResume.mockResolvedValueOnce({ run_id: "run-1", status: "done", ok: true })
+			const host = createMockHost()
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(host.markCompleted).not.toHaveBeenCalled()
+			expect(asked(host, "api_req_failed")).toBe(true)
+		})
+
+		it("treats workspace operations rejected by the user as failure", async () => {
+			mockVscodeConfig({ "cloudAgent.deferredProtocol": false, "cloudAgent.compileLoop.enabled": false })
+			mockClientInstance.submitTask.mockResolvedValueOnce({
+				ok: true,
+				memorySummary: "",
+				tokensIn: 0,
+				tokensOut: 0,
+				cost: 0,
+				workspaceOps: [{ op: "write_file", path: "a.ts", content: "x" }],
+			})
+			const host = createMockHost()
+			scriptAsks(host, { tool: [{ response: "noButtonClicked" }] })
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(applySingleCloudWorkspaceOp).not.toHaveBeenCalled()
+			expect(host.markCompleted).not.toHaveBeenCalled()
+			expect(asked(host, "api_req_failed")).toBe(true)
+		})
+
+		it("treats a compile that still fails after all retries as failure", async () => {
+			mockVscodeConfig({
+				"cloudAgent.deferredProtocol": false,
+				"cloudAgent.compileLoop.enabled": true,
+				"cloudAgent.compileLoop.maxRetries": 1,
+			})
+			mockClientInstance.submitTask.mockResolvedValueOnce({
+				ok: true,
+				memorySummary: "",
+				tokensIn: 0,
+				tokensOut: 0,
+				cost: 0,
+				workspaceOps: [{ op: "write_file", path: "a.ts", content: "x" }],
+			})
+			const host = createMockHost({
+				compileLocal: vi.fn().mockResolvedValue({ success: false, output: "error: syntax" }),
+			})
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(host.markCompleted).not.toHaveBeenCalled()
+			expect(asked(host, "api_req_failed")).toBe(true)
+		})
 	})
 
 	describe("run()", () => {
@@ -298,7 +526,7 @@ describe("CloudAgentOrchestrator", () => {
 			await orch.run("hello")
 
 			expect(host.say).toHaveBeenCalledWith("error", expect.stringContaining("server down"))
-			expect(host.ask).toHaveBeenCalledWith("api_req_failed", "server down")
+			expect(host.ask).toHaveBeenCalledWith("api_req_failed", expect.stringContaining("server down"))
 		})
 
 		it("reports AbortError as cancelled", async () => {
@@ -416,7 +644,7 @@ describe("CloudAgentOrchestrator", () => {
 			await orch.run("hello")
 
 			expect(host.say).toHaveBeenCalledWith("error", expect.stringContaining("start failed"))
-			expect(host.ask).toHaveBeenCalledWith("api_req_failed", "start failed")
+			expect(host.ask).toHaveBeenCalledWith("api_req_failed", expect.stringContaining("start failed"))
 		})
 
 		it("returns early when abort is true and deferredStart fails", async () => {
@@ -608,7 +836,8 @@ describe("CloudAgentOrchestrator", () => {
 			await orch.run("hello")
 
 			expect(rooIgnoreController.validateCommand).toHaveBeenCalledWith("cat .rooignore/secret.txt")
-			expect(host.ask).not.toHaveBeenCalled()
+			// No approval prompt for the blocked tool; the only ask is the end-of-task one.
+			expect(vi.mocked(host.ask).mock.calls.map(([type]) => type)).toEqual(["completion_result"])
 			expect(executeDeferredToolCall).not.toHaveBeenCalled()
 			expect(mockClientInstance.deferredResume).toHaveBeenCalledWith("run-1", "test-task-id", [
 				{
@@ -641,7 +870,8 @@ describe("CloudAgentOrchestrator", () => {
 
 			await orch.run("hello")
 
-			expect(host.ask).not.toHaveBeenCalled()
+			// No approval prompt for the blocked tool; the only ask is the end-of-task one.
+			expect(vi.mocked(host.ask).mock.calls.map(([type]) => type)).toEqual(["completion_result"])
 			expect(executeDeferredToolCall).not.toHaveBeenCalled()
 			expect(mockClientInstance.deferredResume).toHaveBeenCalledWith("run-1", "test-task-id", [
 				{
@@ -803,7 +1033,7 @@ describe("CloudAgentOrchestrator", () => {
 			expect(host.say).toHaveBeenCalledWith("text", "remember this")
 		})
 
-		it("reports completion result with ok=false", async () => {
+		it("reports a failure (not a completion) when the server returns ok=false", async () => {
 			mockClientInstance.deferredStart.mockResolvedValueOnce({
 				run_id: "run-1",
 				status: "done",
@@ -814,10 +1044,9 @@ describe("CloudAgentOrchestrator", () => {
 
 			await orch.run("hello")
 
-			expect(host.say).toHaveBeenCalledWith(
-				"completion_result",
-				expect.stringContaining("errors.cloud_agent.task_failed"),
-			)
+			expect(host.say).toHaveBeenCalledWith("error", expect.stringContaining("errors.cloud_agent.task_failed"))
+			expect(host.say).not.toHaveBeenCalledWith("completion_result", expect.anything())
+			expect(host.ask).toHaveBeenCalledWith("api_req_failed", expect.stringContaining("task_failed"))
 		})
 
 		it("reports deferred resume error", async () => {
@@ -1040,6 +1269,57 @@ describe("CloudAgentOrchestrator", () => {
 				"text",
 				expect.stringContaining("info.cangjieCompileGuard.maxRetriesReached"),
 			)
+		})
+
+		it("disconnects the compile-fix client after each fix round", async () => {
+			mockVscodeConfig({
+				"cloudAgent.deferredProtocol": false,
+				"cloudAgent.compileLoop.enabled": true,
+				"cloudAgent.compileLoop.maxRetries": 3,
+			})
+			mockClientInstance.submitTask.mockResolvedValue({
+				memorySummary: "done",
+				tokensIn: 1,
+				tokensOut: 1,
+				cost: 0,
+				workspaceOps: [{ op: "write_file", path: "a.ts", content: "x" }],
+			})
+			const host = createMockHost({
+				compileLocal: vi
+					.fn()
+					.mockResolvedValueOnce({ success: false, output: "error 1" })
+					.mockResolvedValueOnce({ success: true, output: "" }),
+			})
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			// 1 initial client + 1 compile-fix client, each disconnected exactly once
+			expect(mockClientInstance.submitTask).toHaveBeenCalledTimes(2)
+			expect(mockClientInstance.disconnect).toHaveBeenCalledTimes(2)
+		})
+
+		it("disconnects the compile-fix client when the fix request fails", async () => {
+			mockVscodeConfig({
+				"cloudAgent.deferredProtocol": false,
+				"cloudAgent.compileLoop.enabled": true,
+				"cloudAgent.compileLoop.maxRetries": 3,
+			})
+			mockClientInstance.submitTask
+				.mockResolvedValueOnce({
+					memorySummary: "done",
+					tokensIn: 1,
+					tokensOut: 1,
+					cost: 0,
+					workspaceOps: [{ op: "write_file", path: "a.ts", content: "x" }],
+				})
+				.mockRejectedValueOnce(new Error("fix failed"))
+			const host = createMockHost({
+				compileLocal: vi.fn().mockResolvedValue({ success: false, output: "error" }),
+			})
+
+			await new CloudAgentOrchestrator(host).run("hello")
+
+			expect(mockClientInstance.disconnect).toHaveBeenCalledTimes(2)
 		})
 
 		it("reports local compile failure when compileLocal throws", async () => {

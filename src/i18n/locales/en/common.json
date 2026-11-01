@@ -168,7 +168,10 @@
 			"not_initialized": "ProfileStorageService not initialized. Call setProfileStorageService() first in extension.ts.",
 			"profile_not_configured": "No active Cloud Agent profile configured.",
 			"server_url_empty": "Cloud Agent Profile serverUrl cannot be empty. Configure it in settings.",
-			"task_failed": "Cloud Agent task failed."
+			"task_failed": "Cloud Agent task failed.",
+			"workspace_ops_failed": "Cloud Agent file changes were not all applied.",
+			"workspace_ops_rejected": "{{count}} Cloud Agent file change(s) were rejected or blocked and not applied.",
+			"compile_still_failing": "Local compilation still fails after the Cloud Agent's changes."
 		},
 		"run_code": {
 			"matlab_live_script_unsupported": "MATLAB Live Script (.mlx) is not supported.",

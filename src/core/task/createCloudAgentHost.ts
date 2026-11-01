@@ -5,6 +5,8 @@
 import { EventEmitter } from "events"
 import type { ICloudAgentHost } from "./interfaces/ICloudAgentHost"
 import type { ITaskHost } from "./interfaces/ITaskHost"
+import { NJUST_AIEventName, type TokenUsage, type ToolUsage } from "@njust-ai/types"
+import { TelemetryService } from "@njust-ai/telemetry"
 import { t } from "../../i18n"
 
 /** Minimal shape of Task needed to build a cloud agent host. */
@@ -23,6 +25,11 @@ interface CloudAgentTaskRef {
 	): Promise<void>
 	ask: ICloudAgentHost["ask"]
 	hostRef: { deref(): ITaskHost | undefined }
+	readonly parentTaskId?: string
+	toolUsage: ToolUsage
+	getTokenUsage(): TokenUsage
+	emitFinalTokenUsageUpdate(): void
+	markTaskCompleted(): void
 }
 
 export function createCloudAgentHost(task: CloudAgentTaskRef & EventEmitter): ICloudAgentHost {
@@ -40,6 +47,20 @@ export function createCloudAgentHost(task: CloudAgentTaskRef & EventEmitter): IC
 		emit: (event, ...args) => EventEmitter.prototype.emit.call(task, event, ...args) as boolean,
 		setCurrentRequestAbortController: (ctrl) => {
 			task.currentRequestAbortController = ctrl
+		},
+		markCompleted: () => {
+			// Same sequence as AttemptCompletionTool.emitTaskCompleted.
+			task.emitFinalTokenUsageUpdate()
+			TelemetryService.instance.captureTaskCompleted(task.taskId)
+			EventEmitter.prototype.emit.call(
+				task,
+				NJUST_AIEventName.TaskCompleted,
+				task.taskId,
+				task.getTokenUsage(),
+				task.toolUsage,
+				{ isSubtask: !!task.parentTaskId },
+			)
+			task.markTaskCompleted()
 		},
 		compileLocal: async (cwd) => {
 			const provider = task.hostRef.deref()

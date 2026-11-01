@@ -578,7 +578,7 @@ describe("CloudAgentClient", () => {
 				profile: createMockProfile({ protocolType: "mcp" }),
 			})
 			const result = await client.submitTask("session-123", "test message")
-			expect(mockAdapter.callTool).toHaveBeenCalledWith("submit_task", expect.any(Object))
+			expect(mockAdapter.callTool).toHaveBeenCalledWith("submit_task", expect.any(Object), expect.any(Object))
 			expect(result.memorySummary).toBe("summary")
 		})
 
@@ -589,7 +589,7 @@ describe("CloudAgentClient", () => {
 				profile: createMockProfile({ protocolType: "mcp" }),
 			})
 			const result = await client.compile("session-123")
-			expect(mockAdapter.callTool).toHaveBeenCalledWith("compile", expect.any(Object))
+			expect(mockAdapter.callTool).toHaveBeenCalledWith("compile", expect.any(Object), expect.any(Object))
 			expect(mockAdapter.parseCompileResponse).toHaveBeenCalled()
 			expect(result.success).toBe(true)
 			expect(result.output).toBe("OK")

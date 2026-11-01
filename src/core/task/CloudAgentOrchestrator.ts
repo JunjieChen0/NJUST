@@ -37,6 +37,18 @@ export type { ICloudAgentHost } from "./interfaces/ICloudAgentHost"
 
 // ─── 行为配置（保留为全局 VS Code 设置）─────────────────────────────
 
+/** Result of applying a batch of remote workspace ops. */
+type WorkspaceOpsOutcome = { ok: true } | { ok: false; reason: string }
+
+/** Unresolved problems of one run; empty means the run succeeded. */
+type RunFailures = string[]
+
+/** One submission to the Cloud Agent (the original task, a retry, or follow-up feedback). */
+interface RunRequest {
+	message: string
+	images?: string[]
+}
+
 interface BehaviorConfig {
 	applyRemoteWorkspaceOps: boolean
 	confirmRemoteWorkspaceOps: boolean
@@ -102,8 +114,24 @@ export class CloudAgentOrchestrator {
 
 		// 2. 读取行为配置（全局设置）
 		const behavior = readBehaviorConfig()
-
 		const callbacks = makeCallbacks(this.host)
+		this.host.emit(NJUST_AIEventName.TaskStarted)
+
+		// 3. 执行 → 进入终态 → 按用户回复决定是否继续（重试 / 追加反馈）
+		let request: RunRequest | undefined = { message: userMessage, images }
+		do {
+			const failures: RunFailures | undefined = await this.runOnce(profile, behavior, callbacks, request)
+			request = failures === undefined ? undefined : await this.finishRun(failures, request)
+		} while (request && !this.host.abort)
+	}
+
+	/** One submission to the server. Returns unresolved failures, or undefined if cancelled. */
+	private async runOnce(
+		profile: CloudAgentProfile,
+		behavior: BehaviorConfig,
+		callbacks: CloudAgentCallbacks,
+		request: RunRequest,
+	): Promise<RunFailures | undefined> {
 		const requestAbort = new AbortController()
 		this.host.setCurrentRequestAbortController(requestAbort)
 
@@ -111,26 +139,21 @@ export class CloudAgentOrchestrator {
 			callbacks,
 			makeClientOptions(profile, requestAbort.signal, behavior.requestTimeoutMs),
 		)
-		this.host.emit(NJUST_AIEventName.TaskStarted)
 
 		// MCP 协议强制走 legacy 路径（submit_task 在服务器端内聚 deferred 逻辑）
 		if (behavior.useDeferredProtocol && profile.protocolType !== "mcp") {
 			try {
 				await client.connect()
 			} catch (error) {
-				if (this.host.abort) return
-				const msg = getErrorMessage(error)
-				await this.host.say("error", `Cloud Agent connect error: ${msg}`)
-				await this.host.ask("api_req_failed", msg)
-				return
+				if (this.host.abort) return undefined
+				return [`Cloud Agent connect error: ${getErrorMessage(error)}`]
 			} finally {
 				this.host.setCurrentRequestAbortController(undefined)
 			}
-			await this.runDeferredLoop(client, profile, behavior, callbacks, userMessage, images)
-			return
+			return this.runDeferredLoop(client, profile, behavior, callbacks, request.message, request.images)
 		}
 
-		await this.runLegacy(client, profile, behavior, callbacks, userMessage, images)
+		return this.runLegacy(client, profile, behavior, callbacks, request.message, request.images)
 	}
 
 	// ── Legacy single-shot /v1/run ──────────────────────────────────────
@@ -142,7 +165,7 @@ export class CloudAgentOrchestrator {
 		callbacks: CloudAgentCallbacks,
 		userMessage: string,
 		images?: string[],
-	): Promise<void> {
+	): Promise<RunFailures | undefined> {
 		await this.host.say("api_req_started", JSON.stringify({ request: "Cloud Agent task submitted" }))
 
 		let runResult: CloudRunResult | undefined
@@ -158,19 +181,16 @@ export class CloudAgentOrchestrator {
 				}),
 			)
 		} catch (error) {
-			if (this.host.abort) return
+			if (this.host.abort) return undefined
 			const isAbort =
 				error instanceof TaskAbortedError ||
 				(error instanceof Error && (error.name === "AbortError" || /aborted|timeout/i.test(error.message)))
-			if (isAbort) {
-				const errorMsg = getErrorMessage(error)
-				await this.host.say("error", `Cloud Agent request was cancelled or timed out: ${errorMsg}`)
-				await this.host.ask("api_req_failed", errorMsg)
-				return
-			}
 			const errorMsg = getErrorMessage(error)
-			await this.host.say("error", `Cloud Agent error: ${errorMsg}`)
-			await this.host.ask("api_req_failed", errorMsg)
+			return [
+				isAbort
+					? `Cloud Agent request was cancelled or timed out: ${errorMsg}`
+					: `Cloud Agent error: ${errorMsg}`,
+			]
 		} finally {
 			this.host.setCurrentRequestAbortController(undefined)
 			// Disconnect failures must not mask the original error from the
@@ -186,13 +206,19 @@ export class CloudAgentOrchestrator {
 			}
 		}
 
-		if (this.host.abort || !runResult) return
+		if (this.host.abort || !runResult) return undefined
+
+		const failures: RunFailures = []
+		if (!runResult.ok) {
+			failures.push(t("errors.cloud_agent.task_failed"))
+		}
 
 		if (runResult.workspaceOpsParseError) {
-			await this.host.say(
-				"text",
-				t("errors.cloud_agent.workspace_ops_invalid", { validationMessage: runResult.workspaceOpsParseError }),
-			)
+			const invalidOpsMsg = t("errors.cloud_agent.workspace_ops_invalid", {
+				validationMessage: runResult.workspaceOpsParseError,
+			})
+			await this.host.say("text", invalidOpsMsg)
+			failures.push(invalidOpsMsg)
 		}
 
 		const ops = runResult.workspaceOps
@@ -207,16 +233,60 @@ export class CloudAgentOrchestrator {
 		}
 
 		if (behavior.applyRemoteWorkspaceOps && ops.length > 0) {
-			const applied = await this.applyWorkspaceOps(ops, behavior.confirmRemoteWorkspaceOps)
-			if (behavior.compileLoopEnabled && applied && !this.host.abort) {
-				await this.runCompileFeedbackLoop(
+			const opsOutcome = await this.applyWorkspaceOps(ops, behavior.confirmRemoteWorkspaceOps)
+			if (!opsOutcome.ok) {
+				failures.push(opsOutcome.reason)
+			} else if (behavior.compileLoopEnabled && !this.host.abort) {
+				const compileOk = await this.runCompileFeedbackLoop(
 					profile,
 					behavior,
 					callbacks,
 					behavior.compileMaxRetries,
 					behavior.confirmRemoteWorkspaceOps,
 				)
+				if (!compileOk) {
+					failures.push(t("errors.cloud_agent.compile_still_failing"))
+				}
 			}
+		}
+
+		return failures
+	}
+
+	/**
+	 * Put the task into its terminal state once a cloud run has ended, and
+	 * return what the user wants next (or undefined to stop).
+	 * - success: TaskCompleted + completion_result ask (what the CLI/UI wait for);
+	 *   a typed reply is recorded as feedback and submitted as the next run
+	 * - failure: api_req_failed ask, never a completion event; "retry" reruns `current`
+	 */
+	private async finishRun(failures: RunFailures, current: RunRequest): Promise<RunRequest | undefined> {
+		if (this.host.abort) return undefined
+
+		try {
+			if (failures.length === 0) {
+				this.host.markCompleted()
+				const { response, text, images } = await this.host.ask("completion_result", "")
+				if (response === "messageResponse" && (text?.trim() || images?.length)) {
+					await this.host.say("user_feedback", text ?? "", images)
+					return { message: text ?? "", images }
+				}
+				return undefined
+			}
+
+			const reason = failures.join("\n")
+			await this.host.say("error", reason)
+			const { response } = await this.host.ask("api_req_failed", reason)
+			if (response === "yesButtonClicked") {
+				await this.host.say("api_req_retried")
+				return current
+			}
+			return undefined
+		} catch (error) {
+			// A superseded/ignored ask at the very end of a run is not an error.
+			if (!(error instanceof AskIgnoredError)) throw error
+			logger.debug("CloudAgentOrchestrator", "terminal ask ignored", error)
+			return undefined
 		}
 	}
 
@@ -229,9 +299,11 @@ export class CloudAgentOrchestrator {
 		callbacks: CloudAgentCallbacks,
 		userMessage: string,
 		images?: string[],
-	): Promise<void> {
+	): Promise<RunFailures | undefined> {
 		const maxIterations = this.service.deferredConstants.maxIterations
 		let hadWorkspaceOpsForCompile = false
+		/** Unresolved problems from any round; any entry blocks a successful completion. */
+		const failures: string[] = []
 		let lastNotifiedRunId: string | undefined
 		let lastServerRevision: string | undefined
 		let sessionRecoveries = 0
@@ -257,11 +329,8 @@ export class CloudAgentOrchestrator {
 				}),
 			)
 		} catch (error) {
-			if (this.host.abort) return
-			const msg = getErrorMessage(error)
-			await this.host.say("error", `Cloud Agent deferred/start error: ${msg}`)
-			await this.host.ask("api_req_failed", msg)
-			return
+			if (this.host.abort) return undefined
+			return [`Cloud Agent deferred/start error: ${getErrorMessage(error)}`]
 		} finally {
 			this.host.setCurrentRequestAbortController(undefined)
 		}
@@ -315,17 +384,19 @@ export class CloudAgentOrchestrator {
 
 			const parsed = this.service.parseWorkspaceOps(deferredResp)
 			const { operations: ops, error: workspaceOpsParseError } = parsed
+			// Failures in intermediate rounds count towards the final outcome too.
 			if (workspaceOpsParseError) {
-				await this.host.say(
-					"text",
-					t("errors.cloud_agent.workspace_ops_invalid_deferred", {
-						validationMessage: workspaceOpsParseError,
-					}),
-				)
+				const invalidOpsMsg = t("errors.cloud_agent.workspace_ops_invalid_deferred", {
+					validationMessage: workspaceOpsParseError,
+				})
+				await this.host.say("text", invalidOpsMsg)
+				failures.push(invalidOpsMsg)
 			} else if (ops.length > 0 && behavior.applyRemoteWorkspaceOps) {
-				const applied = await this.applyWorkspaceOps(ops, behavior.confirmRemoteWorkspaceOps)
-				if (applied) {
+				const opsOutcome = await this.applyWorkspaceOps(ops, behavior.confirmRemoteWorkspaceOps)
+				if (opsOutcome.ok) {
 					hadWorkspaceOpsForCompile = true
+				} else {
+					failures.push(opsOutcome.reason)
 				}
 			} else if (ops.length > 0) {
 				await this.host.say("text", t("info.cloud_agent.ops_skipped", { count: ops.length }))
@@ -366,24 +437,18 @@ export class CloudAgentOrchestrator {
 
 			const batchCheck = lifecycleGuard.validateBatchCompleteness()
 			if (batchCheck.action === "abort") {
-				const msg = `Deferred lifecycle abort: ${batchCheck.reason}`
-				await this.host.say("error", msg)
-				await this.host.ask("api_req_failed", msg)
-				return
+				return [`Deferred lifecycle abort: ${batchCheck.reason}`]
 			}
 
 			const runIdForResume = deferredResp.run_id
 			if (!runIdForResume?.trim()) {
-				const msg = t("errors.cloud_agent.missing_run_id")
-				await this.host.say("error", msg)
-				await this.host.ask("api_req_failed", msg)
 				await this.service.sendDeferredAbort(
 					profile,
 					this.host.taskId,
 					lastNotifiedRunId,
 					behavior.requestTimeoutMs > 0 ? behavior.requestTimeoutMs : undefined,
 				)
-				return
+				return [t("errors.cloud_agent.missing_run_id")]
 			}
 
 			await this.host.say(
@@ -394,18 +459,12 @@ export class CloudAgentOrchestrator {
 			// Check if pending-to-running timeout has been exceeded
 			const pendingTimeoutCheck = lifecycleGuard.checkPendingTimeout()
 			if (pendingTimeoutCheck.action === "abort") {
-				const msg = `Deferred lifecycle abort: ${pendingTimeoutCheck.reason}`
-				await this.host.say("error", msg)
-				await this.host.ask("api_req_failed", msg)
-				return
+				return [`Deferred lifecycle abort: ${pendingTimeoutCheck.reason}`]
 			}
 
 			const runningCheck = lifecycleGuard.transitionToRunning()
 			if (runningCheck.action === "abort") {
-				const msg = `Deferred lifecycle abort: ${runningCheck.reason}`
-				await this.host.say("error", msg)
-				await this.host.ask("api_req_failed", msg)
-				return
+				return [`Deferred lifecycle abort: ${runningCheck.reason}`]
 			}
 
 			const resumeAbort = new AbortController()
@@ -419,20 +478,13 @@ export class CloudAgentOrchestrator {
 				deferredResp = await resumeClient.deferredResume(runIdForResume, this.host.taskId, toolResults)
 				const nextRev = deferredResp.server_revision
 				if (lastServerRevision !== undefined && nextRev !== undefined && nextRev !== lastServerRevision) {
-					await this.host.say(
-						"error",
-						t("errors.cloud_agent.server_revision_changed", {
-							old: lastServerRevision,
-							new: nextRev,
-						}),
-					)
 					await this.service.sendDeferredAbort(
 						profile,
 						this.host.taskId,
 						deferredResp.run_id,
 						behavior.requestTimeoutMs > 0 ? behavior.requestTimeoutMs : undefined,
 					)
-					return
+					return [t("errors.cloud_agent.server_revision_changed", { old: lastServerRevision, new: nextRev })]
 				}
 				if (nextRev !== undefined) {
 					lastServerRevision = nextRev
@@ -493,21 +545,12 @@ export class CloudAgentOrchestrator {
 						continue
 					} catch (restartError) {
 						if (this.host.abort) break
-						const restartMsg = getErrorMessage(restartError)
-						await this.host.say(
-							"error",
-							t("errors.cloud_agent.session_recovery_failed", { msg: restartMsg }),
-						)
-						await this.host.ask("api_req_failed", restartMsg)
-						return
+						return [t("errors.cloud_agent.session_recovery_failed", { msg: getErrorMessage(restartError) })]
 					} finally {
 						this.host.setCurrentRequestAbortController(undefined)
 					}
 				}
 
-				const msg = getErrorMessage(error)
-				await this.host.say("error", `Cloud Agent deferred/resume error: ${msg}`)
-				await this.host.ask("api_req_failed", msg)
 				if (status !== 404) {
 					await this.service.sendDeferredAbort(
 						profile,
@@ -516,7 +559,7 @@ export class CloudAgentOrchestrator {
 						behavior.requestTimeoutMs > 0 ? behavior.requestTimeoutMs : undefined,
 					)
 				}
-				return
+				return [`Cloud Agent deferred/resume error: ${getErrorMessage(error)}`]
 			} finally {
 				this.host.setCurrentRequestAbortController(undefined)
 			}
@@ -542,16 +585,26 @@ export class CloudAgentOrchestrator {
 				await this.host.say("text", deferredResp.memory_summary)
 			}
 
+			if (!deferredResp.ok) {
+				failures.push(t("errors.cloud_agent.task_failed"))
+			}
+
 			const finalParsed = this.service.parseWorkspaceOps(deferredResp)
 			if (finalParsed.error) {
-				await this.host.say(
-					"text",
-					t("errors.cloud_agent.final_workspace_ops_invalid", { validationMessage: finalParsed.error }),
-				)
+				const invalidOpsMsg = t("errors.cloud_agent.final_workspace_ops_invalid", {
+					validationMessage: finalParsed.error,
+				})
+				await this.host.say("text", invalidOpsMsg)
+				failures.push(invalidOpsMsg)
 			} else if (finalParsed.operations.length > 0 && behavior.applyRemoteWorkspaceOps) {
-				const applied = await this.applyWorkspaceOps(finalParsed.operations, behavior.confirmRemoteWorkspaceOps)
-				if (applied) {
+				const opsOutcome = await this.applyWorkspaceOps(
+					finalParsed.operations,
+					behavior.confirmRemoteWorkspaceOps,
+				)
+				if (opsOutcome.ok) {
 					hadWorkspaceOpsForCompile = true
+				} else {
+					failures.push(opsOutcome.reason)
 				}
 			}
 
@@ -561,22 +614,29 @@ export class CloudAgentOrchestrator {
 				hadWorkspaceOpsForCompile &&
 				!this.host.abort
 			) {
-				await this.runCompileFeedbackLoop(
+				const compileOk = await this.runCompileFeedbackLoop(
 					profile,
 					behavior,
 					callbacks,
 					behavior.compileMaxRetries,
 					behavior.confirmRemoteWorkspaceOps,
 				)
+				if (!compileOk) {
+					failures.push(t("errors.cloud_agent.compile_still_failing"))
+				}
 			}
 
-			await this.host.say(
-				"completion_result",
-				deferredResp.ok ? t("info.cloud_agent.task_completed") : t("errors.cloud_agent.task_failed"),
-			)
+			if (failures.length === 0) {
+				await this.host.say("completion_result", t("info.cloud_agent.task_completed"))
+			}
+		} else {
+			// Loop left without a final answer (iteration/lifecycle limits); a user
+			// abort is filtered out by finishRun.
+			failures.push(t("errors.cloud_agent.task_failed"))
 		}
 
 		lifecycleGuard.transitionToDone()
+		return failures
 	}
 
 	private resolveTokenSource(profile: CloudAgentProfile): AuthTokenSource {
@@ -717,16 +777,18 @@ export class CloudAgentOrchestrator {
 		callbacks: CloudAgentCallbacks,
 		maxRetries: number,
 		confirmOps: boolean,
-	): Promise<void> {
+	): Promise<boolean> {
+		// Returns true when the code compiles, or when compilation cannot be
+		// checked here (no local SDK / not a cjpm project) — that is not a task failure.
 		if (!this.host.compileLocal) {
 			await this.host.say("error", t("common:info.cangjieCompileGuard.feedbackLoopNotConfigured"))
-			return
+			return true
 		}
 
 		const compileCwd = this.resolveCjpmRoot(this.host.cwd)
 		if (!compileCwd) {
 			await this.host.say("text", t("common:info.cangjieCompileGuard.noCjpmToml"))
-			return
+			return true
 		}
 
 		// maxRetries = maximum number of compile attempts (including the first). Fix rounds = maxRetries - 1 at most.
@@ -745,7 +807,7 @@ export class CloudAgentOrchestrator {
 
 			if (compileResult.success) {
 				await this.host.say("text", t("common:info.cangjieCompileGuard.compileSuccess"))
-				break
+				return true
 			}
 
 			let outputForAgent = compileResult.output
@@ -777,8 +839,9 @@ export class CloudAgentOrchestrator {
 			this.host.setCurrentRequestAbortController(fixAbort)
 
 			let fixResult: CloudRunResult
+			let fixClient: ICloudAgentClient | undefined
 			try {
-				const fixClient = this.service.createClient(
+				fixClient = this.service.createClient(
 					callbacks,
 					makeClientOptions(profile, fixAbort.signal, behavior.requestTimeoutMs),
 				)
@@ -798,6 +861,11 @@ export class CloudAgentOrchestrator {
 				break
 			} finally {
 				this.host.setCurrentRequestAbortController(undefined)
+				// Release the per-round client (MCP keeps a live connection);
+				// a failed disconnect must not mask the fix result.
+				await fixClient
+					?.disconnect(this.host.taskId)
+					.catch((e) => logger.debug("CloudAgentOrchestrator", "compile-fix client disconnect failed", e))
 			}
 
 			if (fixResult.workspaceOpsParseError) {
@@ -816,12 +884,15 @@ export class CloudAgentOrchestrator {
 				break
 			}
 
-			const applied = await this.applyWorkspaceOps(fixOps, confirmOps)
-			if (!applied) {
+			const fixOutcome = await this.applyWorkspaceOps(fixOps, confirmOps)
+			if (!fixOutcome.ok) {
 				await this.host.say("error", t("errors.cloud_agent.compile_fix_not_applied"))
 				break
 			}
 		}
+
+		// Every other exit (retries exhausted, compile/fix errors, abort) leaves the build broken.
+		return false
 	}
 
 	private resolveCjpmRoot(startDir: string): string | undefined {
@@ -837,13 +908,21 @@ export class CloudAgentOrchestrator {
 
 	// ── Workspace ops application ───────────────────────────────────────
 
-	private async applyWorkspaceOps(ops: WorkspaceOp[], confirmOps: boolean): Promise<boolean> {
+	/**
+	 * Apply remote workspace ops. Succeeds only when every op was applied:
+	 * ops rejected by the user, blocked by ignore rules, or failing to execute
+	 * all make the outcome a failure (with a reason for the final report).
+	 */
+	private async applyWorkspaceOps(ops: WorkspaceOp[], confirmOps: boolean): Promise<WorkspaceOpsOutcome> {
+		const failed: WorkspaceOpsOutcome = { ok: false, reason: t("errors.cloud_agent.workspace_ops_failed") }
 		if (confirmOps) {
+			let notApplied = 0
 			for (let i = 0; i < ops.length && !this.host.abort; i++) {
 				const op = ops[i]!
 				const accessAllowed = allowRooIgnorePathAccess(this.host.rooIgnoreController, op.path)
 				if (!accessAllowed) {
 					await this.host.say("rooignore_error", op.path)
+					notApplied++
 					continue
 				}
 				const isWriteProtected = (await this.host.rooProtectedController?.isWriteProtected(op.path)) || false
@@ -859,12 +938,13 @@ export class CloudAgentOrchestrator {
 						await this.host.say("user_feedback", askResult.text, askResult.images)
 					}
 				} catch (err) {
-					if (err instanceof AskIgnoredError) return false
+					if (err instanceof AskIgnoredError) return failed
 					throw err
 				}
 
 				if (response !== "yesButtonClicked") {
 					await this.host.say("text", `Skipped workspace op (${i + 1}/${ops.length}): ${op.path}`)
+					notApplied++
 					continue
 				}
 
@@ -877,8 +957,11 @@ export class CloudAgentOrchestrator {
 				await this.host.say("text", single.message)
 				if (!single.ok) {
 					await this.host.say("error", `Workspace operation failed: ${single.message}`)
-					return false
+					return failed
 				}
+			}
+			if (notApplied > 0) {
+				return { ok: false, reason: t("errors.cloud_agent.workspace_ops_rejected", { count: notApplied }) }
 			}
 		} else {
 			// Confirmation is OFF: the user has chosen to apply remote workspace
@@ -944,9 +1027,9 @@ export class CloudAgentOrchestrator {
 						`Failed: ${applied.results.at(-1)?.message ?? "unknown"}`
 					: `Workspace operation failed: ${applied.results.at(-1)?.message ?? "unknown"}`
 				await this.host.say("error", detail)
-				return false
+				return failed
 			}
 		}
-		return true
+		return { ok: true }
 	}
 }

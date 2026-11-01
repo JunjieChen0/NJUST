@@ -228,10 +228,14 @@ describe("McpProtocolAdapter", () => {
 
 		const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
 		const mockClient = vi.mocked(Client).mock.results[0]?.value
-		expect(mockClient?.callTool).toHaveBeenCalledWith({
-			name: "submit_task",
-			arguments: { goal: "test" },
-		})
+		expect(mockClient?.callTool).toHaveBeenCalledWith(
+			{
+				name: "submit_task",
+				arguments: { goal: "test" },
+			},
+			undefined,
+			expect.objectContaining({ timeout: expect.any(Number) }),
+		)
 		expect(result.ok).toBe(true)
 	})
 

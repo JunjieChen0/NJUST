@@ -27,6 +27,12 @@ export interface ICloudAgentHost {
 	setCurrentRequestAbortController(controller: AbortController | undefined): void
 
 	/**
+	 * Put the task into its completed state (TaskCompleted event + task flag),
+	 * mirroring what attempt_completion does for local agent runs.
+	 */
+	markCompleted(): void
+
+	/**
 	 * Compile the local workspace using the Cangjie SDK (cjpm build).
 	 * Called by CloudAgentOrchestrator when compileLoop is enabled.
 	 * Should throw if the SDK is not available so the orchestrator can abort.
