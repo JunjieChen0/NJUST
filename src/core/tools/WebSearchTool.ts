@@ -1,7 +1,6 @@
 import { z } from "zod"
 
 import { BaseTool, type ToolCallbacks } from "./BaseTool"
-import { toolResultCache } from "./helpers/ToolResultCache"
 import type { Task } from "../task/Task"
 import {
 	createSearchProvider,
@@ -35,12 +34,6 @@ class WebSearchToolImpl extends BaseTool<"web_search"> {
 		task: Task,
 		{ askApproval, handleError, pushToolResult, reportProgress }: ToolCallbacks,
 	): Promise<void> {
-		const cacheKey = toolResultCache.makeKey("web_search", params)
-		const cached = toolResultCache.get(cacheKey)
-		if (cached) {
-			pushToolResult(cached)
-			return
-		}
 		try {
 			const query = params.search_query
 			const count = params.count ?? 5
@@ -77,7 +70,6 @@ class WebSearchToolImpl extends BaseTool<"web_search"> {
 			const results = await searchProvider.search(query, count)
 			const formatted = formatSearchResults(results)
 
-			toolResultCache.set(cacheKey, formatted)
 			pushToolResult(formatted)
 		} catch (error) {
 			await handleError("web search", error instanceof Error ? error : new Error(String(error)))

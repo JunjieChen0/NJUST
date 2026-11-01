@@ -3,7 +3,6 @@ import * as path from "path"
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest"
 
 import { ReadCommandOutputTool } from "../ReadCommandOutputTool"
-import { toolResultCache } from "../helpers/ToolResultCache"
 
 // Mock filesystem operations
 vi.mock("fs/promises", () => ({
@@ -36,7 +35,6 @@ describe("ReadCommandOutputTool", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks()
-		vi.spyOn(toolResultCache, "get").mockReturnValue(undefined)
 
 		tool = new ReadCommandOutputTool()
 		globalStoragePath = "/mock/global/storage"

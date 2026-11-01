@@ -10,7 +10,6 @@ import { VectorStoreSearchResult } from "../../services/code-index/interfaces"
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
-import { toolResultCache } from "./helpers/ToolResultCache"
 
 interface CodebaseSearchParams {
 	query: string
@@ -40,12 +39,6 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 
 	async execute(params: CodebaseSearchParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { askApproval, handleError, pushToolResult, reportProgress } = callbacks
-		const cacheKey = toolResultCache.makeKey("codebase_search", params)
-		const cached = toolResultCache.get(cacheKey)
-		if (cached) {
-			pushToolResult(cached)
-			return
-		}
 		const { query, path: directoryPrefix } = params
 
 		const workspacePath = task.cwd && task.cwd.trim() !== "" ? task.cwd : getWorkspacePath()
@@ -102,7 +95,6 @@ export class CodebaseSearchTool extends BaseTool<"codebase_search"> {
 
 			if (!searchResults || searchResults.length === 0) {
 				const out = `No relevant code snippets found for the query: "${query}"`
-				toolResultCache.set(cacheKey, out)
 				pushToolResult(out)
 				return
 			}
@@ -152,7 +144,6 @@ Code Chunk: ${result.codeChunk}
 	)
 	.join("\n")}`
 
-			toolResultCache.set(cacheKey, output)
 			pushToolResult(output)
 		} catch (error: unknown) {
 			await handleError("codebase_search", error instanceof Error ? error : new Error(String(error)))

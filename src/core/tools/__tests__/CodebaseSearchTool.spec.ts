@@ -1,17 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const {
-	getWorkspacePathMock,
-	codeIndexManagerGetInstanceMock,
-	toolResultCacheGetMock,
-	toolResultCacheSetMock,
-	toolResultCacheMakeKeyMock,
-} = vi.hoisted(() => ({
+const { getWorkspacePathMock, codeIndexManagerGetInstanceMock } = vi.hoisted(() => ({
 	getWorkspacePathMock: vi.fn(),
 	codeIndexManagerGetInstanceMock: vi.fn(),
-	toolResultCacheGetMock: vi.fn(),
-	toolResultCacheSetMock: vi.fn(),
-	toolResultCacheMakeKeyMock: vi.fn().mockReturnValue("cache-key"),
 }))
 
 vi.mock("vscode", () => ({
@@ -27,14 +18,6 @@ vi.mock("../../../utils/path", () => ({
 vi.mock("../../../services/code-index/manager", () => ({
 	CodeIndexManager: {
 		getInstance: codeIndexManagerGetInstanceMock,
-	},
-}))
-
-vi.mock("../helpers/ToolResultCache", () => ({
-	toolResultCache: {
-		get: toolResultCacheGetMock,
-		set: toolResultCacheSetMock,
-		makeKey: toolResultCacheMakeKeyMock,
 	},
 }))
 
@@ -69,7 +52,6 @@ describe("CodebaseSearchTool", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		getWorkspacePathMock.mockReturnValue("/workspace")
-		toolResultCacheGetMock.mockReturnValue(undefined)
 	})
 
 	describe("metadata", () => {
@@ -89,15 +71,6 @@ describe("CodebaseSearchTool", () => {
 	})
 
 	describe("execute", () => {
-		it("returns cached result if available", async () => {
-			toolResultCacheGetMock.mockReturnValue("cached result")
-			const callbacks = createCallbacks()
-
-			await codebaseSearchTool.execute({ query: "test" }, createTask(), callbacks as any)
-
-			expect(callbacks.pushToolResult).toHaveBeenCalledWith("cached result")
-		})
-
 		it("handles missing workspace path", async () => {
 			getWorkspacePathMock.mockReturnValue("")
 			const task = createTask({ cwd: "" })

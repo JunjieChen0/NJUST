@@ -6,18 +6,12 @@ const {
 	isPathOutsideWorkspaceMock,
 	isPathUnderBundledCangjieCorpusMock,
 	isPathPotentiallyUnderCangjieCorpusMock,
-	toolResultCacheGetMock,
-	toolResultCacheSetMock,
-	toolResultCacheMakeKeyMock,
 } = vi.hoisted(() => ({
 	listFilesMock: vi.fn(),
 	formatFilesListMock: vi.fn(),
 	isPathOutsideWorkspaceMock: vi.fn(),
 	isPathUnderBundledCangjieCorpusMock: vi.fn(),
 	isPathPotentiallyUnderCangjieCorpusMock: vi.fn(),
-	toolResultCacheGetMock: vi.fn(),
-	toolResultCacheSetMock: vi.fn(),
-	toolResultCacheMakeKeyMock: vi.fn().mockReturnValue("cache-key"),
 }))
 
 vi.mock("../../../services/glob/list-files", () => ({
@@ -42,14 +36,6 @@ vi.mock("../../../utils/bundledCangjieCorpus", () => ({
 
 vi.mock("../../../utils/path", () => ({
 	getReadablePath: vi.fn((_cwd: string, rel: string) => rel),
-}))
-
-vi.mock("../helpers/ToolResultCache", () => ({
-	toolResultCache: {
-		get: toolResultCacheGetMock,
-		set: toolResultCacheSetMock,
-		makeKey: toolResultCacheMakeKeyMock,
-	},
 }))
 
 import { listFilesTool } from "../ListFilesTool"
@@ -88,7 +74,6 @@ describe("ListFilesTool", () => {
 		isPathOutsideWorkspaceMock.mockReturnValue(false)
 		isPathUnderBundledCangjieCorpusMock.mockReturnValue(false)
 		isPathPotentiallyUnderCangjieCorpusMock.mockReturnValue(false)
-		toolResultCacheGetMock.mockReturnValue(undefined)
 	})
 
 	describe("metadata", () => {
@@ -108,16 +93,6 @@ describe("ListFilesTool", () => {
 	})
 
 	describe("execute", () => {
-		it("returns cached result if available", async () => {
-			toolResultCacheGetMock.mockReturnValue("cached file list")
-			const callbacks = createCallbacks()
-
-			await listFilesTool.execute({ path: "src" }, createTask(), callbacks as any)
-
-			expect(callbacks.pushToolResult).toHaveBeenCalledWith("cached file list")
-			expect(listFilesMock).not.toHaveBeenCalled()
-		})
-
 		it("lists files non-recursively and asks approval", async () => {
 			const task = createTask()
 			const callbacks = createCallbacks()

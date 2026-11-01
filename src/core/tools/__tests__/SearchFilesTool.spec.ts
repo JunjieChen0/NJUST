@@ -163,18 +163,16 @@ describe("SearchFilesTool", () => {
 		)
 	})
 
-	it("returns and caches cangjie corpus regex results without approval", async () => {
+	it("returns cangjie corpus regex results without approval", async () => {
 		isPathUnderBundledCangjieCorpusMock.mockReturnValue(true)
 		const task = createTask({ taskMode: "cangjie" })
 		const callbacks = createCallbacks()
 		const params = { path: "corpus-cache", regex: "std.fs" }
 
 		await tool.execute(params, task, callbacks as any)
-		regexSearchFilesMock.mockClear()
-		await tool.execute(params, task, callbacks as any)
 
 		expect(callbacks.askApproval).not.toHaveBeenCalled()
-		expect(regexSearchFilesMock).not.toHaveBeenCalled()
+		expect(regexSearchFilesMock).toHaveBeenCalledTimes(1)
 		expect(callbacks.pushToolResult).toHaveBeenLastCalledWith("regex matches")
 		expect(task.cangjieSearchHistory.has("std.fs")).toBe(true)
 		expect(task.cangjieRuntimePolicy.noteCorpusSearch).toHaveBeenCalledWith(["std.fs"], "std.fs")

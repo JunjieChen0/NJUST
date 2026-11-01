@@ -13,7 +13,6 @@ import { isPathUnderBundledCangjieCorpus, isPathPotentiallyUnderCangjieCorpus } 
 import type { ToolUse } from "../../shared/tools"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
-import { toolResultCache } from "./helpers/ToolResultCache"
 
 interface ListFilesParams {
 	path: string
@@ -42,12 +41,6 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 	}
 
 	async execute(params: ListFilesParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
-		const cacheKey = toolResultCache.makeKey("list_files", params)
-		const cached = toolResultCache.get(cacheKey)
-		if (cached) {
-			callbacks.pushToolResult(cached)
-			return
-		}
 		const rawPath = params.path
 		const relDirPath =
 			typeof rawPath === "string" ? rawPath.trim() : typeof rawPath === "number" ? String(rawPath) : ""
@@ -74,7 +67,6 @@ export class ListFilesTool extends BaseTool<"list_files"> {
 			)
 
 			if (isPathUnderBundledCangjieCorpus(absolutePath, extensionPath)) {
-				toolResultCache.set(cacheKey, result)
 				pushToolResult(result)
 				return
 			}

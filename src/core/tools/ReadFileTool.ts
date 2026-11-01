@@ -39,7 +39,6 @@ import {
 	ImageMemoryTracker,
 } from "./helpers/imageHelpers"
 import { fileReadCache } from "./helpers/FileReadCache"
-import { toolResultCache } from "./helpers/ToolResultCache"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import { logger } from "../../shared/logger"
 import { getErrorMessage } from "../../shared/error-utils"
@@ -184,12 +183,6 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 	private async executeNew(params: ReadFileParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { pushToolResult } = callbacks
 		const modelInfo = task.api.getModel().info
-		const resultCacheKey = toolResultCache.makeKey("read_file", params)
-		const cached = toolResultCache.get(resultCacheKey)
-		if (cached) {
-			pushToolResult(cached)
-			return
-		}
 		const filePath = typeof params.path === "string" ? params.path.trim() : ""
 
 		// Validate input (models sometimes omit path or send "" / whitespace despite JSON schema)
@@ -351,7 +344,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				task.didToolFailInCurrentTurn = true
 			}
 
-			this.buildAndPushResult(task, fileResults, pushToolResult, resultCacheKey)
+			this.buildAndPushResult(task, fileResults, pushToolResult)
 		} catch (error) {
 			// Re-throw internal control-flow signals so BaseTool.handle() can process them
 			if (error instanceof AskIgnoredError) {
@@ -746,12 +739,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 	/**
 	 * Build and push the final result to the tool output.
 	 */
-	private buildAndPushResult(
-		task: Task,
-		fileResults: FileResult[],
-		pushToolResult: PushToolResult,
-		cacheKey?: string,
-	): void {
+	private buildAndPushResult(task: Task, fileResults: FileResult[], pushToolResult: PushToolResult): void {
 		const finalResult = fileResults
 			.filter((r) => r.nativeContent)
 			.map((r) => r.nativeContent)
@@ -788,9 +776,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 			)
 
 			if (typeof result === "string") {
-				const out = statusMessage ? `${result}\n${finalResult}` : result
-				if (cacheKey) toolResultCache.set(cacheKey, out)
-				pushToolResult(out)
+				pushToolResult(statusMessage ? `${result}\n${finalResult}` : result)
 			} else {
 				if (statusMessage) {
 					const textBlock = { type: "text" as const, text: finalResult }
@@ -800,7 +786,6 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				}
 			}
 		} else {
-			if (cacheKey) toolResultCache.set(cacheKey, finalResult)
 			pushToolResult(finalResult)
 		}
 	}

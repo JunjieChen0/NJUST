@@ -1,19 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const {
-	createSearchProviderMock,
-	formatSearchResultsMock,
-	searchProviderSearchMock,
-	toolResultCacheGetMock,
-	toolResultCacheSetMock,
-	toolResultCacheMakeKeyMock,
-} = vi.hoisted(() => ({
+const { createSearchProviderMock, formatSearchResultsMock, searchProviderSearchMock } = vi.hoisted(() => ({
 	createSearchProviderMock: vi.fn(),
 	formatSearchResultsMock: vi.fn(),
 	searchProviderSearchMock: vi.fn(),
-	toolResultCacheGetMock: vi.fn(),
-	toolResultCacheSetMock: vi.fn(),
-	toolResultCacheMakeKeyMock: vi.fn().mockReturnValue("cache-key"),
 }))
 
 vi.mock("../../../services/web-search/WebSearchProvider", () => ({
@@ -24,14 +14,6 @@ vi.mock("../../../services/web-search/WebSearchProvider", () => ({
 		serpapi: { label: "SerpAPI", keyHint: "Get from serpapi.com", noKey: false },
 		tavily: { label: "Tavily", keyHint: "Get from tavily.com", noKey: false },
 	}),
-}))
-
-vi.mock("../helpers/ToolResultCache", () => ({
-	toolResultCache: {
-		get: toolResultCacheGetMock,
-		set: toolResultCacheSetMock,
-		makeKey: toolResultCacheMakeKeyMock,
-	},
 }))
 
 import { webSearchTool } from "../WebSearchTool"
@@ -63,7 +45,6 @@ function createCallbacks() {
 describe("WebSearchTool", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		toolResultCacheGetMock.mockReturnValue(undefined)
 		searchProviderSearchMock.mockResolvedValue([
 			{ title: "Result 1", url: "https://example.com/1", snippet: "First result" },
 		])
@@ -90,16 +71,6 @@ describe("WebSearchTool", () => {
 	})
 
 	describe("execute", () => {
-		it("returns cached result if available", async () => {
-			toolResultCacheGetMock.mockReturnValue("cached search result")
-			const callbacks = createCallbacks()
-
-			await webSearchTool.execute({ search_query: "test" }, createTask(), callbacks as any)
-
-			expect(callbacks.pushToolResult).toHaveBeenCalledWith("cached search result")
-			expect(createSearchProviderMock).not.toHaveBeenCalled()
-		})
-
 		it("returns error when API key is not configured", async () => {
 			const provider = {
 				getState: vi.fn().mockResolvedValue({
@@ -168,17 +139,6 @@ describe("WebSearchTool", () => {
 			await webSearchTool.execute({ search_query: "test" }, createTask(), callbacks as any)
 
 			expect(searchProviderSearchMock).toHaveBeenCalledWith("test", 5)
-		})
-
-		it("caches successful search results", async () => {
-			const callbacks = createCallbacks()
-
-			await webSearchTool.execute({ search_query: "test" }, createTask(), callbacks as any)
-
-			expect(toolResultCacheSetMock).toHaveBeenCalledWith(
-				"cache-key",
-				"Formatted: Result 1 - https://example.com/1",
-			)
 		})
 
 		it("reports progress during execution", async () => {

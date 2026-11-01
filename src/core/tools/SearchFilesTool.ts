@@ -23,7 +23,6 @@ import type { ToolUse } from "../../shared/tools"
 
 import { wrapAsError } from "../../shared/error-utils"
 import { BaseTool, ToolCallbacks, type ValidationResult } from "./BaseTool"
-import { toolResultCache } from "./helpers/ToolResultCache"
 import { extractStdModulesFromQuery } from "./cangjiePreflightCheck"
 
 interface SearchFilesParams {
@@ -89,12 +88,6 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 
 	async execute(params: SearchFilesParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { askApproval, handleError, pushToolResult } = callbacks
-		const cacheKey = toolResultCache.makeKey("search_files", params)
-		const cached = toolResultCache.get(cacheKey)
-		if (cached) {
-			pushToolResult(cached)
-			return
-		}
 
 		const relDirPath = params.path && params.path.trim().length > 0 ? params.path : "."
 		const regex = params.regex
@@ -161,7 +154,6 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 								})
 								.join("\n\n")
 							const result = `Semantic search results for: "${semanticQuery}"\n\n${formatted}`
-							toolResultCache.set(cacheKey, result)
 							trackCangjieSearchHistory()
 							pushToolResult(result)
 							return
@@ -180,7 +172,6 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 			)
 
 			if (isUnderCangjieCorpus) {
-				toolResultCache.set(cacheKey, results)
 				trackCangjieSearchHistory()
 				pushToolResult(results)
 				return

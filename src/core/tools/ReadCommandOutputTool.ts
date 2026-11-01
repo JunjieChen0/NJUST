@@ -7,7 +7,6 @@ import { Task } from "../task/Task"
 import { getTaskDirectoryPath } from "../../utils/storage"
 
 import { BaseTool, ToolCallbacks } from "./BaseTool"
-import { toolResultCache } from "./helpers/ToolResultCache"
 import { getErrorMessage } from "../../shared/error-utils"
 
 /** Default byte limit for read operations (40KB) */
@@ -123,12 +122,6 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 	async execute(params: ReadCommandOutputParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
 		const { pushToolResult, reportProgress } = callbacks
 		const { artifact_id, search, offset = 0, limit = DEFAULT_LIMIT } = params
-		const cacheKey = toolResultCache.makeKey("read_command_output", params)
-		const cached = toolResultCache.get(cacheKey)
-		if (cached) {
-			pushToolResult(cached)
-			return
-		}
 
 		// Validate artifact_id format to prevent path traversal
 		if (!this.isValidArtifactId(artifact_id)) {
@@ -214,7 +207,6 @@ export class ReadCommandOutputTool extends BaseTool<"read_command_output"> {
 			)
 
 			task.consecutiveMistakeCount = 0
-			toolResultCache.set(cacheKey, result)
 			pushToolResult(result)
 		} catch (error) {
 			const errorMsg = getErrorMessage(error)

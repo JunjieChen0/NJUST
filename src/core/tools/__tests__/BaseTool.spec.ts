@@ -47,14 +47,6 @@ vi.mock("../toolResultStorage", () => ({
 	formatStoredResultMessage: vi.fn((stored: any) => `stored: ${stored.filePath}`),
 }))
 
-vi.mock("../helpers/ToolResultCache", () => ({
-	toolResultCache: {
-		makeKey: vi.fn(() => undefined),
-		get: vi.fn(() => undefined),
-		set: vi.fn(),
-	},
-}))
-
 vi.mock("../../../shared/logger", () => ({
 	logger: {
 		info: vi.fn(),

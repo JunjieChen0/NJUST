@@ -17,7 +17,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { isBinaryFile } from "isbinaryfile"
 
 import { readFileTool } from "../ReadFileTool"
-import { toolResultCache } from "../helpers/ToolResultCache"
 import { formatResponse } from "../../prompts/responses"
 import { validateImageForProcessing, processImageFile, isSupportedImageFormat } from "../helpers/imageHelpers"
 import { extractTextFromFile, getSupportedBinaryFormats } from "../../../integrations/misc/extract-text"
@@ -188,7 +187,6 @@ function createMockCallbacks() {
 describe("ReadFileTool", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		vi.spyOn(toolResultCache, "get").mockReturnValue(undefined)
 
 		// Default mock implementations
 		mockedFsStat.mockResolvedValue({ isDirectory: () => false } as any)
@@ -297,6 +295,21 @@ describe("ReadFileTool", () => {
 			expect(mockTask.say).toHaveBeenCalledWith("rooignore_error", "secret.env")
 			expect(formatResponse.rooIgnoreError).toHaveBeenCalledWith("secret.env")
 			expect(callbacks.pushToolResult).toHaveBeenCalledWith(expect.stringContaining("blocked by the .rooignore"))
+		})
+
+		it("re-checks ignore rules on every read instead of serving an earlier result", async () => {
+			// First read is allowed and succeeds.
+			const allowedTask = createMockTask({ rooIgnoreAllowed: true })
+			await readFileTool.execute({ path: "secret.env" }, allowedTask as any, createMockCallbacks())
+
+			// Same workspace, same params, but this task may no longer read the file.
+			const deniedTask = createMockTask({ rooIgnoreAllowed: false })
+			const callbacks = createMockCallbacks()
+			await readFileTool.execute({ path: "secret.env" }, deniedTask as any, callbacks)
+
+			expect(deniedTask.rooIgnoreController.validateAccess).toHaveBeenCalled()
+			expect(callbacks.pushToolResult).toHaveBeenCalledWith(expect.stringContaining("blocked by the .rooignore"))
+			expect(callbacks.pushToolResult).not.toHaveBeenCalledWith(expect.stringContaining("test content"))
 		})
 	})
 

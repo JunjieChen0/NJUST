@@ -20,7 +20,6 @@ import { getToolResultBudget, truncateToolResult, estimateTokens } from "./toolR
 import { shouldPersistResult, persistToolResult, formatStoredResultMessage } from "./toolResultStorage"
 import { ToolHookManager } from "./ToolHookManager"
 import type { ToolHookContext } from "./toolHooks"
-import { toolResultCache } from "./helpers/ToolResultCache"
 import { recordSecurityMetric, startTraceSpan } from "../security/metrics"
 import { RetryableError } from "./errors"
 import { DualSchemaAdapter, type JSONSchema } from "./DualSchemaAdapter"
@@ -593,21 +592,6 @@ export abstract class BaseTool<TName extends ToolName> {
 			const contextWindow = task.api?.getModel?.()?.info?.contextWindow || 200_000
 			const { singleMax } = getToolResultBudget(contextWindow)
 			const originalPushToolResult = callbacks.pushToolResult
-			const cacheableReadOnly = this.isReadOnly(params as Record<string, unknown>)
-			const cacheKey = cacheableReadOnly ? toolResultCache.makeKey(this.name, params) : undefined
-			if (cacheKey) {
-				const cached = toolResultCache.get(cacheKey)
-				if (cached !== undefined) {
-					logger.info("BaseTool", `ToolCache hit tool=${this.name}`)
-					recordSecurityMetric("tool_cache_hit", { tool: this.name })
-					originalPushToolResult(cached)
-					toolSpan.end("ok", { stage: "cache", cacheHit: true })
-					return
-				}
-				logger.info("BaseTool", `ToolCache miss tool=${this.name}`)
-				recordSecurityMetric("tool_cache_miss", { tool: this.name })
-			}
-
 			if (callbacks.abortSignal?.aborted) {
 				callbacks.pushToolResult(
 					formatResponse.toolError(
@@ -637,9 +621,6 @@ export abstract class BaseTool<TName extends ToolName> {
 										"BaseTool",
 										`ToolResultStorage: Persisted ${this.name} result (${stored.totalChars} chars) to ${stored.filePath}`,
 									)
-									if (cacheKey) {
-										toolResultCache.set(cacheKey, message)
-									}
 									originalPushToolResult(message, opts)
 								})
 								.catch((err) => {
@@ -652,14 +633,8 @@ export abstract class BaseTool<TName extends ToolName> {
 									const tokens = estimateTokens(content)
 									if (tokens > singleMax) {
 										const truncated = truncateToolResult(content, singleMax)
-										if (cacheKey) {
-											toolResultCache.set(cacheKey, truncated)
-										}
 										originalPushToolResult(truncated, opts)
 									} else {
-										if (cacheKey) {
-											toolResultCache.set(cacheKey, content)
-										}
 										originalPushToolResult(content, opts)
 									}
 								})
@@ -675,14 +650,8 @@ export abstract class BaseTool<TName extends ToolName> {
 								"BaseTool",
 								`ToolResultBudget: Truncated ${this.name} result: ${tokens} -> ~${singleMax} tokens`,
 							)
-							if (cacheKey) {
-								toolResultCache.set(cacheKey, truncated)
-							}
 							originalPushToolResult(truncated, opts)
 							return
-						}
-						if (cacheKey) {
-							toolResultCache.set(cacheKey, content)
 						}
 					}
 					// For non-string (array with images) or small results, pass through
