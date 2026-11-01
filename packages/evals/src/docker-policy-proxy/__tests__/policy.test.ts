@@ -34,7 +34,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects privileged containers", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					Privileged: true,
 				},
@@ -48,7 +48,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects Docker socket mounts", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					Binds: ["/var/run/docker.sock:/var/run/docker.sock"],
 				},
@@ -62,7 +62,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects nested socket mounts (escape attempt)", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					Binds: ["/var/run/docker.sock:/tmp/fake.sock"],
 				},
@@ -76,7 +76,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects arbitrary bind mounts outside allowed sources", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					Binds: ["/etc/passwd:/etc/passwd:ro"],
 				},
@@ -90,7 +90,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects host PID namespace", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					PidMode: "host",
 				},
@@ -104,7 +104,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects host IPC namespace", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					IpcMode: "host",
 				},
@@ -118,7 +118,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects any capabilities in CapAdd", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					CapAdd: ["SYS_ADMIN"],
 					Memory: 512 * 1024 * 1024,
@@ -136,7 +136,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects SYS_MODULE capability", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					CapAdd: ["SYS_MODULE"],
 					Memory: 512 * 1024 * 1024,
@@ -154,7 +154,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects SecurityOpt seccomp=unconfined", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					SecurityOpt: ["seccomp=unconfined"],
 					Memory: 512 * 1024 * 1024,
@@ -172,7 +172,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects SecurityOpt apparmor=unconfined", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					SecurityOpt: ["apparmor=unconfined"],
 					Memory: 512 * 1024 * 1024,
@@ -190,7 +190,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects SecurityOpt label=disable (SELinux isolation bypass)", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					SecurityOpt: ["label=disable"],
 					Memory: 512 * 1024 * 1024,
@@ -208,7 +208,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects containers without NetworkMode", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					Memory: 512 * 1024 * 1024,
 					PidsLimit: 200,
@@ -224,7 +224,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects unauthorized images", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "malicious-image:latest",
-				Name: "evals-test",
+				Name: "evals-task-test",
 			}
 
 			const decision = validateCreateContainer(req)
@@ -246,7 +246,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects unauthorized networks", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					NetworkMode: "host",
 					Memory: 512 * 1024 * 1024,
@@ -263,7 +263,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects unauthorized environment variables", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				Env: ["MALICIOUS_VAR=secret"],
 				HostConfig: { Memory: 512 * 1024 * 1024, PidsLimit: 200, NanoCpus: 1e9, NetworkMode: "evals_default" },
 			}
@@ -281,7 +281,7 @@ describe("Docker Policy Engine", () => {
 
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					Memory: 2 * 1024 * 1024 * 1024, // 2GB
 				},
@@ -295,7 +295,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects device access", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					Devices: [{ PathOnHost: "/dev/sda" }],
 					Memory: 512 * 1024 * 1024,
@@ -313,7 +313,7 @@ describe("Docker Policy Engine", () => {
 		it("allows image with tag suffix", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner:v1.0.0",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: { Memory: 512 * 1024 * 1024, PidsLimit: 200, NanoCpus: 1e9, NetworkMode: "evals_default" },
 			}
 
@@ -324,7 +324,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects subdirectory of allowed volume source (exact match only)", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					Binds: ["/tmp/evals/runs/1:/var/log/evals"],
 					Memory: 512 * 1024 * 1024,
@@ -340,7 +340,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects containers without HostConfig", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 			}
 			const decision = validateCreateContainer(req)
 			expect(decision.allowed).toBe(false)
@@ -350,7 +350,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects containers without PidsLimit", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: { Memory: 512 * 1024 * 1024, NanoCpus: 1e9 },
 			}
 			const decision = validateCreateContainer(req)
@@ -361,7 +361,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects containers without NanoCpus", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: { Memory: 512 * 1024 * 1024, PidsLimit: 200 },
 			}
 			const decision = validateCreateContainer(req)
@@ -372,7 +372,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects MemorySwap=-1 (unlimited swap)", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: { Memory: 512 * 1024 * 1024, MemorySwap: -1, PidsLimit: 200, NanoCpus: 1e9 },
 			}
 			const decision = validateCreateContainer(req)
@@ -383,7 +383,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects PidsLimit=-1 (unlimited)", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: { Memory: 512 * 1024 * 1024, PidsLimit: -1, NanoCpus: 1e9 },
 			}
 			const decision = validateCreateContainer(req)
@@ -394,7 +394,7 @@ describe("Docker Policy Engine", () => {
 		it("rejects named volumes in Mounts", () => {
 			const req: DockerCreateContainerRequest = {
 				Image: "evals-runner",
-				Name: "evals-test",
+				Name: "evals-task-test",
 				HostConfig: {
 					Memory: 512 * 1024 * 1024,
 					PidsLimit: 200,
@@ -405,6 +405,76 @@ describe("Docker Policy Engine", () => {
 			const decision = validateCreateContainer(req)
 			expect(decision.allowed).toBe(false)
 			expect(decision.reason).toContain("Named volumes")
+		})
+
+		describe("managed container names", () => {
+			const validHostConfig = {
+				NetworkMode: "evals_default",
+				Memory: 512 * 1024 * 1024,
+				PidsLimit: 200,
+				NanoCpus: 1e9,
+			}
+
+			it.each(["evals-docker-proxy", "evals-web", "evals-db", "evals-redis", "evals-runner"])(
+				"rejects infrastructure container name %s",
+				(name) => {
+					const decision = validateCreateContainer({
+						Image: "evals-runner",
+						Name: name,
+						HostConfig: validHostConfig,
+					})
+					expect(decision.allowed).toBe(false)
+					expect(decision.reason).toContain("must start with")
+				},
+			)
+
+			it.each(["evals-task-run1-42.0", "evals-controller-run1"])("allows managed container name %s", (name) => {
+				const decision = validateCreateContainer({
+					Image: "evals-runner",
+					Name: name,
+					HostConfig: validHostConfig,
+				})
+				expect(decision.allowed).toBe(true)
+			})
+		})
+
+		describe("VolumesFrom", () => {
+			const base = {
+				Image: "evals-runner",
+				Name: "evals-task-1.0",
+			}
+			const validHostConfig = {
+				NetworkMode: "evals_default",
+				Memory: 512 * 1024 * 1024,
+				PidsLimit: 200,
+				NanoCpus: 1e9,
+			}
+
+			it("rejects inheriting volumes from another container", () => {
+				const decision = validateCreateContainer({
+					...base,
+					HostConfig: { ...validHostConfig, VolumesFrom: ["evals-docker-proxy"] },
+				})
+				expect(decision.allowed).toBe(false)
+				expect(decision.reason).toContain("VolumesFrom")
+			})
+
+			it("rejects non-array VolumesFrom values", () => {
+				const decision = validateCreateContainer({
+					...base,
+					HostConfig: { ...validHostConfig, VolumesFrom: "evals-docker-proxy" as unknown as string[] },
+				})
+				expect(decision.allowed).toBe(false)
+				expect(decision.reason).toContain("VolumesFrom")
+			})
+
+			it.each([null, []])("allows empty VolumesFrom (%j, as sent by docker CLI)", (value) => {
+				const decision = validateCreateContainer({
+					...base,
+					HostConfig: { ...validHostConfig, VolumesFrom: value },
+				})
+				expect(decision.allowed).toBe(true)
+			})
 		})
 	})
 

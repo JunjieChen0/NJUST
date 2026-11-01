@@ -36,7 +36,7 @@ async function main(): Promise<void> {
 	console.log(`  Allowed images: ${DEFAULT_POLICY.allowedImages.join(", ")}`)
 	console.log(`  Allowed volume sources: ${DEFAULT_POLICY.allowedVolumeSources.join(", ")}`)
 	console.log(`  Allowed networks: ${DEFAULT_POLICY.allowedNetworks.join(", ")}`)
-	console.log(`  Required name prefix: ${DEFAULT_POLICY.requiredNamePrefix}`)
+	console.log(`  Managed name prefixes: ${DEFAULT_POLICY.managedNamePrefixes.join(", ")}`)
 	console.log(`  Max memory: ${DEFAULT_POLICY.maxMemoryBytes / 1024 / 1024}MB`)
 
 	await proxy.start()

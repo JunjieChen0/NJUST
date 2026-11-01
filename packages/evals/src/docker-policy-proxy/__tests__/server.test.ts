@@ -74,6 +74,17 @@ describe("Docker Policy Proxy — Server Integration", () => {
 			expect(resp.status).toBe(401)
 		})
 
+		it("rejects (without crashing) a token with the same length but non-ASCII bytes", async () => {
+			// "é" is 1 UTF-16 unit but 2 UTF-8 bytes: same string length, different byte length.
+			const sameLengthToken = "é" + TEST_TOKEN.slice(1)
+			const resp = await httpRequest(port, "GET", "/_ping", { authorization: `Bearer ${sameLengthToken}` })
+			expect(resp.status).toBe(401)
+
+			// Server must still be alive afterwards
+			const ok = await httpRequest(port, "GET", "/_ping", { authorization: `Bearer ${TEST_TOKEN}` })
+			expect(ok.status).not.toBe(401)
+		})
+
 		it("accepts requests with correct Bearer token", async () => {
 			// /_ping is allowed but will fail to forward (no Docker daemon)
 			// We just verify auth passes (will get 502 from forwarding, not 401)
@@ -157,7 +168,7 @@ describe("Docker Policy Proxy — Server Integration", () => {
 		})
 
 		it("rejects container creation without body", async () => {
-			const resp = await httpRequest(port, "POST", "/containers/create?name=evals-test", {
+			const resp = await httpRequest(port, "POST", "/containers/create?name=evals-task-test", {
 				authorization: `Bearer ${TEST_TOKEN}`,
 			})
 			expect(resp.status).toBe(403)
@@ -173,7 +184,7 @@ describe("Docker Policy Proxy — Server Integration", () => {
 			const resp = await httpRequest(
 				port,
 				"POST",
-				"/containers/create?name=evals-test-1",
+				"/containers/create?name=evals-task-test-1",
 				{
 					authorization: `Bearer ${TEST_TOKEN}`,
 					"content-type": "application/json",
@@ -181,6 +192,62 @@ describe("Docker Policy Proxy — Server Integration", () => {
 				body,
 			)
 			// Will fail to forward (no Docker daemon), but policy passes
+			expect(resp.status).not.toBe(403)
+		})
+
+		it("rejects container creation with VolumesFrom", async () => {
+			const body = JSON.stringify({
+				Image: "evals-runner",
+				Env: [],
+				HostConfig: {
+					Memory: 512 * 1024 * 1024,
+					PidsLimit: 200,
+					NanoCpus: 1e9,
+					NetworkMode: "evals_default",
+					VolumesFrom: ["evals-docker-proxy"],
+				},
+			})
+			const resp = await httpRequest(
+				port,
+				"POST",
+				"/containers/create?name=evals-task-test-2",
+				{
+					authorization: `Bearer ${TEST_TOKEN}`,
+					"content-type": "application/json",
+				},
+				body,
+			)
+			expect(resp.status).toBe(403)
+			expect(JSON.parse(resp.body).message).toContain("VolumesFrom")
+		})
+	})
+
+	describe("Infrastructure container isolation", () => {
+		const auth = { authorization: `Bearer ${TEST_TOKEN}` }
+
+		it("rejects exec on the proxy container", async () => {
+			const resp = await httpRequest(port, "POST", "/containers/evals-docker-proxy/exec", auth)
+			expect(resp.status).toBe(403)
+		})
+
+		it("rejects deleting the web container", async () => {
+			const resp = await httpRequest(port, "DELETE", "/containers/evals-web", auth)
+			expect(resp.status).toBe(403)
+		})
+
+		it("rejects killing the database container", async () => {
+			const resp = await httpRequest(port, "POST", "/containers/evals-db/kill", auth)
+			expect(resp.status).toBe(403)
+		})
+
+		it("still allows exec on a task container", async () => {
+			const resp = await httpRequest(port, "POST", "/containers/evals-task-run1-1.0/exec", auth)
+			// Will fail to forward (no Docker daemon), but policy passes
+			expect(resp.status).not.toBe(403)
+		})
+
+		it("still allows killing a controller container", async () => {
+			const resp = await httpRequest(port, "POST", "/containers/evals-controller-run1/kill", auth)
 			expect(resp.status).not.toBe(403)
 		})
 	})
@@ -195,7 +262,7 @@ describe("Docker Policy Proxy — Server Integration", () => {
 				const resp = await httpRequest(
 					port,
 					"POST",
-					"/containers/create?name=evals-test",
+					"/containers/create?name=evals-task-test",
 					{
 						authorization: `Bearer ${TEST_TOKEN}`,
 						"content-type": "application/json",

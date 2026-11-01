@@ -22,8 +22,11 @@ export interface PolicyConfig {
 	/** Maximum memory in bytes (0 = unlimited) */
 	maxMemoryBytes: number
 
-	/** Container name prefix that must be used */
-	requiredNamePrefix: string
+	/**
+	 * Name prefixes of containers the proxy manages (task runners, controllers).
+	 * Infrastructure containers (proxy, web, db, ...) must NOT match any of these.
+	 */
+	managedNamePrefixes: string[]
 }
 
 /** Docker container creation request (POST /containers/create) */
@@ -53,6 +56,7 @@ export interface DockerCreateContainerRequest {
 		PidsLimit?: number
 		SecurityOpt?: string[]
 		Devices?: unknown[]
+		VolumesFrom?: string[] | null
 	}
 	Name?: string
 	Labels?: Record<string, string>

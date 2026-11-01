@@ -17,7 +17,13 @@ import { logger } from "./logger"
 import { logSecurityEvent } from "./security-audit"
 
 import type { PolicyConfig, DockerCreateContainerRequest, DockerKillContainerRequest } from "./types"
-import { validateCreateContainer, validateKillContainer, isMethodAllowed, DEFAULT_POLICY } from "./policy"
+import {
+	validateCreateContainer,
+	validateKillContainer,
+	isMethodAllowed,
+	isManagedContainerName,
+	DEFAULT_POLICY,
+} from "./policy"
 
 const SCOPE = "DockerPolicyProxy"
 /** Maximum request body size: 10 MB */
@@ -56,9 +62,12 @@ export class DockerPolicyProxy {
 	 */
 	private verifyBearerToken(authHeader: string | undefined, token: string): boolean {
 		if (!authHeader) return false
-		const expected = `Bearer ${token}`
-		if (authHeader.length !== expected.length) return false
-		return crypto.timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected))
+		const actualBytes = Buffer.from(authHeader)
+		const expectedBytes = Buffer.from(`Bearer ${token}`)
+		// Compare byte lengths, not string lengths: timingSafeEqual throws on
+		// mismatched byte lengths (e.g. non-ASCII chars of equal string length).
+		if (actualBytes.length !== expectedBytes.length) return false
+		return crypto.timingSafeEqual(actualBytes, expectedBytes)
 	}
 
 	async start(): Promise<void> {
@@ -432,7 +441,7 @@ export class DockerPolicyProxy {
 				}
 			}
 			// Inject name prefix filter
-			filters["name"] = [this.policy.requiredNamePrefix]
+			filters["name"] = [...this.policy.managedNamePrefixes]
 			parsedUrl.searchParams.set("filters", JSON.stringify(filters))
 			return parsedUrl.pathname + parsedUrl.search
 		}
@@ -525,8 +534,8 @@ export class DockerPolicyProxy {
 			return { allowed: false, reason: "Missing container ID" }
 		}
 
-		// If the ID looks like a name (starts with our prefix), allow directly
-		if (containerId.startsWith(this.policy.requiredNamePrefix)) {
+		// If the ID is a managed container name, allow directly
+		if (isManagedContainerName(containerId, this.policy)) {
 			return { allowed: true }
 		}
 
@@ -536,10 +545,10 @@ export class DockerPolicyProxy {
 			if (inspectData && inspectData.Name) {
 				// Docker prepends "/" to container names
 				const name = inspectData.Name.replace(/^\//, "")
-				if (!name.startsWith(this.policy.requiredNamePrefix)) {
+				if (!isManagedContainerName(name, this.policy)) {
 					return {
 						allowed: false,
-						reason: `Container '${name}' does not have required prefix '${this.policy.requiredNamePrefix}'`,
+						reason: `Container '${name}' is not a managed container (${this.policy.managedNamePrefixes.join(", ")})`,
 					}
 				}
 				return { allowed: true }

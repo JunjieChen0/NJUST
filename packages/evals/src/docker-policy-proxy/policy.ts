@@ -28,7 +28,15 @@ export const DEFAULT_POLICY: PolicyConfig = {
 		"PROXY_AUTH_TOKEN",
 	],
 	maxMemoryBytes: 2 * 1024 * 1024 * 1024, // 2GB
-	requiredNamePrefix: "evals-",
+	// Only task runners and run controllers. Infrastructure containers
+	// (evals-docker-proxy, evals-web, evals-db, ...) share the "evals-" prefix
+	// and must stay out of reach.
+	managedNamePrefixes: ["evals-task-", "evals-controller-"],
+}
+
+/** Check whether a container name belongs to the managed set. */
+export function isManagedContainerName(name: string, policy: PolicyConfig = DEFAULT_POLICY): boolean {
+	return policy.managedNamePrefixes.some((prefix) => prefix.length > 0 && name.startsWith(prefix))
 }
 
 /**
@@ -107,10 +115,10 @@ export function validateCreateContainer(
 	}
 
 	// Check container name prefix
-	if (req.Name && !req.Name.startsWith(policy.requiredNamePrefix)) {
+	if (req.Name && !isManagedContainerName(req.Name, policy)) {
 		return {
 			allowed: false,
-			reason: `Container name '${req.Name}' must start with '${policy.requiredNamePrefix}'`,
+			reason: `Container name '${req.Name}' must start with one of: ${policy.managedNamePrefixes.join(", ")}`,
 		}
 	}
 
@@ -178,6 +186,17 @@ export function validateCreateContainer(
 				return { allowed: false, reason: `Mount type '${mount.Type}' is not allowed (only bind and volume)` }
 			}
 		}
+	}
+
+	// Reject inheriting mounts from other containers (e.g. the proxy's docker.sock).
+	// The docker CLI sends `null` by default, so only empty values pass.
+	const volumesFrom: unknown = hc.VolumesFrom
+	if (
+		volumesFrom !== undefined &&
+		volumesFrom !== null &&
+		!(Array.isArray(volumesFrom) && volumesFrom.length === 0)
+	) {
+		return { allowed: false, reason: "VolumesFrom is not allowed" }
 	}
 
 	// Enforce memory limit (Memory is required to prevent OOM on host)
