@@ -7,6 +7,7 @@ import { TelemetryService } from "@njust-ai/telemetry"
 import type { ClineProvider } from "../core/webview/ClineProvider"
 import { getErrorMessage } from "../shared/error-utils"
 import { isPathOutsideWorkspace } from "../utils/pathUtils"
+import { RooIgnoreController } from "../core/ignore/RooIgnoreController"
 import { validateRegexPattern } from "../utils/safeRegex"
 import { logger } from "../shared/logger"
 
@@ -211,9 +212,13 @@ async function executeTool(
 	switch (toolName) {
 		case "njust_ai_readFile": {
 			const filePath = resolveFilePath(cwd, input.path as string)
-			const uri = vscode.Uri.file(filePath)
-			const content = await vscode.workspace.fs.readFile(uri)
-			return new TextDecoder().decode(content)
+			return withIgnoreController(cwd, async (ignoreController) => {
+				if (!ignoreController.validateAccess(filePath)) {
+					throw new Error(`Access denied: ${input.path as string} is excluded by ignore rules`)
+				}
+				const content = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath))
+				return new TextDecoder().decode(content)
+			})
 		}
 
 		case "njust_ai_editFile": {
@@ -237,10 +242,13 @@ async function executeTool(
 			const fullPath = searchPath ? resolveFilePath(cwd, searchPath) : cwd
 
 			const results: string[] = []
-			const files = await vscode.workspace.findFiles(
-				new vscode.RelativePattern(fullPath, "**/*"),
-				"**/node_modules/**",
-				100,
+			const files = await filterIgnoredFiles(
+				cwd,
+				await vscode.workspace.findFiles(
+					new vscode.RelativePattern(fullPath, "**/*"),
+					"**/node_modules/**",
+					100,
+				),
 			)
 
 			let regex: RegExp | undefined
@@ -276,10 +284,13 @@ async function executeTool(
 			const listPath = resolveFilePath(cwd, (input.path as string) || ".")
 			const recursive = (input.recursive as boolean) || false
 			const pattern = recursive ? "**/*" : "*"
-			const files = await vscode.workspace.findFiles(
-				new vscode.RelativePattern(listPath, pattern),
-				"**/node_modules/**",
-				500,
+			const files = await filterIgnoredFiles(
+				cwd,
+				await vscode.workspace.findFiles(
+					new vscode.RelativePattern(listPath, pattern),
+					"**/node_modules/**",
+					500,
+				),
 			)
 
 			return (
@@ -300,6 +311,27 @@ async function executeTool(
 		default:
 			throw new Error(`Unknown tool: ${toolName}`)
 	}
+}
+
+/** Run `fn` with a freshly loaded ignore controller for `cwd`, disposing it afterwards. */
+async function withIgnoreController<T>(
+	cwd: string,
+	fn: (ignoreController: RooIgnoreController) => T | Promise<T>,
+): Promise<T> {
+	const ignoreController = new RooIgnoreController(cwd)
+	try {
+		await ignoreController.initialize()
+		return await fn(ignoreController)
+	} finally {
+		ignoreController.dispose()
+	}
+}
+
+/** Drop files excluded by the workspace ignore rules. */
+async function filterIgnoredFiles(cwd: string, files: vscode.Uri[]): Promise<vscode.Uri[]> {
+	return withIgnoreController(cwd, (ignoreController) =>
+		files.filter((file) => ignoreController.validateAccess(file.fsPath)),
+	)
 }
 
 function resolveFilePath(cwd: string, relativePath: string): string {
