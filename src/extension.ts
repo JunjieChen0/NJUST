@@ -114,14 +114,11 @@ export async function activate(context: vscode.ExtensionContext) {
 			return
 		}
 
+		// Report only. This listener is process-wide in the shared extension host,
+		// and re-throwing from here would re-enter this same listener in a loop.
+		// Whether the host process keeps running is the VS Code host's decision.
 		logger.error("Extension", "Uncaught exception:", error)
 		TelemetryService.reportError(error, TelemetryEventName.UTILITY_ERROR)
-		// Re-throw to preserve Node.js default fatal behavior.
-		// VSCode extension host will log and deactivate the extension.
-		// Wrap in setTimeout to allow telemetry to flush before the fatal crash.
-		setTimeout(() => {
-			throw error
-		}, 100)
 	}
 	process.on("uncaughtException", uncaughtExceptionListener)
 	outputChannel = vscode.window.createOutputChannel(Package.outputChannel)

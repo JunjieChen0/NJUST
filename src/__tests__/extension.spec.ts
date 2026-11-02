@@ -7,6 +7,8 @@ import { createMockExtensionContext } from "./helpers/vscodeMocks"
 import * as fsModule from "fs"
 import * as dotenvxModule from "@dotenvx/dotenvx"
 
+import { TelemetryService } from "@njust-ai/telemetry"
+
 import { activate } from "../extension"
 
 vi.mock("vscode", () => {
@@ -408,6 +410,27 @@ describe("extension.ts", () => {
 		await activate(mockContext)
 
 		expect(dotenvxModule.config).toHaveBeenCalledTimes(1)
+	})
+
+	it("reports an uncaught exception once without re-throwing it", async () => {
+		const before = process.listeners("uncaughtException")
+		await activate(mockContext)
+		const listener = process.listeners("uncaughtException").find((l) => !before.includes(l))
+		expect(listener).toBeDefined()
+
+		vi.useFakeTimers()
+		try {
+			const error = new Error("boom")
+			listener!(error, "uncaughtException")
+
+			// A re-throw would surface here and re-enter the same listener forever.
+			expect(() => vi.advanceTimersByTime(1000)).not.toThrow()
+			const reports = vi.mocked(TelemetryService.reportError).mock.calls.filter(([e]) => e === error)
+			expect(reports).toHaveLength(1)
+		} finally {
+			vi.useRealTimers()
+			process.removeListener("uncaughtException", listener!)
+		}
 	})
 
 	// Cloud-related auth tests removed in simplified version
