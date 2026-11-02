@@ -168,16 +168,16 @@ describe("CodeParser", () => {
 			expect(result).toBeDefined()
 		})
 
-		it("should handle parser load errors", async () => {
+		it("throws when the language parser fails to load", async () => {
 			;(loadRequiredLanguageParsers as any).mockRejectedValue(new Error("Load failed"))
-			const result = await parser["parseContent"]("test.js", "const test = 123", "hash")
-			expect(result).toEqual([])
+			await expect(parser["parseContent"]("test.js", "const test = 123", "hash")).rejects.toThrow("Load failed")
 		})
 
-		it("should return empty array when no parser is available", async () => {
+		it("throws when no parser is available for the extension", async () => {
 			;(loadRequiredLanguageParsers as any).mockResolvedValue({} as any)
-			const result = await parser["parseContent"]("test.js", "const test = 123", "hash")
-			expect(result).toEqual([])
+			await expect(parser["parseContent"]("test.js", "const test = 123", "hash")).rejects.toThrow(
+				"No parser available",
+			)
 		})
 	})
 

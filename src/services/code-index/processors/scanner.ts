@@ -6,16 +6,15 @@ import * as path from "path"
 import { generateNormalizedAbsolutePath, generateRelativeFilePath } from "../shared/get-relative-path"
 import { getWorkspacePathForContext } from "../../../utils/path"
 import { scannerExtensions } from "../shared/supported-extensions"
+import { codeBlockPointId } from "../shared/point-id"
 import * as vscode from "vscode"
 import { CodeBlock, ICodeParser, IEmbedder, IVectorStore, IDirectoryScanner } from "../interfaces"
 import { createHash } from "crypto"
-import { v5 as uuidv5 } from "uuid"
 import pLimit from "p-limit"
 import { Mutex } from "async-mutex"
 import { CacheManager } from "../cache-manager"
 import { t } from "../../../i18n"
 import {
-	QDRANT_CODE_BLOCK_NAMESPACE,
 	MAX_FILE_SIZE_BYTES,
 	MAX_LIST_FILES_LIMIT_CODE_INDEX,
 	BATCH_SEGMENT_THRESHOLD,
@@ -31,6 +30,10 @@ import { logger } from "../../../shared/logger"
 import { getErrorMessage } from "../../../shared/error-utils"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
+
+// Cached for a new file while its blocks are being written. It never equals a real
+// content hash, so a scan that stops part-way leaves the file marked as having points.
+const INDEX_INCOMPLETE_HASH = "index-incomplete"
 
 export class DirectoryScanner implements IDirectoryScanner {
 	private readonly batchSegmentThreshold: number
@@ -119,7 +122,10 @@ export class DirectoryScanner implements IDirectoryScanner {
 		// Shared batch accumulators (protected by mutex)
 		let currentBatchBlocks: CodeBlock[] = []
 		let currentBatchTexts: string[] = []
-		let currentBatchFileInfos: { filePath: string; fileHash: string; isNew: boolean }[] = []
+		// File path of each block in the current batch (parallel to currentBatchBlocks)
+		let currentBatchFilePaths: string[] = []
+		// Blocks still unwritten per file; a file's hash is updated only once all are written
+		const pendingFiles = new Map<string, { remaining: number; fileHash: string }>()
 		const activeBatchPromises = new Set<Promise<void>>()
 		let pendingBatchCount = 0
 
@@ -165,79 +171,94 @@ export class DirectoryScanner implements IDirectoryScanner {
 					processedCount++
 
 					// Process embeddings if configured
-					if (this.embedder && this.qdrantClient && blocks.length > 0) {
-						// Add to batch accumulators
-						let addedBlocksFromFile = false
-						for (const block of blocks) {
-							const trimmedContent = block.content.trim()
-							if (trimmedContent) {
-								const release = await mutex.acquire()
-								try {
-									currentBatchBlocks.push(block)
-									currentBatchTexts.push(trimmedContent)
-									addedBlocksFromFile = true
+					if (this.embedder && this.qdrantClient) {
+						const embeddableBlocks = blocks.filter((block) => block.content.trim())
 
-									// Check if batch threshold is met
-									// Check abort signal before dispatching batch
-									if (signal?.aborted) {
-										throw new DOMException("Indexing aborted", "AbortError")
-									}
-
-									if (currentBatchBlocks.length >= this.batchSegmentThreshold) {
-										// Wait if we've reached the maximum pending batches
-										while (pendingBatchCount >= MAX_PENDING_BATCHES) {
-											if (signal?.aborted) {
-												throw new DOMException("Indexing aborted", "AbortError")
-											}
-											await Promise.race(activeBatchPromises)
-										}
-
-										// Copy current batch data and clear accumulators
-										const batchBlocks = [...currentBatchBlocks]
-										const batchTexts = [...currentBatchTexts]
-										const batchFileInfos = [...currentBatchFileInfos]
-										currentBatchBlocks = []
-										currentBatchTexts = []
-										currentBatchFileInfos = []
-
-										// Increment pending batch count
-										pendingBatchCount++
-
-										// Queue batch processing
-										const batchPromise = batchLimiter(() =>
-											this.processBatch(
-												batchBlocks,
-												batchTexts,
-												batchFileInfos,
-												scanWorkspace,
-												onError,
-												onBlocksIndexed,
-											),
-										)
-										activeBatchPromises.add(batchPromise)
-
-										// Clean up completed promises to prevent memory accumulation
-										void batchPromise.finally(() => {
-											activeBatchPromises.delete(batchPromise)
-											pendingBatchCount--
-										})
-									}
-								} finally {
-									release()
-								}
-							}
+						// Delete this file's old points once, before any of its new blocks are
+						// queued, so a later batch can never delete blocks an earlier one wrote.
+						if (!isNewFile) {
+							await this.deleteOldPoints(filePath, scanWorkspace)
 						}
 
-						// Add file info once per file (outside the block loop)
-						if (addedBlocksFromFile) {
+						// Parsed fine but nothing to index (e.g. the file was emptied): the old
+						// points are gone, so the new hash can be recorded right away.
+						if (embeddableBlocks.length === 0) {
+							await this.cacheManager.updateHash(filePath, currentFileHash)
+							return
+						}
+
+						// If this scan fails or stops before all blocks are written, the next scan
+						// will treat the file as existing and delete the partial points first.
+						if (isNewFile) {
+							await this.cacheManager.updateHash(filePath, INDEX_INCOMPLETE_HASH)
+						}
+
+						const release = await mutex.acquire()
+						try {
+							totalBlockCount += fileBlockCount
+							pendingFiles.set(filePath, {
+								remaining: embeddableBlocks.length,
+								fileHash: currentFileHash,
+							})
+						} finally {
+							release()
+						}
+
+						// Add to batch accumulators
+						for (const block of embeddableBlocks) {
+							const trimmedContent = block.content.trim()
 							const release = await mutex.acquire()
 							try {
-								totalBlockCount += fileBlockCount
-								currentBatchFileInfos.push({
-									filePath,
-									fileHash: currentFileHash,
-									isNew: isNewFile,
-								})
+								currentBatchBlocks.push(block)
+								currentBatchTexts.push(trimmedContent)
+								currentBatchFilePaths.push(filePath)
+
+								// Check if batch threshold is met
+								// Check abort signal before dispatching batch
+								if (signal?.aborted) {
+									throw new DOMException("Indexing aborted", "AbortError")
+								}
+
+								if (currentBatchBlocks.length >= this.batchSegmentThreshold) {
+									// Wait if we've reached the maximum pending batches
+									while (pendingBatchCount >= MAX_PENDING_BATCHES) {
+										if (signal?.aborted) {
+											throw new DOMException("Indexing aborted", "AbortError")
+										}
+										await Promise.race(activeBatchPromises)
+									}
+
+									// Copy current batch data and clear accumulators
+									const batchBlocks = [...currentBatchBlocks]
+									const batchTexts = [...currentBatchTexts]
+									const batchFilePaths = [...currentBatchFilePaths]
+									currentBatchBlocks = []
+									currentBatchTexts = []
+									currentBatchFilePaths = []
+
+									// Increment pending batch count
+									pendingBatchCount++
+
+									// Queue batch processing
+									const batchPromise = batchLimiter(() =>
+										this.processBatch(
+											batchBlocks,
+											batchTexts,
+											batchFilePaths,
+											pendingFiles,
+											scanWorkspace,
+											onError,
+											onBlocksIndexed,
+										),
+									)
+									activeBatchPromises.add(batchPromise)
+
+									// Clean up completed promises to prevent memory accumulation
+									void batchPromise.finally(() => {
+										activeBatchPromises.delete(batchPromise)
+										pendingBatchCount--
+									})
+								}
 							} finally {
 								release()
 							}
@@ -292,17 +313,25 @@ export class DirectoryScanner implements IDirectoryScanner {
 				// Copy current batch data and clear accumulators
 				const batchBlocks = [...currentBatchBlocks]
 				const batchTexts = [...currentBatchTexts]
-				const batchFileInfos = [...currentBatchFileInfos]
+				const batchFilePaths = [...currentBatchFilePaths]
 				currentBatchBlocks = []
 				currentBatchTexts = []
-				currentBatchFileInfos = []
+				currentBatchFilePaths = []
 
 				// Increment pending batch count for final batch
 				pendingBatchCount++
 
 				// Queue final batch processing
 				const batchPromise = batchLimiter(() =>
-					this.processBatch(batchBlocks, batchTexts, batchFileInfos, scanWorkspace, onError, onBlocksIndexed),
+					this.processBatch(
+						batchBlocks,
+						batchTexts,
+						batchFilePaths,
+						pendingFiles,
+						scanWorkspace,
+						onError,
+						onBlocksIndexed,
+					),
 				)
 				activeBatchPromises.add(batchPromise)
 
@@ -375,10 +404,48 @@ export class DirectoryScanner implements IDirectoryScanner {
 		}
 	}
 
+	/** Deletes a modified file's existing points before its new blocks are queued. */
+	private async deleteOldPoints(filePath: string, scanWorkspace: string): Promise<void> {
+		try {
+			await this.qdrantClient.deletePointsByMultipleFilePaths([filePath])
+		} catch (deleteError: unknown) {
+			logger.error(
+				"DirectoryScanner",
+				`Failed to delete old points before upsert in workspace ${scanWorkspace}:`,
+				deleteError,
+			)
+			TelemetryService.reportError(deleteError, TelemetryEventName.CODE_INDEX_ERROR)
+
+			// Re-throw with workspace context; the file is skipped and its hash kept stale
+			throw new Error(
+				`Failed to delete old points for ${filePath}. Workspace: ${scanWorkspace}. ${getErrorMessage(deleteError)}`,
+				{ cause: deleteError },
+			)
+		}
+	}
+
+	/** Counts written blocks per file and updates a file's hash once all its blocks are written. */
+	private async markBlocksWritten(
+		batchFilePaths: string[],
+		pendingFiles: Map<string, { remaining: number; fileHash: string }>,
+	): Promise<void> {
+		for (const filePath of batchFilePaths) {
+			const pending = pendingFiles.get(filePath)
+			if (!pending) continue
+
+			pending.remaining--
+			if (pending.remaining === 0) {
+				pendingFiles.delete(filePath)
+				await this.cacheManager.updateHash(filePath, pending.fileHash)
+			}
+		}
+	}
+
 	private async processBatch(
 		batchBlocks: CodeBlock[],
 		batchTexts: string[],
-		batchFileInfos: { filePath: string; fileHash: string; isNew: boolean }[],
+		batchFilePaths: string[],
+		pendingFiles: Map<string, { remaining: number; fileHash: string }>,
 		scanWorkspace: string,
 		onError?: (error: Error) => void,
 		onBlocksIndexed?: (indexedCount: number) => void,
@@ -392,41 +459,6 @@ export class DirectoryScanner implements IDirectoryScanner {
 		while (attempts < MAX_BATCH_RETRIES && !success) {
 			attempts++
 			try {
-				// --- Deletion Step ---
-				const uniqueFilePaths = [
-					...new Set(
-						batchFileInfos
-							.filter((info) => !info.isNew) // Only modified files (not new)
-							.map((info) => info.filePath),
-					),
-				]
-				if (uniqueFilePaths.length > 0) {
-					try {
-						await this.qdrantClient.deletePointsByMultipleFilePaths(uniqueFilePaths)
-					} catch (deleteError: unknown) {
-						const errorObj = deleteError as Record<string, unknown>
-						const _errorStatus =
-							errorObj?.status ||
-							(errorObj?.response as Record<string, unknown>)?.status ||
-							errorObj?.statusCode
-						const errorMessage = getErrorMessage(deleteError)
-
-						logger.error(
-							"DirectoryScanner",
-							`Failed to delete points for ${uniqueFilePaths.length} files before upsert in workspace ${scanWorkspace}:`,
-							deleteError,
-						)
-						TelemetryService.reportError(deleteError, TelemetryEventName.CODE_INDEX_ERROR)
-
-						// Re-throw with workspace context
-						throw new Error(
-							`Failed to delete points for ${uniqueFilePaths.length} files. Workspace: ${scanWorkspace}. ${errorMessage}`,
-							{ cause: deleteError },
-						)
-					}
-				}
-				// --- End Deletion Step ---
-
 				// Create embeddings for batch
 				const { embeddings } = await this.embedder.createEmbeddings(batchTexts)
 
@@ -434,11 +466,9 @@ export class DirectoryScanner implements IDirectoryScanner {
 				const points = batchBlocks.map((block, index) => {
 					const normalizedAbsolutePath = generateNormalizedAbsolutePath(block.file_path, scanWorkspace)
 
-					// Use segmentHash for unique ID generation to handle multiple segments from same line
-					const pointId = uuidv5(block.segmentHash, QDRANT_CODE_BLOCK_NAMESPACE)
-
 					return {
-						id: pointId,
+						// Shared with the file watcher; unique per segment of the same line
+						id: codeBlockPointId(block.segmentHash),
 						vector: embeddings[index]!,
 						payload: {
 							filePath: generateRelativeFilePath(normalizedAbsolutePath, scanWorkspace),
@@ -453,11 +483,6 @@ export class DirectoryScanner implements IDirectoryScanner {
 				// Upsert points to Qdrant
 				await this.qdrantClient.upsertPoints(points)
 				onBlocksIndexed?.(batchBlocks.length)
-
-				// Update hashes for successfully processed files in this batch
-				for (const fileInfo of batchFileInfos) {
-					await this.cacheManager.updateHash(fileInfo.filePath, fileInfo.fileHash)
-				}
 				success = true
 			} catch (error) {
 				lastError = error as Error
@@ -473,6 +498,11 @@ export class DirectoryScanner implements IDirectoryScanner {
 					await new Promise((resolve) => setTimeout(resolve, delay))
 				}
 			}
+		}
+
+		// Outside the retry loop so a retried batch never double-counts its blocks
+		if (success) {
+			await this.markBlocksWritten(batchFilePaths, pendingFiles)
 		}
 
 		if (!success && lastError) {

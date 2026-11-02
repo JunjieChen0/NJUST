@@ -117,7 +117,7 @@ export class CodeParser implements ICodeParser {
 				} catch (error) {
 					logger.error("Parser", `Error in pending parser load for ${filePath}:`, error)
 					TelemetryService.reportError(error, TelemetryEventName.CODE_INDEX_ERROR)
-					return []
+					throw error
 				}
 			} else {
 				const loadPromise = loadRequiredLanguageParsers([filePath])
@@ -130,7 +130,7 @@ export class CodeParser implements ICodeParser {
 				} catch (error) {
 					logger.error("Parser", `Error loading language parser for ${filePath}:`, error)
 					TelemetryService.reportError(error, TelemetryEventName.CODE_INDEX_ERROR)
-					return []
+					throw error
 				} finally {
 					this.pendingLoads.delete(ext)
 				}
@@ -138,9 +138,10 @@ export class CodeParser implements ICodeParser {
 		}
 
 		const language = this.loadedParsers[ext]
+		// A parser that failed to load is not the same as a file with no code:
+		// throw so callers keep the existing index and retry later.
 		if (!language) {
-			logger.warn("Parser", `No parser available for file extension: ${ext}`)
-			return []
+			throw new Error(`No parser available for file extension: ${ext}`)
 		}
 
 		const tree = language.parser.parse(content)

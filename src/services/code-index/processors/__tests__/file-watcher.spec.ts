@@ -4,7 +4,25 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 import * as vscode from "vscode"
 
+import { createHash } from "crypto"
+import { v5 as uuidv5 } from "uuid"
+
 import { FileWatcher } from "../file-watcher"
+import { codeParser } from "../parser"
+import { QDRANT_CODE_BLOCK_NAMESPACE } from "../../constants"
+
+function makeBlock(overrides: { segmentHash: string }) {
+	return {
+		file_path: "/mock/workspace/src/long-line.ts",
+		identifier: null,
+		type: "line_segment",
+		start_line: 1,
+		end_line: 1,
+		content: `content of ${overrides.segmentHash}`,
+		fileHash: "file-hash",
+		...overrides,
+	}
+}
 
 // Mock TelemetryService
 vi.mock("../../../../../packages/telemetry/src/TelemetryService", () => ({
@@ -292,6 +310,80 @@ describe("FileWatcher", () => {
 			expect(processedFiles).not.toContain("src/.hidden/components/Button.tsx")
 			expect(processedFiles).not.toContain(".hidden/src/components/Button.tsx")
 			expect(processedFiles).not.toContain("src/components/.hidden/Button.tsx")
+		})
+	})
+
+	describe("change handling", () => {
+		const filePath = "/mock/workspace/src/file.ts"
+		// vscode.workspace.fs.readFile is mocked to return "test content".
+		const currentHash = createHash("sha256").update("test content").digest("hex")
+
+		beforeEach(() => {
+			vi.useFakeTimers()
+		})
+
+		afterEach(() => {
+			vi.useRealTimers()
+		})
+
+		it("keeps existing points when a change event has unchanged content", async () => {
+			mockCacheManager.getHash.mockReturnValue(currentHash)
+			await fileWatcher.initialize()
+
+			await mockOnDidChange({ fsPath: filePath })
+			await vi.advanceTimersByTimeAsync(600)
+
+			expect(mockVectorStore.deletePointsByMultipleFilePaths).not.toHaveBeenCalled()
+			expect(mockCacheManager.updateHash).not.toHaveBeenCalled()
+		})
+
+		it("replaces points when a change event has new content", async () => {
+			mockCacheManager.getHash.mockReturnValue("old-hash")
+			vi.mocked(codeParser.parseFile).mockResolvedValueOnce([makeBlock({ segmentHash: "seg-1" }) as never])
+			await fileWatcher.initialize()
+
+			await mockOnDidChange({ fsPath: filePath })
+			await vi.advanceTimersByTimeAsync(600)
+
+			expect(mockVectorStore.deletePointsByMultipleFilePaths).toHaveBeenCalledWith([filePath])
+			expect(mockVectorStore.upsertPoints).toHaveBeenCalled()
+			expect(mockCacheManager.updateHash).toHaveBeenCalledWith(filePath, currentHash)
+		})
+
+		it("clears old points for a file deleted and recreated within the debounce window", async () => {
+			mockCacheManager.getHash.mockReturnValue("old-hash")
+			vi.mocked(codeParser.parseFile).mockResolvedValueOnce([makeBlock({ segmentHash: "seg-1" }) as never])
+			await fileWatcher.initialize()
+
+			// Coalesced into a single "create" event for the path.
+			await mockOnDidDelete({ fsPath: filePath })
+			await mockOnDidCreate({ fsPath: filePath })
+			await vi.advanceTimersByTimeAsync(600)
+
+			expect(mockVectorStore.deletePointsByMultipleFilePaths).toHaveBeenCalledWith([filePath])
+			expect(mockVectorStore.deletePointsByMultipleFilePaths.mock.invocationCallOrder[0]).toBeLessThan(
+				mockVectorStore.upsertPoints.mock.invocationCallOrder[0],
+			)
+			expect(mockCacheManager.updateHash).toHaveBeenCalledWith(filePath, currentHash)
+		})
+	})
+
+	describe("point ids", () => {
+		it("gives segments split from one line distinct ids derived from segmentHash", async () => {
+			mockCacheManager.getHash.mockReturnValue(undefined)
+			mockEmbedder.createEmbeddings.mockResolvedValueOnce({ embeddings: [[0.1], [0.2], [0.3]] })
+			vi.mocked(codeParser.parseFile).mockResolvedValueOnce(
+				["seg-a", "seg-b", "seg-c"].map((segmentHash) => makeBlock({ segmentHash })) as never,
+			)
+
+			const result = await fileWatcher.processFile("/mock/workspace/src/long-line.ts")
+
+			const points = (result as { pointsToUpsert?: Array<{ id: string; payload: Record<string, unknown> }> })
+				.pointsToUpsert
+			expect(points).toHaveLength(3)
+			expect(new Set(points!.map((p) => p.id)).size).toBe(3)
+			expect(points![0]!.id).toBe(uuidv5("seg-a", QDRANT_CODE_BLOCK_NAMESPACE))
+			expect(points![0]!.payload.segmentHash).toBe("seg-a")
 		})
 	})
 

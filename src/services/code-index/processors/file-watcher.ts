@@ -1,14 +1,8 @@
 import * as vscode from "vscode"
-import {
-	QDRANT_CODE_BLOCK_NAMESPACE,
-	MAX_FILE_SIZE_BYTES,
-	BATCH_SEGMENT_THRESHOLD,
-	MAX_BATCH_RETRIES,
-	INITIAL_RETRY_DELAY_MS,
-} from "../constants"
+import { MAX_FILE_SIZE_BYTES, BATCH_SEGMENT_THRESHOLD, MAX_BATCH_RETRIES, INITIAL_RETRY_DELAY_MS } from "../constants"
 import { createHash } from "crypto"
 import { RooIgnoreController } from "../../../core/ignore/RooIgnoreController"
-import { v5 as uuidv5 } from "uuid"
+import { codeBlockPointId } from "../shared/point-id"
 import { Ignore } from "ignore"
 import { scannerExtensions } from "../shared/supported-extensions"
 import {
@@ -203,10 +197,10 @@ export class FileWatcher implements IFileWatcher {
 		let overallBatchError: Error | undefined
 		const allPathsToClearFromDB = new Set<string>(pathsToExplicitlyDelete)
 
+		// Clear every file being replaced, not just "change" events: a delete followed
+		// by a create within the debounce window arrives here as a single "create".
 		for (const fileDetail of filesToUpsertDetails) {
-			if (fileDetail.originalType === "change") {
-				allPathsToClearFromDB.add(fileDetail.path)
-			}
+			allPathsToClearFromDB.add(fileDetail.path)
 		}
 
 		if (allPathsToClearFromDB.size > 0 && this.vectorStore) {
@@ -433,18 +427,8 @@ export class FileWatcher implements IFileWatcher {
 			}
 		}
 
-		// Phase 1: Handle deletions
-		const { overallBatchError: deletionError, processedCount: deletionCount } = await this._handleBatchDeletions(
-			batchResults,
-			processedCountInBatch,
-			totalFilesInBatch,
-			pathsToExplicitlyDelete,
-			filesToUpsertDetails,
-		)
-		overallBatchError = deletionError
-		processedCountInBatch = deletionCount
-
-		// Phase 2: Process files and prepare upserts
+		// Phase 1: Process files and prepare upserts. This runs before any
+		// deletion so unchanged or unreadable files keep their existing points.
 		const {
 			pointsForBatchUpsert,
 			successfullyProcessedForUpsert,
@@ -457,6 +441,18 @@ export class FileWatcher implements IFileWatcher {
 			pathsToExplicitlyDelete,
 		)
 		processedCountInBatch = upsertCount
+
+		// Phase 2: Delete explicit deletions plus old points of files that will be re-upserted
+		const pathsToReplace = new Set(successfullyProcessedForUpsert.map((file) => file.path))
+		const { overallBatchError: deletionError, processedCount: deletionCount } = await this._handleBatchDeletions(
+			batchResults,
+			processedCountInBatch,
+			totalFilesInBatch,
+			pathsToExplicitlyDelete,
+			filesToUpsertDetails.filter((file) => pathsToReplace.has(file.path)),
+		)
+		overallBatchError = deletionError
+		processedCountInBatch = deletionCount
 
 		// Phase 3: Execute batch upsert
 		overallBatchError = await this._executeBatchUpsertOperations(
@@ -551,17 +547,15 @@ export class FileWatcher implements IFileWatcher {
 
 				pointsToUpsert = blocks.map((block, index) => {
 					const normalizedAbsolutePath = generateNormalizedAbsolutePath(block.file_path, this.workspacePath)
-					const stableName = `${normalizedAbsolutePath}:${block.start_line}`
-					const pointId = uuidv5(stableName, QDRANT_CODE_BLOCK_NAMESPACE)
-
 					return {
-						id: pointId,
+						id: codeBlockPointId(block.segmentHash),
 						vector: embeddings[index]!,
 						payload: {
 							filePath: generateRelativeFilePath(normalizedAbsolutePath, this.workspacePath),
 							codeChunk: block.content,
 							startLine: block.start_line,
 							endLine: block.end_line,
+							segmentHash: block.segmentHash,
 						},
 					}
 				})

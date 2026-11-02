@@ -2,7 +2,10 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+import { createHash } from "crypto"
+
 import { DirectoryScanner } from "../scanner"
+import * as vscode from "vscode"
 import { stat } from "fs/promises"
 
 // Mock TelemetryService
@@ -458,6 +461,177 @@ describe("DirectoryScanner", () => {
 
 			// Deleted file cleanup should not have run
 			expect(mockVectorStore.deletePointsByMultipleFilePaths).not.toHaveBeenCalled()
+		})
+	})
+
+	describe("modified file spanning batch boundaries", () => {
+		// vscode.workspace.fs.readFile is mocked to return "test content".
+		const newHash = createHash("sha256").update("test content").digest("hex")
+
+		/** Single-file fake store: delete clears the file, upsert adds points by id. */
+		function useFakeStore() {
+			const stored = new Set<string>()
+			mockVectorStore.deletePointsByMultipleFilePaths.mockImplementation(async () => {
+				stored.clear()
+			})
+			mockVectorStore.upsertPoints.mockImplementation(async (points: Array<{ id: string }>) => {
+				points.forEach((p) => stored.add(p.id))
+			})
+			mockEmbedder.createEmbeddings.mockImplementation(async (texts: string[]) => ({
+				embeddings: texts.map(() => [0.1]),
+			}))
+			return stored
+		}
+
+		function makeBlocks(count: number) {
+			return Array.from({ length: count }, (_, i) => ({
+				file_path: "test/file1.js",
+				content: `block ${i}`,
+				start_line: i + 1,
+				end_line: i + 1,
+				identifier: null,
+				type: "function",
+				fileHash: newHash,
+				segmentHash: `segment-${i}`,
+			}))
+		}
+
+		beforeEach(async () => {
+			const { listFiles } = await import("../../../glob/list-files")
+			vi.mocked(listFiles).mockResolvedValue([["test/file1.js"], false])
+			mockCacheManager.getHash.mockReturnValue("old-hash")
+			scanner = new DirectoryScanner(
+				mockEmbedder,
+				mockVectorStore,
+				mockCodeParser,
+				mockCacheManager,
+				mockIgnoreInstance,
+				60,
+			)
+		})
+
+		it.each([63, 60, 120])(
+			"keeps all %i new blocks, deletes old points once, then updates the hash",
+			async (blockCount) => {
+				const stored = useFakeStore()
+				mockCodeParser.parseFile.mockResolvedValue(makeBlocks(blockCount))
+
+				await scanner.scanDirectory("/test")
+
+				expect(mockVectorStore.deletePointsByMultipleFilePaths).toHaveBeenCalledTimes(1)
+				expect(stored.size).toBe(blockCount)
+				expect(mockCacheManager.updateHash).toHaveBeenCalledTimes(1)
+				expect(mockCacheManager.updateHash).toHaveBeenCalledWith("test/file1.js", newHash)
+			},
+		)
+
+		it("does not update the hash when one of the file's batches fails", async () => {
+			useFakeStore()
+			mockCodeParser.parseFile.mockResolvedValue(makeBlocks(63))
+			mockVectorStore.upsertPoints.mockRejectedValue(new Error("qdrant down"))
+
+			await scanner.scanDirectory("/test")
+
+			expect(mockCacheManager.updateHash).not.toHaveBeenCalled()
+		})
+
+		it.each([
+			["no blocks", []],
+			["only blank blocks", [{ ...makeBlocks(1)[0], content: "   \n" }]],
+		])("deletes old points and updates the hash when the file now parses to %s", async (_label, blocks) => {
+			const stored = useFakeStore()
+			stored.add("old-point")
+			mockCodeParser.parseFile.mockResolvedValue(blocks)
+
+			await scanner.scanDirectory("/test")
+
+			expect(mockVectorStore.deletePointsByMultipleFilePaths).toHaveBeenCalledTimes(1)
+			expect(stored.size).toBe(0)
+			expect(mockCacheManager.updateHash).toHaveBeenCalledWith("test/file1.js", newHash)
+		})
+
+		it("keeps old points and the old hash when parsing fails", async () => {
+			const stored = useFakeStore()
+			stored.add("old-point")
+			mockCodeParser.parseFile.mockRejectedValue(new Error("No parser available for file extension: js"))
+
+			await scanner.scanDirectory("/test")
+
+			expect(mockVectorStore.deletePointsByMultipleFilePaths).not.toHaveBeenCalled()
+			expect(stored.has("old-point")).toBe(true)
+			expect(mockCacheManager.updateHash).not.toHaveBeenCalled()
+		})
+
+		describe("new file that was only partly indexed", () => {
+			const emptiedHash = createHash("sha256").update("").digest("hex")
+
+			/** Cache and store that keep state across scans, starting with no hash for the file. */
+			function useStatefulStores() {
+				const hashes = new Map<string, string>()
+				mockCacheManager.getHash.mockImplementation((p: string) => hashes.get(p))
+				mockCacheManager.getAllHashes.mockImplementation(() => Object.fromEntries(hashes))
+				mockCacheManager.updateHash.mockImplementation((p: string, h: string) => {
+					hashes.set(p, h)
+				})
+				mockCacheManager.deleteHash.mockImplementation((p: string) => {
+					hashes.delete(p)
+				})
+				const stored = new Set<string>()
+				mockVectorStore.deletePointsByMultipleFilePaths.mockImplementation(async () => {
+					stored.clear()
+				})
+				mockEmbedder.createEmbeddings.mockImplementation(async (texts: string[]) => ({
+					embeddings: texts.map(() => [0.1]),
+				}))
+				const storePoints = async (points: Array<{ id: string }>) => {
+					points.forEach((p) => stored.add(p.id))
+				}
+				return { hashes, stored, storePoints }
+			}
+
+			async function rescanEmptied() {
+				vi.mocked(vscode.workspace.fs.readFile).mockResolvedValueOnce(Buffer.from("") as never)
+				mockCodeParser.parseFile.mockResolvedValueOnce([])
+				await scanner.scanDirectory("/test")
+			}
+
+			it("clears stale points when it is emptied after a failed first scan", async () => {
+				const { hashes, stored, storePoints } = useStatefulStores()
+				mockVectorStore.upsertPoints
+					.mockImplementationOnce(storePoints)
+					.mockRejectedValue(new Error("qdrant down"))
+				mockCodeParser.parseFile.mockResolvedValueOnce(makeBlocks(63))
+
+				await scanner.scanDirectory("/test")
+				expect(stored.size).toBeGreaterThan(0)
+
+				await rescanEmptied()
+
+				expect(stored.size).toBe(0)
+				expect(hashes.get("test/file1.js")).toBe(emptiedHash)
+			})
+
+			it("clears stale points when it is emptied after an aborted first scan", async () => {
+				const { hashes, stored, storePoints } = useStatefulStores()
+				const controller = new AbortController()
+				mockVectorStore.upsertPoints.mockImplementation(async (points: Array<{ id: string }>) => {
+					await storePoints(points)
+					controller.abort()
+				})
+				mockCodeParser.parseFile.mockResolvedValueOnce(makeBlocks(63))
+
+				await scanner
+					.scanDirectory("/test", undefined, undefined, undefined, controller.signal)
+					.catch(() => undefined)
+				expect(stored.size).toBeGreaterThan(0)
+				expect(stored.size).toBeLessThan(63)
+
+				mockVectorStore.upsertPoints.mockImplementation(storePoints)
+				await rescanEmptied()
+
+				expect(stored.size).toBe(0)
+				expect(hashes.get("test/file1.js")).toBe(emptiedHash)
+			})
 		})
 	})
 })
