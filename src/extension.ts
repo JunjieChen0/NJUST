@@ -78,7 +78,56 @@ let unhandledRejectionListener: NodeJS.UnhandledRejectionListener | undefined
 let uncaughtExceptionListener: NodeJS.UncaughtExceptionListener | undefined
 let nodeInspectorWarningLogged = false
 
+/** Remove the process-level listeners registered by activate(), if any. */
+function removeProcessListeners(): void {
+	if (unhandledRejectionListener) {
+		process.removeListener("unhandledRejection", unhandledRejectionListener)
+		unhandledRejectionListener = undefined
+	}
+	if (uncaughtExceptionListener) {
+		process.removeListener("uncaughtException", uncaughtExceptionListener)
+		uncaughtExceptionListener = undefined
+	}
+}
+
+/**
+ * Log and report from a process-level listener. Neither step may throw: an
+ * exception thrown from an uncaughtException listener ends the host process.
+ */
+function reportFromProcessListener(message: string, error: Error): void {
+	try {
+		logger.error("Extension", message, error)
+	} catch {
+		// The logger itself failed; still try telemetry below.
+	}
+	try {
+		TelemetryService.reportError(error, TelemetryEventName.UTILITY_ERROR)
+	} catch {
+		// Nothing left to report to.
+	}
+}
+
+/** An Error for a rejection reason; String() itself can throw (e.g. Object.create(null)). */
+function rejectionReasonToError(reason: unknown): Error {
+	if (reason instanceof Error) return reason
+	try {
+		return new Error(String(reason))
+	} catch {
+		return new Error("Unhandled rejection (reason cannot be converted to a string)")
+	}
+}
+
 export async function activate(context: vscode.ExtensionContext) {
+	try {
+		return await activateExtension(context)
+	} catch (error) {
+		// VS Code does not call deactivate() after a failed activation.
+		removeProcessListeners()
+		throw error
+	}
+}
+
+async function activateExtension(context: vscode.ExtensionContext) {
 	// Load environment variables from .env file
 	// The extension-level .env is optional (not shipped in production builds).
 	// Avoid calling dotenvx when the file doesn't exist, otherwise dotenvx emits
@@ -97,28 +146,34 @@ export async function activate(context: vscode.ExtensionContext) {
 	startupProfiler.start("activate")
 	extensionContext = context
 	nodeInspectorWarningLogged = false
+	// A repeated activate() without deactivate() must not stack a second pair of listeners.
+	removeProcessListeners()
+	// Neither listener may throw (see reportFromProcessListener), so each body is guarded as a whole.
 	unhandledRejectionListener = (reason, _promise) => {
-		logger.error("Extension", "Unhandled promise rejection:", reason)
-		TelemetryService.reportError(
-			reason instanceof Error ? reason : new Error(String(reason)),
-			TelemetryEventName.UTILITY_ERROR,
-		)
+		try {
+			reportFromProcessListener("Unhandled promise rejection:", rejectionReasonToError(reason))
+		} catch {
+			// Never throw from a process-level listener.
+		}
 	}
 	process.on("unhandledRejection", unhandledRejectionListener)
 	uncaughtExceptionListener = (error) => {
-		if (isKnownNodeInspectorProtocolError(error)) {
-			if (!nodeInspectorWarningLogged) {
-				nodeInspectorWarningLogged = true
-				logger.debug("Extension", "Ignored known Node inspector protocol error")
+		try {
+			if (isKnownNodeInspectorProtocolError(error)) {
+				if (!nodeInspectorWarningLogged) {
+					nodeInspectorWarningLogged = true
+					logger.debug("Extension", "Ignored known Node inspector protocol error")
+				}
+				return
 			}
-			return
-		}
 
-		// Report only. This listener is process-wide in the shared extension host,
-		// and re-throwing from here would re-enter this same listener in a loop.
-		// Whether the host process keeps running is the VS Code host's decision.
-		logger.error("Extension", "Uncaught exception:", error)
-		TelemetryService.reportError(error, TelemetryEventName.UTILITY_ERROR)
+			// Report only. This listener is process-wide in the shared extension host,
+			// and re-throwing from here would re-enter this same listener in a loop.
+			// Whether the host process keeps running is the VS Code host's decision.
+			reportFromProcessListener("Uncaught exception:", error)
+		} catch {
+			// Never throw from a process-level listener.
+		}
 	}
 	process.on("uncaughtException", uncaughtExceptionListener)
 	outputChannel = vscode.window.createOutputChannel(Package.outputChannel)
@@ -425,6 +480,15 @@ export async function activate(context: vscode.ExtensionContext) {
 
 // This method is called when your extension is deactivated.
 export async function deactivate() {
+	try {
+		await deactivateExtension()
+	} finally {
+		// Even if a cleanup step above failed, never leave process-level listeners behind.
+		removeProcessListeners()
+	}
+}
+
+async function deactivateExtension() {
 	outputChannel.appendLine(`${Package.name} extension deactivated`)
 
 	// Dispose Cangjie language resources
@@ -487,18 +551,6 @@ export async function deactivate() {
 	// Flush telemetry before exit
 	if (TelemetryService.hasInstance()) {
 		TelemetryService.instance.shutdown()
-	}
-
-	// Remove the process-level listeners registered in activate(). Without
-	// this, repeated activation/deactivation (e.g. during dev reload) leaks
-	// listeners and inflates the process listener count indefinitely.
-	if (unhandledRejectionListener) {
-		process.removeListener("unhandledRejection", unhandledRejectionListener)
-		unhandledRejectionListener = undefined
-	}
-	if (uncaughtExceptionListener) {
-		process.removeListener("uncaughtException", uncaughtExceptionListener)
-		uncaughtExceptionListener = undefined
 	}
 
 	// Dispose the output channel last so the deactivation log line above

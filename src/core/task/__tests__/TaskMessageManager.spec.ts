@@ -41,6 +41,9 @@ vi.mock("../../tools/UpdateTodoListTool", () => ({
 }))
 
 import { TaskMessageManager, type TaskMessageContext } from "../TaskMessageManager"
+import { TaskModeHandler } from "../TaskModeHandler"
+import type { ITaskHost } from "../interfaces/ITaskHost"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 function createContext(overrides: Partial<TaskMessageContext> = {}): TaskMessageContext {
 	return {
@@ -353,6 +356,30 @@ describe("TaskMessageManager", () => {
 
 		await expect(manager.saveClineMessages()).resolves.toBe(true)
 
+		expect(taskMetadataMock).toHaveBeenCalledWith(
+			expect.objectContaining({ mode: "cangjie", apiConfigName: "production-profile" }),
+		)
+	})
+
+	it("waits for a real TaskModeHandler to finish initializing before saving mode and config", async () => {
+		// Mode and config both read the same (slow) provider state.
+		let resolveState!: (state: { mode: string; currentApiConfigName: string }) => void
+		const state = new Promise<{ mode: string; currentApiConfigName: string }>((resolve) => (resolveState = resolve))
+		const host = asMock<ITaskHost>({ getState: vi.fn(() => state), log: vi.fn() })
+		const modeHandler = new TaskModeHandler({ cancelCurrentRequest: vi.fn(), updateApiConfiguration: vi.fn() })
+		modeHandler.initializeAsync(host)
+		const manager = new TaskMessageManager(
+			createContext({
+				getTaskMode: () => modeHandler.getTaskMode(),
+				getTaskApiConfigName: () => modeHandler.getTaskApiConfigName(),
+			}),
+		)
+
+		// Save starts while the mode and config are still loading.
+		const saved = manager.saveClineMessages()
+		resolveState({ mode: "cangjie", currentApiConfigName: "production-profile" })
+
+		await expect(saved).resolves.toBe(true)
 		expect(taskMetadataMock).toHaveBeenCalledWith(
 			expect.objectContaining({ mode: "cangjie", apiConfigName: "production-profile" }),
 		)

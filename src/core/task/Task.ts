@@ -103,7 +103,7 @@ import { TaskStateMachine, TaskState } from "./TaskStateMachine"
 import { TaskRequestBuilder } from "./TaskRequestBuilder"
 import { TaskStreamProcessor } from "./TaskStreamProcessor"
 import type { IsolationLevel, ForkedContextConfig, CacheSafeParams } from "./SubTaskOptions"
-import { TaskMessageManager, type TaskMessageContext } from "./TaskMessageManager"
+import { TaskMessageManager } from "./TaskMessageManager"
 import { TaskAskSayHandler } from "./TaskAskSayHandler"
 import { type TaskAskSayHost } from "./interfaces/TaskAskSayHost"
 import { TaskSubtaskHandler } from "./TaskSubtaskHandler"
@@ -200,7 +200,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	/** Narrow accessor: returns only the UI notification facet of the host. */
-	private get notifier(): ITaskUINotifier | undefined {
+	get notifier(): ITaskUINotifier | undefined {
 		return this.hostRef.deref()
 	}
 
@@ -390,7 +390,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// Token Usage Throttling - Debounced emit function
 	private readonly TOKEN_USAGE_EMIT_INTERVAL_MS = 2000 // 2 seconds
-	private debouncedEmitTokenUsage: ReturnType<typeof debounce>
+	debouncedEmitTokenUsage: ReturnType<typeof debounce>
 
 	private queuedMessageTimer?: ReturnType<typeof setTimeout>
 	// Delegate for system prompt generation, caching, and context condensation
@@ -403,7 +403,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	readonly errorRecovery: ErrorRecoveryHandler
 
 	// Initial status for the task's history item (set at creation time to avoid race conditions)
-	private readonly initialStatus?: "active" | "delegated" | "completed"
+	readonly initialStatus?: "active" | "delegated" | "completed"
 
 	// MessageManager for high-level message operations (lazy initialized)
 	private _messageManager?: MessageManager
@@ -417,25 +417,24 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// ── Host delegation (lazy init) ──────────────────────────────────────────
 	//
-	// NOTE: These use a `this` double-cast rather than `implements Host`
-	// because Task's actual shape differs from what the interfaces declare:
+	// TaskMessageManager gets plain `this`, so the compiler checks Task against
+	// TaskMessageContext. The other hosts still use a `this` double-cast because
+	// Task's actual shape differs from what their interfaces declare:
 	//
-	//   TaskMessageContext    — requires public `initialStatus`, `debouncedEmitTokenUsage`
-	//                           and `notifier` (all private on Task).
 	//   TaskExecutorHost    — requires public `stateMachine` (Task: private readonly).
 	//                           `getTaskMode()` is sync in interface but Task's impl
 	//                           is `async → Promise<string>`.
 	//   TaskLifecycleHost    — requires public `modeHandler` (Task: private readonly)
 	//                           and public `persistentRetryHandler` (Task: private).
-	//   TaskAskSayHost       — requires public `notifier` (Task: private getter).
+	//   TaskAskSayHost       — see that interface for the remaining differences.
 	//   TaskSubtaskHost     — requires public `getSavedApiConversationHistory()`
 	//                           (Task: private async).
 	//
 	// Refactoring path (tracked in architecture backlog):
 	//   1. Make the private members listed above public (or narrow the interfaces).
-	//   2. Add `implements TaskMessageContext, TaskAskSayHost, TaskExecutorHost,
-	//      TaskLifecycleHost, TaskSubtaskHost` to the class declaration.
-	//   3. Remove the 6 double casts (replace with plain `this`).
+	//   2. Add `implements TaskAskSayHost, TaskExecutorHost, TaskLifecycleHost,
+	//      TaskSubtaskHost` to the class declaration.
+	//   3. Remove the remaining double casts (replace with plain `this`).
 	//
 	// The `unknown` in the cast chain eliminates the `any`-poisoning that the
 	// original `any` cast chain caused. The cast hides real mismatches: a member
@@ -445,7 +444,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/** @internal Persistence/CRUD operations on messages — delegates to TaskMessageManager. */
 	private get msgMgr(): TaskMessageManager {
 		if (!this._taskMessageManager) {
-			this._taskMessageManager = new TaskMessageManager(this as unknown as TaskMessageContext)
+			this._taskMessageManager = new TaskMessageManager(this)
 		}
 		return this._taskMessageManager
 	}

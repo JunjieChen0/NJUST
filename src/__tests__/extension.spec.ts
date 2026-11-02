@@ -9,7 +9,11 @@ import * as dotenvxModule from "@dotenvx/dotenvx"
 
 import { TelemetryService } from "@njust-ai/telemetry"
 
-import { activate } from "../extension"
+import * as vscodeModule from "vscode"
+
+import { activate, deactivate } from "../extension"
+import { logger } from "../shared/logger"
+import { McpServerManager } from "../services/mcp/McpServerManager"
 
 vi.mock("vscode", () => {
 	const mockRegFn = () =>
@@ -142,6 +146,7 @@ const { mockAsyncFn, mockConstructor } = vi.hoisted(() => {
 				dispose: vi.fn(),
 				onCangjieActivated: vi.fn(),
 				start: vi.fn().mockResolvedValue(undefined),
+				stop: vi.fn().mockResolvedValue(undefined),
 			}
 		})
 	return { mockAsyncFn, mockConstructor }
@@ -431,6 +436,144 @@ describe("extension.ts", () => {
 			vi.useRealTimers()
 			process.removeListener("uncaughtException", listener!)
 		}
+	})
+
+	describe("process-level listeners", () => {
+		type Listener = (...args: unknown[]) => void
+		const EVENTS = ["uncaughtException", "unhandledRejection"] as const
+
+		/** Listeners this extension added on top of the given snapshot. */
+		function added(before: Record<string, unknown[]>) {
+			return Object.fromEntries(
+				EVENTS.map((event) => [
+					event,
+					process.listeners(event).filter((l) => !before[event]!.includes(l)) as Listener[],
+				]),
+			) as Record<(typeof EVENTS)[number], Listener[]>
+		}
+		function snapshot(): Record<string, unknown[]> {
+			return Object.fromEntries(EVENTS.map((event) => [event, [...process.listeners(event)]]))
+		}
+
+		it("keeps a single pair of listeners across repeated activation", async () => {
+			await deactivate().catch(() => undefined)
+			const before = snapshot()
+
+			await activate(mockContext)
+			await activate(mockContext)
+
+			const ours = added(before)
+			expect(ours.uncaughtException).toHaveLength(1)
+			expect(ours.unhandledRejection).toHaveLength(1)
+			await deactivate()
+		})
+
+		it("leaves a host listener registered and removes only its own on deactivate", async () => {
+			await deactivate().catch(() => undefined)
+			const hostListener = vi.fn()
+			process.on("uncaughtException", hostListener)
+			try {
+				const before = snapshot()
+				await activate(mockContext)
+				expect(added(before).uncaughtException).toHaveLength(1)
+
+				await deactivate()
+
+				expect(added(before).uncaughtException).toHaveLength(0)
+				expect(added(before).unhandledRejection).toHaveLength(0)
+				expect(process.listeners("uncaughtException")).toContain(hostListener)
+			} finally {
+				process.removeListener("uncaughtException", hostListener)
+			}
+		})
+
+		it("never throws from a listener, even when logging and telemetry fail", async () => {
+			await deactivate().catch(() => undefined)
+			const before = snapshot()
+			await activate(mockContext)
+			const ours = added(before)
+			vi.spyOn(logger, "error").mockImplementation(() => {
+				throw new Error("logger broken")
+			})
+			vi.mocked(TelemetryService.reportError).mockImplementation(() => {
+				throw new Error("telemetry broken")
+			})
+
+			try {
+				expect(() => ours.uncaughtException[0]!(new Error("boom"), "uncaughtException")).not.toThrow()
+				expect(() => ours.unhandledRejection[0]!(new Error("rejected"), Promise.resolve())).not.toThrow()
+			} finally {
+				vi.mocked(logger.error).mockRestore()
+				vi.mocked(TelemetryService.reportError).mockReset()
+				await deactivate()
+			}
+		})
+
+		it("never throws from the inspector-error branch when its debug log fails", async () => {
+			await deactivate().catch(() => undefined)
+			const before = snapshot()
+			await activate(mockContext)
+			const ours = added(before)
+			const inspectorError = Object.assign(new Error("Missing dataLength in event"), {
+				stack: [
+					"Error",
+					"    at broadcastToFrontend (node:inspector:1:1)",
+					"    at dataReceived (node:inspector:2:2)",
+				].join("\n"),
+			})
+			vi.spyOn(logger, "debug").mockImplementation(() => {
+				throw new Error("logger broken")
+			})
+
+			try {
+				expect(() => ours.uncaughtException[0]!(inspectorError, "uncaughtException")).not.toThrow()
+				expect(logger.debug).toHaveBeenCalled()
+			} finally {
+				vi.mocked(logger.debug).mockRestore()
+				await deactivate()
+			}
+		})
+
+		it("reports a rejection whose reason cannot be turned into a string", async () => {
+			await deactivate().catch(() => undefined)
+			const before = snapshot()
+			await activate(mockContext)
+			const ours = added(before)
+			// String() throws for an object without a prototype (no toString / valueOf).
+			const reason = Object.create(null)
+
+			try {
+				expect(() => ours.unhandledRejection[0]!(reason, Promise.resolve())).not.toThrow()
+				expect(TelemetryService.reportError).toHaveBeenCalledWith(expect.any(Error), expect.anything())
+			} finally {
+				await deactivate()
+			}
+		})
+
+		it("removes its listeners when activation fails", async () => {
+			await deactivate().catch(() => undefined)
+			const before = snapshot()
+			vi.mocked(vscodeModule.window.createOutputChannel).mockImplementationOnce(() => {
+				throw new Error("activation failed")
+			})
+
+			await expect(activate(mockContext)).rejects.toThrow("activation failed")
+
+			expect(added(before).uncaughtException).toHaveLength(0)
+			expect(added(before).unhandledRejection).toHaveLength(0)
+		})
+
+		it("removes its listeners even when an earlier deactivation step fails", async () => {
+			await deactivate().catch(() => undefined)
+			const before = snapshot()
+			await activate(mockContext)
+			vi.mocked(McpServerManager.cleanup).mockRejectedValueOnce(new Error("cleanup failed"))
+
+			await expect(deactivate()).rejects.toThrow("cleanup failed")
+
+			expect(added(before).uncaughtException).toHaveLength(0)
+			expect(added(before).unhandledRejection).toHaveLength(0)
+		})
 	})
 
 	// Cloud-related auth tests removed in simplified version
