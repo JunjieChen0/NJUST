@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { createHash } from "crypto"
 
 import { DirectoryScanner } from "../scanner"
+import { INDEX_INCOMPLETE_HASH } from "../../constants"
 import * as vscode from "vscode"
 import { stat } from "fs/promises"
 
@@ -102,6 +103,7 @@ describe("DirectoryScanner", () => {
 			getAllHashes: vi.fn().mockReturnValue({}),
 			updateHash: vi.fn().mockResolvedValue(undefined),
 			deleteHash: vi.fn().mockResolvedValue(undefined),
+			markIncomplete: vi.fn().mockResolvedValue(undefined),
 			initialize: vi.fn().mockResolvedValue(undefined),
 			clearCacheFile: vi.fn().mockResolvedValue(undefined),
 		}
@@ -520,8 +522,10 @@ describe("DirectoryScanner", () => {
 
 				expect(mockVectorStore.deletePointsByMultipleFilePaths).toHaveBeenCalledTimes(1)
 				expect(stored.size).toBe(blockCount)
-				expect(mockCacheManager.updateHash).toHaveBeenCalledTimes(1)
-				expect(mockCacheManager.updateHash).toHaveBeenCalledWith("test/file1.js", newHash)
+				expect(mockCacheManager.updateHash).toHaveBeenLastCalledWith("test/file1.js", newHash)
+				expect(mockCacheManager.updateHash.mock.calls.filter((c: unknown[]) => c[1] === newHash)).toHaveLength(
+					1,
+				)
 			},
 		)
 
@@ -532,7 +536,7 @@ describe("DirectoryScanner", () => {
 
 			await scanner.scanDirectory("/test")
 
-			expect(mockCacheManager.updateHash).not.toHaveBeenCalled()
+			expect(mockCacheManager.updateHash).not.toHaveBeenCalledWith("test/file1.js", newHash)
 		})
 
 		it.each([
@@ -576,6 +580,9 @@ describe("DirectoryScanner", () => {
 				mockCacheManager.deleteHash.mockImplementation((p: string) => {
 					hashes.delete(p)
 				})
+				mockCacheManager.markIncomplete.mockImplementation(async (paths: string[]) => {
+					paths.forEach((p) => hashes.set(p, INDEX_INCOMPLETE_HASH))
+				})
 				const stored = new Set<string>()
 				mockVectorStore.deletePointsByMultipleFilePaths.mockImplementation(async () => {
 					stored.clear()
@@ -609,6 +616,58 @@ describe("DirectoryScanner", () => {
 
 				expect(stored.size).toBe(0)
 				expect(hashes.get("test/file1.js")).toBe(emptiedHash)
+			})
+
+			it("restores points when a modified file that failed to re-index goes back to its old content", async () => {
+				const { hashes, stored, storePoints } = useStatefulStores()
+				const oldContent = "old content"
+				const oldHash = createHash("sha256").update(oldContent).digest("hex")
+				hashes.set("test/file1.js", oldHash)
+				stored.add("old-point")
+
+				// Content changes to "test content", but writing its blocks fails.
+				mockVectorStore.upsertPoints.mockRejectedValue(new Error("qdrant down"))
+				mockCodeParser.parseFile.mockResolvedValueOnce(makeBlocks(3))
+				await scanner.scanDirectory("/test")
+				expect(stored.size).toBe(0)
+				expect(hashes.get("test/file1.js")).not.toBe(oldHash)
+
+				// The file goes back to its old content and is rescanned.
+				mockVectorStore.upsertPoints.mockImplementation(storePoints)
+				vi.mocked(vscode.workspace.fs.readFile).mockResolvedValueOnce(Buffer.from(oldContent) as never)
+				mockCodeParser.parseFile.mockResolvedValueOnce(makeBlocks(2))
+				await scanner.scanDirectory("/test")
+
+				expect(stored.size).toBe(2)
+				expect(hashes.get("test/file1.js")).toBe(oldHash)
+			})
+
+			it("leaves the old points and hash alone when the marker cannot be saved", async () => {
+				const { hashes, stored } = useStatefulStores()
+				hashes.set("test/file1.js", "old-hash")
+				stored.add("old-point")
+				mockCacheManager.markIncomplete.mockRejectedValue(new Error("disk full"))
+				mockCodeParser.parseFile.mockResolvedValueOnce(makeBlocks(3))
+
+				await scanner.scanDirectory("/test")
+
+				expect(mockVectorStore.deletePointsByMultipleFilePaths).not.toHaveBeenCalled()
+				expect(mockVectorStore.upsertPoints).not.toHaveBeenCalled()
+				expect(stored.has("old-point")).toBe(true)
+				expect(hashes.get("test/file1.js")).toBe("old-hash")
+			})
+
+			it("saves the marker before deleting old points", async () => {
+				const { hashes } = useStatefulStores()
+				hashes.set("test/file1.js", "old-hash")
+				mockCodeParser.parseFile.mockResolvedValueOnce(makeBlocks(3))
+
+				await scanner.scanDirectory("/test")
+
+				expect(mockCacheManager.markIncomplete).toHaveBeenCalledWith(["test/file1.js"])
+				expect(mockCacheManager.markIncomplete.mock.invocationCallOrder[0]).toBeLessThan(
+					mockVectorStore.deletePointsByMultipleFilePaths.mock.invocationCallOrder[0],
+				)
 			})
 
 			it("clears stale points when it is emptied after an aborted first scan", async () => {

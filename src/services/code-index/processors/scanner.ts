@@ -31,10 +31,6 @@ import { getErrorMessage } from "../../../shared/error-utils"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
 
-// Cached for a new file while its blocks are being written. It never equals a real
-// content hash, so a scan that stops part-way leaves the file marked as having points.
-const INDEX_INCOMPLETE_HASH = "index-incomplete"
-
 export class DirectoryScanner implements IDirectoryScanner {
 	private readonly batchSegmentThreshold: number
 
@@ -174,6 +170,11 @@ export class DirectoryScanner implements IDirectoryScanner {
 					if (this.embedder && this.qdrantClient) {
 						const embeddableBlocks = blocks.filter((block) => block.content.trim())
 
+						// Mark the file before touching its points. If this scan fails or stops
+						// before all new blocks are written, the next scan re-indexes the file
+						// (instead of trusting a hash whose points are gone or incomplete).
+						await this.cacheManager.markIncomplete([filePath])
+
 						// Delete this file's old points once, before any of its new blocks are
 						// queued, so a later batch can never delete blocks an earlier one wrote.
 						if (!isNewFile) {
@@ -185,12 +186,6 @@ export class DirectoryScanner implements IDirectoryScanner {
 						if (embeddableBlocks.length === 0) {
 							await this.cacheManager.updateHash(filePath, currentFileHash)
 							return
-						}
-
-						// If this scan fails or stops before all blocks are written, the next scan
-						// will treat the file as existing and delete the partial points first.
-						if (isNewFile) {
-							await this.cacheManager.updateHash(filePath, INDEX_INCOMPLETE_HASH)
 						}
 
 						const release = await mutex.acquire()

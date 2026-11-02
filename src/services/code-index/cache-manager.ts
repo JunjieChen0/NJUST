@@ -6,6 +6,7 @@ import { safeWriteJson } from "../../utils/safeWriteJson"
 import { logger } from "../../shared/logger"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
+import { INDEX_INCOMPLETE_HASH } from "./constants"
 
 /**
  * Manages the cache for code indexing
@@ -14,6 +15,10 @@ export class CacheManager implements ICacheManager {
 	private cachePath: vscode.Uri
 	private fileHashes: Record<string, string> = {}
 	private _debouncedSaveCache: () => void
+	/** Settles when the current immediate save is done (never rejects). */
+	private saveInFlight: Promise<void> = Promise.resolve()
+	/** The next immediate save, shared by every caller that arrives before it starts. */
+	private queuedSave: Promise<void> | undefined
 
 	/**
 	 * Creates a new cache manager
@@ -100,6 +105,29 @@ export class CacheManager implements ICacheManager {
 	deleteHash(filePath: string): void {
 		delete this.fileHashes[filePath]
 		this._debouncedSaveCache()
+	}
+
+	async markIncomplete(filePaths: string[]): Promise<void> {
+		for (const filePath of filePaths) {
+			this.fileHashes[filePath] = INDEX_INCOMPLETE_HASH
+		}
+		await this.saveNow()
+	}
+
+	/**
+	 * Write the current hashes now and reject on failure. Callers that arrive while a
+	 * write is running share the next one, so a full scan does not write once per file.
+	 */
+	private saveNow(): Promise<void> {
+		if (!this.queuedSave) {
+			const save = this.saveInFlight.then(async () => {
+				this.queuedSave = undefined
+				await safeWriteJson(this.cachePath.fsPath, { ...this.fileHashes })
+			})
+			this.queuedSave = save
+			this.saveInFlight = save.catch(() => undefined)
+		}
+		return this.queuedSave
 	}
 
 	/**

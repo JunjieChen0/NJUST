@@ -3,6 +3,7 @@ import * as vscode from "vscode"
 import { createHash } from "crypto"
 import debounce from "lodash.debounce"
 import { CacheManager } from "../cache-manager"
+import { INDEX_INCOMPLETE_HASH } from "../constants"
 
 // Mock safeWriteJson utility
 vitest.mock("../../../utils/safeWriteJson", () => ({
@@ -169,6 +170,19 @@ describe("CacheManager", () => {
 			} finally {
 				vi.useRealTimers()
 			}
+		})
+	})
+
+	describe("incomplete-index marker", () => {
+		it("survives a save and reload, so a restarted scan still sees the file as partly indexed", async () => {
+			cacheManager.updateHash("partial.ts", INDEX_INCOMPLETE_HASH)
+			const saved = (safeWriteJson as Mock).mock.calls.at(-1)![1]
+			;(vscode.workspace.fs.readFile as Mock).mockResolvedValue(Buffer.from(JSON.stringify(saved)))
+
+			const reloaded = new CacheManager(mockContext, mockWorkspacePath)
+			await reloaded.initialize()
+
+			expect(reloaded.getHash("partial.ts")).toBe(INDEX_INCOMPLETE_HASH)
 		})
 	})
 

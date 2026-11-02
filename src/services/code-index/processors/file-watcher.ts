@@ -19,7 +19,7 @@ import { generateNormalizedAbsolutePath, generateRelativeFilePath } from "../sha
 import { isPathInIgnoredDirectory } from "../../glob/ignore-utils"
 import { Package } from "../../../shared/package"
 import { logger } from "../../../shared/logger"
-import { getErrorMessage } from "../../../shared/error-utils"
+import { getErrorMessage, wrapAsError } from "../../../shared/error-utils"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
 
@@ -348,7 +348,8 @@ export class FileWatcher implements IFileWatcher {
 		batchResults: FileProcessingResult[],
 		overallBatchError?: Error,
 	): Promise<Error | undefined> {
-		if (pointsForBatchUpsert.length > 0 && this.vectorStore && !overallBatchError) {
+		// Runs with zero points too (e.g. a file that was emptied), so its new hash is committed.
+		if (this.vectorStore && !overallBatchError) {
 			try {
 				for (let i = 0; i < pointsForBatchUpsert.length; i += this.batchSegmentThreshold) {
 					const batch = pointsForBatchUpsert.slice(i, i + this.batchSegmentThreshold)
@@ -387,7 +388,7 @@ export class FileWatcher implements IFileWatcher {
 					batchResults.push({ path, status: "error", error: err })
 				}
 			}
-		} else if (overallBatchError && pointsForBatchUpsert.length > 0) {
+		} else if (overallBatchError) {
 			for (const { path } of successfullyProcessedForUpsert) {
 				batchResults.push({ path, status: "error", error: overallBatchError })
 			}
@@ -442,16 +443,27 @@ export class FileWatcher implements IFileWatcher {
 		)
 		processedCountInBatch = upsertCount
 
-		// Phase 2: Delete explicit deletions plus old points of files that will be re-upserted
+		// Phase 2: Delete explicit deletions plus old points of files that will be re-upserted.
+		// Replaced files are marked on disk first (their real hash is committed only after
+		// phase 3 succeeds); if the marker cannot be saved, none of them is touched.
 		const pathsToReplace = new Set(successfullyProcessedForUpsert.map((file) => file.path))
+		let markError: Error | undefined
+		if (pathsToReplace.size > 0) {
+			try {
+				await this.cacheManager.markIncomplete([...pathsToReplace])
+			} catch (error) {
+				markError = wrapAsError(error)
+				logger.error("FileWatcher", "Failed to save incomplete-index markers; skipping replacement:", error)
+			}
+		}
 		const { overallBatchError: deletionError, processedCount: deletionCount } = await this._handleBatchDeletions(
 			batchResults,
 			processedCountInBatch,
 			totalFilesInBatch,
 			pathsToExplicitlyDelete,
-			filesToUpsertDetails.filter((file) => pathsToReplace.has(file.path)),
+			markError ? [] : filesToUpsertDetails.filter((file) => pathsToReplace.has(file.path)),
 		)
-		overallBatchError = deletionError
+		overallBatchError = markError ?? deletionError
 		processedCountInBatch = deletionCount
 
 		// Phase 3: Execute batch upsert

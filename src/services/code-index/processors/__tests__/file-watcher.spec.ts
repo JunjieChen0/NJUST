@@ -9,7 +9,7 @@ import { v5 as uuidv5 } from "uuid"
 
 import { FileWatcher } from "../file-watcher"
 import { codeParser } from "../parser"
-import { QDRANT_CODE_BLOCK_NAMESPACE } from "../../constants"
+import { INDEX_INCOMPLETE_HASH, QDRANT_CODE_BLOCK_NAMESPACE } from "../../constants"
 
 function makeBlock(overrides: { segmentHash: string }) {
 	return {
@@ -136,6 +136,7 @@ describe("FileWatcher", () => {
 			getHash: vi.fn(),
 			updateHash: vi.fn(),
 			deleteHash: vi.fn(),
+			markIncomplete: vi.fn().mockResolvedValue(undefined),
 		}
 
 		mockEmbedder = {
@@ -348,6 +349,83 @@ describe("FileWatcher", () => {
 			expect(mockVectorStore.deletePointsByMultipleFilePaths).toHaveBeenCalledWith([filePath])
 			expect(mockVectorStore.upsertPoints).toHaveBeenCalled()
 			expect(mockCacheManager.updateHash).toHaveBeenCalledWith(filePath, currentHash)
+		})
+
+		describe("with a cache and store that keep state", () => {
+			const emptyHash = createHash("sha256").update("").digest("hex")
+
+			function useStatefulStores(initialHash: string) {
+				const hashes = new Map<string, string>([[filePath, initialHash]])
+				mockCacheManager.getHash.mockImplementation((p: string) => hashes.get(p))
+				mockCacheManager.updateHash.mockImplementation((p: string, h: string) => {
+					hashes.set(p, h)
+				})
+				mockCacheManager.markIncomplete.mockImplementation(async (paths: string[]) => {
+					paths.forEach((p) => hashes.set(p, INDEX_INCOMPLETE_HASH))
+				})
+				const stored = new Set<string>(["old-point"])
+				mockVectorStore.deletePointsByMultipleFilePaths.mockImplementation(async () => {
+					stored.clear()
+				})
+				const storePoints = async (points: Array<{ id: string }>) => {
+					points.forEach((p) => stored.add(p.id))
+				}
+				mockVectorStore.upsertPoints.mockImplementation(storePoints)
+				return { hashes, stored, storePoints }
+			}
+
+			async function changeTo(content: string, blocks: unknown[]) {
+				vi.mocked(vscode.workspace.fs.readFile).mockResolvedValueOnce(Buffer.from(content) as never)
+				vi.mocked(codeParser.parseFile).mockResolvedValueOnce(blocks as never)
+				await mockOnDidChange({ fsPath: filePath })
+				await vi.advanceTimersByTimeAsync(600)
+			}
+
+			it("saves the marker before deleting, and changes nothing if that save fails", async () => {
+				const { hashes, stored } = useStatefulStores(currentHash)
+				await fileWatcher.initialize()
+
+				mockCacheManager.markIncomplete.mockRejectedValueOnce(new Error("disk full"))
+				await changeTo("new content", [makeBlock({ segmentHash: "seg-new" })])
+				expect(mockVectorStore.deletePointsByMultipleFilePaths).not.toHaveBeenCalled()
+				expect(mockVectorStore.upsertPoints).not.toHaveBeenCalled()
+				expect(stored.has("old-point")).toBe(true)
+				expect(hashes.get(filePath)).toBe(currentHash)
+
+				await changeTo("new content", [makeBlock({ segmentHash: "seg-new" })])
+				expect(mockCacheManager.markIncomplete.mock.invocationCallOrder.at(-1)).toBeLessThan(
+					mockVectorStore.deletePointsByMultipleFilePaths.mock.invocationCallOrder[0],
+				)
+			})
+
+			it("re-indexes A after the file went A -> empty -> A", async () => {
+				const { hashes, stored } = useStatefulStores(currentHash)
+				await fileWatcher.initialize()
+
+				await changeTo("", [])
+				expect(stored.size).toBe(0)
+				expect(hashes.get(filePath)).toBe(emptyHash)
+
+				await changeTo("test content", [makeBlock({ segmentHash: "seg-a" })])
+				expect(stored.size).toBe(1)
+				expect(hashes.get(filePath)).toBe(currentHash)
+			})
+
+			it("re-indexes the old content after a failed replacement is reverted", async () => {
+				const { hashes, stored, storePoints } = useStatefulStores(currentHash)
+				await fileWatcher.initialize()
+
+				mockVectorStore.upsertPoints.mockRejectedValue(new Error("qdrant down"))
+				await changeTo("new content", [makeBlock({ segmentHash: "seg-new" })])
+				await vi.advanceTimersByTimeAsync(10_000)
+				expect(stored.size).toBe(0)
+				expect(hashes.get(filePath)).not.toBe(currentHash)
+
+				mockVectorStore.upsertPoints.mockImplementation(storePoints)
+				await changeTo("test content", [makeBlock({ segmentHash: "seg-a" })])
+				expect(stored.size).toBe(1)
+				expect(hashes.get(filePath)).toBe(currentHash)
+			})
 		})
 
 		it("clears old points for a file deleted and recreated within the debounce window", async () => {
