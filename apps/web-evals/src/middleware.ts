@@ -18,14 +18,6 @@ export function middleware(request: NextRequest) {
 	// ── CSP Headers ─────────────────────────────────────────────────────────
 	const nonce = generateNonce()
 
-	const response = NextResponse.next({
-		request: {
-			headers: new Headers(request.headers),
-		},
-	})
-
-	response.headers.set("x-nonce", nonce)
-
 	const isProduction = process.env.NODE_ENV === "production"
 	const reportUri = isProduction ? "" : ""
 
@@ -45,7 +37,23 @@ export function middleware(request: NextRequest) {
 		cspDirectives.push(`report-uri ${reportUri}`)
 	}
 
-	response.headers.set("Content-Security-Policy", cspDirectives.join("; "))
+	const csp = cspDirectives.join("; ")
+
+	// Next reads the nonce from the *request* CSP when rendering, so the
+	// forwarded request must carry it too; otherwise framework inline scripts
+	// get no nonce and the response CSP blocks them.
+	const requestHeaders = new Headers(request.headers)
+	requestHeaders.set("x-nonce", nonce)
+	requestHeaders.set("Content-Security-Policy", csp)
+
+	const response = NextResponse.next({
+		request: {
+			headers: requestHeaders,
+		},
+	})
+
+	response.headers.set("x-nonce", nonce)
+	response.headers.set("Content-Security-Policy", csp)
 
 	return response
 }
