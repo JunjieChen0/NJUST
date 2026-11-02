@@ -214,6 +214,44 @@ describe("safeWriteJson", () => {
 		expect(content).toEqual(initialData)
 	})
 
+	it("keeps the backup and names it in the error when both the replace and the restore fail", async () => {
+		const initialData = { message: "Only copy of the old data" }
+		await originalFsPromisesWriteFile(currentTestFilePath, JSON.stringify(initialData))
+
+		let renameCallCount = 0
+		vi.spyOn(fs, "rename").mockImplementation(async function (oldPath, newPath) {
+			renameCallCount++
+			if (renameCallCount === 1) {
+				// filePath -> backup succeeds
+				return originalFsPromisesRename(oldPath, newPath)
+			}
+			if (renameCallCount === 2) {
+				// temp -> filePath fails
+				throw new Error("Rename from temp to final failed")
+			}
+			if (renameCallCount === 3) {
+				// backup -> filePath (restore) fails too
+				throw new Error("Restore failed")
+			}
+			return originalFsPromisesRename(oldPath, newPath)
+		})
+
+		const error: Error = await safeWriteJson(currentTestFilePath, { message: "New content" }).then(
+			() => {
+				throw new Error("expected safeWriteJson to reject")
+			},
+			(e: Error) => e,
+		)
+
+		const backups = (await fs.readdir(tempDir)).filter((name) => name.startsWith(".test-file.json.bak_"))
+		expect(backups).toHaveLength(1)
+		const backupPath = path.join(tempDir, backups[0]!)
+		expect(await readFileContent(backupPath)).toEqual(initialData)
+		expect(error.message).toContain("Rename from temp to final failed")
+		expect(error.message).toContain(backupPath)
+		expect((error as Error & { cause?: unknown }).cause).toBeInstanceOf(Error)
+	})
+
 	// Tests for directory creation functionality
 	it("should create parent directory if it doesn't exist", async () => {
 		// Create a path in a non-existent subdirectory of the temp dir

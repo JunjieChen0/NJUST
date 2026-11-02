@@ -175,17 +175,14 @@ async function safeWriteJson(filePath: string, data: unknown, options?: SafeWrit
 			}
 		}
 
-		// Cleanup the .bak file if it still needs to be (i.e., wasn't successfully restored)
+		// The restore failed, so the backup is now the only copy of the previous data.
+		// Keep it and tell the caller where it is.
 		if (actualTempBackupFilePath) {
-			try {
-				await fs.unlink(actualTempBackupFilePath)
-			} catch (cleanupError) {
-				logger.error(
-					"SafeWriteJson",
-					`[Catch] Failed to clean up temporary backup file ${actualTempBackupFilePath}:`,
-					cleanupError,
-				)
-			}
+			const message = originalError instanceof Error ? originalError.message : String(originalError)
+			throw new Error(
+				`${message}. Restoring ${absoluteFilePath} failed; its previous contents are kept at ${actualTempBackupFilePath}`,
+				{ cause: originalError },
+			)
 		}
 		throw originalError // This MUST be the error that rejects the promise.
 	} finally {
