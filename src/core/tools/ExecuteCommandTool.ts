@@ -93,12 +93,35 @@ export const BYPASS_PROTECTED_PATTERNS: RegExp[] = [
 	/:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}/,
 ]
 
-export function isSuccessfulCommandResult(result: unknown, rejected: boolean): boolean {
-	if (rejected) return false
+export type CommandOutcome = "passed" | "failed" | "cancelled" | "unknown"
+
+const COMMAND_FAILURE_TEXT_RE =
+	/(?:^Command execution failed|^Sandbox execution failed|Command execution was not successful|\bcjpm\s+build\s+failed\b|Process terminated by signal)/im
+
+/**
+ * Classify a command tool result. Only an explicit `Exit code: 0` counts as passed;
+ * a missing or undefined exit code (still running, shell integration lost) is "unknown".
+ * The first `Exit code:` (the status header) wins, so program output cannot override it.
+ */
+export function classifyCommandOutcome(result: unknown, rejected: boolean): CommandOutcome {
+	if (rejected) return "cancelled"
 	const text = String(result)
-	const exitCodeMatch = text.match(/Exit code:\s*(-?\d+)/i)
-	if (exitCodeMatch) return Number(exitCodeMatch[1]) === 0
-	return !/(?:^Command execution failed|Command execution was not successful|\bcjpm\s+build\s+failed\b)/im.test(text)
+	const exitCodeMatch = text.match(/Exit code:\s*(-?\d+|<undefined)/i)
+	if (exitCodeMatch && exitCodeMatch[1] !== "<undefined") {
+		return Number(exitCodeMatch[1]) === 0 ? "passed" : "failed"
+	}
+	if (COMMAND_FAILURE_TEXT_RE.test(text)) return "failed"
+	return "unknown"
+}
+
+export function isSuccessfulCommandResult(result: unknown, rejected: boolean): boolean {
+	return classifyCommandOutcome(result, rejected) === "passed"
+}
+
+/** Map a command outcome to the runtime policy's build signal (cancelled keeps its previous "not successful" meaning). */
+function toBuildSignal(outcome: CommandOutcome): boolean | "unknown" {
+	if (outcome === "unknown") return "unknown"
+	return outcome === "passed"
 }
 
 import { NamedError } from "@njust-ai/core/shared"
@@ -342,7 +365,7 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 				if (task.taskMode === "cangjie") {
 					task.cangjieRuntimePolicy.noteBuildResult(
 						canonicalCommand,
-						isSuccessfulCommandResult(result, rejected),
+						toBuildSignal(classifyCommandOutcome(result, rejected)),
 						String(result),
 					)
 				}
@@ -371,7 +394,7 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 				if (task.taskMode === "cangjie") {
 					task.cangjieRuntimePolicy.noteBuildResult(
 						canonicalCommand,
-						!rejected && !/^Command execution failed/i.test(String(result)),
+						toBuildSignal(classifyCommandOutcome(result, rejected)),
 						String(result),
 					)
 				}

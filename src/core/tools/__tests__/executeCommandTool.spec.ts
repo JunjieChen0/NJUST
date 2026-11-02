@@ -84,7 +84,8 @@ vitest.mock("../../prompts/responses")
 
 // Import the module
 import * as executeCommandModule from "../ExecuteCommandTool"
-const { executeCommandTool, isSuccessfulCommandResult, validateCangjieImplementCommand } = executeCommandModule
+const { classifyCommandOutcome, executeCommandTool, isSuccessfulCommandResult, validateCangjieImplementCommand } =
+	executeCommandModule
 
 function asSandboxService(service: Record<string, unknown>): SandboxExecutionService {
 	return asMock<SandboxExecutionService>(service)
@@ -120,6 +121,59 @@ describe("isSuccessfulCommandResult", () => {
 	it("recognizes a cjpm failure when an exit code is unavailable", () => {
 		expect(isSuccessfulCommandResult("Error: cjpm build failed", false)).toBe(false)
 		expect(isSuccessfulCommandResult("cjpm build success", true)).toBe(false)
+	})
+
+	it("does not treat an unknown exit code as success", () => {
+		expect(isSuccessfulCommandResult("cjpm build success", false)).toBe(false)
+		expect(
+			isSuccessfulCommandResult(
+				"Command executed in terminal within working directory '/ws'. Exit code: <undefined, notify user>\nOutput:\ncjpm build success",
+				false,
+			),
+		).toBe(false)
+		expect(isSuccessfulCommandResult("Command is still running in terminal from '/ws'.", false)).toBe(false)
+		expect(isSuccessfulCommandResult("Process terminated by signal SIGKILL\nOutput:\n", false)).toBe(false)
+	})
+})
+
+describe("classifyCommandOutcome", () => {
+	it("returns passed only for an explicit zero exit code", () => {
+		expect(classifyCommandOutcome("Exit code: 0\nOutput:\nok", false)).toBe("passed")
+	})
+
+	it("returns failed for a non-zero exit code or an explicit failure message", () => {
+		expect(classifyCommandOutcome("Exit code: 2\nOutput:\n", false)).toBe("failed")
+		expect(classifyCommandOutcome("Command execution failed: spawn ENOENT", false)).toBe("failed")
+		expect(classifyCommandOutcome("Error: cjpm build failed", false)).toBe("failed")
+		expect(classifyCommandOutcome("Process terminated by signal SIGSEGV", false)).toBe("failed")
+	})
+
+	it("returns cancelled when the user rejected the command", () => {
+		expect(classifyCommandOutcome("Exit code: 0", true)).toBe("cancelled")
+	})
+
+	it("classifies signal termination in the real terminal status format as failed", () => {
+		expect(
+			classifyCommandOutcome(
+				"Command executed in terminal within working directory '/ws'. Process terminated by signal SIGKILL\nOutput:\n",
+				false,
+			),
+		).toBe("failed")
+	})
+
+	it("does not let program output override an undefined exit code header", () => {
+		expect(
+			classifyCommandOutcome(
+				"Command executed in terminal within working directory '/ws'. Exit code: <undefined, notify user>\nOutput:\nprevious step Exit code: 0",
+				false,
+			),
+		).toBe("unknown")
+	})
+
+	it("returns unknown when the exit code is missing or undefined", () => {
+		expect(classifyCommandOutcome("cjpm build success", false)).toBe("unknown")
+		expect(classifyCommandOutcome("Exit code: <undefined, notify user>\nOutput:\n", false)).toBe("unknown")
+		expect(classifyCommandOutcome("Command is still running in terminal.", false)).toBe("unknown")
 	})
 })
 

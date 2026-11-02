@@ -188,6 +188,26 @@ describe("CangjieRuntimePolicy", () => {
 		expect(policy.getContextIntensity(2)).toBe("compact")
 	})
 
+	it("treats a build with an unknown exit code as neither passed nor failed", () => {
+		const policy = new CangjieRuntimePolicy(tempDir)
+
+		policy.noteWriteApplied("src/main.cj", "main() {}", 'main() { println("hi") }')
+		policy.noteBuildResult("cjpm build", "unknown", "cjpm build success")
+
+		const reason = policy.getAttemptCompletionBlockReason()
+		expect(reason).toContain("exit code")
+		expect(reason).not.toContain("latest build failed")
+		expect(policy.getCompileFailureRounds()).toBe(0)
+		expect(policy.getEvalRuntimeSnapshot()).toMatchObject({
+			recentBuildSucceeded: false,
+			recentBuildFailed: false,
+			recentBuildCommand: "cjpm build",
+		})
+
+		policy.noteBuildResult("cjpm build", true, "Exit code: 0")
+		expect(policy.getAttemptCompletionBlockReason()).toBeNull()
+	})
+
 	it("routes failed delegated verification through repair, verify, and fresh evidence on stagnation", () => {
 		const policy = new CangjieRuntimePolicy(tempDir)
 		policy.configureAgentRoute("新增函数并编译验证")

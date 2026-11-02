@@ -383,6 +383,7 @@ export class CangjieRuntimePolicy {
 	private recentBuildFailureSummary: CangjieBuildFailureSummary | undefined
 	private recentBuildRootCauses: string[] = []
 	private recentBuildCommand: string | undefined
+	private recentBuildOutcomeUnknown = false
 	private pendingEvidenceModules = new Set<string>()
 	private compileFailureRounds = 0
 	private stagnantFailureRounds = 0
@@ -800,13 +801,23 @@ export class CangjieRuntimePolicy {
 		this.repairDirective = undefined
 	}
 
-	noteBuildResult(command: string, succeeded: boolean, output: string): void {
-		if (INIT_COMMAND_RE.test(command) && succeeded) {
+	/**
+	 * @param succeeded `"unknown"` when the exit code could not be determined: the build
+	 *   is then neither validated nor counted as a failure.
+	 */
+	noteBuildResult(command: string, succeeded: boolean | "unknown", output: string): void {
+		if (INIT_COMMAND_RE.test(command) && succeeded === true) {
 			this.noteWriteApplied("cjpm.toml", undefined, "")
 		}
 		if (!BUILD_COMMAND_RE.test(command)) return
 
 		this.recentBuildCommand = command
+		this.recentBuildOutcomeUnknown = succeeded === "unknown"
+		if (succeeded === "unknown") {
+			this.recentBuildSucceeded = false
+			this.recentBuildFailed = false
+			return
+		}
 		this.recentBuildSucceeded = succeeded
 		this.recentBuildFailed = !succeeded
 
@@ -901,7 +912,13 @@ export class CangjieRuntimePolicy {
 	}
 
 	private formatPendingBuildGuidance(): string {
-		return " Run `cjpm build` before completing; use `cjpm check` first only if you need a faster diagnostic pass."
+		const unknownOutcome = this.recentBuildOutcomeUnknown
+			? " The last build finished with an unknown exit code, so it does not count as passed; re-run it so the exit code is captured."
+			: ""
+		return (
+			unknownOutcome +
+			" Run `cjpm build` before completing; use `cjpm check` first only if you need a faster diagnostic pass."
+		)
 	}
 
 	getAttemptCompletionBlockReason(
