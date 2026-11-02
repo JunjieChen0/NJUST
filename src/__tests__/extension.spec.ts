@@ -292,6 +292,37 @@ vi.mock("../integrations/terminal/TerminalRegistry", () => ({
 	},
 }))
 
+// Real sandbox and audit services probe Docker and write files on activate/deactivate,
+// which made deactivate() slow enough to time out on CI runners.
+vi.mock("../services/sandbox", () => {
+	const sandboxService = {
+		initializeDocker: vi.fn().mockResolvedValue("unavailable"),
+		refreshDockerBackend: vi.fn().mockResolvedValue(undefined),
+		dispose: vi.fn().mockResolvedValue(undefined),
+	}
+	return {
+		SandboxExecutionService: {
+			getInstance: vi.fn(() => sandboxService),
+			resetInstance: vi.fn(),
+		},
+		VSCodeSandboxConfigProvider: vi.fn(function () {
+			return {}
+		}),
+	}
+})
+
+vi.mock("../services/AuditLogger", () => ({
+	AuditLogger: vi.fn(function () {
+		return { log: vi.fn(), dispose: vi.fn().mockResolvedValue(undefined) }
+	}),
+}))
+
+vi.mock("../services/AuditSink", () => ({
+	AuditSink: vi.fn(function () {
+		return { dispose: vi.fn() }
+	}),
+}))
+
 vi.mock("../services/mcp/McpServerManager", () => ({
 	McpServerManager: {
 		cleanup: vi.fn().mockResolvedValue(undefined),

@@ -352,8 +352,9 @@ describe("Docker Policy Proxy — Server Integration", () => {
 				// If we get a response, it should be an error
 				expect(resp.status).toBeGreaterThanOrEqual(400)
 			} catch (err: unknown) {
-				// ECONNRESET is expected — server destroyed the socket
-				expect((err as { code?: string }).code).toBe("ECONNRESET")
+				// The server destroyed the socket mid-upload. Depending on the OS this surfaces
+				// as ECONNRESET (read side) or EPIPE (write side, e.g. on macOS).
+				expect(["ECONNRESET", "EPIPE"]).toContain((err as { code?: string }).code)
 			}
 		})
 	})
