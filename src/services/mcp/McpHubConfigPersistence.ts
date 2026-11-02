@@ -36,7 +36,7 @@ export async function toggleServerDisabledWithHub(
 				// If disabling a connected server, disconnect it
 				if (disabled && connection.server.status === "connected") {
 					// Clean up file watchers when disabling
-					hub.removeFileWatchersForServer(serverName)
+					hub.removeFileWatchersForServer(serverName, serverSource)
 					await hub.deleteConnection(serverName, serverSource)
 					// Re-add as a disabled connection
 					// Re-read config from file to get updated disabled state

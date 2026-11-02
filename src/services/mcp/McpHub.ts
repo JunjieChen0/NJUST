@@ -102,7 +102,7 @@ export interface McpHubInternal {
 		reason: string,
 	): McpConnection
 	setupFileWatcher(name: string, config: unknown, source: "global" | "project"): void
-	removeFileWatchersForServer(serverName: string): void
+	removeFileWatchersForServer(serverName: string, source?: "global" | "project"): void
 	connectToServer(name: string, config: unknown, source?: "global" | "project"): Promise<void>
 	notifyWebviewOfServerChanges(): Promise<void>
 	fetchToolsList(name: string, source?: "global" | "project"): Promise<McpTool[]>
@@ -590,8 +590,8 @@ export class McpHub implements IMcpHubService {
 	}
 
 	async deleteConnection(name: string, source?: "global" | "project"): Promise<void> {
-		// Clean up file watchers for this server
-		this.removeFileWatchersForServer(name)
+		// Clean up file watchers for this server (only this source when given)
+		this.removeFileWatchersForServer(name, source)
 
 		// If source is provided, only delete connections from that source
 		const connections = source
@@ -637,8 +637,6 @@ export class McpHub implements IMcpHubService {
 			findConnection: (name, source) => this.findConnection(name, source),
 			validateServerConfig: (config, name) => this.validateServerConfig(config, name),
 			showErrorMessage: (message, error) => this.showErrorMessage(message, error),
-			setupFileWatcher: (name, config, source) => this.setupFileWatcher(name, config, source),
-			removeAllFileWatchers: () => this.removeAllFileWatchers(),
 			connectToServer: (name, config, source) => this.connectToServer(name, config, source),
 			notifyWebviewOfServerChanges: () => this.notifyWebviewOfServerChanges(),
 			initializeMcpServers: (source) => this.initializeMcpServers(source),
@@ -669,8 +667,8 @@ export class McpHub implements IMcpHubService {
 		this.fileWatcherManager.removeAll()
 	}
 
-	removeFileWatchersForServer(serverName: string) {
-		this.fileWatcherManager.removeForServer(serverName)
+	removeFileWatchersForServer(serverName: string, source?: "global" | "project") {
+		this.fileWatcherManager.removeForServer(serverName, source)
 	}
 
 	async restartConnection(serverName: string, source?: "global" | "project"): Promise<void> {

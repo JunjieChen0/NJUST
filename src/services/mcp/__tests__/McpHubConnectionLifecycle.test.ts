@@ -15,6 +15,7 @@ import {
 	type McpConnectionLifecycleHost,
 	type McpLifecycleConnection,
 	type McpServerConfig,
+	type McpSource,
 	refreshAllConnectionsWithHub,
 	restartConnectionWithHub,
 	updateServerConnectionsWithHub,
@@ -57,8 +58,6 @@ const makeHost = (
 		findConnection: vi.fn(() => undefined),
 		validateServerConfig: vi.fn((config: unknown) => config as McpServerConfig),
 		showErrorMessage: vi.fn(),
-		setupFileWatcher: vi.fn(),
-		removeAllFileWatchers: vi.fn(),
 		connectToServer: vi.fn(async () => undefined),
 		notifyWebviewOfServerChanges: vi.fn(async () => undefined),
 		initializeMcpServers: vi.fn(async () => undefined),
@@ -81,16 +80,15 @@ describe("updateServerConnectionsWithHub", () => {
 		expect(host.deleteConnection).toHaveBeenCalledWith("old", "global")
 	})
 
-	it("connects new servers and installs a watcher", async () => {
+	it("connects new servers (connectToServer installs their watchers)", async () => {
 		const { host } = makeHost()
 
 		await updateServerConnectionsWithHub(host, { fresh: { command: "node" } })
 
-		expect(host.setupFileWatcher).toHaveBeenCalledWith("fresh", expect.anything(), "global")
 		expect(host.connectToServer).toHaveBeenCalledWith("fresh", expect.anything(), "global")
 	})
 
-	it("skips the watcher for disabled servers but still connects them", async () => {
+	it("still connects disabled servers (connectToServer skips their watchers)", async () => {
 		const { host } = makeHost(
 			{},
 			{
@@ -102,8 +100,7 @@ describe("updateServerConnectionsWithHub", () => {
 
 		await updateServerConnectionsWithHub(host, { off: { command: "node" } })
 
-		expect(host.setupFileWatcher).not.toHaveBeenCalled()
-		expect(host.connectToServer).toHaveBeenCalled()
+		expect(host.connectToServer).toHaveBeenCalledWith("off", expect.objectContaining({ disabled: true }), "global")
 	})
 
 	it("reconnects when the stored config differs", async () => {
@@ -141,6 +138,67 @@ describe("updateServerConnectionsWithHub", () => {
 
 		expect(host.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining("broken"), expect.any(Error))
 		expect(host.connectToServer).not.toHaveBeenCalled()
+	})
+
+	describe("file watchers", () => {
+		/** Models McpHub: connectToServer installs a server's watchers, deleteConnection removes them. */
+		const withWatcherRegistry = (connections: McpLifecycleConnection[]) => {
+			const watchers = new Map<string, number>()
+			const key = (name: string, source?: string) => `${source ?? "global"}:${name}`
+			const install = (name: string, config: McpServerConfig, source?: McpSource) => {
+				if (!config.disabled) watchers.set(key(name, source), (watchers.get(key(name, source)) ?? 0) + 1)
+			}
+			const { host } = makeHost(
+				{ connections },
+				{
+					findConnection: vi.fn((name: string, source?: McpSource) =>
+						connections.find((c) => c.server.name === name && c.server.source === source),
+					),
+					deleteConnection: vi.fn(async (name: string, source?: McpSource) => {
+						watchers.delete(key(name, source))
+					}),
+					connectToServer: vi.fn(async (name: string, config: McpServerConfig, source?: McpSource) =>
+						install(name, config, source),
+					),
+				},
+			)
+			for (const c of connections) {
+				install(c.server.name, JSON.parse(c.server.config) as McpServerConfig, c.server.source)
+			}
+			return { host, watchers }
+		}
+
+		it("keeps watchers of unchanged servers and of the other source", async () => {
+			const { host, watchers } = withWatcherRegistry([
+				makeConnection("a", { source: "global" }),
+				makeConnection("b", { source: "project" }),
+			])
+
+			await updateServerConnectionsWithHub(host, { a: { command: "a" } }, "global")
+
+			expect([...watchers.entries()]).toEqual([
+				["global:a", 1],
+				["project:b", 1],
+			])
+		})
+
+		it("ends with exactly one watcher set for a changed server", async () => {
+			const { host, watchers } = withWatcherRegistry([
+				makeConnection("a", { config: JSON.stringify({ command: "old" }) }),
+			])
+
+			await updateServerConnectionsWithHub(host, { a: { command: "new" } }, "global")
+
+			expect(watchers.get("global:a")).toBe(1)
+		})
+
+		it("installs exactly one watcher set for a new server", async () => {
+			const { host, watchers } = withWatcherRegistry([])
+
+			await updateServerConnectionsWithHub(host, { fresh: { command: "node" } }, "global")
+
+			expect(watchers.get("global:fresh")).toBe(1)
+		})
 	})
 
 	it("clears the connecting flag only when it manages the state", async () => {

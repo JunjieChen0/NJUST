@@ -39,8 +39,6 @@ export interface McpConnectionLifecycleHost {
 	findConnection(name: string, source?: McpSource): McpLifecycleConnection | undefined
 	validateServerConfig(config: unknown, serverName?: string): McpServerConfig
 	showErrorMessage(message: string, error: unknown): void
-	setupFileWatcher(name: string, config: McpServerConfig, source: McpSource): void
-	removeAllFileWatchers(): void
 	connectToServer(name: string, config: McpServerConfig, source?: McpSource): Promise<void>
 	notifyWebviewOfServerChanges(): Promise<void>
 	initializeMcpServers(source: McpSource): Promise<void>
@@ -59,8 +57,9 @@ export async function updateServerConnectionsWithHub(
 		hub.setIsConnecting(true)
 	}
 
-	hub.removeAllFileWatchers()
-
+	// File watchers are not touched here: connectToServer installs a server's
+	// watchers and deleteConnection removes them, so only servers that are added,
+	// removed or changed below get new watchers; unchanged ones keep theirs.
 	const currentConnections = hub
 		.getConnections()
 		.filter((conn) => conn.server.source === source || (!conn.server.source && source === "global"))
@@ -86,18 +85,12 @@ export async function updateServerConnectionsWithHub(
 
 		if (!currentConnection) {
 			try {
-				if (!validatedConfig.disabled) {
-					hub.setupFileWatcher(name, validatedConfig, source)
-				}
 				await hub.connectToServer(name, validatedConfig, source)
 			} catch (error) {
 				hub.showErrorMessage(`Failed to connect to new MCP server ${name}`, error)
 			}
 		} else if (!deepEqual(JSON.parse(currentConnection.server.config), config)) {
 			try {
-				if (!validatedConfig.disabled) {
-					hub.setupFileWatcher(name, validatedConfig, source)
-				}
 				await hub.deleteConnection(name, source)
 				await hub.connectToServer(name, validatedConfig, source)
 			} catch (error) {

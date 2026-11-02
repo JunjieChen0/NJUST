@@ -12,6 +12,7 @@ import type { ServerConfigSchema } from "./McpHubConfigSchema"
  * triggers server restart on changes.
  */
 export class McpHubFileWatcherManager {
+	// Keyed by `${source}:${serverName}` so same-named global/project servers stay apart
 	private fileWatchers: Map<string, FSWatcher[]> = new Map()
 
 	/**
@@ -24,12 +25,10 @@ export class McpHubFileWatcherManager {
 		source: "global" | "project",
 		restartConnection: (serverName: string, source: "global" | "project") => Promise<void>,
 	): void {
-		// Initialize an empty array for this server if it doesn't exist
-		if (!this.fileWatchers.has(name)) {
-			this.fileWatchers.set(name, [])
-		}
+		// Replace, never append: setting up the same server twice must not duplicate watchers
+		this.removeForServer(name, source)
 
-		const watchers = this.fileWatchers.get(name) || []
+		const watchers: FSWatcher[] = []
 
 		// Only stdio type has args
 		if (config.type === "stdio") {
@@ -78,7 +77,7 @@ export class McpHubFileWatcherManager {
 
 			// Update the fileWatchers map with all watchers for this server
 			if (watchers.length > 0) {
-				this.fileWatchers.set(name, watchers)
+				this.fileWatchers.set(watcherKey(name, source), watchers)
 			}
 		}
 	}
@@ -89,12 +88,22 @@ export class McpHubFileWatcherManager {
 		this.fileWatchers.clear()
 	}
 
-	/** Close and remove file watchers for a specific server. */
-	removeForServer(serverName: string): void {
-		const watchers = this.fileWatchers.get(serverName)
-		if (watchers) {
-			watchers.forEach((watcher) => watcher.close())
-			this.fileWatchers.delete(serverName)
+	/** Close and remove file watchers for a server; without a source, for every source. */
+	removeForServer(serverName: string, source?: McpWatcherSource): void {
+		const sources: McpWatcherSource[] = source ? [source] : ["global", "project"]
+		for (const src of sources) {
+			const key = watcherKey(serverName, src)
+			const watchers = this.fileWatchers.get(key)
+			if (watchers) {
+				watchers.forEach((watcher) => watcher.close())
+				this.fileWatchers.delete(key)
+			}
 		}
 	}
+}
+
+type McpWatcherSource = "global" | "project"
+
+function watcherKey(serverName: string, source: McpWatcherSource): string {
+	return `${source}:${serverName}`
 }

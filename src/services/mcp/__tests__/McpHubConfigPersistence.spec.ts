@@ -290,7 +290,7 @@ describe("McpHubConfigPersistence", () => {
 
 			await toggleServerDisabledWithHub(hub, "testServer", true)
 
-			expect(hub.removeFileWatchersForServer).toHaveBeenCalledWith("testServer")
+			expect(hub.removeFileWatchersForServer).toHaveBeenCalledWith("testServer", "global")
 			expect(hub.deleteConnection).toHaveBeenCalledWith("testServer", "global")
 			expect(hub.connectToServer).toHaveBeenCalled()
 			expect(hub.notifyWebviewOfServerChanges).toHaveBeenCalled()
