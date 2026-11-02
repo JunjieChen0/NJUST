@@ -99,6 +99,28 @@ describe("isPathOutsideWorkspace symlink escape prevention", () => {
 		expect(isPathOutsideWorkspace(linkFile)).toBe(true)
 	})
 
+	it("detects a new file under a dangling directory link that points outside", async () => {
+		await setupDirs()
+		// The link target does not exist yet; writing through the link would create it outside.
+		const missingOutsideDir = path.join(tempDir, "outside-not-created")
+		const linkDir = path.join(workspaceDir, "dangling-dir")
+		await createSymlink(missingOutsideDir, linkDir)
+
+		expect(isPathOutsideWorkspace(path.join(linkDir, "new.txt"))).toBe(true)
+	})
+
+	it("detects a dangling file link that points outside", async () => {
+		await setupDirs()
+		// On Windows file symlinks need admin; skip this test on Windows
+		if (process.platform === "win32") {
+			return
+		}
+		const linkFile = path.join(workspaceDir, "dangling.txt")
+		await symlink(path.join(tempDir, "outside-new.txt"), linkFile, "file")
+
+		expect(isPathOutsideWorkspace(linkFile)).toBe(true)
+	})
+
 	it("returns true when no workspace folders exist", () => {
 		mockWorkspaceFolder = null
 		expect(isPathOutsideWorkspace("/any/path")).toBe(true)

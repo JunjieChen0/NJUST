@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { type ClineSayTool } from "@njust-ai/types"
+
 import path from "path"
 
 import { Task } from "../task/Task"
@@ -8,6 +10,7 @@ import { formatResponse } from "../prompts/responses"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 import { getErrorMessage, wrapAsError } from "../../shared/error-utils"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
+import { allowRooIgnorePathAccess } from "../ignore/RooIgnoreController"
 
 interface NotebookEditParams {
 	path: string
@@ -58,7 +61,7 @@ export class NotebookEditTool extends BaseTool<"notebook_edit"> {
 	}
 
 	async execute(params: NotebookEditParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
-		const { pushToolResult, handleError } = callbacks
+		const { pushToolResult, handleError, askApproval } = callbacks
 
 		try {
 			const { path: notebookPath, action, cellIndex, content, cellType } = params
@@ -82,6 +85,32 @@ export class NotebookEditTool extends BaseTool<"notebook_edit"> {
 				pushToolResult(
 					formatResponse.toolError(`Safety: cannot edit notebook outside workspace: ${notebookPath}`),
 				)
+				return
+			}
+
+			// Same guards as the other file-writing tools, all before the notebook is opened.
+			if (!allowRooIgnorePathAccess(task.rooIgnoreController, notebookPath)) {
+				await task.say("rooignore_error", notebookPath)
+				pushToolResult(formatResponse.rooIgnoreError(notebookPath))
+				return
+			}
+
+			const isWriteProtected = (await task.rooProtectedController?.isWriteProtected(notebookPath)) || false
+			const approvalMessage = JSON.stringify({
+				tool: "editedExistingFile",
+				path: notebookPath,
+				content: `${action} cell ${cellIndex}${
+					content
+						? `:
+${content}`
+						: ""
+				}`,
+				isOutsideWorkspace: false,
+				isProtected: isWriteProtected,
+			} satisfies ClineSayTool)
+			// askApproval reports a denial to the model itself.
+			const didApprove = await askApproval("tool", approvalMessage, undefined, isWriteProtected)
+			if (!didApprove) {
 				return
 			}
 

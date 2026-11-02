@@ -61,6 +61,7 @@ vi.mock("../../../utils/pathUtils", () => ({
 vi.mock("../../prompts/responses", () => ({
 	formatResponse: {
 		toolError: toolErrorMock,
+		rooIgnoreError: (p: string) => `rooignore: ${p}`,
 	},
 }))
 
@@ -99,6 +100,68 @@ describe("NotebookEditTool", () => {
 		applyEditMock.mockResolvedValue(true)
 		notebookEditInsertMock.mockReturnValue({ type: "insert" })
 		notebookEditDeleteMock.mockReturnValue({ type: "delete" })
+	})
+
+	describe("file protection", () => {
+		const params = { path: "secret.ipynb", action: "edit" as const, cellIndex: 0, content: "x = 1" }
+
+		function expectNotebookUntouched() {
+			expect(openNotebookDocumentMock).not.toHaveBeenCalled()
+			expect(applyEditMock).not.toHaveBeenCalled()
+		}
+
+		it("refuses a notebook blocked by .rooignore before opening it", async () => {
+			const say = vi.fn()
+			const validateAccess = vi.fn().mockReturnValue(false)
+			const task = createTask({ say, rooIgnoreController: { validateAccess } })
+			const callbacks = createCallbacks()
+
+			await notebookEditTool.execute(params, task, callbacks)
+
+			expect(validateAccess).toHaveBeenCalledWith("secret.ipynb")
+			expect(say).toHaveBeenCalledWith("rooignore_error", "secret.ipynb")
+			expect(callbacks.pushToolResult).toHaveBeenCalledWith("rooignore: secret.ipynb")
+			expect(callbacks.askApproval).not.toHaveBeenCalled()
+			expectNotebookUntouched()
+		})
+
+		it("asks for approval, flagged as protected, before opening a write-protected notebook", async () => {
+			const isWriteProtected = vi.fn().mockResolvedValue(true)
+			const task = createTask({ rooProtectedController: { isWriteProtected } })
+			const callbacks = createCallbacks()
+			callbacks.askApproval.mockResolvedValue(false)
+
+			await notebookEditTool.execute(params, task, callbacks)
+
+			expect(isWriteProtected).toHaveBeenCalledWith("secret.ipynb")
+			expect(callbacks.askApproval).toHaveBeenCalledWith("tool", expect.any(String), undefined, true)
+			expectNotebookUntouched()
+		})
+
+		it("does not open or edit the notebook when approval is denied", async () => {
+			const task = createTask()
+			const callbacks = createCallbacks()
+			callbacks.askApproval.mockResolvedValue(false)
+
+			await notebookEditTool.execute(params, task, callbacks)
+
+			expect(callbacks.askApproval).toHaveBeenCalledTimes(1)
+			expectNotebookUntouched()
+		})
+
+		it("asks for approval before opening the notebook", async () => {
+			const task = createTask()
+			const callbacks = createCallbacks()
+
+			await notebookEditTool.execute(params, task, callbacks)
+
+			expect(callbacks.askApproval.mock.invocationCallOrder[0]).toBeLessThan(
+				openNotebookDocumentMock.mock.invocationCallOrder[0],
+			)
+			const message = JSON.parse(callbacks.askApproval.mock.calls[0]![1] as string)
+			expect(message).toMatchObject({ tool: "editedExistingFile", path: "secret.ipynb", isProtected: false })
+			expect(applyEditMock).toHaveBeenCalledTimes(1)
+		})
 	})
 
 	describe("metadata", () => {

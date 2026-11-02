@@ -1,39 +1,16 @@
 import * as vscode from "vscode"
 import * as path from "path"
-import * as fsSync from "fs"
+import { resolveRealPathFollowingLinks } from "./resolveRealPath"
 
 /**
- * Resolves the real path of a file, handling non-existent files by
- * finding the nearest existing parent directory and resolving symlinks.
- * This prevents symlink-based path traversal attacks where a symlink
- * inside the workspace points to a location outside the workspace.
+ * Real path for the workspace boundary check. Falls back to the given path when
+ * it cannot be resolved (e.g. a link loop, which no write can go through either).
  */
 function resolveRealPath(filePath: string): string {
 	try {
-		return fsSync.realpathSync(filePath)
+		return resolveRealPathFollowingLinks(filePath)
 	} catch {
-		// File doesn't exist - find nearest existing parent and resolve its real path
-		let current = filePath
-		const missingParts: string[] = []
-
-		while (true) {
-			const parent = path.dirname(current)
-			if (parent === current) {
-				// Reached root, return original
-				return filePath
-			}
-
-			try {
-				const realParent = fsSync.realpathSync(parent)
-				// Found existing parent, reconstruct path with real parent.
-				// current is the first missing segment below realParent;
-				// missingParts are the segments below current (in original order).
-				return path.join(realParent, path.basename(current), ...missingParts)
-			} catch {
-				missingParts.unshift(path.basename(current))
-				current = parent
-			}
-		}
+		return filePath
 	}
 }
 

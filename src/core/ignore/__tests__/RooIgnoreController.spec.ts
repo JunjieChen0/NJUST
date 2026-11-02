@@ -253,6 +253,93 @@ describe("RooIgnoreController", () => {
 		})
 	})
 
+	describe("validateAccess for files that do not exist yet", () => {
+		const fsError = (code: string) => Object.assign(new Error(code), { code })
+
+		beforeEach(async () => {
+			mockFileExists.mockResolvedValue(true)
+			mockReadFile.mockResolvedValue("node_modules\nsecrets/**")
+			await controller.initialize()
+		})
+
+		/** realpathSync fails with ENOENT for the given paths and resolves the rest via `links`. */
+		function mockMissing(missing: string[], links: Record<string, string> = {}) {
+			vi.mocked(fsSync.realpathSync).mockImplementation(function (filePath) {
+				const p = filePath.toString()
+				if (missing.some((m) => p === path.resolve(TEST_CWD, m))) throw fsError("ENOENT")
+				for (const [link, target] of Object.entries(links)) {
+					if (p === path.resolve(TEST_CWD, link)) return path.resolve(TEST_CWD, target)
+				}
+				return p
+			})
+		}
+
+		it("allows a new file that no ignore rule matches", () => {
+			mockMissing(["src/new-file.ts", "src/new-dir", "src/new-dir/deep.ts"])
+			expect(controller.validateAccess("src/new-file.ts")).toBe(true)
+			expect(controller.validateAccess("src/new-dir/deep.ts")).toBe(true)
+		})
+
+		it("denies a new file that an ignore rule matches", () => {
+			mockMissing(["secrets/new.json", "node_modules/new-pkg", "node_modules/new-pkg/index.js"])
+			expect(controller.validateAccess("secrets/new.json")).toBe(false)
+			expect(controller.validateAccess("node_modules/new-pkg/index.js")).toBe(false)
+		})
+
+		it("denies a new file under a symlinked directory that points into an ignored path", () => {
+			mockMissing(["linked/new.js"], { linked: "node_modules" })
+			expect(controller.validateAccess("linked/new.js")).toBe(false)
+		})
+
+		it("denies a dangling link whose target is an ignored new file", () => {
+			const alias = path.resolve(TEST_CWD, "alias.json")
+			const target = path.resolve(TEST_CWD, "secrets/new.json")
+			vi.mocked(fsSync.realpathSync).mockImplementation(function (filePath) {
+				const p = filePath.toString()
+				// alias.json exists as a link, but its target does not exist yet
+				if (p === alias || p === target) throw fsError("ENOENT")
+				return p
+			})
+			vi.mocked(fsSync.lstatSync).mockImplementation(function (filePath) {
+				if (filePath.toString() === alias) return { isSymbolicLink: () => true } as fsSync.Stats
+				throw fsError("ENOENT")
+			} as typeof fsSync.lstatSync)
+			vi.mocked(fsSync.readlinkSync).mockImplementation(function () {
+				return "secrets/new.json"
+			} as typeof fsSync.readlinkSync)
+
+			expect(controller.validateAccess("secrets/new.json")).toBe(false)
+			expect(controller.validateAccess("alias.json")).toBe(false)
+		})
+
+		it("denies a link loop", () => {
+			const a = path.resolve(TEST_CWD, "loop-a")
+			const b = path.resolve(TEST_CWD, "loop-b")
+			vi.mocked(fsSync.realpathSync).mockImplementation(function (filePath) {
+				const p = filePath.toString()
+				if (p === a || p === b) throw fsError("ENOENT")
+				return p
+			})
+			vi.mocked(fsSync.lstatSync).mockImplementation(function (filePath) {
+				const p = filePath.toString()
+				if (p === a || p === b) return { isSymbolicLink: () => true } as fsSync.Stats
+				throw fsError("ENOENT")
+			} as typeof fsSync.lstatSync)
+			vi.mocked(fsSync.readlinkSync).mockImplementation(function (filePath) {
+				return filePath.toString() === a ? b : a
+			} as typeof fsSync.readlinkSync)
+
+			expect(controller.validateAccess("loop-a")).toBe(false)
+		})
+
+		it("still denies when the path cannot be resolved for another reason", () => {
+			vi.mocked(fsSync.realpathSync).mockImplementation(function () {
+				throw fsError("EACCES")
+			})
+			expect(controller.validateAccess("src/app.ts")).toBe(false)
+		})
+	})
+
 	describe("validateCommand", () => {
 		beforeEach(async () => {
 			// Setup .rooignore content

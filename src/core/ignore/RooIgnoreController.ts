@@ -1,7 +1,7 @@
 import path from "path"
 import { fileExistsAtPath } from "../../utils/fs"
+import { resolveRealPathFollowingLinks } from "../../utils/resolveRealPath"
 import fs from "fs/promises"
-import fsSync from "fs"
 import ignore, { Ignore } from "ignore"
 import type * as vscode from "vscode"
 import { logger } from "../../shared/logger"
@@ -205,7 +205,7 @@ export class RooIgnoreController {
 			// Follow symlinks to get the real path
 			let realPath: string
 			try {
-				realPath = fsSync.realpathSync(absolutePath)
+				realPath = resolveRealPathFollowingLinks(absolutePath)
 			} catch {
 				// Fail-closed: if we can't resolve the real path, deny access
 				return false
