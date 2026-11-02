@@ -2,6 +2,7 @@ import * as vscode from "vscode"
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { registerLMTools } from "../registerLMTools"
+import { asMock } from "../../__tests__/helpers/asMock"
 
 const ignoredPaths = new Set<string>()
 
@@ -76,7 +77,7 @@ type Tool = {
 }
 
 async function invoke(name: string, input: Record<string, unknown>): Promise<string> {
-	const tool = (vscode as unknown as { __registered: Map<string, Tool> }).__registered.get(name)!
+	const tool = asMock<{ __registered: Map<string, Tool> }>(vscode).__registered.get(name)!
 	const result = await tool.invoke({ input }, {})
 	return result.content.map((c) => c.value).join("")
 }
@@ -84,9 +85,9 @@ async function invoke(name: string, input: Record<string, unknown>): Promise<str
 describe("registerLMTools — ignore rules", () => {
 	beforeAll(() => {
 		registerLMTools(
-			{ subscriptions: [] } as unknown as vscode.ExtensionContext,
+			asMock<vscode.ExtensionContext>({ subscriptions: [] }),
 			{} as never,
-			{ appendLine: vi.fn() } as unknown as vscode.OutputChannel,
+			asMock<vscode.OutputChannel>({ appendLine: vi.fn() }),
 		)
 	})
 

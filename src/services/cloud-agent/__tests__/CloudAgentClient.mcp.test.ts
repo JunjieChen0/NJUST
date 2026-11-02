@@ -13,6 +13,7 @@ import { CloudAgentClient } from "../CloudAgentClient"
 import { McpProtocolAdapter } from "../adapters/McpProtocolAdapter"
 import type { CloudAgentProfile } from "../types/profile"
 import type { CloudAgentCallbacks } from "../types"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("../../../shared/logger", () => ({
 	logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -55,7 +56,7 @@ async function connectClient(
 	adapter.initialize(profile)
 	const sdkClient = new Client({ name: "njust-ai", version: "1.0.0" }, { capabilities: {} })
 	await sdkClient.connect(clientTransport)
-	Object.assign(adapter as unknown as Record<string, unknown>, {
+	Object.assign(asMock<Record<string, unknown>>(adapter), {
 		transport: clientTransport,
 		client: sdkClient,
 		connected: true,

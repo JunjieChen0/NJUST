@@ -460,10 +460,15 @@ describe("Docker Policy Engine", () => {
 			})
 
 			it("rejects non-array VolumesFrom values", () => {
-				const decision = validateCreateContainer({
-					...base,
-					HostConfig: { ...validHostConfig, VolumesFrom: "evals-docker-proxy" as unknown as string[] },
-				})
+				// Raw wire body: VolumesFrom arrives as a string, not an array.
+				const decision = validateCreateContainer(
+					JSON.parse(
+						JSON.stringify({
+							...base,
+							HostConfig: { ...validHostConfig, VolumesFrom: "evals-docker-proxy" },
+						}),
+					),
+				)
 				expect(decision.allowed).toBe(false)
 				expect(decision.reason).toContain("VolumesFrom")
 			})

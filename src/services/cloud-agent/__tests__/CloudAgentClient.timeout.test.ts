@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { CloudAgentClient } from "../CloudAgentClient"
 import type { CloudAgentProfile } from "../types/profile"
 import { setDeviceToken } from "../deviceToken"
+import { asMock } from "../../../__tests__/helpers/asMock"
 
 setDeviceToken("device-token")
 
@@ -29,16 +30,18 @@ const callbacks = {
 
 /** fetch that sends headers immediately but never finishes the body unless the request signal aborts. */
 function stallingBodyFetch(): typeof fetch {
-	return vi.fn(async (_url: unknown, init?: RequestInit) => {
-		const signal = init?.signal
-		const body = new ReadableStream<Uint8Array>({
-			start(controller) {
-				controller.enqueue(new TextEncoder().encode('{"ok":true,'))
-				signal?.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")))
-			},
-		})
-		return new Response(body, { status: 200, headers: { "Content-Type": "application/json" } })
-	}) as unknown as typeof fetch
+	return asMock<typeof fetch>(
+		vi.fn(async (_url: unknown, init?: RequestInit) => {
+			const signal = init?.signal
+			const body = new ReadableStream<Uint8Array>({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode('{"ok":true,'))
+					signal?.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")))
+				},
+			})
+			return new Response(body, { status: 200, headers: { "Content-Type": "application/json" } })
+		}),
+	)
 }
 
 const originalFetch = globalThis.fetch

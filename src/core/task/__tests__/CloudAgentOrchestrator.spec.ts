@@ -37,9 +37,11 @@ function createMockHost(overrides: Partial<ICloudAgentHost> = {}): ICloudAgentHo
 		rooProtectedController: undefined,
 		say: vi.fn().mockResolvedValue(undefined),
 		// Default user: approves everything but does not retry failed runs.
-		ask: vi.fn(async (type: string) => ({
-			response: type === "api_req_failed" ? "noButtonClicked" : "yesButtonClicked",
-		})) as unknown as ICloudAgentHost["ask"],
+		ask: asMock<ICloudAgentHost["ask"]>(
+			vi.fn(async (type: string) => ({
+				response: type === "api_req_failed" ? "noButtonClicked" : "yesButtonClicked",
+			})),
+		),
 		emit: vi.fn().mockReturnValue(true),
 		setCurrentRequestAbortController: vi.fn(),
 		markCompleted: vi.fn(),
