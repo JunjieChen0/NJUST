@@ -411,7 +411,8 @@ export function NewRun() {
 		setConfigSelections((prev) => prev.map((s) => (s.id === id ? { ...s, popoverOpen: open } : s)))
 	}, [])
 
-	const onSubmit: SubmitHandler<CreateRun> = useCallback(async (values) => {
+	const onSubmit: SubmitHandler<CreateRun> = useCallback(
+		async (values) => {
 			try {
 				const baseValues = normalizeCreateRunForSubmit(values, selectedExercises, suite)
 
@@ -567,7 +568,9 @@ export function NewRun() {
 							<FormItem>
 								<Tabs
 									value={provider}
-									onValueChange={(value) => setModelSource(value as "njust-ai" | "openrouter" | "other")}>
+									onValueChange={(value) =>
+										setModelSource(value as "njust-ai" | "openrouter" | "other")
+									}>
 									<TabsList className="mb-2">
 										<TabsTrigger value="other">Import</TabsTrigger>
 										<TabsTrigger value="njust-ai">NJUST_AI Cloud</TabsTrigger>
@@ -1074,6 +1077,7 @@ export function NewRun() {
 			<Button
 				variant="default"
 				className="absolute top-4 right-12 size-12 rounded-full"
+				aria-label="Close"
 				onClick={() => router.push("/")}>
 				<X className="size-6" />
 			</Button>

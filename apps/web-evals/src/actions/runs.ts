@@ -46,6 +46,44 @@ async function listFullSuiteExercises(): Promise<Array<{ language: ExerciseLangu
 	return perLanguage.flat()
 }
 
+/**
+ * Resolves `language/exercise` paths for a partial run. Each must be a valid path,
+ * listed once, and present in the exercise catalog: a duplicate would hit the tasks
+ * unique index part-way through, and an unknown exercise would start a task that
+ * cannot run.
+ */
+async function resolvePartialExercises(
+	exercisePaths: string[],
+): Promise<Array<{ language: ExerciseLanguage; exercise: string }>> {
+	const selected = exercisePaths.map((exercisePath) => parseExercisePath(exercisePath, exerciseLanguages))
+
+	const seen = new Set<string>()
+	for (const { language, exercise } of selected) {
+		const key = `${language}/${exercise}`
+		if (seen.has(key)) {
+			throw new Error(`Duplicate exercise: ${key}`)
+		}
+		seen.add(key)
+	}
+
+	const languages = [...new Set(selected.map(({ language }) => language))]
+	const catalog = new Map(
+		await Promise.all(
+			languages.map(
+				async (language) =>
+					[language, new Set(await getExercisesForLanguage(EVALS_REPO_PATH, language))] as const,
+			),
+		),
+	)
+	for (const { language, exercise } of selected) {
+		if (!catalog.get(language)?.has(exercise)) {
+			throw new Error(`Unknown exercise: ${language}/${exercise}`)
+		}
+	}
+
+	return selected
+}
+
 export async function createRun(input: CreateRun) {
 	await requireAdminForAction()
 
@@ -61,9 +99,7 @@ export async function createRun(input: CreateRun) {
 
 	// Resolve and validate every task before touching the database or spawning.
 	const selectedExercises =
-		suite === "partial"
-			? exercises.map((exercisePath) => parseExercisePath(exercisePath, exerciseLanguages))
-			: await listFullSuiteExercises()
+		suite === "partial" ? await resolvePartialExercises(exercises) : await listFullSuiteExercises()
 	validateTaskCount(selectedExercises.length * iterations)
 
 	let run: Awaited<ReturnType<typeof _createRun>>

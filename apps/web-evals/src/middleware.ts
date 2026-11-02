@@ -27,7 +27,8 @@ export function middleware(request: NextRequest) {
 		`style-src 'self' 'unsafe-inline'`,
 		`img-src 'self' data: blob:`,
 		`font-src 'self' data:`,
-		`connect-src 'self'`,
+		// The new-run page loads the model list from OpenRouter in the browser.
+		`connect-src 'self' https://openrouter.ai`,
 		`frame-ancestors 'none'`,
 		`base-uri 'self'`,
 		`form-action 'self'`,

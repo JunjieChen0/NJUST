@@ -6,6 +6,8 @@
 		"lint": "eslint src --ext=ts,tsx --max-warnings=0",
 		"check:server-action-guards": "tsx scripts/scan-server-action-guards.ts",
 		"check-types": "tsc -b",
+		"test": "vitest run",
+		"test:e2e": "next build && playwright test",
 		"dev": "scripts/check-services.sh && next dev -p 3446",
 		"format": "prettier --write src",
 		"build": "next build",
@@ -53,6 +55,7 @@
 	"devDependencies": {
 		"@njust-ai/config-eslint": "workspace:^",
 		"@njust-ai/config-typescript": "workspace:^",
+		"@playwright/test": "1.61.0",
 		"@tailwindcss/postcss": "^4",
 		"@types/archiver": "^7.0.0",
 		"@types/ps-tree": "^1.1.6",

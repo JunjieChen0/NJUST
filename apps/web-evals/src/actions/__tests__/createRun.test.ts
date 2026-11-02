@@ -1,6 +1,6 @@
 import { spawn } from "child_process"
 
-import { createRun as dbCreateRun, createTask } from "@njust-ai/evals"
+import { createRun as dbCreateRun, createTask, getExercisesForLanguage } from "@njust-ai/evals"
 
 import type { CreateRun } from "@/lib/schemas"
 
@@ -31,10 +31,14 @@ vi.mock("@njust-ai/evals", () => ({
 	deleteRunsByIds: vi.fn(),
 	createTask: vi.fn().mockResolvedValue(undefined),
 	exerciseLanguages: ["go", "python"],
-	getExercisesForLanguage: vi.fn().mockResolvedValue([]),
+	// Exercise catalog: go has two exercises, python none.
+	getExercisesForLanguage: vi.fn(async (_repo: string, language: string) =>
+		language === "go" ? ["hello-world", "two-fer"] : [],
+	),
 }))
 
 import { createRun } from "../runs"
+import { MAX_TASKS_PER_RUN, validateTaskCount } from "@/lib/server/validation"
 
 const validPartial: CreateRun = {
 	model: "test-model",
@@ -56,6 +60,8 @@ describe("createRun server-side validation", () => {
 		["path traversal in exercise", { ...validPartial, exercises: ["go/../../etc"] }],
 		["unknown language", { ...validPartial, exercises: ["cobol/hello-world"] }],
 		["exercise without language", { ...validPartial, exercises: ["hello-world"] }],
+		["an exercise missing from the catalog", { ...validPartial, exercises: ["go/does-not-exist"] }],
+		["a duplicated exercise", { ...validPartial, exercises: ["go/hello-world", "go/two-fer", "go/hello-world"] }],
 	])("rejects %s before touching the database or spawning", async (_label, input) => {
 		await expect(createRun(input as CreateRun)).rejects.toThrow()
 
@@ -65,6 +71,9 @@ describe("createRun server-side validation", () => {
 	})
 
 	it("rejects a full suite that would create no tasks", async () => {
+		// One empty catalog per language (go, python).
+		vi.mocked(getExercisesForLanguage).mockResolvedValueOnce([]).mockResolvedValueOnce([])
+
 		await expect(createRun({ ...validPartial, suite: "full", exercises: [] })).rejects.toThrow()
 
 		expect(dbCreateRun).not.toHaveBeenCalled()
@@ -77,5 +86,19 @@ describe("createRun server-side validation", () => {
 		expect(dbCreateRun).toHaveBeenCalledTimes(1)
 		expect(createTask).toHaveBeenCalledTimes(2)
 		expect(spawn).toHaveBeenCalledTimes(1)
+	})
+})
+
+describe("validateTaskCount", () => {
+	it.each([0, MAX_TASKS_PER_RUN + 1])("rejects %i tasks", (count) => {
+		expect(() => validateTaskCount(count)).toThrow()
+	})
+
+	it.each([1, MAX_TASKS_PER_RUN])("accepts %i tasks", (count) => {
+		expect(() => validateTaskCount(count)).not.toThrow()
+	})
+
+	it("allows exactly 5000 tasks per run", () => {
+		expect(MAX_TASKS_PER_RUN).toBe(5000)
 	})
 })
