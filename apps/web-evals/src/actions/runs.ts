@@ -20,26 +20,51 @@ import {
 	getExercisesForLanguage,
 } from "@njust-ai/evals"
 
-import { CreateRun } from "@/lib/schemas"
+import { type CreateRun, createRunSchema } from "@/lib/schemas"
 import { redisClient } from "@/lib/server/redis"
 import { requireAdminForAction } from "@/lib/server/admin-auth"
 import { logAuditEvent } from "@/lib/server/audit"
-import { validateRunId, validateDescription, MAX_BATCH_DELETE_COUNT } from "@/lib/server/validation"
+import {
+	validateRunId,
+	validateDescription,
+	MAX_BATCH_DELETE_COUNT,
+	parseExercisePath,
+	validateTaskCount,
+} from "@/lib/server/validation"
 
 // Storage base path for eval logs
 const EVALS_STORAGE_PATH = "/tmp/evals/runs"
 
 const EVALS_REPO_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../../evals")
 
-export async function createRun({
-	suite,
-	exercises = [],
-	timeout,
-	iterations = 1,
-	executionMethod = "vscode",
-	...values
-}: CreateRun) {
+async function listFullSuiteExercises(): Promise<Array<{ language: ExerciseLanguage; exercise: string }>> {
+	const perLanguage = await Promise.all(
+		exerciseLanguages.map(async (language) =>
+			(await getExercisesForLanguage(EVALS_REPO_PATH, language)).map((exercise) => ({ language, exercise })),
+		),
+	)
+	return perLanguage.flat()
+}
+
+export async function createRun(input: CreateRun) {
 	await requireAdminForAction()
+
+	// The CreateRun type is not a runtime check; server actions get untrusted input.
+	const {
+		suite,
+		exercises = [],
+		timeout,
+		iterations = 1,
+		executionMethod = "vscode",
+		...values
+	} = createRunSchema.parse(input)
+
+	// Resolve and validate every task before touching the database or spawning.
+	const selectedExercises =
+		suite === "partial"
+			? exercises.map((exercisePath) => parseExercisePath(exercisePath, exerciseLanguages))
+			: await listFullSuiteExercises()
+	validateTaskCount(selectedExercises.length * iterations)
 
 	let run: Awaited<ReturnType<typeof _createRun>>
 	try {
@@ -51,42 +76,29 @@ export async function createRun({
 		})
 
 		if (suite === "partial") {
-			for (const path of exercises) {
-				const [language, exercise] = path.split("/")
-
-				if (!language || !exercise) {
-					throw new Error("Invalid exercise path: " + path)
-				}
-
+			for (const { language, exercise } of selectedExercises) {
 				// Create multiple tasks for each iteration
 				for (let iteration = 1; iteration <= iterations; iteration++) {
 					await createTask({
 						...values,
 						runId: run.id,
-						language: language as ExerciseLanguage,
+						language,
 						exercise,
 						iteration,
 					})
 				}
 			}
 		} else {
-			for (const language of exerciseLanguages) {
-				const languageExercises = await getExercisesForLanguage(EVALS_REPO_PATH, language)
+			// Create tasks for all iterations of each exercise
+			const tasksToCreate = selectedExercises.flatMap(({ language, exercise }) =>
+				Array.from({ length: iterations }, (_, i) => ({ language, exercise, iteration: i + 1 })),
+			)
 
-				// Create tasks for all iterations of each exercise
-				const tasksToCreate: Array<{ language: ExerciseLanguage; exercise: string; iteration: number }> = []
-				for (const exercise of languageExercises) {
-					for (let iteration = 1; iteration <= iterations; iteration++) {
-						tasksToCreate.push({ language, exercise, iteration })
-					}
-				}
-
-				await pMap(
-					tasksToCreate,
-					({ language, exercise, iteration }) => createTask({ runId: run.id, language, exercise, iteration }),
-					{ concurrency: 10 },
-				)
-			}
+			await pMap(
+				tasksToCreate,
+				({ language, exercise, iteration }) => createTask({ runId: run.id, language, exercise, iteration }),
+				{ concurrency: 10 },
+			)
 		}
 
 		revalidatePath("/runs")
