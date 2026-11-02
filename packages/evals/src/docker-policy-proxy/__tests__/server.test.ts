@@ -7,7 +7,7 @@
  * validated before forwarding, so we test the validation layer).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import * as http from "http"
 
 import { DockerPolicyProxy } from "../server"
@@ -219,6 +219,85 @@ describe("Docker Policy Proxy — Server Integration", () => {
 			)
 			expect(resp.status).toBe(403)
 			expect(JSON.parse(resp.body).message).toContain("VolumesFrom")
+		})
+	})
+
+	describe("Forwarded body", () => {
+		it("forwards the validated object, not the raw request body", async () => {
+			let forwarded: string | undefined
+			// forwardRequest is private; spy on the prototype so no cast is needed.
+			vi.spyOn(Object.getPrototypeOf(proxy), "forwardRequest").mockImplementation(async (...args: unknown[]) => {
+				forwarded = args[2] as string
+				;(args[1] as http.ServerResponse).end()
+			})
+			const raw = `{ "Image": "evals-runner",  "Env": [],
+				"HostConfig": { "Memory": 536870912, "PidsLimit": 200, "NanoCpus": 1000000000, "NetworkMode": "evals_default" } }`
+
+			const resp = await httpRequest(
+				port,
+				"POST",
+				"/containers/create?name=evals-task-fwd",
+				{ authorization: `Bearer ${TEST_TOKEN}`, "content-type": "application/json" },
+				raw,
+			)
+
+			expect(resp.status).toBe(200)
+			expect(forwarded).toBe(JSON.stringify(JSON.parse(raw)))
+		})
+
+		it("drops zero-valued fields outside the allowlist from the forwarded body", async () => {
+			let forwarded: string | undefined
+			vi.spyOn(Object.getPrototypeOf(proxy), "forwardRequest").mockImplementation(async (...args: unknown[]) => {
+				forwarded = args[2] as string
+				;(args[1] as http.ServerResponse).end()
+			})
+			const raw = JSON.stringify({
+				Image: "evals-runner",
+				Volumes: null,
+				HostConfig: {
+					Memory: 536870912,
+					PidsLimit: 200,
+					NanoCpus: 1e9,
+					NetworkMode: "evals_default",
+					DeviceRequests: null,
+					Runtime: "",
+				},
+			})
+
+			const resp = await httpRequest(
+				port,
+				"POST",
+				"/containers/create?name=evals-task-drop",
+				{ authorization: `Bearer ${TEST_TOKEN}`, "content-type": "application/json" },
+				raw,
+			)
+
+			expect(resp.status).toBe(200)
+			expect(JSON.parse(forwarded!)).toEqual({
+				Image: "evals-runner",
+				HostConfig: { Memory: 536870912, PidsLimit: 200, NanoCpus: 1e9, NetworkMode: "evals_default" },
+			})
+		})
+
+		it("rejects a body that relies on case-insensitive field matching", async () => {
+			const raw = JSON.stringify({
+				Image: "evals-runner",
+				HostConfig: {
+					Memory: 536870912,
+					PidsLimit: 200,
+					NanoCpus: 1e9,
+					NetworkMode: "evals_default",
+					privileged: true,
+				},
+			})
+			const resp = await httpRequest(
+				port,
+				"POST",
+				"/containers/create?name=evals-task-case",
+				{ authorization: `Bearer ${TEST_TOKEN}`, "content-type": "application/json" },
+				raw,
+			)
+			expect(resp.status).toBe(403)
 		})
 	})
 

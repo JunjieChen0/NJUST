@@ -74,6 +74,8 @@ export interface DockerKillContainerRequest {
 export interface PolicyDecision {
 	allowed: boolean
 	reason?: string
+	/** The validated request body, rebuilt from allowlisted fields; only this may be forwarded. */
+	body?: DockerCreateContainerRequest | DockerKillContainerRequest
 }
 
 /** Docker API error response */

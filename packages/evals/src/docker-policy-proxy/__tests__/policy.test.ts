@@ -10,6 +10,14 @@ import { describe, it, expect } from "vitest"
 
 import { validateCreateContainer, validateKillContainer, isMethodAllowed, DEFAULT_POLICY } from "../policy"
 import type { DockerCreateContainerRequest, PolicyConfig } from "../types"
+import * as fs from "fs"
+import * as path from "path"
+
+/**
+ * Body sent by Docker CLI 29.4.3 for the evals `docker run` arguments, captured
+ * from a local fake Docker API (no container was created).
+ */
+const CLI_CREATE_BODY = fs.readFileSync(path.join(__dirname, "fixtures", "docker-cli-29.4.3-create.json"), "utf-8")
 
 describe("Docker Policy Engine", () => {
 	describe("validateCreateContainer", () => {
@@ -580,6 +588,177 @@ describe("Docker Policy Engine", () => {
 		it("rejects swarm operations", () => {
 			expect(isMethodAllowed("POST", "/swarm/init")).toBe(false)
 			expect(isMethodAllowed("POST", "/swarm/join")).toBe(false)
+		})
+	})
+
+	describe("wire-level body checks", () => {
+		// Bodies are parsed from raw JSON, as the proxy does. Docker decodes field
+		// names case-insensitively, so spellings the policy does not read must be rejected.
+		const validHostConfig = {
+			NetworkMode: "evals_default",
+			Memory: 512 * 1024 * 1024,
+			PidsLimit: 200,
+			NanoCpus: 1e9,
+		}
+		const wire = (hostConfig: Record<string, unknown>, top: Record<string, unknown> = {}): unknown =>
+			JSON.parse(
+				JSON.stringify({ Image: "evals-runner", Name: "evals-task-1.0", HostConfig: hostConfig, ...top }),
+			)
+
+		it("accepts the canonical body", () => {
+			expect(validateCreateContainer(wire(validHostConfig)).allowed).toBe(true)
+		})
+
+		it.each([
+			["lowercase privileged", { ...validHostConfig, privileged: true }],
+			["lowercase binds", { ...validHostConfig, binds: ["/:/host"] }],
+			["mixed-case Networkmode", { ...validHostConfig, Networkmode: "host" }],
+			[
+				"a mount whose source is overridden by a lowercase duplicate",
+				{ ...validHostConfig, Mounts: [{ Type: "bind", Source: "/tmp/evals", source: "/", Target: "/x" }] },
+			],
+			[
+				"a mount key that only folds to Source outside ASCII",
+				{ ...validHostConfig, Mounts: [{ Type: "bind", Source: "/tmp/evals", ſource: "/", Target: "/x" }] },
+			],
+		])("rejects %s", (_label, hostConfig) => {
+			const decision = validateCreateContainer(wire(hostConfig))
+			expect(decision.allowed).toBe(false)
+		})
+
+		it("rejects a lowercase top-level field", () => {
+			expect(validateCreateContainer(wire(validHostConfig, { hostconfig: { Privileged: true } })).allowed).toBe(
+				false,
+			)
+		})
+
+		it.each([
+			["Memory: null", { ...validHostConfig, Memory: null }],
+			["Memory as a string", { ...validHostConfig, Memory: "1" }],
+			["PidsLimit: null", { ...validHostConfig, PidsLimit: null }],
+			["Privileged as a string", { ...validHostConfig, Privileged: "true" }],
+			["Binds as a string", { ...validHostConfig, Binds: "/:/host" }],
+			["a mount that is not an object", { ...validHostConfig, Mounts: ["/:/host"] }],
+		])("rejects %s", (_label, hostConfig) => {
+			expect(validateCreateContainer(wire(hostConfig)).allowed).toBe(false)
+		})
+
+		it.each([
+			["an array body", []],
+			["a null body", null],
+			["an array HostConfig", { Image: "evals-runner", Name: "evals-task-1.0", HostConfig: [] }],
+		])("rejects %s", (_label, body) => {
+			expect(validateCreateContainer(body).allowed).toBe(false)
+		})
+
+		it("rejects a kill signal spelled in lowercase", () => {
+			expect(validateKillContainer("evals-task-1", JSON.parse('{"signal":"SIGHUP"}')).allowed).toBe(false)
+		})
+	})
+
+	describe("field allowlist", () => {
+		const hostConfig = {
+			NetworkMode: "evals_default",
+			Memory: 512 * 1024 * 1024,
+			PidsLimit: 200,
+			NanoCpus: 1e9,
+		}
+		const create = (extraHostConfig: Record<string, unknown> = {}, extraTop: Record<string, unknown> = {}) =>
+			validateCreateContainer(
+				JSON.parse(
+					JSON.stringify({
+						Image: "evals-runner",
+						Name: "evals-task-1.0",
+						HostConfig: { ...hostConfig, ...extraHostConfig },
+						...extraTop,
+					}),
+				),
+			)
+		const gpu = [{ Driver: "nvidia", Count: -1, Capabilities: [["gpu"]] }]
+
+		it.each([
+			["DeviceRequests", { DeviceRequests: gpu }],
+			["lowercase deviceRequests", { deviceRequests: gpu }],
+			["Runtime", { Runtime: "runc-unconfined" }],
+			["CgroupnsMode host", { CgroupnsMode: "host" }],
+			["a restart policy other than no", { RestartPolicy: { Name: "always", MaximumRetryCount: 0 } }],
+		])("rejects HostConfig with %s", (_label, extra) => {
+			const decision = create(extra)
+			expect(decision.allowed).toBe(false)
+			expect(decision.body).toBeUndefined()
+		})
+
+		it.each([
+			["another network", { EndpointsConfig: { bridge: {} } }],
+			["an endpoint with a static IP", { EndpointsConfig: { evals_default: { IPAddress: "10.0.0.9" } } }],
+		])("rejects NetworkingConfig joining %s", (_label, networkingConfig) => {
+			expect(create({}, { NetworkingConfig: networkingConfig }).allowed).toBe(false)
+		})
+
+		it("rejects an unknown top-level field with a value", () => {
+			expect(create({}, { Volumes: { "/data": {} } }).allowed).toBe(false)
+		})
+
+		it("accepts the body a real Docker CLI sends for the evals run arguments", () => {
+			const decision = validateCreateContainer({ ...JSON.parse(CLI_CREATE_BODY), Name: "evals-task-1.0" })
+
+			expect(decision.reason).toBeUndefined()
+			expect(decision.allowed).toBe(true)
+			// -1 means "system default", the same as not sending the field.
+			expect((decision.body as DockerCreateContainerRequest).HostConfig).not.toHaveProperty("MemorySwappiness")
+		})
+
+		it("still rejects a MemorySwappiness other than the default", () => {
+			expect(create({ MemorySwappiness: 100 }).allowed).toBe(false)
+		})
+
+		it("accepts a Docker CLI style body and forwards only allowed fields", () => {
+			const decision = create(
+				{
+					Binds: ["/tmp/evals:/var/log/evals"],
+					MemorySwap: 1024 * 1024 * 1024,
+					AutoRemove: true,
+					RestartPolicy: { Name: "no", MaximumRetryCount: 0 },
+					LogConfig: { Type: "", Config: {} },
+					ConsoleSize: [0, 0],
+					DeviceRequests: null,
+					Runtime: "",
+					CgroupnsMode: "",
+					MemorySwappiness: null,
+					Dns: [],
+					ShmSize: 0,
+				},
+				{
+					Env: ["EVALS_ATTEMPT=0"],
+					Cmd: ["sh", "-c", "pnpm cli"],
+					AttachStdout: true,
+					AttachStderr: true,
+					Tty: false,
+					Volumes: null,
+					NetworkingConfig: { EndpointsConfig: { evals_default: { Aliases: null, IPAMConfig: null } } },
+				},
+			)
+
+			expect(decision.allowed).toBe(true)
+			const body = decision.body as Record<string, Record<string, unknown>>
+			expect(Object.keys(body.HostConfig!).sort()).toEqual(
+				[
+					"AutoRemove",
+					"Binds",
+					"Memory",
+					"MemorySwap",
+					"NanoCpus",
+					"NetworkMode",
+					"PidsLimit",
+					"RestartPolicy",
+					"LogConfig",
+					"ConsoleSize",
+				].sort(),
+			)
+			expect(body.HostConfig!.LogConfig).toEqual({})
+			expect(Object.keys(body.HostConfig!)).not.toContain("DeviceRequests")
+			expect(body).not.toHaveProperty("Volumes")
+			expect(body.NetworkingConfig).toEqual({ EndpointsConfig: { evals_default: {} } })
 		})
 	})
 })

@@ -6,7 +6,8 @@
  * access, Docker socket nested mounts, and arbitrary bind mounts.
  */
 
-import type { PolicyConfig, PolicyDecision, DockerCreateContainerRequest, DockerKillContainerRequest } from "./types"
+import type { PolicyConfig, PolicyDecision } from "./types"
+import { sanitizeCreateContainerBody, sanitizeKillContainerBody } from "./body-shape"
 
 /** Default policy configuration for evals environment */
 export const DEFAULT_POLICY: PolicyConfig = {
@@ -101,11 +102,16 @@ function isEnvVarAllowed(env: string, allowedNames: string[]): boolean {
 
 /**
  * Validate a container creation request against the policy.
+ * Takes the parsed wire body: its shape is checked before any field is read.
  */
-export function validateCreateContainer(
-	req: DockerCreateContainerRequest,
-	policy: PolicyConfig = DEFAULT_POLICY,
-): PolicyDecision {
+export function validateCreateContainer(input: unknown, policy: PolicyConfig = DEFAULT_POLICY): PolicyDecision {
+	const sanitized = sanitizeCreateContainerBody(input, policy.allowedNetworks)
+	if ("error" in sanitized) {
+		return { allowed: false, reason: sanitized.error }
+	}
+	// Every check below reads the rebuilt body, which is also what gets forwarded.
+	const req = sanitized.body
+
 	// Check image
 	if (!req.Image || !isImageAllowed(req.Image, policy.allowedImages)) {
 		return {
@@ -201,7 +207,7 @@ export function validateCreateContainer(
 
 	// Enforce memory limit (Memory is required to prevent OOM on host)
 	if (policy.maxMemoryBytes > 0) {
-		if (hc.Memory === undefined || hc.Memory === 0) {
+		if (hc.Memory === undefined || hc.Memory === null || hc.Memory <= 0) {
 			return { allowed: false, reason: "Memory limit is required (set HostConfig.Memory > 0)" }
 		}
 		if (hc.Memory > policy.maxMemoryBytes) {
@@ -258,7 +264,7 @@ export function validateCreateContainer(
 		}
 	}
 
-	return { allowed: true }
+	return { allowed: true, body: sanitized.body }
 }
 
 /**
@@ -267,16 +273,22 @@ export function validateCreateContainer(
  */
 export function validateKillContainer(
 	containerId: string,
-	req: DockerKillContainerRequest,
+	input: unknown,
 	_policy: PolicyConfig = DEFAULT_POLICY,
 ): PolicyDecision {
+	const sanitized = sanitizeKillContainerBody(input)
+	if ("error" in sanitized) {
+		return { allowed: false, reason: sanitized.error }
+	}
+	const req = sanitized.body
+
 	// We can't validate the actual container name from the ID alone,
 	// but we can check the signal is reasonable.
 	if (req.Signal && !["SIGTERM", "SIGKILL", "SIGINT", "SIGSTOP"].includes(req.Signal)) {
 		return { allowed: false, reason: `Signal '${req.Signal}' is not allowed` }
 	}
 
-	return { allowed: true }
+	return { allowed: true, body: sanitized.body }
 }
 
 /**

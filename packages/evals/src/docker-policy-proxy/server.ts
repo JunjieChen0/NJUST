@@ -16,7 +16,8 @@ import { URL } from "url"
 import { logger } from "./logger"
 import { logSecurityEvent } from "./security-audit"
 
-import type { PolicyConfig, DockerCreateContainerRequest, DockerKillContainerRequest } from "./types"
+import type { PolicyConfig, DockerCreateContainerRequest } from "./types"
+import { isPlainObject } from "./body-shape"
 import {
 	validateCreateContainer,
 	validateKillContainer,
@@ -173,8 +174,9 @@ export class DockerPolicyProxy {
 			// Rewrite URL if needed (e.g., inject filters for /containers/json)
 			const effectiveUrlPath = this.rewriteUrl(method, urlPath)
 
-			// Forward to Docker daemon
-			await this.forwardRequest(req, res, body, effectiveUrlPath)
+			// Forward to Docker daemon. A validated JSON body is re-serialized from the
+			// parsed object, so Docker decodes exactly what the policy checked.
+			await this.forwardRequest(req, res, decision.forwardBody ?? body, effectiveUrlPath)
 		} catch (error) {
 			logger.error(SCOPE, "Error handling request", error)
 			if (!res.headersSent) {
@@ -317,7 +319,7 @@ export class DockerPolicyProxy {
 		method: string,
 		urlPath: string,
 		body: string,
-	): Promise<{ allowed: boolean; reason?: string }> {
+	): Promise<{ allowed: boolean; reason?: string; forwardBody?: string }> {
 		// Parse URL to extract path and query separately
 		const parsedUrl = new URL(urlPath, "http://localhost")
 		const normalizedPath = parsedUrl.pathname.replace(/^\/v[\d.]+/, "")
@@ -328,17 +330,24 @@ export class DockerPolicyProxy {
 				return { allowed: false, reason: "Container create requires a JSON body" }
 			}
 			try {
-				const reqBody: DockerCreateContainerRequest = JSON.parse(body)
+				const reqBody: unknown = JSON.parse(body)
 				// Docker API puts container name in the query string, not the body
 				const nameFromQuery = parsedUrl.searchParams.get("name") ?? undefined
+				const nameFromBody =
+					isPlainObject(reqBody) && typeof reqBody.Name === "string" ? reqBody.Name : undefined
 				// Container name is REQUIRED - auto-named containers bypass policy
-				const containerName = nameFromQuery ?? reqBody.Name
+				const containerName = nameFromQuery ?? nameFromBody
 				if (!containerName) {
 					return { allowed: false, reason: "Container name is required (use ?name=xxx query parameter)" }
 				}
-				reqBody.Name = containerName
-				const decision = validateCreateContainer(reqBody, this.policy)
-				return decision
+				const decision = validateCreateContainer(
+					isPlainObject(reqBody) ? { ...reqBody, Name: containerName } : reqBody,
+					this.policy,
+				)
+				if (!decision.allowed || !decision.body) return decision
+				// Docker takes the name from the query string; Name is only for validation.
+				const { Name: _name, ...forwarded } = decision.body as DockerCreateContainerRequest
+				return { ...decision, forwardBody: JSON.stringify(forwarded) }
 			} catch (error) {
 				return { allowed: false, reason: `Invalid request body: ${error}` }
 			}
@@ -348,14 +357,16 @@ export class DockerPolicyProxy {
 		if (method === "POST" && normalizedPath.match(/\/containers\/[^/]+\/kill/)) {
 			const containerId = normalizedPath.split("/")[2]
 			try {
-				const reqBody: DockerKillContainerRequest = body ? JSON.parse(body) : {}
+				const reqBody: unknown = body ? JSON.parse(body) : {}
 				// Verify target container belongs to our managed set
 				const nameCheck = await this.verifyContainerNamePrefix(containerId ?? "")
 				if (!nameCheck.allowed) {
 					return nameCheck
 				}
 				const decision = validateKillContainer(containerId ?? "", reqBody, this.policy)
-				return decision
+				return decision.allowed && body && decision.body
+					? { ...decision, forwardBody: JSON.stringify(decision.body) }
+					: decision
 			} catch {
 				// Kill requests may have empty body — still enforce name check
 				return await this.verifyContainerNamePrefix(containerId)
