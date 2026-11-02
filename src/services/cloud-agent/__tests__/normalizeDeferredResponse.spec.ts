@@ -59,4 +59,58 @@ describe("normalizeDeferredResponse", () => {
 	it("rejects run_id with newlines or excessive length", () => {
 		expect(() => normalizeDeferredResponse({ run_id: "bad\nid", status: "done" })).toThrow(/run_id/)
 	})
+
+	describe("field types", () => {
+		const base = { run_id: "r1", status: "done" }
+
+		it.each([
+			["a status outside pending/done", { status: "running" }],
+			["a missing status", { status: undefined }],
+			["ok as a string", { ok: "false" }],
+			["a string protocol version", { deferred_protocol_version: "2" }],
+			["a fractional protocol version", { deferred_protocol_version: 1.5 }],
+			["a numeric server_revision", { server_revision: 42 }],
+			["text that is not a string", { text: 5 }],
+			["reasoning that is not a string", { reasoning: {} }],
+			["memory_summary that is not a string", { memory_summary: 1 }],
+			["logs with a non-string entry", { logs: ["ok", 1] }],
+			["tokens_in as a string", { tokens_in: "10" }],
+			["a non-finite cost", { cost: Number.POSITIVE_INFINITY }],
+			["pending_tools that is not an array", { pending_tools: "c1" }],
+		])("rejects %s", (_label, override) => {
+			expect(() => normalizeDeferredResponse({ ...base, ...override })).toThrow()
+		})
+
+		const validTool = { call_id: "c1", tool: "read_file", arguments: {} }
+		it.each([
+			["pending_tools where every entry is invalid", { pending_tools: [{ tool: "read_file" }, "x"] }],
+			["pending_tools mixing valid and invalid entries", { pending_tools: [validTool, { call_id: "c2" }] }],
+			[
+				"tool_calls with an entry missing its id",
+				{ tool_calls: [{ function: { name: "t1", arguments: "{}" } }] },
+			],
+		])("rejects %s instead of dropping entries", (_label, override) => {
+			expect(() => normalizeDeferredResponse({ run_id: "r1", status: "pending", ...override })).toThrow(
+				/tool call/,
+			)
+		})
+
+		it("accepts well-typed optional fields", () => {
+			const out = normalizeDeferredResponse({
+				...base,
+				ok: false,
+				deferred_protocol_version: 1,
+				server_revision: "rev-1",
+				text: "t",
+				reasoning: "r",
+				memory_summary: "m",
+				logs: ["a"],
+				tokens_in: 1,
+				tokens_out: 2,
+				cost: 0.5,
+			})
+			expect(out.ok).toBe(false)
+			expect(out.server_revision).toBe("rev-1")
+		})
+	})
 })

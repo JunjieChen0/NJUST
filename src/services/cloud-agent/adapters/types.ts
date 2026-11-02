@@ -18,6 +18,9 @@ export interface UniversalPendingTool {
 	arguments: Record<string, unknown>
 }
 
+/** 响应来自哪个端点：legacy `/v1/run`，或 deferred start/resume */
+export type ResponseKind = "legacy" | "deferred"
+
 export interface UniversalTaskResponse {
 	runId: string
 	status: "pending" | "done"
@@ -36,6 +39,8 @@ export interface UniversalTaskResponse {
 	tokensIn?: number
 	tokensOut?: number
 	cost?: number
+	/** deferred 协议的服务端版本号，用于检测运行中服务端变更 */
+	serverRevision?: string
 	/** 原始响应，用于透传未知字段 */
 	raw?: Record<string, unknown>
 	/**
@@ -84,8 +89,11 @@ export interface IProtocolAdapter {
 	/** 构建请求体（协议层） */
 	buildRequestBody(request: UniversalTaskRequest): Record<string, unknown>
 
-	/** 解析响应体（协议层）。包含 pending_tools/tool_calls 归一化。 */
-	parseResponseBody(data: Record<string, unknown>): UniversalTaskResponse
+	/**
+	 * 解析响应体（协议层）。包含 pending_tools/tool_calls 归一化。
+	 * kind 为 "deferred" 时响应必须符合 deferred 协议，校验失败直接抛错（不回退为 done）。
+	 */
+	parseResponseBody(data: Record<string, unknown>, kind?: ResponseKind): UniversalTaskResponse
 
 	/** 获取端点路径（不含 serverUrl 前缀） */
 	getEndpoint(type: EndpointType): string

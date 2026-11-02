@@ -69,6 +69,60 @@ export function parseDeferredToolCallItem(item: unknown): DeferredToolCall | nul
 	return { call_id: callId, tool, arguments: args }
 }
 
+const isString = (v: unknown) => typeof v === "string"
+const isFiniteNumber = (v: unknown) => typeof v === "number" && Number.isFinite(v)
+
+/** Optional fields and their expected types. null is treated as absent. */
+const OPTIONAL_FIELD_CHECKS: Array<[field: string, check: (v: unknown) => boolean, expected: string]> = [
+	["ok", (v) => typeof v === "boolean", "a boolean"],
+	["deferred_protocol_version", (v) => Number.isInteger(v), "an integer"],
+	["server_revision", isString, "a string"],
+	["text", isString, "a string"],
+	["reasoning", isString, "a string"],
+	["memory_summary", isString, "a string"],
+	["logs", (v) => Array.isArray(v) && v.every(isString), "an array of strings"],
+	["tokens_in", isFiniteNumber, "a finite number"],
+	["tokens_out", isFiniteNumber, "a finite number"],
+	["cost", isFiniteNumber, "a finite number"],
+	["pending_tools", Array.isArray, "an array"],
+	["tool_calls", Array.isArray, "an array"],
+]
+
+/**
+ * Reject fields with the wrong type instead of letting them through (e.g. ok: "false"
+ * would read as success). Returns the response with null optional fields removed.
+ */
+function checkFieldTypes(raw: Record<string, unknown>): unknown {
+	if (raw.status !== "pending" && raw.status !== "done") {
+		throw new Error(`Cloud Agent: deferred response status must be "pending" or "done"`)
+	}
+	const checked = { ...raw }
+	for (const [field, check, expected] of OPTIONAL_FIELD_CHECKS) {
+		const value = checked[field]
+		if (value === null) {
+			delete checked[field]
+		} else if (value !== undefined && !check(value)) {
+			throw new Error(`Cloud Agent: deferred response field ${field} must be ${expected}`)
+		}
+	}
+	return checked
+}
+
+/**
+ * Parse every entry of a tool call list. An entry that cannot be parsed is an error:
+ * dropping it would resume without that call's result and could report success.
+ */
+function parseToolCallList(list: unknown[] | undefined, field: string): DeferredToolCall[] {
+	if (!Array.isArray(list)) return []
+	return list.map((item, index) => {
+		const call = parseDeferredToolCallItem(item)
+		if (!call) {
+			throw new Error(`Cloud Agent: deferred response ${field}[${index}] is not a valid tool call`)
+		}
+		return call
+	})
+}
+
 /**
  * Some servers send `tool_calls` (OpenAI-like) instead of `pending_tools`. Normalize so Task always
  * executes and resumes with matching counts.
@@ -78,15 +132,10 @@ export function normalizeDeferredResponse(raw: unknown): DeferredResponse {
 	if (!raw || typeof raw !== "object") {
 		throw new Error("Cloud Agent: deferred response is not a JSON object")
 	}
-	const r = raw as DeferredResponse & { tool_calls?: unknown[] }
+	const r = checkFieldTypes(raw as Record<string, unknown>) as DeferredResponse & { tool_calls?: unknown[] }
 
-	const fromPending = Array.isArray(r.pending_tools)
-		? r.pending_tools.map(parseDeferredToolCallItem).filter((x): x is DeferredToolCall => x !== null)
-		: []
-
-	const fromToolCalls = Array.isArray(r.tool_calls)
-		? r.tool_calls.map(parseDeferredToolCallItem).filter((x): x is DeferredToolCall => x !== null)
-		: []
+	const fromPending = parseToolCallList(r.pending_tools, "pending_tools")
+	const fromToolCalls = parseToolCallList(r.tool_calls, "tool_calls")
 
 	let pending_tools: DeferredToolCall[]
 	if (fromPending.length > 0 && fromToolCalls.length > 0) {

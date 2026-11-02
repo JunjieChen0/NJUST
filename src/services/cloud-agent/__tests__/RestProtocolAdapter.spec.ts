@@ -207,6 +207,79 @@ describe("RestProtocolAdapter", () => {
 		})
 	})
 
+	describe("parseResponseBody() for deferred responses", () => {
+		function adapterFor(overrides?: Partial<CloudAgentProfile>) {
+			const adapter = new RestProtocolAdapter()
+			adapter.initialize(createMockProfile(overrides))
+			return adapter
+		}
+		const pendingTool = { call_id: "c1", tool: "read_file", arguments: { path: "a.ts" } }
+
+		it.each([
+			["a missing run_id", { status: "pending", pending_tools: [pendingTool], ok: true }],
+			["a run_id with a newline", { run_id: "run\nx", status: "pending", pending_tools: [pendingTool] }],
+			[
+				"protocol version 0",
+				{ run_id: "run-1", status: "pending", pending_tools: [pendingTool], deferred_protocol_version: 0 },
+			],
+		])("throws instead of reporting done for %s", (_label, body) => {
+			expect(() => adapterFor().parseResponseBody(body, "deferred")).toThrow()
+		})
+
+		it("rejects a server revision that is not a string instead of dropping it", () => {
+			expect(() =>
+				adapterFor().parseResponseBody(
+					{ run_id: "run-1", status: "pending", pending_tools: [pendingTool], server_revision: 2 },
+					"deferred",
+				),
+			).toThrow(/server_revision/)
+		})
+
+		it("keeps the server revision", () => {
+			const response = adapterFor().parseResponseBody(
+				{ run_id: "run-1", status: "pending", pending_tools: [pendingTool], server_revision: "rev-1" },
+				"deferred",
+			)
+			expect(response.serverRevision).toBe("rev-1")
+		})
+
+		it("maps each status value once, even when custom values swap the standard ones", () => {
+			const adapter = adapterFor({
+				fieldMapping: { statusValues: { pending: "done", done: "pending" } },
+			} as Partial<CloudAgentProfile>)
+
+			const pending = adapter.parseResponseBody(
+				{ run_id: "run-1", status: "done", pending_tools: [pendingTool] },
+				"deferred",
+			)
+			expect(pending.status).toBe("pending")
+			expect(pending.pendingTools).toHaveLength(1)
+
+			expect(adapter.parseResponseBody({ run_id: "run-1", status: "pending" }, "deferred").status).toBe("done")
+		})
+
+		it("applies a custom response field and status mapping", () => {
+			const adapter = adapterFor({
+				fieldMapping: {
+					response: { runId: "job", status: "phase", pendingTools: "calls" },
+					statusValues: { pending: "working", done: "finished" },
+				},
+			} as Partial<CloudAgentProfile>)
+
+			const pending = adapter.parseResponseBody(
+				{ job: "job-1", phase: "working", calls: [pendingTool] },
+				"deferred",
+			)
+			expect(pending.runId).toBe("job-1")
+			expect(pending.status).toBe("pending")
+			expect(pending.pendingTools?.map((t) => t.callId)).toEqual(["c1"])
+
+			const done = adapter.parseResponseBody({ job: "job-1", phase: "finished", text: "ok" }, "deferred")
+			expect(done.status).toBe("done")
+			expect(done.text).toBe("ok")
+		})
+	})
+
 	describe("getEndpoint()", () => {
 		it("returns correct endpoints", () => {
 			const adapter = new RestProtocolAdapter()

@@ -17,7 +17,13 @@ import type {
 import type { CloudAgentProfile } from "./types/profile"
 import { AdapterFactory } from "./adapters/AdapterFactory"
 import type { IProtocolAdapterFactory } from "./adapters/IProtocolAdapterFactory"
-import type { IProtocolAdapter, McpCallbackHandler, McpCallOptions, UniversalTaskResponse } from "./adapters/types"
+import type {
+	IProtocolAdapter,
+	McpCallbackHandler,
+	McpCallOptions,
+	ResponseKind,
+	UniversalTaskResponse,
+} from "./adapters/types"
 import { MCP_TOOLS } from "./adapters/McpProtocolAdapter"
 import { normalizeServerUrl } from "./urlUtils"
 import { guardedFetch, assertHeadersSafe } from "../../core/security/networkGuard"
@@ -328,7 +334,10 @@ export class CloudAgentClient {
 		return guardedFetch(url, init)
 	}
 
-	private async parseUniversalResponse(resp: Response): Promise<UniversalTaskResponse> {
+	private async parseUniversalResponse(
+		resp: Response,
+		kind: ResponseKind = "legacy",
+	): Promise<UniversalTaskResponse> {
 		// Use streaming read with hard byte limit to protect against unbounded
 		// chunked responses that lack a Content-Length header.
 		const text = await readResponseBodyWithLimit(resp, MAX_RESPONSE_BODY_BYTES)
@@ -341,7 +350,7 @@ export class CloudAgentClient {
 			)
 		}
 		try {
-			return this.adapter.parseResponseBody(parsed as Record<string, unknown>)
+			return this.adapter.parseResponseBody(parsed as Record<string, unknown>, kind)
 		} catch (e) {
 			const hint = getErrorMessage(e)
 			throw new Error(`Cloud Agent: invalid response payload (HTTP ${resp.status}): ${hint}`)
@@ -625,7 +634,7 @@ export class CloudAgentClient {
 						throw err
 					}
 
-					universal = await this.parseUniversalResponse(resp)
+					universal = await this.parseUniversalResponse(resp, "deferred")
 				} finally {
 					cleanup()
 				}
@@ -638,7 +647,9 @@ export class CloudAgentClient {
 						tool: t.tool,
 						arguments: t.arguments,
 					})),
-					workspace_ops: universal.raw?.workspace_ops as DeferredResponse["workspace_ops"],
+					workspace_ops: (universal.payload ?? universal.raw)
+						?.workspace_ops as DeferredResponse["workspace_ops"],
+					server_revision: universal.serverRevision,
 					text: universal.text,
 					reasoning: universal.reasoning,
 					ok: universal.ok,

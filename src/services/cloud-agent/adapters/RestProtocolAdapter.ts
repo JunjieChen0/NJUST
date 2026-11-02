@@ -1,6 +1,6 @@
 import type { CloudAgentProfile, RestFieldMapping, EndpointConfig } from "../types/profile"
 import { DEFAULT_ENDPOINTS, DEFAULT_FIELD_MAPPING, DEFAULT_AUTH } from "../types/profile"
-import type { IProtocolAdapter, UniversalTaskRequest, UniversalTaskResponse, EndpointType } from "./types"
+import type { IProtocolAdapter, UniversalTaskRequest, UniversalTaskResponse, EndpointType, ResponseKind } from "./types"
 import type { DeferredToolCall, WorkspaceOpsEnvelope } from "../types"
 import { normalizeDeferredResponse } from "../normalizeDeferredResponse"
 import { getDeviceToken } from "../deviceToken"
@@ -71,27 +71,32 @@ export class RestProtocolAdapter implements IProtocolAdapter {
 
 	// ─── 响应解析（含归一化） ───────────────────────────────────────
 
-	parseResponseBody(data: Record<string, unknown>): UniversalTaskResponse {
-		// 使用 normalizeDeferredResponse 进行 pending_tools/tool_calls 归一化
-		// 对于 /v1/run 响应（无 run_id），normalizeDeferredResponse 会失败，我们回退到直接解析
+	parseResponseBody(data: Record<string, unknown>, kind: ResponseKind = "legacy"): UniversalTaskResponse {
+		// 先按 Profile.fieldMapping 把自定义字段名和状态值转换为标准字段，再校验
+		const fields = this.toStandardFields(data)
+
+		// deferred 端点的响应必须通过校验；只有 legacy /v1/run（无 run_id）才回退为 done
 		let normalized: ReturnType<typeof normalizeDeferredResponse>
-		try {
-			normalized = normalizeDeferredResponse(data)
-		} catch {
-			// 回退：直接读取字段（用于 /v1/run 响应）
-			normalized = {
-				run_id: "",
-				status: "done" as const,
-				ok: data.ok as boolean | undefined,
-				memory_summary: data.memory_summary as string | undefined,
-				logs: data.logs as string[] | undefined,
-				tokens_in: data.tokens_in as number | undefined,
-				tokens_out: data.tokens_out as number | undefined,
-				cost: data.cost as number | undefined,
-				text: data.text as string | undefined,
-				reasoning: data.reasoning as string | undefined,
-				pending_tools: undefined,
-				workspace_ops: data.workspace_ops as WorkspaceOpsEnvelope,
+		if (kind === "deferred") {
+			normalized = normalizeDeferredResponse(fields)
+		} else {
+			try {
+				normalized = normalizeDeferredResponse(fields)
+			} catch {
+				normalized = {
+					run_id: "",
+					status: "done" as const,
+					ok: fields.ok as boolean | undefined,
+					memory_summary: fields.memory_summary as string | undefined,
+					logs: fields.logs as string[] | undefined,
+					tokens_in: fields.tokens_in as number | undefined,
+					tokens_out: fields.tokens_out as number | undefined,
+					cost: fields.cost as number | undefined,
+					text: fields.text as string | undefined,
+					reasoning: fields.reasoning as string | undefined,
+					pending_tools: undefined,
+					workspace_ops: fields.workspace_ops as WorkspaceOpsEnvelope,
+				}
 			}
 		}
 
@@ -111,9 +116,36 @@ export class RestProtocolAdapter implements IProtocolAdapter {
 			tokensIn: normalized.tokens_in,
 			tokensOut: normalized.tokens_out,
 			cost: normalized.cost,
+			serverRevision: typeof normalized.server_revision === "string" ? normalized.server_revision : undefined,
 			raw: data,
-			payload: data,
+			payload: fields,
 		}
+	}
+
+	/** 把自定义响应字段名和状态值映射为标准字段（默认映射时原样返回） */
+	private toStandardFields(data: Record<string, unknown>): Record<string, unknown> {
+		const { response, statusValues } = this.resolvedMapping
+		const fields: Record<string, unknown> = { ...data }
+
+		for (const [key, standardName] of Object.entries(DEFAULT_FIELD_MAPPING.response)) {
+			const customName = response[key]
+			if (customName && customName !== standardName && customName in data) {
+				fields[standardName] = data[customName]
+			}
+		}
+
+		// Compare against the original value and convert at most once, so mappings that
+		// swap standard values (pending: "done", done: "pending") are not applied twice.
+		const statusName = DEFAULT_FIELD_MAPPING.response.status ?? "status"
+		const originalStatus = fields[statusName]
+		for (const [key, standardValue] of Object.entries(DEFAULT_FIELD_MAPPING.statusValues)) {
+			const customValue = statusValues[key]
+			if (customValue && originalStatus === customValue) {
+				fields[statusName] = standardValue
+				break
+			}
+		}
+		return fields
 	}
 
 	// ─── 端点路径 ──────────────────────────────────────────────────

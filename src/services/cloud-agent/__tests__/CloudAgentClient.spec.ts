@@ -419,6 +419,59 @@ describe("CloudAgentClient", () => {
 			expect(body).toMatchObject({ goal: "goal", session_id: "sid-1", workspace_path: "/ws", images: ["img"] })
 		})
 
+		it("deferredStart passes the server revision from the HTTP response through", async () => {
+			globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValue(
+				new Response(
+					JSON.stringify({
+						run_id: "run-1",
+						status: "pending",
+						pending_tools: [{ call_id: "c1", tool: "read_file", arguments: { path: "a.ts" } }],
+						server_revision: "rev-1",
+					}),
+					{ status: 200 },
+				),
+			)
+			const client = new CloudAgentClient(createCallbacks(), {
+				profile: createMockProfile({ serverUrl: "http://localhost:4000" }),
+			})
+
+			const result = await client.deferredStart("sid-1", "goal")
+
+			expect(result.server_revision).toBe("rev-1")
+		})
+
+		it("deferredStart rejects an invalid deferred response instead of treating it as done", async () => {
+			globalThis.fetch = vi
+				.fn<typeof fetch>()
+				.mockImplementation(
+					async () => new Response(JSON.stringify({ status: "pending", ok: true }), { status: 200 }),
+				)
+			const client = new CloudAgentClient(createCallbacks(), {
+				profile: createMockProfile({ serverUrl: "http://localhost:4000" }),
+			})
+
+			await expect(client.deferredStart("sid-1", "goal")).rejects.toThrow("run_id")
+		})
+
+		it("deferredStart rejects a tool call it cannot parse instead of dropping it", async () => {
+			globalThis.fetch = vi.fn<typeof fetch>().mockImplementation(
+				async () =>
+					new Response(
+						JSON.stringify({
+							run_id: "run-1",
+							status: "pending",
+							pending_tools: [{ tool: "read_file", arguments: { path: "a.ts" } }],
+						}),
+						{ status: 200 },
+					),
+			)
+			const client = new CloudAgentClient(createCallbacks(), {
+				profile: createMockProfile({ serverUrl: "http://localhost:4000" }),
+			})
+
+			await expect(client.deferredStart("sid-1", "goal")).rejects.toThrow(/tool call/)
+		})
+
 		it("deferredStart returns done status", async () => {
 			const fetchMock = vi
 				.fn()
