@@ -280,7 +280,7 @@ describe("SettingsView - Unsaved Changes Detection", () => {
 		ttsEnabled: false,
 		ttsSpeed: 1.0,
 		soundVolume: 0.5,
-	terminalOutputLineLimit: 500,
+		terminalOutputLineLimit: 500,
 		terminalOutputCharacterLimit: 50000,
 		terminalShellIntegrationTimeout: 3000,
 		terminalShellIntegrationDisabled: false,
@@ -407,6 +407,58 @@ describe("SettingsView - Unsaved Changes Detection", () => {
 
 		// onDone should be called
 		expect(onDone).toHaveBeenCalled()
+	})
+
+	it("keeps unsaved edits across state updates after an import, and syncs only on a new import", async () => {
+		const onDone = vi.fn()
+		vi.mocked(ApiOptions).mockImplementation(({ apiConfiguration, setApiConfigurationField }: any) => (
+			<div data-testid="api-options">
+				<span data-testid="model-id">{apiConfiguration?.apiModelId ?? ""}</span>
+				<button onClick={() => setApiConfigurationField("apiModelId", "user-model")} data-testid="change-model">
+					Change Model
+				</button>
+			</div>
+		))
+
+		// The mocked useExtensionState does not trigger renders by itself; a fresh
+		// onDone prop forces SettingsView to re-render like a real state update would.
+		const tree = () => (
+			<QueryClientProvider client={queryClient}>
+				<SettingsView onDone={() => onDone()} />
+			</QueryClientProvider>
+		)
+		;(useExtensionState as any).mockReturnValue({ ...defaultExtensionState, settingsImportedAt: 1000 })
+		const { rerender } = render(tree())
+
+		fireEvent.click(await screen.findByTestId("change-model"))
+		expect(screen.getByTestId("model-id")).toHaveTextContent("user-model")
+
+		// An unrelated extension state update arrives (new object, same import time)
+		;(useExtensionState as any).mockReturnValue({
+			...defaultExtensionState,
+			settingsImportedAt: 1000,
+			soundEnabled: true,
+		})
+		rerender(tree())
+
+		expect(screen.getByTestId("model-id")).toHaveTextContent("user-model")
+		fireEvent.click(screen.getByText("settings:common.done"))
+		await waitFor(() => {
+			expect(screen.getByText("settings:unsavedChangesDialog.title")).toBeInTheDocument()
+		})
+		expect(onDone).not.toHaveBeenCalled()
+
+		// A new import replaces the cached state with the imported settings
+		;(useExtensionState as any).mockReturnValue({
+			...defaultExtensionState,
+			settingsImportedAt: 2000,
+			apiConfiguration: { apiProvider: "openai", apiModelId: "imported-model" },
+		})
+		rerender(tree())
+
+		await waitFor(() => {
+			expect(screen.getByTestId("model-id")).toHaveTextContent("imported-model")
+		})
 	})
 
 	it("should show unsaved changes when user makes actual changes", async () => {

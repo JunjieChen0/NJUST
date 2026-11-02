@@ -266,12 +266,17 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 		setChangeDetected(false)
 	}, [currentApiConfigName, extensionState])
 
-	// Bust the cache when settings are imported.
+	// Bust the cache only when a *new* import happens. settingsImportedAt is never
+	// cleared, so reacting to every extensionState change would wipe unsaved edits.
+	const handledSettingsImportedAt = useRef(settingsImportedAt)
 	useEffect(() => {
-		if (settingsImportedAt) {
-			setCachedState((prevCachedState) => ({ ...prevCachedState, ...extensionState }))
-			setChangeDetected(false)
+		if (!settingsImportedAt || settingsImportedAt === handledSettingsImportedAt.current) {
+			return
 		}
+
+		handledSettingsImportedAt.current = settingsImportedAt
+		setCachedState((prevCachedState) => ({ ...prevCachedState, ...extensionState }))
+		setChangeDetected(false)
 	}, [settingsImportedAt, extensionState])
 
 	const setCachedStateField: SetCachedStateField<keyof ExtensionStateContextType> = useCallback((field, value) => {
