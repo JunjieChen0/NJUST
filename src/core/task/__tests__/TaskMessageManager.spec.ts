@@ -58,9 +58,8 @@ function createContext(overrides: Partial<TaskMessageContext> = {}): TaskMessage
 		lastMessageTs: 0,
 		api: {},
 		apiConfiguration: { apiProvider: "openai" } as any,
-		_taskMode: "code",
-		_taskApiConfigName: "default",
-		taskApiConfigReady: Promise.resolve(),
+		getTaskMode: vi.fn().mockResolvedValue("code"),
+		getTaskApiConfigName: vi.fn().mockResolvedValue("default"),
 		initialStatus: "active",
 		cwd: "D:\\repo",
 		debouncedEmitTokenUsage: vi.fn(),
@@ -326,7 +325,7 @@ describe("TaskMessageManager", () => {
 	})
 
 	it("saves Cline messages with metadata and task history update", async () => {
-		const ctx = createContext({ _taskApiConfigName: undefined })
+		const ctx = createContext({ getTaskApiConfigName: vi.fn().mockResolvedValue(undefined) })
 		const manager = new TaskMessageManager(ctx)
 
 		await expect(manager.saveClineMessages()).resolves.toBe(true)
@@ -343,6 +342,20 @@ describe("TaskMessageManager", () => {
 		)
 		expect(ctx.debouncedEmitTokenUsage).toHaveBeenCalledWith({ totalTokens: 12 }, ctx.toolUsage)
 		expect(ctx.notifier?.updateTaskHistory).toHaveBeenCalledWith({ id: "task-1" })
+	})
+
+	it("saves the task's real mode and API config name to history", async () => {
+		const ctx = createContext({
+			getTaskMode: vi.fn().mockResolvedValue("cangjie"),
+			getTaskApiConfigName: vi.fn().mockResolvedValue("production-profile"),
+		})
+		const manager = new TaskMessageManager(ctx)
+
+		await expect(manager.saveClineMessages()).resolves.toBe(true)
+
+		expect(taskMetadataMock).toHaveBeenCalledWith(
+			expect.objectContaining({ mode: "cangjie", apiConfigName: "production-profile" }),
+		)
 	})
 
 	it("returns false when saving Cline messages fails", async () => {

@@ -20,7 +20,6 @@ import type {
 } from "@njust-ai/types"
 import { NJUST_AIEventName, TelemetryEventName, getApiProtocol, getModelId, isRetiredProvider } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
-import { defaultModeSlug } from "../../shared/modes"
 import {
 	type ApiMessage,
 	readApiMessages,
@@ -58,14 +57,9 @@ export interface TaskMessageContext {
 
 	apiConfiguration: ProviderSettings
 
-	// NOTE: These members are NOT directly on Task — they are stored inside the
-	// private TaskModeHandler. Task surfaces them only via a double cast
-	// TaskMessageContext` (see Task.ts ~L410 for the full mismatch list and
-	// refactoring plan).  A proper fix would expose them as public getters on
-	// Task that delegate to modeHandler, so Task can `implements` this interface.
-	_taskMode: string | undefined
-	_taskApiConfigName: string | undefined
-	taskApiConfigReady: Promise<void>
+	// Public Task accessors; both wait for mode / API config initialization.
+	getTaskMode(): Promise<string>
+	getTaskApiConfigName(): Promise<string | undefined>
 	initialStatus?: "active" | "delegated" | "completed"
 
 	todoList?: TodoItem[]
@@ -413,9 +407,7 @@ export class TaskMessageManager {
 				globalStoragePath: this.ctx.globalStoragePath,
 			})
 
-			if (this.ctx._taskApiConfigName === undefined) {
-				await this.ctx.taskApiConfigReady
-			}
+			const [mode, apiConfigName] = await Promise.all([this.ctx.getTaskMode(), this.ctx.getTaskApiConfigName()])
 
 			const { historyItem, tokenUsage } = await taskMetadata({
 				taskId: this.ctx.taskId,
@@ -425,8 +417,8 @@ export class TaskMessageManager {
 				messages: this.ctx.clineMessages,
 				globalStoragePath: this.ctx.globalStoragePath,
 				workspace: this.ctx.cwd,
-				mode: this.ctx._taskMode || defaultModeSlug,
-				apiConfigName: this.ctx._taskApiConfigName,
+				mode,
+				apiConfigName,
 				initialStatus: this.ctx.initialStatus,
 			})
 

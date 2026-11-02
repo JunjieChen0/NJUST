@@ -420,29 +420,27 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	// NOTE: These use a `this` double-cast rather than `implements Host`
 	// because Task's actual shape differs from what the interfaces declare:
 	//
-	//   TaskMessageContext    — requires public `_taskMode` / `_taskApiConfigName` /
-	//                           `taskApiConfigReady` (Task stores them inside the
-	//                           private `modeHandler`; see TaskModeHandler).
-	//   TaskExecutorHost     — requires public `stateMachine` (Task: private readonly).
+	//   TaskMessageContext    — requires public `initialStatus`, `debouncedEmitTokenUsage`
+	//                           and `notifier` (all private on Task).
+	//   TaskExecutorHost    — requires public `stateMachine` (Task: private readonly).
 	//                           `getTaskMode()` is sync in interface but Task's impl
 	//                           is `async → Promise<string>`.
 	//   TaskLifecycleHost    — requires public `modeHandler` (Task: private readonly)
 	//                           and public `persistentRetryHandler` (Task: private).
 	//   TaskAskSayHost       — requires public `notifier` (Task: private getter).
-	//   TaskMessageContext   — requires public `notifier` (Task: private getter).
-	//   TaskSubtaskHost      — requires public `getSavedApiConversationHistory()`
+	//   TaskSubtaskHost     — requires public `getSavedApiConversationHistory()`
 	//                           (Task: private async).
 	//
 	// Refactoring path (tracked in architecture backlog):
-	//   1. Refactor TaskModeHandler to expose `_taskMode`, `_taskApiConfigName`,
-	//      `taskApiConfigReady` as public members.
+	//   1. Make the private members listed above public (or narrow the interfaces).
 	//   2. Add `implements TaskMessageContext, TaskAskSayHost, TaskExecutorHost,
 	//      TaskLifecycleHost, TaskSubtaskHost` to the class declaration.
 	//   3. Remove the 6 double casts (replace with plain `this`).
 	//
 	// The `unknown` in the cast chain eliminates the `any`-poisoning that the
-	// original `any` cast chain caused. The structural mismatches are harmless
-	// at runtime via the cast — this is a type-safety debt, not a correctness bug.
+	// original `any` cast chain caused. The cast hides real mismatches: a member
+	// the interface names but Task lacks reads as `undefined` at runtime (this
+	// once made task history save the default mode instead of the task's own).
 
 	/** @internal Persistence/CRUD operations on messages — delegates to TaskMessageManager. */
 	private get msgMgr(): TaskMessageManager {
