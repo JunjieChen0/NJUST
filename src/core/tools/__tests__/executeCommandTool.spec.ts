@@ -693,7 +693,7 @@ describe("executeCommandTool", () => {
 			expect(mockCline.didToolFailInCurrentTurn).toBe(true)
 		})
 
-		it("releases a background cjpm lock without passing agentTimeout as a Docker hard timeout", async () => {
+		it("holds a background cjpm lock until Docker exits without using agentTimeout as a hard timeout", async () => {
 			vitest.useFakeTimers()
 			let finish: ((value: any) => void) | undefined
 			const run = vitest.fn(
@@ -728,7 +728,7 @@ describe("executeCommandTool", () => {
 			const acquired = vitest.fn(async () => undefined)
 			const next = withCjpmProjectLock(cline.cwd, acquired)
 			await vitest.advanceTimersByTimeAsync(1)
-			expect(acquired).toHaveBeenCalledOnce()
+			expect(acquired).not.toHaveBeenCalled()
 
 			finish?.({
 				executionId: "sandbox-exec",
@@ -741,6 +741,7 @@ describe("executeCommandTool", () => {
 			await vitest.runAllTimersAsync()
 			await vitest.waitFor(() => expect(mockCline.terminalProcess).toBeUndefined())
 			await next
+			expect(acquired).toHaveBeenCalledOnce()
 			getInstance.mockRestore()
 		})
 

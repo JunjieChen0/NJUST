@@ -121,7 +121,7 @@ describe("executeCommand", () => {
 		})
 
 		it.each(["agent timeout", "user feedback"])(
-			"releases the project lock as soon as cjpm moves to the background (%s)",
+			"holds the project lock while backgrounded cjpm is still running (%s)",
 			async (cause) => {
 				let callbacks!: RooTerminalCallbacks
 				let continueProcess!: () => void
@@ -155,7 +155,7 @@ describe("executeCommand", () => {
 				})
 				try {
 					await new Promise((resolve) => setTimeout(resolve, 10))
-					expect(acquired).toBe(true)
+					expect(acquired).toBe(false)
 				} finally {
 					callbacks.onShellExecutionComplete({ exitCode: 0 }, process)
 					await callbacks.onCompleted("done", process)
@@ -175,6 +175,30 @@ describe("executeCommand", () => {
 			).rejects.toThrow("spawn failed")
 			await expect(withCjpmProjectLock(mockTask.cwd, async () => "released")).resolves.toBe("released")
 		})
+
+		it.each(["async failure", "cancelled"])(
+			"releases the project lock after %s without a completion callback",
+			async (reason) => {
+				let rejectProcess!: (error: Error) => void
+				mockProcess = Object.assign(
+					new Promise<void>((_resolve, reject) => {
+						rejectProcess = reject
+					}),
+					{ continue: vi.fn(), abort: vi.fn() },
+				)
+				mockTerminal.runCommand.mockReturnValue(mockProcess)
+				const execution = executeCommandInTerminal(mockTask, {
+					executionId: "failed-process",
+					command: "cjpm build",
+				})
+				const failure = expect(execution).rejects.toThrow(reason)
+				await vi.waitFor(() => expect(mockTerminal.runCommand).toHaveBeenCalled())
+				if (reason === "cancelled") mockTask.abort = true
+				rejectProcess(new Error(reason))
+				await failure
+				await expect(withCjpmProjectLock(mockTask.cwd, async () => "released")).resolves.toBe("released")
+			},
+		)
 
 		it("does not start cjpm after cancellation while waiting for the project lock", async () => {
 			let finishBuild!: () => void

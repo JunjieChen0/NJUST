@@ -475,7 +475,7 @@ export async function executeCommandInTerminal(
 
 	await (task.rootTask ?? task).cangjieVerification?.preemptBaseline()
 	const projectRoot = (await findNearestCjpmProjectDir(workingDir)) ?? workingDir
-	const release = await acquireCjpmProjectLock(projectRoot)
+	const release = await acquireCjpmProjectLock(projectRoot, { holder: { command, taskId: task.taskId } })
 	let started = false
 	try {
 		if (task.abort) return [false, "Command cancelled before cjpm started."]
@@ -489,11 +489,10 @@ export async function executeCommandInTerminal(
 					started = true
 				},
 				completed: release,
-				backgrounded: release,
 			},
 		)
 	} finally {
-		// Started commands release through their completion or background callback.
+		// Started commands release through actual completion or asynchronous failure.
 		if (!started) release()
 	}
 }
@@ -510,7 +509,7 @@ async function executeCommandAtCwd(
 	}: ExecuteCommandOptions,
 	workingDir: string,
 	requireExactCwd: boolean,
-	lifecycle?: { started(): void; completed(): void; backgrounded(): void },
+	lifecycle?: { started(): void; completed(): void },
 ): Promise<[boolean, ToolResponse]> {
 	const resolvedCommand = normalizeDotSlashCommandForWindowsShell(command.trim(), BaseTerminal.getExecaShellPath())
 
@@ -640,7 +639,6 @@ async function executeCommandAtCwd(
 			try {
 				const { response, text, images } = await task.ask("command_output", "")
 				runInBackground = true
-				lifecycle?.backgrounded()
 
 				if (response === "messageResponse") {
 					message = { text, images }
@@ -858,7 +856,6 @@ async function executeCommandAtCwd(
 			completion.then((response) => ({ kind: "complete" as const, response })),
 			new Promise<{ kind: "background" }>((resolve) => {
 				backgroundTimer = setTimeout(() => {
-					lifecycle?.backgrounded()
 					resolve({ kind: "background" })
 				}, agentTimeout)
 			}),
@@ -930,6 +927,9 @@ async function executeCommandAtCwd(
 		process = terminal.runCommand(resolvedCommand, callbacks)
 		startedProcess = process
 		lifecycle?.started()
+		// Fulfilment means "continue", including backgrounding, rather than process exit.
+		// Successful exit releases via onCompleted; a rejected process may have no callback.
+		void process.then(undefined, () => lifecycle?.completed())
 		unregisterScopedProcess = sandboxService.registerExternalProcess(
 			sandboxRequest.resourceScopeId ?? sandboxRequest.taskId,
 			process,
@@ -1039,7 +1039,6 @@ async function executeCommandAtCwd(
 				new Promise<void>((resolve) => {
 					agentTimeoutId = setTimeout(() => {
 						runInBackground = true
-						lifecycle?.backgrounded()
 						process.continue()
 						task.supersedePendingAsk()
 						resolve()

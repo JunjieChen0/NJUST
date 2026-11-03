@@ -80,7 +80,9 @@ describe("CangjieVerificationRunner", () => {
 		"records verification that never started after lock wait %s",
 		async (reason) => {
 			vi.useFakeTimers()
-			const release = await acquireCjpmProjectLock(ctx.projectRoot)
+			const release = await acquireCjpmProjectLock(ctx.projectRoot, {
+				holder: { command: "cjpm test --filter Slow*", taskId: "other-task" },
+			})
 			const controller = new AbortController()
 			const exec = vi.fn(async () => processResult())
 			const checking = runCangjieCheck("build", { ...ctx, signal: controller.signal }, deps(exec))
@@ -96,7 +98,7 @@ describe("CangjieVerificationRunner", () => {
 					inputFingerprintAfter: "fp-1",
 				})
 				if (reason === "timeout")
-					expect(run.abortDetail).toBe("Another cjpm process is still running in this project")
+					expect(run.abortDetail).toContain("cjpm test --filter Slow* (task other-task, running 60s)")
 				expect(run.exitCode).toBeUndefined()
 				expect(exec).not.toHaveBeenCalled()
 				expect((await loadVerificationRecord(taskDir, "task-1"))?.runs).toEqual([run])

@@ -180,13 +180,22 @@ export async function runCangjieCheck(
 					signal: ctx.signal,
 					timeoutMs: deps.timeoutMs,
 				}),
-			{ preempt: ctx.preempt, signal: ctx.signal, timeoutMs: LOCK_WAIT_TIMEOUT_MS },
+			{
+				preempt: ctx.preempt,
+				signal: ctx.signal,
+				timeoutMs: LOCK_WAIT_TIMEOUT_MS,
+				holder: { command: displayCommand(kind), taskId: ctx.taskId },
+			},
 		)
 	} catch (error) {
 		logger.debug("CangjieVerificationRunner", "Verification could not acquire the project lock", error)
 		if (!(error instanceof CjpmLockUnavailableError)) throw error
 		if (error.reason === "timeout") {
-			return block("project_busy", "Another cjpm process is still running in this project")
+			const holder = error.holder
+			const detail = holder
+				? `Another cjpm process is still running in this project: ${holder.command} (task ${holder.taskId ?? "unknown"}, running ${Math.max(0, Math.floor((Date.now() - holder.startedAt) / 1000))}s)`
+				: "Another cjpm process is still running in this project"
+			return block("project_busy", detail)
 		}
 		const cancelled: VerificationRun = {
 			...base,

@@ -10,6 +10,13 @@ interface ProjectLockState {
 	tail: Promise<void>
 	waiting: number
 	preemptHolder?: () => void
+	holder?: CjpmLockHolder
+}
+
+export interface CjpmLockHolder {
+	command: string
+	taskId?: string
+	startedAt: number
 }
 
 const locks = new Map<string, ProjectLockState>()
@@ -18,10 +25,14 @@ interface ProjectLockOptions {
 	preempt?: () => void
 	signal?: AbortSignal
 	timeoutMs?: number
+	holder?: Omit<CjpmLockHolder, "startedAt">
 }
 
 export class CjpmLockUnavailableError extends Error {
-	constructor(readonly reason: "timeout" | "aborted") {
+	constructor(
+		readonly reason: "timeout" | "aborted",
+		readonly holder?: CjpmLockHolder,
+	) {
 		super(
 			reason === "timeout"
 				? "Timed out waiting for the cjpm project lock"
@@ -36,7 +47,7 @@ function keyFor(root: string): string {
 	return process.platform === "win32" ? resolved.toLowerCase() : resolved
 }
 
-/** Acquire a project slot; the idempotent release may be called after a command backgrounds. */
+/** Acquire a project slot; release only when the owning process has ended. */
 export async function acquireCjpmProjectLock(
 	projectRoot: string,
 	options: ProjectLockOptions = {},
@@ -63,11 +74,14 @@ export async function acquireCjpmProjectLock(
 	try {
 		await new Promise<void>((resolve, reject) => {
 			void previous.then(resolve)
-			onAbort = () => reject(new CjpmLockUnavailableError("aborted"))
+			onAbort = () => reject(new CjpmLockUnavailableError("aborted", state.holder))
 			options.signal?.addEventListener("abort", onAbort, { once: true })
 			if (options.signal?.aborted) onAbort()
 			if (options.timeoutMs !== undefined) {
-				timer = setTimeout(() => reject(new CjpmLockUnavailableError("timeout")), options.timeoutMs)
+				timer = setTimeout(
+					() => reject(new CjpmLockUnavailableError("timeout", state.holder)),
+					options.timeoutMs,
+				)
 			}
 		})
 		if (options.signal?.aborted) throw new CjpmLockUnavailableError("aborted")
@@ -81,12 +95,14 @@ export async function acquireCjpmProjectLock(
 	}
 
 	state.preemptHolder = options.preempt
+	state.holder = { command: "cjpm", ...options.holder, startedAt: Date.now() }
 	if (options.preempt && state.waiting > 0) options.preempt()
 	let released = false
 	return () => {
 		if (released) return
 		released = true
 		state.preemptHolder = undefined
+		state.holder = undefined
 		release()
 	}
 }
