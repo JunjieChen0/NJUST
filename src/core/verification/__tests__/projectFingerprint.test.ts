@@ -35,6 +35,12 @@ describe("computeProjectFingerprint", () => {
 		await expect(computeProjectFingerprint(root)).resolves.toBe(first)
 	})
 
+	it("uses the same relative input paths through a symlinked project directory", async () => {
+		const alias = path.join(base, "project-alias")
+		await fs.symlink(root, alias, process.platform === "win32" ? "junction" : "dir")
+		await expect(computeProjectSnapshot(alias)).resolves.toEqual(await computeProjectSnapshot(root))
+	})
+
 	it("returns relative input paths and their exact content hashes", async () => {
 		const snapshot = await computeProjectSnapshot(root)
 

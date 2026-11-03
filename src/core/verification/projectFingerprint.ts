@@ -84,8 +84,9 @@ async function projectRoots(root: string, gaps: string[]): Promise<Set<string>> 
 
 /** Hash all inputs, including test data and FFI; incomplete traversal never certifies success. */
 export async function computeProjectSnapshot(projectRoot: string): Promise<ProjectSnapshot | undefined> {
-	const root = path.resolve(projectRoot)
+	let root = path.resolve(projectRoot)
 	try {
+		root = await fs.realpath(root)
 		await fs.access(path.join(root, MANIFEST))
 	} catch (error) {
 		logger.debug("projectFingerprint", "Project manifest unavailable", error)

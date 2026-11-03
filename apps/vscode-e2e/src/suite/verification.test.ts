@@ -177,6 +177,13 @@ suite("Cangjie verification in Extension Host", function () {
 		api?.off(NJUST_AIEventName.TaskCompleted, onCompleted)
 		for (const [key, { value, target }] of previousSettings)
 			await vscode.workspace.getConfiguration("njust-ai").update(key, value, target)
+		// Archive the generated manifest so later generic suites do not inherit a Cangjie project.
+		if (root && fixtureDir)
+			await fs
+				.rename(path.join(root, "cjpm.toml"), path.join(fixtureDir, `completed-${Date.now()}.toml`))
+				.catch((error: NodeJS.ErrnoException) => {
+					if (error.code !== "ENOENT") throw error
+				})
 	})
 
 	test("modifies an existing feature and delivers evidence after approving build and test", async () => {
