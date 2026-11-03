@@ -3,6 +3,7 @@ import { Anthropic } from "@anthropic-ai/sdk"
 import type { ToolName, ClineAsk } from "@njust-ai/types"
 import { TelemetryEventName } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
+import { customToolRegistry } from "@njust-ai/core/custom-tools"
 import type { ToolResponse, ToolUse, PushToolResultOptions } from "../../shared/tools"
 import { getErrorMessage } from "../../shared/error-utils"
 import { logger } from "../../shared/logger"
@@ -149,7 +150,12 @@ export async function validateToolUseBlock(
 			(cline.taskMode === "cangjie" && cline.cangjieRuntimePolicy?.isCheckOnlyRoute?.() === true) ||
 			isReadOnlyCangjieAgent(cline.agentType)
 		const checkOnlyError = isCheckOnlyContext
-			? validateCheckOnlyToolUse(resolveToolAlias(block.name), merged)
+			? validateCheckOnlyToolUse(
+					stateExperiments?.customTools && customToolRegistry.has(block.name)
+						? "custom_tool"
+						: resolveToolAlias(block.name),
+					merged,
+				)
 			: null
 		if (checkOnlyError) {
 			throw new Error(checkOnlyError)

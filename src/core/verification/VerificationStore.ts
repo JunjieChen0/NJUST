@@ -11,6 +11,7 @@ import {
 	type CompletionClaim,
 	type TaskVerificationRecord,
 	type VerificationRun,
+	type VerificationInvalidation,
 } from "./types"
 
 export const VERIFICATION_FILE_NAME = "verification.json"
@@ -27,7 +28,31 @@ export class VerificationRecordCorruptError extends Error {
 }
 
 export function createEmptyVerificationRecord(taskId: string): TaskVerificationRecord {
-	return { version: VERIFICATION_RECORD_VERSION, taskId, runs: [], claims: [], acceptances: [] }
+	return { version: VERIFICATION_RECORD_VERSION, taskId, runs: [], claims: [], acceptances: [], invalidations: [] }
+}
+
+export function withInvalidation(
+	record: TaskVerificationRecord,
+	inv: VerificationInvalidation,
+): TaskVerificationRecord {
+	const previous = record.invalidations.at(-1)
+	if (
+		previous &&
+		previous.toFingerprint === inv.toFingerprint &&
+		JSON.stringify(previous.environment) === JSON.stringify(inv.environment)
+	)
+		return record
+	return {
+		...record,
+		invalidations: [
+			...record.invalidations,
+			{
+				...inv,
+				changes: inv.changes.slice(0, 200),
+				changesTruncated: inv.changesTruncated || inv.changes.length > 200,
+			},
+		],
+	}
 }
 
 /** Add a run, or replace the run with the same runId (e.g. running → passed). */

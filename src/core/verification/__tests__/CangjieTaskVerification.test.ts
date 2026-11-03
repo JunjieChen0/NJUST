@@ -11,6 +11,7 @@ import {
 } from "../CangjieTaskVerification"
 import type { CangjieCheckDeps, ProcessResult } from "../CangjieVerificationRunner"
 import { loadVerificationRecord } from "../VerificationStore"
+import { computeProjectSnapshot } from "../projectFingerprint"
 
 vi.mock("../../../utils/safeWriteJson", () => ({
 	safeWriteJson: vi.fn(async (filePath: string, data: unknown) => {
@@ -62,7 +63,8 @@ describe("CangjieTaskVerification", () => {
 			resolveCjpm: () => "cjpm",
 			buildEnv: () => ({}),
 			sdkInfo: async () => ({ version: "1.0.5" }),
-			fingerprint: async () => "fp-1",
+			snapshot: async () => ({ fingerprint: "fp-1", files: {} }),
+			environment: async () => ({ sdkVersion: "1.0.5", cjpmPath: "cjpm" }),
 			now: () => ++ids,
 			newId: () => `run-${ids}`,
 			timeoutMs: 1_000,
@@ -114,6 +116,88 @@ describe("CangjieTaskVerification", () => {
 		const record = await loadVerificationRecord(taskDir, "task-1")
 		expect(record?.claims).toHaveLength(1)
 		expect(record?.claims[0]?.inputFingerprint).toBe("fp-1")
+	})
+
+	it.each(["accepted", "changes_requested"] as const)(
+		"records an explicit %s decision for unchanged code",
+		async (decision) => {
+			const dependencies = deps()
+			dependencies.checkDeps.snapshot = computeProjectSnapshot
+			exec.mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok(TESTS_PASSED))
+			const session = new CangjieTaskVerification(
+				{ taskId: "task-1", cwd: projectRoot, policy: makePolicy() },
+				dependencies,
+			)
+			await session.verifyForCompletion(approveAll)
+
+			await expect(session.recordAcceptance(decision)).resolves.toBe("recorded")
+			expect((await loadVerificationRecord(taskDir, "task-1"))?.acceptances.at(-1)?.decision).toBe(decision)
+		},
+	)
+
+	it("rejects acceptance after a source change without changing the record", async () => {
+		const dependencies = deps()
+		dependencies.checkDeps.snapshot = computeProjectSnapshot
+		exec.mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok(TESTS_PASSED))
+		const session = new CangjieTaskVerification(
+			{ taskId: "task-1", cwd: projectRoot, policy: makePolicy() },
+			dependencies,
+		)
+		await session.verifyForCompletion(approveAll)
+		const before = await loadVerificationRecord(taskDir, "task-1")
+		await fs.writeFile(path.join(projectRoot, "src", "main.cj"), "main() {}")
+
+		await expect(session.recordAcceptance("accepted")).resolves.toBe("superseded")
+		await expect(loadVerificationRecord(taskDir, "task-1")).resolves.toEqual(before)
+	})
+
+	it("does not accept when there is no delivery", async () => {
+		await expect(create(makePolicy()).recordAcceptance("accepted")).resolves.toBe("no_delivery")
+	})
+
+	it("reports external edits on resume and preserves checkpoint invalidation cause", async () => {
+		const dependencies = deps()
+		dependencies.checkDeps.snapshot = computeProjectSnapshot
+		exec.mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok(TESTS_PASSED))
+		const session = new CangjieTaskVerification(
+			{ taskId: "task-1", cwd: projectRoot, policy: makePolicy() },
+			dependencies,
+		)
+		await session.verifyForCompletion(approveAll)
+		await expect(session.onTaskResumed()).resolves.toBeUndefined()
+		await fs.writeFile(path.join(projectRoot, "src", "external.cj"), "main() {}")
+		await session.onCheckpointRestored()
+		const notice = await session.onTaskResumed()
+		expect(notice).toContain("仓颉验证输入已变化")
+		expect(notice).toContain("Changes by other sources: src/external.cj")
+		expect((await loadVerificationRecord(taskDir, "task-1"))?.invalidations).toMatchObject([
+			{ cause: "checkpoint_restore" },
+		])
+		session.dispose()
+	})
+
+	it("does not reuse a success from a different SDK environment", async () => {
+		const dependencies = deps()
+		let sdkVersion = "1.0.5"
+		dependencies.checkDeps.sdkInfo = async () => ({ version: sdkVersion })
+		dependencies.checkDeps.environment = async () => ({ sdkVersion, cjpmPath: "cjpm" })
+		exec.mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok(TESTS_PASSED))
+		const session = new CangjieTaskVerification(
+			{ taskId: "task-1", cwd: projectRoot, policy: makePolicy() },
+			dependencies,
+		)
+		await session.verifyForCompletion(approveAll)
+		sdkVersion = "2.0.0"
+		const notice = await session.onTaskResumed()
+		expect(notice).toContain("仓颉验证输入已变化")
+		expect(notice).toContain("SDK or cjpm environment changed (stale)")
+		exec.mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok(TESTS_PASSED))
+		const result = await session.verifyForCompletion(approveAll)
+		expect(exec).toHaveBeenCalledTimes(4)
+		if (result.action === "allow") expect(result.facts).toContain("Verdict: verified")
+		expect(result.action).toBe("allow")
+		expect((await loadVerificationRecord(taskDir, "task-1"))?.invalidations).toHaveLength(1)
+		session.dispose()
 	})
 
 	it("delivers with the gap when the user does not approve the build", async () => {
@@ -275,6 +359,38 @@ describe("CangjieTaskVerification", () => {
 		const outcome = await session.verifyForCompletion(approveAll)
 
 		expect(outcome.action).toBe("allow")
+		const record = await loadVerificationRecord(taskDir, "task-1")
+		expect(record?.runs.find((r) => r.phase === "baseline")).toMatchObject({ status: "cancelled" })
+	})
+
+	it("waits for the cancelled baseline to finish cleanup before preemption resolves", async () => {
+		let finishCleanup!: () => void
+		let aborted = false
+		exec.mockImplementationOnce(
+			(_file: string, _args: string[], options: { signal: AbortSignal }) =>
+				new Promise<ProcessResult>((resolve) => {
+					finishCleanup = () => resolve({ exitCode: null, output: "", timedOut: false, cancelled: true })
+					options.signal.addEventListener("abort", () => {
+						aborted = true
+					})
+				}),
+		)
+		const session = create(makePolicy())
+		session.onRouteConfigured()
+		await vi.waitFor(() => expect(finishCleanup).toBeDefined())
+		let stopped = false
+		const stopping = session.preemptBaseline().then(() => {
+			stopped = true
+		})
+		try {
+			await Promise.resolve()
+			expect(aborted).toBe(true)
+			expect(stopped).toBe(false)
+		} finally {
+			finishCleanup()
+			await stopping
+		}
+		expect(stopped).toBe(true)
 		const record = await loadVerificationRecord(taskDir, "task-1")
 		expect(record?.runs.find((r) => r.phase === "baseline")).toMatchObject({ status: "cancelled" })
 	})

@@ -266,6 +266,11 @@ export async function checkpointRestore(
 
 	try {
 		await service.restoreCheckpoint(commitHash)
+		try {
+			await task.cangjieVerification?.onCheckpointRestored()
+		} catch (error) {
+			logger.debug("Checkpoints", "Verification refresh after checkpoint restore failed", error)
+		}
 		TelemetryService.instance.captureCheckpointRestored(task.taskId)
 		await provider?.postMessageToWebview({ type: "currentCheckpointUpdated", text: commitHash })
 

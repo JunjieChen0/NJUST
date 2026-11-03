@@ -14,6 +14,7 @@ import {
 	withAcceptance,
 	withClaim,
 	withRun,
+	withInvalidation,
 } from "../VerificationStore"
 
 vi.mock("../../../utils/safeWriteJson", () => ({
@@ -39,6 +40,30 @@ function buildRun(overrides: Partial<VerificationRun> = {}): VerificationRun {
 }
 
 describe("verification record helpers", () => {
+	it("deduplicates invalidations while retaining distinct environment changes and caps file details", () => {
+		const inv = {
+			at: 1,
+			cause: "checkpoint_restore" as const,
+			toFingerprint: "fp",
+			changes: [],
+			changesTruncated: false,
+		}
+		const first = withInvalidation(createEmptyVerificationRecord("task-1"), inv)
+		expect(withInvalidation(first, { ...inv, at: 2, cause: "task_resume" })).toBe(first)
+		const changed = withInvalidation(first, {
+			...inv,
+			cause: "environment_change",
+			environment: { sdkVersion: "2" },
+		})
+		expect(changed.invalidations).toHaveLength(2)
+		const many = withInvalidation(changed, {
+			...inv,
+			toFingerprint: "next",
+			changes: Array.from({ length: 201 }, (_, i) => ({ path: `${i}.cj`, change: "added", source: "other" })),
+		})
+		expect(many.invalidations.at(-1)?.changes).toHaveLength(200)
+		expect(many.invalidations.at(-1)?.changesTruncated).toBe(true)
+	})
 	it("appends a new run and replaces a run with the same id without mutating the input", () => {
 		const empty = createEmptyVerificationRecord("task-1")
 		const started = withRun(empty, buildRun())
@@ -95,6 +120,14 @@ describe("verification record persistence", () => {
 
 	it("returns undefined when no record exists", async () => {
 		await expect(loadVerificationRecord(taskDir, "task-1")).resolves.toBeUndefined()
+	})
+
+	it("loads version 1 records without invalidations", async () => {
+		await fs.writeFile(
+			path.join(taskDir, VERIFICATION_FILE_NAME),
+			JSON.stringify({ version: 1, taskId: "task-1", runs: [], claims: [], acceptances: [] }),
+		)
+		expect((await loadVerificationRecord(taskDir, "task-1"))?.invalidations).toEqual([])
 	})
 
 	it("round-trips a record through disk", async () => {

@@ -4,7 +4,9 @@ import type {
 	VerificationKind,
 	VerificationRun,
 	VerificationRunStatus,
+	VerificationEnvironment,
 } from "./types"
+import * as path from "path"
 
 /**
  * State of one check (build or test) as it applies to the CURRENT code.
@@ -14,7 +16,8 @@ import type {
  */
 export type CheckState =
 	| { state: "not_run" }
-	| { state: VerificationRunStatus | "stale" | "zero_tests"; run: VerificationRun }
+	| { state: VerificationRunStatus | "zero_tests"; run: VerificationRun }
+	| { state: "stale"; run: VerificationRun; staleReason: "code_changed" | "environment_changed" }
 
 export type OverallVerdict = "no_record" | "verified" | "failed" | "incomplete"
 
@@ -41,6 +44,7 @@ export interface VerificationVerdict {
 export function evaluateVerification(
 	record: TaskVerificationRecord | undefined,
 	currentFingerprint: string | undefined,
+	currentEnvironment?: VerificationEnvironment,
 ): VerificationVerdict {
 	if (!record) {
 		return {
@@ -51,8 +55,8 @@ export function evaluateVerification(
 		}
 	}
 
-	const build = evaluateCheck(record.runs, "build", currentFingerprint)
-	const test = evaluateCheck(record.runs, "test", currentFingerprint)
+	const build = evaluateCheck(record.runs, "build", currentFingerprint, currentEnvironment)
+	const test = evaluateCheck(record.runs, "test", currentFingerprint, currentEnvironment)
 	const latestClaim = latestBy(record.claims, (c) => c.claimedAt)
 
 	return {
@@ -74,6 +78,7 @@ function evaluateCheck(
 	runs: readonly VerificationRun[],
 	kind: VerificationKind,
 	currentFingerprint: string | undefined,
+	currentEnvironment?: VerificationEnvironment,
 ): CheckState {
 	// The latest execution wins, so an older success never masks a newer failure.
 	const run = latestBy(
@@ -94,10 +99,36 @@ function evaluateCheck(
 		currentFingerprint !== undefined &&
 		run.inputFingerprint === currentFingerprint &&
 		run.inputFingerprintAfter === currentFingerprint
-	if (!appliesToCurrentCode) return { state: "stale", run }
+	if (!appliesToCurrentCode) return { state: "stale", run, staleReason: "code_changed" }
+	if (hasEnvironmentChanged(run, currentEnvironment))
+		return { state: "stale", run, staleReason: "environment_changed" }
 
 	if (run.status !== "passed") return { state: run.status, run }
 	return kind === "build" ? evaluatePassedBuild(run) : evaluatePassedTest(run)
+}
+
+export function hasEnvironmentChanged(run: VerificationRun, current?: VerificationEnvironment): boolean {
+	return environmentsDiffer(
+		{ sdkHome: run.sdk?.home, sdkVersion: run.sdk?.version, cjpmPath: run.executable },
+		current,
+	)
+}
+
+export function environmentsDiffer(previous?: VerificationEnvironment, current?: VerificationEnvironment): boolean {
+	if (!previous || !current) return false
+	const normalize = (value: string) => {
+		const normalized = path.normalize(value)
+		return process.platform === "win32" ? normalized.toLowerCase() : normalized
+	}
+	const differentPath = (before: string | undefined, next: string | undefined) =>
+		before !== undefined && next !== undefined && normalize(before) !== normalize(next)
+	return (
+		differentPath(previous.sdkHome, current.sdkHome) ||
+		differentPath(previous.cjpmPath, current.cjpmPath) ||
+		(previous.sdkVersion !== undefined &&
+			current.sdkVersion !== undefined &&
+			previous.sdkVersion !== current.sdkVersion)
+	)
 }
 
 function evaluatePassedBuild(run: VerificationRun): CheckState {

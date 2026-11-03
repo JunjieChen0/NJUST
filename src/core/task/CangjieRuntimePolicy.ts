@@ -1,6 +1,11 @@
 import path from "path"
 
-import { routeCangjieAgentTask, type CangjieAgentRouteKind, type CangjieAgentStage } from "../agent/CangjieAgentRouter"
+import {
+	isExplicitCangjieReadOnlyRequest,
+	routeCangjieAgentTask,
+	type CangjieAgentRouteKind,
+	type CangjieAgentStage,
+} from "../agent/CangjieAgentRouter"
 import { getMatchingCjcPatternsByCategory, parseCjpmToml } from "../prompts/sections/cangjie-context"
 import {
 	CRITICAL_SIGNATURE_MODULES,
@@ -12,11 +17,10 @@ export type CangjieContextIntensity = "compact" | "full"
 
 const PROJECT_CACHE_TTL_MS = 5_000
 const MAX_REPAIR_ATTEMPTS = 2
-const VERIFICATION_ONLY_RE =
-	/(?:\u53ea|\u4ec5)(?:\u8fd0\u884c|\u6267\u884c).{0,16}(?:cjpm\s+build|\u6784\u5efa|\u9a8c\u8bc1)|(?:\u4e0d\u8981|\u4e0d\u5141\u8bb8|\u7981\u6b62).{0,12}(?:\u4fee\u6539|\u4fee\u590d)|\bonly\s+(?:run|verify)\b|\bdo not\s+(?:modify|edit|repair)\b/i
-const REPAIR_REQUEST_RE = /\u4fee\u590d|\u4fee\u6539|\u81ea\u52a8\u5904\u7406|repair|\bfix\b/i
 const BUILD_ONLY_REQUEST_RE = /(?:只|仅)(?:运行|执行)\s*`?cjpm\s+build|\bonly\s+run\s+`?cjpm\s+build/i
 const TEST_MENTION_RE = /测试|\bcjpm\s+test\b|\btests?\b/i
+const TEST_PROHIBITION_RE =
+	/(?:不要|不允许|禁止|不得)\s*(?:运行|执行)?\s*(?:测试|`?cjpm\s+test`?)|\b(?:do not|don't|never)\s+(?:run\s+)?(?:tests?|`?cjpm\s+test`?)/gi
 const SOURCE_DELETE_REQUEST_RE = /\u5220\u9664|\u79fb\u9664|\bdelete\b|\bremove\b/i
 const ALLOWED_SEGMENT_PREFIXES = [
 	"cjpm",
@@ -422,7 +426,7 @@ export class CangjieRuntimePolicy {
 		this.requiredAgentStages = route.stages
 		this.routeKind = route.kind
 		this.delegatedAgentTypes = []
-		this.verificationOnlyRoute = VERIFICATION_ONLY_RE.test(routeKey) && !REPAIR_REQUEST_RE.test(routeKey)
+		this.verificationOnlyRoute = route.kind === "verify" || isExplicitCangjieReadOnlyRequest(routeKey)
 	}
 
 	getRouteKind(): CangjieAgentRouteKind | undefined {
@@ -431,14 +435,17 @@ export class CangjieRuntimePolicy {
 
 	/** The request only checks or investigates: no source edits, formatting, or repair may happen. */
 	isCheckOnlyRoute(): boolean {
-		// "explore" is also the router's fallback for unclassified requests, so it must not forbid edits.
-		return this.verificationOnlyRoute || this.routeKind === "verify"
+		return this.verificationOnlyRoute
 	}
 
 	/** The user explicitly limited the work to `cjpm build`; system verification must not add `cjpm test`. */
 	isBuildOnlyRequest(): boolean {
 		const request = this.agentRouteKey
-		return request !== undefined && BUILD_ONLY_REQUEST_RE.test(request) && !TEST_MENTION_RE.test(request)
+		return (
+			request !== undefined &&
+			BUILD_ONLY_REQUEST_RE.test(request) &&
+			!TEST_MENTION_RE.test(request.replace(TEST_PROHIBITION_RE, ""))
+		)
 	}
 
 	getWrittenPaths(): string[] {

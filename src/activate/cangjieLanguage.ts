@@ -51,6 +51,7 @@ import { cangjieDiagnosticModeSwitch } from "../services/cangjie-lsp/cangjieDiag
 import { CangjieLintConfig } from "../services/cangjie-lsp/CangjieLintConfig"
 import { CangjieMetricsCollector } from "../services/cangjie-lsp/CangjieMetricsCollector"
 import { t } from "../i18n"
+import { resetSdkInfoCache } from "../core/verification/CangjieVerificationRunner"
 
 // Module-level state
 let cangjieLspClient: CangjieLspClient | undefined
@@ -117,6 +118,12 @@ export function initializeCangjieLanguage(
 	// Config watchers for Cangjie
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((e) => {
+			if (
+				e.affectsConfiguration(`${Package.name}.cangjieTools`) ||
+				e.affectsConfiguration(`${Package.name}.cangjieLsp.cjcPath`) ||
+				e.affectsConfiguration(`${Package.name}.cangjieLsp.serverPath`)
+			)
+				resetSdkInfoCache()
 			if (e.affectsConfiguration(Package.name)) {
 				invalidateCangjieToolEnvCache()
 				bumpCangjieL3TtlConfigCache()

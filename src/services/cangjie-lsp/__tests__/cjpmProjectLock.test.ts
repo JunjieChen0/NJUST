@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest"
 
 import * as path from "path"
 
-import { withCjpmProjectLock } from "../cjpmProjectLock"
+import { acquireCjpmProjectLock, CjpmLockUnavailableError, withCjpmProjectLock } from "../cjpmProjectLock"
 
 function deferred() {
 	let resolve!: () => void
@@ -12,6 +12,105 @@ function deferred() {
 
 describe("withCjpmProjectLock", () => {
 	const root = path.resolve("/ws/app")
+
+	it.each(["timeout", "aborted"] as const)(
+		"removes a waiter after %s without bypassing the holder or blocking successors",
+		async (reason) => {
+			vi.useFakeTimers()
+			const releaseHolder = await acquireCjpmProjectLock(root)
+			const controller = new AbortController()
+			const abandoned = acquireCjpmProjectLock(root, { signal: controller.signal, timeoutMs: 10 })
+			const failure = expect(abandoned).rejects.toMatchObject({ name: "CjpmLockUnavailableError", reason })
+			let acquiredNext = false
+			const next = acquireCjpmProjectLock(root).then((release) => {
+				acquiredNext = true
+				return release
+			})
+			let releaseNext: (() => void) | undefined
+			let releaseLast: (() => void) | undefined
+			try {
+				if (reason === "aborted") controller.abort()
+				else await vi.advanceTimersByTimeAsync(10)
+				await failure
+				expect(acquiredNext).toBe(false)
+				// A request queued AFTER the abandonment must still wait behind the existing successor.
+				let acquiredLast = false
+				const last = acquireCjpmProjectLock(root).then((release) => {
+					acquiredLast = true
+					return release
+				})
+				releaseHolder()
+				releaseNext = await next
+				expect(acquiredLast).toBe(false)
+				releaseNext()
+				releaseLast = await last
+				releaseLast()
+				const preemptWhenFree = vi.fn()
+				await expect(withCjpmProjectLock(root, async () => "free", { preempt: preemptWhenFree })).resolves.toBe(
+					"free",
+				)
+				expect(preemptWhenFree).not.toHaveBeenCalled()
+			} finally {
+				releaseHolder()
+				releaseNext?.()
+				releaseLast?.()
+				vi.useRealTimers()
+			}
+		},
+	)
+
+	it("rejects an already-aborted request without preempting the holder", async () => {
+		const preempt = vi.fn()
+		const release = await acquireCjpmProjectLock(root, { preempt })
+		const controller = new AbortController()
+		controller.abort()
+		try {
+			await expect(acquireCjpmProjectLock(root, { signal: controller.signal })).rejects.toBeInstanceOf(
+				CjpmLockUnavailableError,
+			)
+			expect(preempt).not.toHaveBeenCalled()
+		} finally {
+			release()
+		}
+	})
+
+	it("clears timeout and abort listeners after acquiring the lock", async () => {
+		vi.useFakeTimers()
+		const controller = new AbortController()
+		const release = await acquireCjpmProjectLock(root, { signal: controller.signal, timeoutMs: 10 })
+		let acquiredNext = false
+		const next = acquireCjpmProjectLock(root).then((releaseNext) => {
+			acquiredNext = true
+			return releaseNext
+		})
+		try {
+			controller.abort()
+			await vi.advanceTimersByTimeAsync(20)
+			expect(vi.getTimerCount()).toBe(0)
+			expect(acquiredNext).toBe(false)
+		} finally {
+			release()
+			;(await next)()
+			vi.useRealTimers()
+		}
+	})
+
+	it("releases an acquired slot only once without releasing the next holder", async () => {
+		const release = await acquireCjpmProjectLock(root)
+		const next = acquireCjpmProjectLock(root)
+		release()
+		const releaseNext = await next
+		release()
+		let acquired = false
+		const third = withCjpmProjectLock(root, async () => {
+			acquired = true
+		})
+		await Promise.resolve()
+		expect(acquired).toBe(false)
+		releaseNext()
+		await third
+		expect(acquired).toBe(true)
+	})
 
 	it("runs cjpm work for the same project one at a time", async () => {
 		const order: string[] = []

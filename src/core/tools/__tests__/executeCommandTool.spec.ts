@@ -13,8 +13,10 @@ import { ToolUse, AskApproval, HandleError, PushToolResult } from "../../../shar
 import { unescapeHtmlEntities } from "../../../utils/text-normalization"
 import { TerminalRegistry } from "../../../integrations/terminal/TerminalRegistry"
 import { Terminal } from "../../../integrations/terminal/Terminal"
+import type { RooTerminalCallbacks, RooTerminalProcessResultPromise } from "../../../integrations/terminal/types"
 import { CommandTimeoutError, SandboxExecutionService } from "../../../services/sandbox"
 import { asMock } from "../../../__tests__/helpers/asMock"
+import { withCjpmProjectLock } from "../../../services/cangjie-lsp/cjpmProjectLock"
 
 vitest.mock("@njust-ai/telemetry", () => ({
 	TelemetryService: {
@@ -73,7 +75,14 @@ vitest.mock("vscode", () => ({
 vitest.mock("../../../integrations/terminal/TerminalRegistry", () => ({
 	TerminalRegistry: {
 		getOrCreateTerminal: vitest.fn().mockResolvedValue({
-			runCommand: vitest.fn().mockResolvedValue(undefined),
+			runCommand: vitest.fn((_command: string, callbacks: RooTerminalCallbacks) => {
+				const process = Promise.resolve() as RooTerminalProcessResultPromise
+				queueMicrotask(() => {
+					callbacks.onShellExecutionComplete({ exitCode: 0 }, process)
+					void callbacks.onCompleted("", process)
+				})
+				return process
+			}),
 			getCurrentWorkingDirectory: vitest.fn().mockReturnValue("/test/workspace"),
 		}),
 	},
@@ -516,6 +525,7 @@ describe("executeCommandTool", () => {
 				expect.stringContaining("packages"),
 				"test-task-id",
 				"execa",
+				{ exactCwd: true },
 			)
 		})
 	})
@@ -683,7 +693,7 @@ describe("executeCommandTool", () => {
 			expect(mockCline.didToolFailInCurrentTurn).toBe(true)
 		})
 
-		it("does not pass agentTimeout to the Docker runner as a hard timeout", async () => {
+		it("releases a background cjpm lock without passing agentTimeout as a Docker hard timeout", async () => {
 			vitest.useFakeTimers()
 			let finish: ((value: any) => void) | undefined
 			const run = vitest.fn(
@@ -705,7 +715,7 @@ describe("executeCommandTool", () => {
 
 			const execution = executeCommandModule.executeCommandInTerminal(cline, {
 				executionId: "docker-background",
-				command: "long-running-command",
+				command: "cjpm test",
 				agentTimeout: 10,
 				commandExecutionTimeout: 0,
 			})
@@ -715,6 +725,10 @@ describe("executeCommandTool", () => {
 			expect(String(response)).toContain("still running in the Docker sandbox")
 			expect(run).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 0 }))
 			expect(cancel).not.toHaveBeenCalled()
+			const acquired = vitest.fn(async () => undefined)
+			const next = withCjpmProjectLock(cline.cwd, acquired)
+			await vitest.advanceTimersByTimeAsync(1)
+			expect(acquired).toHaveBeenCalledOnce()
 
 			finish?.({
 				executionId: "sandbox-exec",
@@ -726,6 +740,7 @@ describe("executeCommandTool", () => {
 			})
 			await vitest.runAllTimersAsync()
 			await vitest.waitFor(() => expect(mockCline.terminalProcess).toBeUndefined())
+			await next
 			getInstance.mockRestore()
 		})
 

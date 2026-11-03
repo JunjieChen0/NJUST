@@ -16,9 +16,11 @@ import {
 	type CangjieCheckDeps,
 } from "./CangjieVerificationRunner"
 import { resolveVerificationProjectRoot } from "./projectRoot"
-import type { TaskVerificationRecord } from "./types"
+import type { TaskVerificationRecord, CompletionClaim } from "./types"
 import { evaluateVerification, type CheckState, type VerificationVerdict } from "./verdict"
-import { loadVerificationRecord, updateVerificationRecord, withClaim } from "./VerificationStore"
+import { loadVerificationRecord, updateVerificationRecord, withClaim, withAcceptance } from "./VerificationStore"
+import { saveSnapshot } from "./snapshotStore"
+import { CangjieChangeMonitor, type ChangeMonitorDeps } from "./CangjieChangeMonitor"
 
 const LOG_TAIL_CHARS = 4_000
 /** Upper bound on completions blocked by failed system verification, so a task always reaches an end. */
@@ -45,6 +47,8 @@ export interface TaskVerificationDeps {
 	isWorkspaceTrusted: () => boolean
 	/** Whether the user's command auto-approval settings would run `command` without asking. */
 	canAutoApprove: (command: string) => Promise<boolean>
+	watchInputs?: ChangeMonitorDeps["watchInputs"]
+	watchEnvironment?: ChangeMonitorDeps["watchEnvironment"]
 }
 
 /** Interactive approval for one verification command, using the same approval flow as execute_command. */
@@ -73,15 +77,47 @@ export class CangjieTaskVerification {
 	private releaseAutoFormat: (() => void) | undefined
 	private missingTestsRequested = false
 	private systemBlocks = 0
+	private readonly changeMonitor: CangjieChangeMonitor
 
 	constructor(
 		private readonly task: { taskId: string; cwd: string; policy: TaskVerificationPolicy },
 		private readonly deps: TaskVerificationDeps,
-	) {}
+	) {
+		this.changeMonitor = new CangjieChangeMonitor(
+			{ taskId: task.taskId, writtenPaths: () => task.policy.getWrittenPaths() },
+			{
+				taskDir: deps.taskDir,
+				resolveRoot: () => this.resolveRoot(),
+				snapshot: (root) => deps.checkDeps.snapshot(root),
+				environment: () => deps.checkDeps.environment(),
+				now: () => deps.checkDeps.now(),
+				watchInputs: deps.watchInputs,
+				watchEnvironment: deps.watchEnvironment,
+			},
+		)
+	}
+
+	get onDidChange() {
+		return this.changeMonitor.onDidChange
+	}
+
+	async onCheckpointRestored(): Promise<void> {
+		await this.changeMonitor.recheck("checkpoint_restore")
+	}
+
+	async onTaskResumed(): Promise<string | undefined> {
+		const change = await this.changeMonitor.recheck("task_resume")
+		if (!change) return undefined
+		this.changeMonitor.start()
+		const stale = [change.verdict.build, change.verdict.test].some((check) => check.state === "stale")
+		if (!change.codeChanged && !stale) return undefined
+		return `仓颉验证输入已变化，请依据当前代码和验证记录继续任务。\n${formatVerificationFacts(change.verdict, undefined, change.changes)}`
+	}
 
 	/** Called once the agent route is known: isolate check-only work, or record a baseline for edits. */
 	onRouteConfigured(): void {
 		if (this.abortController.signal.aborted) return
+		this.changeMonitor.start()
 		const { policy } = this.task
 		if (policy.isCheckOnlyRoute()) {
 			this.releaseAutoFormat ??= this.deps.suspendAutoFormat(this.task.cwd)
@@ -101,16 +137,16 @@ export class CangjieTaskVerification {
 	}
 
 	/** Stop an unfinished baseline so it never competes with other cjpm runs for the target directory. */
-	preemptBaseline(): void {
+	async preemptBaseline(): Promise<void> {
 		this.baselineController?.abort()
+		await this.baseline
 	}
 
 	async verifyForCompletion(approve: ApproveCommand): Promise<CompletionVerificationOutcome> {
 		const signal = this.abortController.signal
 		if (signal.aborted) return { action: "cancelled" }
 		try {
-			this.preemptBaseline()
-			await this.baseline
+			await this.preemptBaseline()
 			const outcome = await this.verify(signal, approve)
 			return signal.aborted ? { action: "cancelled" } : outcome
 		} catch (error) {
@@ -126,14 +162,42 @@ export class CangjieTaskVerification {
 	}
 
 	cancel(): void {
-		this.preemptBaseline()
+		this.baselineController?.abort()
 		this.abortController.abort()
 	}
 
 	dispose(): void {
 		this.cancel()
+		this.changeMonitor.dispose()
 		this.releaseAutoFormat?.()
 		this.releaseAutoFormat = undefined
+	}
+
+	/** Explicit user decisions apply only to the newest delivery of the unchanged code. */
+	async recordAcceptance(
+		decision: "accepted" | "changes_requested",
+	): Promise<"recorded" | "superseded" | "no_delivery"> {
+		const taskDir = await this.deps.taskDir()
+		const record = await loadVerificationRecord(taskDir, this.task.taskId)
+		const claim = record?.claims.reduce<CompletionClaim | undefined>(
+			(latest, next) => (!latest || next.claimedAt >= latest.claimedAt ? next : latest),
+			undefined,
+		)
+		if (!claim) return "no_delivery"
+		const root = await this.resolveRoot()
+		const snapshot = root.kind === "resolved" ? await this.deps.checkDeps.snapshot(root.root) : undefined
+		if (!snapshot || snapshot.fingerprint !== claim.inputFingerprint) return "superseded"
+		let outcome: "recorded" | "superseded" = "superseded"
+		await updateVerificationRecord(taskDir, this.task.taskId, (current) => {
+			const latest = current.claims.reduce<CompletionClaim | undefined>(
+				(previous, next) => (!previous || next.claimedAt >= previous.claimedAt ? next : previous),
+				undefined,
+			)
+			if (latest?.claimId !== claim.claimId) return current
+			outcome = "recorded"
+			return withAcceptance(current, { claimId: claim.claimId, decision, decidedAt: this.deps.checkDeps.now() })
+		})
+		return outcome
 	}
 
 	private async resolveRoot() {
@@ -183,23 +247,31 @@ export class CangjieTaskVerification {
 		}
 
 		const root = resolution.root
+		const changed = await this.changeMonitor.recheck("file_change")
 		const skipTests = policy.isBuildOnlyRequest()
-		let fingerprint = await this.deps.checkDeps.fingerprint(root)
+		let snapshot = await this.deps.checkDeps.snapshot(root)
+		let fingerprint = snapshot?.fingerprint
 		const existing = await loadVerificationRecord(taskDir, this.task.taskId)
-		if (skipTests || !hasReusableResult(evaluateVerification(existing, fingerprint))) {
+		if (
+			skipTests ||
+			!hasReusableResult(evaluateVerification(existing, fingerprint, await this.deps.checkDeps.environment()))
+		) {
 			await runCangjieVerification(
 				{ taskId: this.task.taskId, taskDir, projectRoot: root, signal, phase: "delivery", approve },
 				this.deps.checkDeps,
 				{ skipTests },
 			)
 			if (signal.aborted) return { action: "cancelled" }
-			fingerprint = await this.deps.checkDeps.fingerprint(root)
+			snapshot = await this.deps.checkDeps.snapshot(root)
+			fingerprint = snapshot?.fingerprint
 		}
 
-		const verdict = evaluateVerification(await this.recordClaim(taskDir, fingerprint), fingerprint)
+		const record = await this.recordClaim(taskDir, fingerprint)
+		if (snapshot) await saveSnapshot(taskDir, snapshot, [snapshot.fingerprint])
+		const verdict = evaluateVerification(record, fingerprint, await this.deps.checkDeps.environment())
 		await this.feedPolicy(verdict, taskDir)
 		const note = skipTests ? "Tests were not run because the request only allowed `cjpm build`" : undefined
-		return this.decide(verdict, taskDir, note)
+		return this.decide(verdict, taskDir, note, changed?.changes)
 	}
 
 	private async allowWithNote(taskDir: string, note: string): Promise<CompletionVerificationOutcome> {
@@ -211,6 +283,7 @@ export class CangjieTaskVerification {
 		verdict: VerificationVerdict,
 		taskDir: string,
 		note: string | undefined,
+		changes?: Parameters<typeof formatVerificationFacts>[2],
 	): Promise<CompletionVerificationOutcome> {
 		const { policy } = this.task
 		const decision = decideCangjieCompletion(verdict, {
@@ -218,7 +291,8 @@ export class CangjieTaskVerification {
 			repairExhausted: policy.isRepairLoopExhausted() || this.systemBlocks >= MAX_SYSTEM_VERIFICATION_BLOCKS,
 			missingTestsAlreadyRequested: this.missingTestsRequested,
 		})
-		if (decision.action === "allow") return { action: "allow", facts: formatVerificationFacts(verdict, note) }
+		if (decision.action === "allow")
+			return { action: "allow", facts: formatVerificationFacts(verdict, note, changes) }
 
 		this.systemBlocks += 1
 		if (decision.requestedMissingTests) this.missingTestsRequested = true
@@ -281,6 +355,28 @@ export function createCangjieTaskVerification(task: {
 			taskDir: () => getTaskDirectoryPath(task.globalStoragePath, task.taskId),
 			workspaceFolders: () => (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
 			checkDeps: createDefaultCangjieCheckDeps(),
+			watchInputs: (onChange) => {
+				const watcher = vscode.workspace.createFileSystemWatcher("**/{*.cj,cjpm.toml,cjpm.lock}")
+				const subscriptions = [
+					watcher.onDidChange((uri) => onChange(uri.fsPath)),
+					watcher.onDidCreate((uri) => onChange(uri.fsPath)),
+					watcher.onDidDelete((uri) => onChange(uri.fsPath)),
+				]
+				return {
+					dispose: () => {
+						for (const sub of subscriptions) sub.dispose()
+						watcher.dispose()
+					},
+				}
+			},
+			watchEnvironment: (onChange) =>
+				vscode.workspace.onDidChangeConfiguration((event) => {
+					if (
+						event.affectsConfiguration("njust-ai.cangjieTools") ||
+						event.affectsConfiguration("njust-ai.cangjieLsp")
+					)
+						onChange()
+				}),
 			suspendAutoFormat: suspendCangjieAutoFormat,
 			isWorkspaceTrusted: () => vscode.workspace.isTrusted !== false,
 			canAutoApprove: async (command) => {

@@ -270,6 +270,36 @@ describe("Checkpoint functionality", () => {
 			expect(mockProvider.cancelTask).toHaveBeenCalled()
 		})
 
+		it("rechecks restored code after restore completes and before cancelling the task", async () => {
+			const refreshed = vi.fn().mockResolvedValue(undefined)
+			mockTask.cangjieVerification = { onCheckpointRestored: refreshed }
+			await checkpointRestore(mockTask, { ts: 2, commitHash: "abc123", mode: "preview" })
+			expect(refreshed).toHaveBeenCalledOnce()
+			expect(mockCheckpointService.restoreCheckpoint.mock.invocationCallOrder[0]).toBeLessThan(
+				refreshed.mock.invocationCallOrder[0],
+			)
+			expect(refreshed.mock.invocationCallOrder[0]).toBeLessThan(
+				mockProvider.cancelTask.mock.invocationCallOrder[0],
+			)
+		})
+
+		it("keeps checkpoint restore successful when verification refresh fails", async () => {
+			mockTask.cangjieVerification = {
+				onCheckpointRestored: vi.fn().mockRejectedValue(new Error("corrupt verification")),
+			}
+			await checkpointRestore(mockTask, { ts: 2, commitHash: "abc123", mode: "preview" })
+			expect(mockTask.enableCheckpoints).toBe(true)
+			expect(mockProvider.cancelTask).toHaveBeenCalledOnce()
+		})
+
+		it("does not recheck verification when restoring the checkpoint fails", async () => {
+			const refreshed = vi.fn()
+			mockTask.cangjieVerification = { onCheckpointRestored: refreshed }
+			mockCheckpointService.restoreCheckpoint.mockRejectedValueOnce(new Error("Restore failed"))
+			await checkpointRestore(mockTask, { ts: 2, commitHash: "abc123", mode: "preview" })
+			expect(refreshed).not.toHaveBeenCalled()
+		})
+
 		it("should handle preview mode without modifying messages", async () => {
 			await checkpointRestore(mockTask, {
 				ts: 2,

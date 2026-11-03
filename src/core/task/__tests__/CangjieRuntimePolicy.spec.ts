@@ -99,6 +99,40 @@ describe("CangjieRuntimePolicy", () => {
 		expect(policy.validateAgentStageToolUse("apply_patch", {}, true)).toBeNull()
 	})
 
+	it.each([
+		"只检查当前项目，不要修改或修复",
+		"Only verify this project; do not modify or repair any files.",
+		"只运行 cjpm build，不要修复：error: type mismatch",
+		"只运行 cjpm build：error: type mismatch",
+		"Only run cjpm build: error: type mismatch",
+	])("enforces an explicit write prohibition: %s", (request) => {
+		const policy = new CangjieRuntimePolicy(tempDir)
+		policy.configureAgentRoute(request)
+
+		expect(policy.isCheckOnlyRoute()).toBe(true)
+	})
+
+	it.each(["build", "test"])("allows a check-only delivery after a failed %s without requiring repair", (kind) => {
+		const policy = new CangjieRuntimePolicy(tempDir)
+		policy.configureAgentRoute("验证当前工程的构建和测试")
+		policy.noteAgentDelegation("CangjieVerify")
+		policy.noteBuildResult("cjpm build", kind === "test", "error: type mismatch")
+		if (kind === "test") policy.noteTestResult(false)
+
+		expect(policy.isCheckOnlyRoute()).toBe(true)
+		expect(policy.validateAgentStageToolUse("attempt_completion")).toBeNull()
+		expect(policy.validateAgentStageToolUse("agent", { agentType: "CangjieRepair" })).not.toBeNull()
+		expect(policy.getAttemptCompletionBlockReason()).toBeNull()
+		expect(policy.getRepairDirective()).toBeUndefined()
+	})
+
+	it("does not add tests when the build-only request explicitly forbids them", () => {
+		const policy = new CangjieRuntimePolicy(tempDir)
+		policy.configureAgentRoute("只运行 cjpm build，不要运行测试")
+
+		expect(policy.isBuildOnlyRequest()).toBe(true)
+	})
+
 	it("blocks Cangjie source deletion unless the user explicitly requested it", () => {
 		const policy = new CangjieRuntimePolicy(tempDir)
 

@@ -20,8 +20,35 @@ const RUN: VerificationRun = {
 }
 
 function check(state: CheckState["state"], run: Partial<VerificationRun> = {}): CheckState {
-	return state === "not_run" ? { state } : { state, run: { ...RUN, ...run } }
+	if (state === "not_run") return { state }
+	if (state === "stale") return { state, run: { ...RUN, ...run }, staleReason: "code_changed" }
+	return { state, run: { ...RUN, ...run } }
 }
+
+describe("changed input facts", () => {
+	const stale = () => verdict(check("stale"), check("stale"))
+	it("omits change details when there are no changes", () => {
+		expect(formatVerificationFacts(stale())).not.toContain("Changed since")
+	})
+	it("separates task tool paths from other sources", () => {
+		const facts = formatVerificationFacts(stale(), undefined, [
+			{ path: "src/a.cj", change: "modified", source: "task_tool" },
+			{ path: "src/b.cj", change: "added", source: "other" },
+		])
+		expect(facts).toContain("1 file(s) by task tools, 1 by other sources")
+		expect(facts).toContain("Changes by other sources: src/b.cj")
+	})
+	it("lists at most ten paths for external changes", () => {
+		const facts = formatVerificationFacts(
+			stale(),
+			undefined,
+			Array.from({ length: 11 }, (_, i) => ({ path: `file-${i}.cj`, change: "modified", source: "other" })),
+		)
+		expect(facts).toContain("0 file(s) by task tools, 11 by other sources")
+		expect(facts).toContain("file-9.cj, ...")
+		expect(facts).not.toContain("file-10.cj")
+	})
+})
 
 function verdict(build: CheckState, test: CheckState, overall?: VerificationVerdict["overall"]): VerificationVerdict {
 	const derived =
@@ -144,6 +171,15 @@ describe("formatVerificationFacts", () => {
 
 	it("reports zero executed tests as a gap", () => {
 		expect(formatVerificationFacts(verdict(check("passed"), ZERO_TEST))).toMatch(/Tests: no tests executed/)
+	})
+
+	it("explains a busy project without suggesting a code or test failure", () => {
+		const text = formatVerificationFacts(
+			verdict(check("blocked", { exitCode: undefined, abortReason: "project_busy" }), check("not_run")),
+		)
+		expect(text).toContain("Build: blocked — Another cjpm process is still running in this project")
+		expect(text).toContain("Tests: not run")
+		expect(text).toContain("Verdict: incomplete")
 	})
 
 	it("includes an extra note such as an unresolved project", () => {

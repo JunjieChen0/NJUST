@@ -410,6 +410,34 @@ describe("TaskLifecycleHandler", () => {
 		expect(newUserContent.length).toBeGreaterThan(2)
 	})
 
+	it("shows verification changes before resume and includes them in model context alongside user feedback", async () => {
+		const notice = "仓颉验证输入已变化：src/main.cj"
+		const host = createHost({
+			cangjieVerification: { onTaskResumed: vi.fn().mockResolvedValue(notice) },
+			getSavedApiConversationHistory: vi.fn().mockResolvedValue([{ role: "user", content: "old request" }]),
+			ask: vi.fn().mockResolvedValue({ response: "messageResponse", text: "继续" }),
+		})
+		await new TaskLifecycleHandler(host).resumeTaskFromHistory()
+		expect(host.say).toHaveBeenCalledWith("text", notice)
+		expect(host.say.mock.invocationCallOrder[0]).toBeLessThan(host.ask.mock.invocationCallOrder[0])
+		expect(host.initiateTaskLoop.mock.calls[0][0]).toEqual(
+			expect.arrayContaining([
+				{ type: "text", text: `[TASK RESUMPTION]\n${notice}` },
+				{ type: "text", text: "[USER-MESSAGE]\n继续\n[END USER-MESSAGE]" },
+			]),
+		)
+	})
+
+	it("continues task resume when verification history cannot be read", async () => {
+		const host = createHost({
+			cangjieVerification: { onTaskResumed: vi.fn().mockRejectedValue(new Error("corrupt verification")) },
+			getSavedApiConversationHistory: vi.fn().mockResolvedValue([{ role: "user", content: "old request" }]),
+		})
+		await new TaskLifecycleHandler(host).resumeTaskFromHistory()
+		expect(host.ask).toHaveBeenCalledWith("resume_task")
+		expect(host.initiateTaskLoop).toHaveBeenCalled()
+	})
+
 	it("adds interrupted tool results when resuming after assistant tool use", async () => {
 		const assistant = {
 			role: "assistant",

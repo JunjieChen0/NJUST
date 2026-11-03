@@ -43,6 +43,7 @@ import { checkCommandSafety } from "./helpers/commandSafety"
 import { logger } from "../../shared/logger"
 import { TIMING } from "../../shared/constants"
 import { resolveWithinWorkspaceAsync } from "../../utils/resolveWithinWorkspace"
+import { acquireCjpmProjectLock } from "../../services/cangjie-lsp/cjpmProjectLock"
 import {
 	SandboxExecutionService,
 	SandboxError,
@@ -355,11 +356,6 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 				},
 			}
 
-			// An unfinished background baseline must not race this cjpm run on the same target/ directory.
-			if (/\bcjpm\b/i.test(canonicalCommand)) {
-				;(task.rootTask ?? task).cangjieVerification?.preemptBaseline()
-			}
-
 			try {
 				const [rejected, result] = await executeCommandInTerminal(task, options)
 
@@ -432,16 +428,9 @@ export type ExecuteCommandOptions = {
 
 export async function executeCommandInTerminal(
 	task: Task,
-	{
-		executionId,
-		command,
-		customCwd,
-		terminalShellIntegrationDisabled = true,
-		commandExecutionTimeout = 0,
-		agentTimeout = 0,
-		audit,
-	}: ExecuteCommandOptions,
+	options: ExecuteCommandOptions,
 ): Promise<[boolean, ToolResponse]> {
+	const { command, customCwd } = options
 	let workingDir: string
 
 	if (!customCwd) {
@@ -468,9 +457,10 @@ export async function executeCommandInTerminal(
 		workingDir = cwdResolution.resolved
 	}
 
-	const requireExactCwd = !customCwd && isCangjieToolchainCommand(command)
+	const isCjpmCommand = /\bcjpm\b/i.test(command)
+	const requireExactCwd = (!customCwd || isCjpmCommand) && isCangjieToolchainCommand(command)
 
-	if (requireExactCwd) {
+	if (!customCwd && requireExactCwd) {
 		workingDir = await resolveCangjieToolchainWorkingDir(workingDir)
 	}
 
@@ -481,6 +471,47 @@ export async function executeCommandInTerminal(
 		return [false, `Working directory '${workingDir}' does not exist.`]
 	}
 
+	if (!isCjpmCommand) return executeCommandAtCwd(task, options, workingDir, requireExactCwd)
+
+	await (task.rootTask ?? task).cangjieVerification?.preemptBaseline()
+	const projectRoot = (await findNearestCjpmProjectDir(workingDir)) ?? workingDir
+	const release = await acquireCjpmProjectLock(projectRoot)
+	let started = false
+	try {
+		if (task.abort) return [false, "Command cancelled before cjpm started."]
+		return await executeCommandAtCwd(
+			task,
+			{ ...options, terminalShellIntegrationDisabled: true },
+			workingDir,
+			requireExactCwd,
+			{
+				started: () => {
+					started = true
+				},
+				completed: release,
+				backgrounded: release,
+			},
+		)
+	} finally {
+		// Started commands release through their completion or background callback.
+		if (!started) release()
+	}
+}
+
+async function executeCommandAtCwd(
+	task: Task,
+	{
+		executionId,
+		command,
+		terminalShellIntegrationDisabled = true,
+		commandExecutionTimeout = 0,
+		agentTimeout = 0,
+		audit,
+	}: ExecuteCommandOptions,
+	workingDir: string,
+	requireExactCwd: boolean,
+	lifecycle?: { started(): void; completed(): void; backgrounded(): void },
+): Promise<[boolean, ToolResponse]> {
 	const resolvedCommand = normalizeDotSlashCommandForWindowsShell(command.trim(), BaseTerminal.getExecaShellPath())
 
 	let message: { text?: string; images?: string[] } | undefined
@@ -609,6 +640,7 @@ export async function executeCommandInTerminal(
 			try {
 				const { response, text, images } = await task.ask("command_output", "")
 				runInBackground = true
+				lifecycle?.backgrounded()
 
 				if (response === "messageResponse") {
 					message = { text, images }
@@ -640,6 +672,7 @@ export async function executeCommandInTerminal(
 				await queueCommandOutputMessage(result, false, true)
 				completed = true
 			} finally {
+				lifecycle?.completed()
 				onBackgroundProcessCompleted?.()
 				// Signal that onCompleted has finished, so the main code can safely use persistedResult
 				resolveOnCompleted?.()
@@ -750,6 +783,7 @@ export async function executeCommandInTerminal(
 		}
 		void provider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(startedStatus) })
 
+		lifecycle?.started()
 		const completion = sandboxService
 			.run({
 				...sandboxRequest,
@@ -813,6 +847,7 @@ export async function executeCommandInTerminal(
 				return [false, `Sandbox execution failed: ${errorMessage}\nOutput:\n${result}`]
 			})
 			.finally(() => {
+				lifecycle?.completed()
 				if (task.terminalProcess === dockerProcess) task.terminalProcess = undefined
 			})
 
@@ -822,7 +857,10 @@ export async function executeCommandInTerminal(
 		const foreground = await Promise.race([
 			completion.then((response) => ({ kind: "complete" as const, response })),
 			new Promise<{ kind: "background" }>((resolve) => {
-				backgroundTimer = setTimeout(() => resolve({ kind: "background" }), agentTimeout)
+				backgroundTimer = setTimeout(() => {
+					lifecycle?.backgrounded()
+					resolve({ kind: "background" })
+				}, agentTimeout)
 			}),
 		])
 		if (foreground.kind === "complete") {
@@ -891,6 +929,7 @@ export async function executeCommandInTerminal(
 
 		process = terminal.runCommand(resolvedCommand, callbacks)
 		startedProcess = process
+		lifecycle?.started()
 		unregisterScopedProcess = sandboxService.registerExternalProcess(
 			sandboxRequest.resourceScopeId ?? sandboxRequest.taskId,
 			process,
@@ -1000,6 +1039,7 @@ export async function executeCommandInTerminal(
 				new Promise<void>((resolve) => {
 					agentTimeoutId = setTimeout(() => {
 						runInBackground = true
+						lifecycle?.backgrounded()
 						process.continue()
 						task.supersedePendingAsk()
 						resolve()

@@ -7,11 +7,14 @@ import * as path from "path"
 import {
 	runCangjieCheck,
 	runCangjieVerification,
+	LOCK_WAIT_TIMEOUT_MS,
 	type CangjieCheckContext,
 	type CangjieCheckDeps,
 	type ProcessResult,
 } from "../CangjieVerificationRunner"
 import { loadVerificationRecord } from "../VerificationStore"
+import { loadSnapshot } from "../snapshotStore"
+import { acquireCjpmProjectLock } from "../../../services/cangjie-lsp/cjpmProjectLock"
 
 vi.mock("../../../utils/safeWriteJson", () => ({
 	safeWriteJson: vi.fn(async (filePath: string, data: unknown) => {
@@ -40,7 +43,8 @@ describe("CangjieVerificationRunner", () => {
 			resolveCjpm: () => "/sdk/tools/bin/cjpm",
 			buildEnv: () => ({ PATH: "/sdk/bin" }),
 			sdkInfo: async () => ({ home: "/sdk", version: "1.0.5" }),
-			fingerprint: async () => "fp-1",
+			snapshot: async () => ({ fingerprint: "fp-1", files: {} }),
+			environment: async () => ({ sdkHome: "/sdk", sdkVersion: "1.0.5", cjpmPath: "/sdk/tools/bin/cjpm" }),
 			now: () => 1_000,
 			newId: () => `run-${++ids}`,
 			timeoutMs: 60_000,
@@ -71,6 +75,39 @@ describe("CangjieVerificationRunner", () => {
 		expect(exec).not.toHaveBeenCalled()
 		expect(run).toMatchObject({ status: "blocked", abortReason: "not_approved" })
 	})
+
+	it.each(["timeout", "aborted"] as const)(
+		"records verification that never started after lock wait %s",
+		async (reason) => {
+			vi.useFakeTimers()
+			const release = await acquireCjpmProjectLock(ctx.projectRoot)
+			const controller = new AbortController()
+			const exec = vi.fn(async () => processResult())
+			const checking = runCangjieCheck("build", { ...ctx, signal: controller.signal }, deps(exec))
+			try {
+				await vi.waitFor(() => expect(vi.getTimerCount()).toBeGreaterThan(0))
+				if (reason === "aborted") controller.abort()
+				else await vi.advanceTimersByTimeAsync(LOCK_WAIT_TIMEOUT_MS)
+				const run = await checking
+				expect(run).toMatchObject({
+					status: reason === "timeout" ? "blocked" : "cancelled",
+					abortReason: reason === "timeout" ? "project_busy" : "cancelled",
+					inputFingerprint: "fp-1",
+					inputFingerprintAfter: "fp-1",
+				})
+				if (reason === "timeout")
+					expect(run.abortDetail).toBe("Another cjpm process is still running in this project")
+				expect(run.exitCode).toBeUndefined()
+				expect(exec).not.toHaveBeenCalled()
+				expect((await loadVerificationRecord(taskDir, "task-1"))?.runs).toEqual([run])
+			} finally {
+				controller.abort()
+				release()
+				await checking
+				vi.useRealTimers()
+			}
+		},
+	)
 
 	it("treats flags rejected by an older cjpm as inconclusive, not as failing tests", async () => {
 		const run = await runCangjieCheck(
@@ -194,15 +231,20 @@ describe("CangjieVerificationRunner", () => {
 	})
 
 	it("captures the fingerprint after the run so mid-run edits are visible", async () => {
-		const fingerprint = vi.fn().mockResolvedValueOnce("fp-before").mockResolvedValueOnce("fp-after")
+		const snapshot = vi
+			.fn()
+			.mockResolvedValueOnce({ fingerprint: "fp-before", files: { "cjpm.lock": "before" } })
+			.mockResolvedValueOnce({ fingerprint: "fp-after", files: { "cjpm.lock": "after" } })
 
 		const run = await runCangjieCheck(
 			"build",
 			ctx,
-			deps(async () => processResult(), { fingerprint }),
+			deps(async () => processResult(), { snapshot }),
 		)
 
 		expect(run).toMatchObject({ inputFingerprint: "fp-before", inputFingerprintAfter: "fp-after" })
+		expect((await loadSnapshot(taskDir, "fp-before"))?.files).toEqual({ "cjpm.lock": "before" })
+		expect((await loadSnapshot(taskDir, "fp-after"))?.files).toEqual({ "cjpm.lock": "after" })
 	})
 
 	it("runs tests with an xml report outside the project and records the counts", async () => {

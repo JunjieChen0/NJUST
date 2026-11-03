@@ -1,7 +1,7 @@
 //
 // Tests the ExecuteCommand tool itself vs calling the tool where the tool is mocked.
 //
-import { describe, it, expect, beforeEach } from "vitest"
+import { describe, it, expect, beforeEach, vi } from "vitest"
 
 import * as path from "path"
 import * as fs from "fs/promises"
@@ -11,6 +11,7 @@ import { TerminalRegistry } from "../../../integrations/terminal/TerminalRegistr
 import { Terminal } from "../../../integrations/terminal/Terminal"
 import { ExecaTerminal } from "../../../integrations/terminal/ExecaTerminal"
 import type { RooTerminalCallbacks } from "../../../integrations/terminal/types"
+import { withCjpmProjectLock } from "../../../services/cangjie-lsp/cjpmProjectLock"
 
 // Mock fs to control directory existence checks
 vitest.mock("fs/promises")
@@ -81,6 +82,127 @@ describe("executeCommand", () => {
 	})
 
 	describe("Working Directory Behavior", () => {
+		it("waits for baseline cleanup and the save-time build before starting cjpm", async () => {
+			let finishBaseline!: () => void
+			let finishBuild!: () => void
+			const baseline = new Promise<void>((resolve) => {
+				finishBaseline = resolve
+			})
+			const saveBuild = withCjpmProjectLock(
+				mockTask.cwd,
+				() =>
+					new Promise<void>((resolve) => {
+						finishBuild = resolve
+					}),
+			)
+			mockTask.cangjieVerification = { preemptBaseline: vi.fn(() => baseline) }
+			mockTerminal.runCommand.mockImplementation((_command: string, callbacks: RooTerminalCallbacks) => {
+				setTimeout(() => {
+					callbacks.onShellExecutionComplete({ exitCode: 0 }, mockProcess)
+					void callbacks.onCompleted("build complete", mockProcess)
+				}, 0)
+				return mockProcess
+			})
+			const execution = executeCommandInTerminal(mockTask, { executionId: "locked", command: "cjpm build" })
+			try {
+				await vi.waitFor(() => expect(mockTask.cangjieVerification.preemptBaseline).toHaveBeenCalled())
+				expect(mockTerminal.runCommand).not.toHaveBeenCalled()
+				finishBaseline()
+				await new Promise((resolve) => setTimeout(resolve, 10))
+				expect(mockTerminal.runCommand).not.toHaveBeenCalled()
+			} finally {
+				finishBaseline()
+				finishBuild()
+				await Promise.all([saveBuild, execution])
+			}
+			expect(mockTerminal.runCommand).toHaveBeenCalledTimes(1)
+		})
+
+		it.each(["agent timeout", "user feedback"])(
+			"releases the project lock as soon as cjpm moves to the background (%s)",
+			async (cause) => {
+				let callbacks!: RooTerminalCallbacks
+				let continueProcess!: () => void
+				const process = Object.assign(
+					new Promise<void>((resolve) => {
+						continueProcess = resolve
+					}),
+					{
+						continue: () => continueProcess(),
+						abort: vi.fn(),
+					},
+				)
+				mockTask.supersedePendingAsk = vi.fn()
+				mockTask.ask = vi.fn().mockResolvedValue({ response: "messageResponse", text: "continue" })
+				mockTerminal.runCommand.mockImplementation((_command: string, cb: RooTerminalCallbacks) => {
+					callbacks = cb
+					if (cause === "user feedback")
+						queueMicrotask(() => {
+							void cb.onLine(
+								"running",
+								process as unknown as Parameters<RooTerminalCallbacks["onCompleted"]>[1],
+							)
+						})
+					return process
+				})
+				await executeCommandInTerminal(mockTask, {
+					executionId: "background",
+					command: "cjpm test",
+					agentTimeout: cause === "agent timeout" ? 1 : 0,
+				})
+				let acquired = false
+				const nextBuild = withCjpmProjectLock(mockTask.cwd, async () => {
+					acquired = true
+				})
+				try {
+					await new Promise((resolve) => setTimeout(resolve, 10))
+					expect(acquired).toBe(true)
+				} finally {
+					callbacks.onShellExecutionComplete(
+						{ exitCode: 0 },
+						process as unknown as Parameters<RooTerminalCallbacks["onCompleted"]>[1],
+					)
+					await callbacks.onCompleted(
+						"done",
+						process as unknown as Parameters<RooTerminalCallbacks["onCompleted"]>[1],
+					)
+					await nextBuild
+				}
+				expect(acquired).toBe(true)
+			},
+		)
+
+		it("releases the cjpm lock when the terminal cannot start", async () => {
+			mockTerminal.runCommand.mockImplementationOnce(() => {
+				throw new Error("spawn failed")
+			})
+
+			await expect(
+				executeCommandInTerminal(mockTask, { executionId: "startup-failed", command: "cjpm build" }),
+			).rejects.toThrow("spawn failed")
+			await expect(withCjpmProjectLock(mockTask.cwd, async () => "released")).resolves.toBe("released")
+		})
+
+		it("does not start cjpm after cancellation while waiting for the project lock", async () => {
+			let finishBuild!: () => void
+			const build = withCjpmProjectLock(
+				mockTask.cwd,
+				() =>
+					new Promise<void>((resolve) => {
+						finishBuild = resolve
+					}),
+			)
+			await vi.waitFor(() => expect(finishBuild).toBeDefined())
+			const execution = executeCommandInTerminal(mockTask, { executionId: "cancelled", command: "cjpm build" })
+			mockTask.abort = true
+			finishBuild()
+
+			await expect(execution).resolves.toEqual([false, expect.stringMatching(/cancelled/)])
+			await build
+			expect(mockTerminal.runCommand).not.toHaveBeenCalled()
+			await expect(withCjpmProjectLock(mockTask.cwd, async () => "released")).resolves.toBe("released")
+		})
+
 		it("should use terminal.getCurrentWorkingDirectory() in the output message for completed commands", async () => {
 			// Setup: Mock terminal to return a different current working directory
 			const initialCwd = "/test/project"

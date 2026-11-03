@@ -1,4 +1,5 @@
 import type { CheckState, VerificationVerdict } from "./verdict"
+import type { AttributedChange } from "./types"
 
 export interface CompletionDecisionContext {
 	/** Check-only/evidence-only request: never route into repair or ask for new tests. */
@@ -63,10 +64,15 @@ export function decideCangjieCompletion(
 
 function describeGap(check: CheckState): string {
 	if (check.state === "not_run") return "not run"
-	const detail = check.run.abortDetail ?? check.run.abortReason
+	const detail =
+		check.run.abortReason === "project_busy"
+			? "Another cjpm process is still running in this project"
+			: (check.run.abortDetail ?? check.run.abortReason)
 	switch (check.state) {
 		case "stale":
-			return "result belongs to a different code state (stale)"
+			return check.staleReason === "environment_changed"
+				? "SDK or cjpm environment changed (stale)"
+				: "result belongs to a different code state (stale)"
 		case "zero_tests":
 			return "no tests executed (none found or none matched)"
 		case "running":
@@ -98,12 +104,28 @@ function logLine(check: CheckState, label: string): string | undefined {
 }
 
 /** Plain-text summary of the recorded facts, appended to the delivery. Written by the extension, not the model. */
-export function formatVerificationFacts(verdict: VerificationVerdict, note?: string): string {
+export function formatVerificationFacts(
+	verdict: VerificationVerdict,
+	note?: string,
+	changes: readonly AttributedChange[] = [],
+): string {
+	const stale = verdict.build.state === "stale" || verdict.test.state === "stale"
+	const taskChanges = changes.filter((change) => change.source === "task_tool")
+	const otherChanges = changes.filter((change) => change.source === "other")
+	const names = (items: readonly AttributedChange[]) =>
+		items
+			.slice(0, 10)
+			.map((change) => change.path)
+			.join(", ") + (items.length > 10 ? ", ..." : "")
 	return [
 		"System verification (recorded by the extension, not by the model):",
 		`- Verdict: ${verdict.overall}`,
 		`- Build: ${describeBuild(verdict.build)}`,
 		`- Tests: ${describeTests(verdict.test)}`,
+		stale && changes.length > 0
+			? `- Changed since last verification: ${taskChanges.length} file(s) by task tools, ${otherChanges.length} by other sources (${names(changes)})`
+			: undefined,
+		stale && otherChanges.length > 0 ? `- Changes by other sources: ${names(otherChanges)}` : undefined,
 		logLine(verdict.build, "Build"),
 		logLine(verdict.test, "Test"),
 		note ? `- Note: ${note}` : undefined,

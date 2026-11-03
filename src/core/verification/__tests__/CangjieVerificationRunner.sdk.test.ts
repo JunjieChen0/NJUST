@@ -9,6 +9,8 @@ import * as path from "path"
 import { createDefaultCangjieCheckDeps, runCangjieVerification } from "../CangjieVerificationRunner"
 import { evaluateVerification } from "../verdict"
 import { loadVerificationRecord } from "../VerificationStore"
+import { loadSnapshot } from "../snapshotStore"
+import { CangjieTaskVerification, type TaskVerificationPolicy } from "../CangjieTaskVerification"
 
 const enabled = process.env.NJUST_CANGJIE_SDK_SMOKE === "1" && Boolean(process.env.CANGJIE_HOME)
 
@@ -74,7 +76,7 @@ describe.skipIf(!enabled)("Cangjie verification with a real SDK", () => {
 			{ taskId: "smoke", taskDir, projectRoot, signal, phase: "delivery", approve: async () => true },
 			deps,
 		)
-		const fingerprint = await deps.fingerprint(projectRoot)
+		const fingerprint = (await deps.snapshot(projectRoot))?.fingerprint
 		return { result, verdict: evaluateVerification(await loadVerificationRecord(taskDir, "smoke"), fingerprint) }
 	}
 
@@ -93,10 +95,54 @@ describe.skipIf(!enabled)("Cangjie verification with a real SDK", () => {
 	it("verifies the fixed code and marks the old failure stale", async () => {
 		await fs.writeFile(path.join(projectRoot, "src", "calc.cj"), CALC("a + b"), "utf8")
 
-		const { verdict } = await verify()
+		const { result, verdict } = await verify()
 
 		expect(verdict.overall).toBe("verified")
 		expect(verdict.test.state).toBe("passed")
+		const before = await loadSnapshot(taskDir, result.build.inputFingerprint!)
+		const after = await loadSnapshot(taskDir, result.build.inputFingerprintAfter!)
+		expect(before).toBeDefined()
+		expect(after).toEqual(before)
+		expect(after?.files["cjpm.lock"]).toBe(before?.files["cjpm.lock"])
+	}, 240_000)
+
+	it("invalidates a delivered real project after an external edit and rejects its acceptance", async () => {
+		const policy: TaskVerificationPolicy = {
+			isCheckOnlyRoute: () => true,
+			isBuildOnlyRequest: () => false,
+			getRouteKind: () => "verify",
+			getWrittenPaths: () => [],
+			isRepairLoopExhausted: () => false,
+			noteBuildResult: () => {},
+			noteTestResult: () => {},
+		}
+		const session = new CangjieTaskVerification(
+			{ taskId: "smoke", cwd: projectRoot, policy },
+			{
+				taskDir: async () => taskDir,
+				workspaceFolders: () => [projectRoot],
+				checkDeps: createDefaultCangjieCheckDeps(),
+				suspendAutoFormat: () => () => {},
+				isWorkspaceTrusted: () => true,
+				canAutoApprove: async () => true,
+			},
+		)
+		try {
+			const outcome = await session.verifyForCompletion(async () => true)
+			expect(outcome.action).toBe("allow")
+			if (outcome.action === "allow") expect(outcome.facts).toContain("Verdict: verified")
+			const sourcePath = path.join(projectRoot, "src/calc.cj")
+			const content = await fs.readFile(sourcePath, "utf8")
+			await fs.appendFile(sourcePath, "\n// external edit\n")
+			const notice = await session.onTaskResumed()
+			expect(notice).toContain("Changes by other sources: src/calc.cj")
+			await expect(session.recordAcceptance("accepted")).resolves.toBe("superseded")
+			await fs.writeFile(sourcePath, content)
+			await expect(session.onTaskResumed()).resolves.toBeUndefined()
+			await expect(session.recordAcceptance("accepted")).resolves.toBe("recorded")
+		} finally {
+			session.dispose()
+		}
 	}, 240_000)
 
 	it("records a cancelled build when the task is cancelled", async () => {

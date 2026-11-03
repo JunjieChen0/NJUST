@@ -32,10 +32,26 @@ function passingTest(overrides: Partial<VerificationRun> = {}): VerificationRun 
 }
 
 function record(parts: Partial<TaskVerificationRecord> = {}): TaskVerificationRecord {
-	return { version: 1, taskId: "task-1", runs: [], claims: [], acceptances: [], ...parts }
+	return { version: 1, taskId: "task-1", runs: [], claims: [], acceptances: [], invalidations: [], ...parts }
 }
 
 describe("evaluateVerification", () => {
+	it.each([{ sdkVersion: "2" }, { sdkHome: "/other/sdk" }, { cjpmPath: "/other/cjpm" }])(
+		"marks a changed environment stale: %o",
+		(environment) => {
+			const build = run({ kind: "build", sdk: { home: "/sdk", version: "1" } })
+			const result = evaluateVerification(record({ runs: [build] }), FP, environment)
+			expect(result.build).toMatchObject({ state: "stale", staleReason: "environment_changed" })
+		},
+	)
+
+	it("does not infer SDK changes when old metadata is missing", () => {
+		const result = evaluateVerification(record({ runs: [run({ kind: "build" })] }), FP, {
+			sdkHome: "/sdk",
+			sdkVersion: "2",
+		})
+		expect(result.build.state).toBe("passed")
+	})
 	it("reports no_record for legacy tasks without a verification file", () => {
 		const verdict = evaluateVerification(undefined, FP)
 

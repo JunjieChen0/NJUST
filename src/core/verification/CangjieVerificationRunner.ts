@@ -8,16 +8,19 @@ import {
 	buildCangjieToolEnv,
 	detectCangjieHome,
 	resolveCangjieToolPath,
+	CJC_CONFIG_KEY,
 } from "../../services/cangjie-lsp/cangjieToolUtils"
 
-import { withCjpmProjectLock } from "../../services/cangjie-lsp/cjpmProjectLock"
+import { CjpmLockUnavailableError, withCjpmProjectLock } from "../../services/cangjie-lsp/cjpmProjectLock"
 
 import { buildCangjieTestScope, parseCangjieTestSummary, readCangjieTestReportDir } from "./cangjieTestReport"
-import { computeProjectFingerprint } from "./projectFingerprint"
-import type { VerificationKind, VerificationRun } from "./types"
+import { computeProjectSnapshot, type ProjectSnapshot } from "./projectFingerprint"
+import { saveSnapshot } from "./snapshotStore"
+import type { VerificationKind, VerificationRun, VerificationEnvironment } from "./types"
 import { updateVerificationRecord, withRun } from "./VerificationStore"
 
 export const DEFAULT_CHECK_TIMEOUT_MS = 10 * 60_000
+export const LOCK_WAIT_TIMEOUT_MS = 60_000
 const LOG_DIR = "verification-logs"
 const REPORT_DIR = "verification-reports"
 const WHOLE_PROJECT_SCOPE = "whole project"
@@ -59,7 +62,8 @@ export interface CangjieCheckDeps {
 	resolveCjpm: () => string | undefined
 	buildEnv: () => Record<string, string>
 	sdkInfo: () => Promise<{ home?: string; version?: string }>
-	fingerprint: (projectRoot: string) => Promise<string | undefined>
+	snapshot: (projectRoot: string) => Promise<ProjectSnapshot | undefined>
+	environment: () => Promise<VerificationEnvironment>
 	now: () => number
 	newId: () => string
 	timeoutMs: number
@@ -122,6 +126,8 @@ export async function runCangjieCheck(
 	const runId = deps.newId()
 	const reportDir = path.join(ctx.taskDir, REPORT_DIR, runId)
 	const executable = deps.resolveCjpm()
+	const before = await deps.snapshot(ctx.projectRoot)
+	if (before) await saveSnapshot(ctx.taskDir, before)
 	const base: VerificationRun = {
 		runId,
 		taskId: ctx.taskId,
@@ -133,7 +139,7 @@ export async function runCangjieCheck(
 		startedAt: deps.now(),
 		status: "running",
 		sdk: await deps.sdkInfo(),
-		inputFingerprint: await deps.fingerprint(ctx.projectRoot),
+		inputFingerprint: before?.fingerprint,
 		stale: false,
 		...(kind === "test" ? { testScope: { description: WHOLE_PROJECT_SCOPE } } : {}),
 	}
@@ -160,17 +166,35 @@ export async function runCangjieCheck(
 	}
 
 	await persist(ctx, base)
-	const result = await withCjpmProjectLock(
-		ctx.projectRoot,
-		() =>
-			deps.exec(executable, base.args, {
-				cwd: ctx.projectRoot,
-				env: deps.buildEnv(),
-				signal: ctx.signal,
-				timeoutMs: deps.timeoutMs,
-			}),
-		{ preempt: ctx.preempt },
-	)
+	let result: ProcessResult
+	try {
+		result = await withCjpmProjectLock(
+			ctx.projectRoot,
+			() =>
+				deps.exec(executable, base.args, {
+					cwd: ctx.projectRoot,
+					env: deps.buildEnv(),
+					signal: ctx.signal,
+					timeoutMs: deps.timeoutMs,
+				}),
+			{ preempt: ctx.preempt, signal: ctx.signal, timeoutMs: LOCK_WAIT_TIMEOUT_MS },
+		)
+	} catch (error) {
+		logger.debug("CangjieVerificationRunner", "Verification could not acquire the project lock", error)
+		if (!(error instanceof CjpmLockUnavailableError)) throw error
+		if (error.reason === "timeout") {
+			return block("project_busy", "Another cjpm process is still running in this project")
+		}
+		const cancelled: VerificationRun = {
+			...base,
+			endedAt: deps.now(),
+			status: "cancelled",
+			abortReason: "cancelled",
+			inputFingerprintAfter: base.inputFingerprint,
+		}
+		await persist(ctx, cancelled)
+		return cancelled
+	}
 
 	let outcome = classifyProcessResult(result)
 	let testScope = base.testScope
@@ -183,13 +207,15 @@ export async function runCangjieCheck(
 		outcome = classifyTestOutcome(outcome, result, testScope.failed ?? 0)
 	}
 
+	const after = await deps.snapshot(ctx.projectRoot)
+	if (after) await saveSnapshot(ctx.taskDir, after)
 	const finished: VerificationRun = {
 		...base,
 		...outcome,
 		testScope,
 		endedAt: deps.now(),
 		logRef: await writeLog(ctx.taskDir, runId, result.output),
-		inputFingerprintAfter: await deps.fingerprint(ctx.projectRoot),
+		inputFingerprintAfter: after?.fingerprint,
 	}
 	await persist(ctx, finished)
 	return finished
@@ -276,26 +302,36 @@ export const execaProcessExecutor: ProcessExecutor = async (file, args, { cwd, e
 
 let cachedSdkVersion: Promise<string | undefined> | undefined
 
+export function resetSdkInfoCache(): void {
+	cachedSdkVersion = undefined
+}
+
 async function readSdkVersion(): Promise<string | undefined> {
-	const cjc = resolveCangjieToolPath("cjc")
+	const cjc = resolveCangjieToolPath("cjc", CJC_CONFIG_KEY)
 	if (!cjc) return undefined
 	const result = await execa(cjc, ["--version"], { reject: false, timeout: 15_000, windowsHide: true })
 	return result.exitCode === 0 ? String(result.stdout).split(/\r?\n/)[0]?.trim() || undefined : undefined
 }
 
 export function createDefaultCangjieCheckDeps(): CangjieCheckDeps {
+	const resolveCjpm = () => resolveCangjieToolPath("cjpm", "cangjieTools.cjpmPath")
+	const sdkInfo = async () => {
+		cachedSdkVersion ??= readSdkVersion().catch((error) => {
+			logger.debug("CangjieVerificationRunner", "Cannot read Cangjie SDK version", error)
+			return undefined
+		})
+		return { home: detectCangjieHome(), version: await cachedSdkVersion }
+	}
 	return {
 		exec: execaProcessExecutor,
-		resolveCjpm: () => resolveCangjieToolPath("cjpm", "cangjieTools.cjpmPath"),
+		resolveCjpm,
 		buildEnv: () => buildCangjieToolEnv(),
-		sdkInfo: async () => {
-			cachedSdkVersion ??= readSdkVersion().catch((error) => {
-				logger.debug("CangjieVerificationRunner", "Cannot read Cangjie SDK version", error)
-				return undefined
-			})
-			return { home: detectCangjieHome(), version: await cachedSdkVersion }
+		sdkInfo,
+		environment: async () => {
+			const sdk = await sdkInfo()
+			return { sdkHome: sdk.home, sdkVersion: sdk.version, cjpmPath: resolveCjpm() }
 		},
-		fingerprint: computeProjectFingerprint,
+		snapshot: computeProjectSnapshot,
 		now: Date.now,
 		newId: () => crypto.randomUUID(),
 		timeoutMs: DEFAULT_CHECK_TIMEOUT_MS,

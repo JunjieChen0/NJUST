@@ -29,6 +29,8 @@ export const verificationAbortReasonSchema = z.enum([
 	"exit_code_unknown",
 	"input_changed",
 	"project_unresolved",
+	/** Another cjpm command did not release the project within the lock wait limit. */
+	"project_busy",
 	/** The user (or their auto-approval settings) did not approve running the command. */
 	"not_approved",
 	"untrusted_workspace",
@@ -98,12 +100,34 @@ export const acceptanceDecisionSchema = z.object({
 
 export const VERIFICATION_RECORD_VERSION = 1
 
+export const fileChangeSchema = z.object({
+	path: z.string(),
+	change: z.enum(["added", "modified", "deleted"]),
+})
+export const attributedChangeSchema = fileChangeSchema.extend({ source: z.enum(["task_tool", "other"]) })
+export const verificationEnvironmentSchema = z.object({
+	sdkHome: z.string().optional(),
+	sdkVersion: z.string().optional(),
+	cjpmPath: z.string().optional(),
+})
+export const invalidationSchema = z.object({
+	at: z.number(),
+	cause: z.enum(["file_change", "checkpoint_restore", "task_resume", "environment_change"]),
+	fromFingerprint: z.string().optional(),
+	toFingerprint: z.string().optional(),
+	changes: z.array(attributedChangeSchema),
+	changesTruncated: z.boolean().default(false),
+	/** Distinguishes SDK changes that share the same code fingerprint. */
+	environment: verificationEnvironmentSchema.optional(),
+})
+
 export const taskVerificationRecordSchema = z.object({
 	version: z.literal(VERIFICATION_RECORD_VERSION),
 	taskId: z.string().min(1),
 	runs: z.array(verificationRunSchema),
 	claims: z.array(completionClaimSchema),
 	acceptances: z.array(acceptanceDecisionSchema),
+	invalidations: z.array(invalidationSchema).default([]),
 })
 
 export type VerificationKind = z.infer<typeof verificationKindSchema>
@@ -112,3 +136,7 @@ export type VerificationRun = z.infer<typeof verificationRunSchema>
 export type CompletionClaim = z.infer<typeof completionClaimSchema>
 export type AcceptanceDecision = z.infer<typeof acceptanceDecisionSchema>
 export type TaskVerificationRecord = z.infer<typeof taskVerificationRecordSchema>
+export type FileChange = z.infer<typeof fileChangeSchema>
+export type AttributedChange = z.infer<typeof attributedChangeSchema>
+export type VerificationEnvironment = z.infer<typeof verificationEnvironmentSchema>
+export type VerificationInvalidation = z.infer<typeof invalidationSchema>

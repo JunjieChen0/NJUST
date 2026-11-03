@@ -60,7 +60,7 @@ export interface TaskLifecycleHost {
 	consecutiveNoAssistantMessagesCount: number
 	persistentRetryHandler?: { cancel(): void } | undefined
 	/** Stops in-flight system build/test verification on abort and releases its resources on dispose. */
-	readonly cangjieVerification?: { cancel(): void; dispose(): void }
+	readonly cangjieVerification?: { cancel(): void; dispose(): void; onTaskResumed?(): Promise<string | undefined> }
 	readonly modeHandler: {
 		providerProfileChangeListener: ((...args: any[]) => void) | undefined
 		dispose(): void
@@ -237,6 +237,14 @@ export class TaskLifecycleHandler {
 
 			t.isInitialized = true
 
+			let verificationNotice: string | undefined
+			try {
+				verificationNotice = await t.cangjieVerification?.onTaskResumed?.()
+				if (verificationNotice) await t.say("text", verificationNotice)
+			} catch (error) {
+				logger.debug("TaskLifecycleHandler", "Verification refresh on task resume failed", error)
+			}
+
 			const { response, text, images } = await t.ask(askType)
 
 			let responseText: string | undefined
@@ -366,6 +374,9 @@ export class TaskLifecycleHandler {
 					type: "text",
 					text: "[TASK RESUMPTION] Resuming task...",
 				})
+			}
+			if (verificationNotice) {
+				newUserContent.push({ type: "text", text: `[TASK RESUMPTION]\n${verificationNotice}` })
 			}
 
 			await t.overwriteApiConversationHistory(modifiedApiConversationHistory)

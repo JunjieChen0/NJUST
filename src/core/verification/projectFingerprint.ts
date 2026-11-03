@@ -2,6 +2,7 @@ import * as crypto from "crypto"
 import type { Dirent } from "fs"
 import * as fs from "fs/promises"
 import * as path from "path"
+import { parse as parseToml } from "smol-toml"
 
 import { logger } from "../../shared/logger"
 
@@ -12,7 +13,6 @@ const EXCLUDED_DIRS = new Set([".git", "node_modules"])
 const ROOT_BUILD_OUTPUT_DIR = "target"
 /** Guard against accidentally hashing a huge tree (e.g. a path dependency pointing at a home dir). */
 const MAX_INPUT_FILES = 20_000
-const PATH_DEPENDENCY_RE = /\bpath\s*=\s*"([^"]+)"/g
 
 function isInputFile(name: string): boolean {
 	return INPUT_FILE_NAMES.has(name) || name.toLowerCase().endsWith(".cj")
@@ -45,8 +45,19 @@ async function collectInputFiles(dir: string, out: string[], isProjectRoot = tru
 }
 
 async function readPathDependencies(projectRoot: string): Promise<string[]> {
-	const manifest = await fs.readFile(path.join(projectRoot, MANIFEST), "utf8")
-	return [...manifest.matchAll(PATH_DEPENDENCY_RE)].flatMap((m) => (m[1] ? [path.resolve(projectRoot, m[1])] : []))
+	const manifest = parseToml(await fs.readFile(path.join(projectRoot, MANIFEST), "utf8"))
+	const dependencies: string[] = []
+	const visit = (table: object): void => {
+		for (const [key, value] of Object.entries(table)) {
+			if (key === "path" && typeof value === "string") {
+				dependencies.push(path.resolve(projectRoot, value))
+			} else if (value !== null && typeof value === "object") {
+				visit(value)
+			}
+		}
+	}
+	visit(manifest)
+	return dependencies
 }
 
 /** Project roots whose inputs affect the build: the project plus its local path dependencies (transitively). */
@@ -72,7 +83,12 @@ async function collectProjectRoots(projectRoot: string): Promise<string[]> {
  * (tracked or not), `cjpm.toml`, `cjpm.lock`, and local path dependencies. Build output and
  * VCS metadata are excluded. Returns undefined when the project cannot be fingerprinted.
  */
-export async function computeProjectFingerprint(projectRoot: string): Promise<string | undefined> {
+export interface ProjectSnapshot {
+	fingerprint: string
+	files: Record<string, string>
+}
+
+export async function computeProjectSnapshot(projectRoot: string): Promise<ProjectSnapshot | undefined> {
 	const root = path.resolve(projectRoot)
 	try {
 		await fs.access(path.join(root, MANIFEST))
@@ -82,14 +98,22 @@ export async function computeProjectFingerprint(projectRoot: string): Promise<st
 		}
 
 		const hash = crypto.createHash("sha256")
+		const inputs: Record<string, string> = {}
 		for (const file of [...new Set(files)].sort()) {
 			const content = await fs.readFile(file)
 			const rel = path.relative(root, file).split(path.sep).join("/")
-			hash.update(`${rel}\0${crypto.createHash("sha256").update(content).digest("hex")}\n`)
+			const contentHash = crypto.createHash("sha256").update(content).digest("hex")
+			inputs[rel] = contentHash
+			hash.update(`${rel}\0${contentHash}\n`)
 		}
-		return hash.digest("hex")
+		return { fingerprint: hash.digest("hex"), files: inputs }
 	} catch (error) {
 		logger.warn("projectFingerprint", `Cannot fingerprint ${root}`, error)
 		return undefined
 	}
+}
+
+/** Compatibility API for callers that only need the aggregate fingerprint. */
+export async function computeProjectFingerprint(projectRoot: string): Promise<string | undefined> {
+	return (await computeProjectSnapshot(projectRoot))?.fingerprint
 }

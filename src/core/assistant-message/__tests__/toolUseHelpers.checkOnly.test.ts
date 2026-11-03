@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest"
 
 import type { ToolUse } from "../../../shared/tools"
 import type { Task } from "../../task/Task"
+import { customToolRegistry } from "@njust-ai/core/custom-tools"
 
 vi.mock("@njust-ai/telemetry", () => ({
 	TelemetryService: { reportError: vi.fn() },
@@ -32,6 +33,32 @@ const writeBlock: ToolUse = {
 } as ToolUse
 
 describe("validateToolUseBlock check-only isolation", () => {
+	it("rejects a custom writer by its registered name", async () => {
+		const has = vi.spyOn(customToolRegistry, "has").mockImplementation((name) => name === "write_project_file")
+		try {
+			const task = makeTask({ taskMode: "cangjie" })
+			const block = { ...writeBlock, name: "write_project_file" } as unknown as ToolUse
+
+			const ok = await validateToolUseBlock(
+				task,
+				block,
+				"custom-1",
+				"cangjie",
+				[],
+				{ customTools: true },
+				undefined,
+				undefined,
+			)
+
+			expect(ok).toBe(false)
+			expect(task.pushToolResultToUserContent).toHaveBeenCalledWith(
+				expect.objectContaining({ content: expect.stringMatching(/check-only/i) }),
+			)
+		} finally {
+			has.mockRestore()
+		}
+	})
+
 	it("rejects writes in a check-only Cangjie task", async () => {
 		const task = makeTask({ taskMode: "cangjie" })
 

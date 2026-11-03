@@ -36,14 +36,37 @@ const EVIDENCE_ONLY_PATTERNS = [
 ]
 
 const IMPLEMENT_PATTERNS = [
-	/\b(?:add|create|implement|modify|edit|write|refactor|fix)\b/i,
+	/\b(?:add|create|implement|modify|edit|write|refactor|fix|repair)\b/i,
 	/\u65b0\u589e|\u6dfb\u52a0|\u5b9e\u73b0|\u4fee\u6539|\u521b\u5efa|\u7f16\u5199|\u91cd\u6784|\u4fee\u590d|\u5e2e\u6211\u5199|\u76f4\u63a5\u6539/,
 ]
 
 const TOOLCHAIN_COMMAND_PATTERN = /\b(?:cjpm\s+(?:build|check|test)|cjc|cjlint)\b/i
 
+/** Explicit read-only constraints take priority over edit words inside a negation or diagnostic. */
+export function isExplicitCangjieReadOnlyRequest(text: string): boolean {
+	const onlyChecks = /(?:只|仅)(?:检查|验证|调查|审查)|\bonly\s+(?:check|verify|investigate|audit)\b/i
+	const onlyCommands = /(?:只|仅)(?:运行|执行)|\bonly\s+(?:run|execute)\b/i
+	// Scoped constraints such as "do not modify public APIs" still permit the requested implementation.
+	const noWrites =
+		/(?:不要|不允许|禁止|不得)\s*(?:修改|编辑|写入|修复)(?:\s*(?:或|和|、)\s*(?:修改|编辑|写入|修复))*(?:\s*(?:任何)?(?:代码|源码|文件|内容))?(?=\s*(?:[，。；：.!?;,:\n]|$))|\b(?:do\s+not|don't|never)\s+(?:modify|edit|write|repair|fix)(?:\s+(?:or|and)\s+(?:modify|edit|write|repair|fix))*(?:\s+(?:(?:any|the)\s+)?(?:source\s+)?(?:code|files?))?(?=\s*(?:[;,.!?\n]|$))/i
+	return (
+		onlyChecks.test(text) ||
+		noWrites.test(text) ||
+		(onlyCommands.test(text) && !IMPLEMENT_PATTERNS.some((pattern) => pattern.test(text)))
+	)
+}
+
 export function routeCangjieAgentTask(userMessage: string): CangjieAgentRoute {
 	const text = userMessage.trim()
+	if (isExplicitCangjieReadOnlyRequest(text)) {
+		const verify =
+			VERIFY_ONLY_PATTERNS.some((pattern) => pattern.test(text)) || TOOLCHAIN_COMMAND_PATTERN.test(text)
+		return {
+			kind: verify ? "verify" : "explore",
+			stages: [verify ? "CangjieVerify" : "CangjieExplore"],
+			reason: "The request explicitly forbids source changes; report findings without implementation or repair.",
+		}
+	}
 	const hasImplementationIntent = IMPLEMENT_PATTERNS.some((pattern) => pattern.test(text))
 
 	if (REAL_DIAGNOSTIC_PATTERNS.some((pattern) => pattern.test(text))) {
@@ -94,8 +117,10 @@ export function buildCangjieAgentRoutingSection(
 	options: CangjieAgentRoutingOptions = {},
 ): string {
 	const route = routeCangjieAgentTask(userMessage)
+	const repairRequired =
+		options.repairRequired && route.kind !== "verify" && !isExplicitCangjieReadOnlyRequest(userMessage)
 	let plannedStages: CangjieAgentStage[] = [...route.stages]
-	if (options.repairRequired) {
+	if (repairRequired) {
 		plannedStages = [...completedStages] as CangjieAgentStage[]
 		const lastStage = completedStages.at(-1)
 		if (lastStage === "CangjieRepair") {
@@ -118,13 +143,13 @@ export function buildCangjieAgentRoutingSection(
 	const nextStage = pendingStages[0]
 	return [
 		"## Cangjie Agent Route",
-		`- Route kind: ${options.repairRequired ? "repair" : route.kind}`,
+		`- Route kind: ${repairRequired ? "repair" : route.kind}`,
 		`- Planned stages: ${plannedStages.join(" -> ")}`,
 		`- Completed stages: ${completedStages.join(" -> ") || "none"}`,
 		`- Required stages: ${pendingStages.join(" -> ") || "none"}`,
 		`- Next stage: ${nextStage ?? "none; finish the parent task without another delegation"}`,
 		`- Reason: ${
-			options.repairRequired
+			repairRequired
 				? "The latest CangjieVerify build failed, so the diagnostics require a narrow repair and another verification."
 				: route.reason
 		}`,
