@@ -554,5 +554,50 @@
   "apiConfigSelector": {
     "pinnedConfigurations": "已固定的設定",
     "allConfigurations": "所有設定"
+  },
+  "verification": {
+    "title": "系統驗證",
+    "overall": {
+      "verified": "已驗證",
+      "failed": "失敗",
+      "incomplete": "不完整",
+      "no_record": "未驗證"
+    },
+    "states": {
+      "not_run": "未執行",
+      "running": "執行中",
+      "passed": "通過",
+      "failed": "失敗",
+      "blocked": "受阻",
+      "cancelled": "已取消",
+      "inconclusive": "不確定",
+      "stale": "已過期",
+      "zero_tests": "零測試，未執行任何測試"
+    },
+    "build": "建置",
+    "test": "測試",
+    "exitCode": "結束代碼 {{code}}",
+    "testCounts": "通過 {{passed}}，失敗 {{failed}}，略過 {{skipped}}",
+    "codeChanged": "已過期：程式碼已變更",
+    "environmentChanged": "已過期：SDK 或工具鏈已變更",
+    "changes": "任務編輯工具變更 {{taskTool}} 個檔案，其他來源變更 {{other}} 個檔案",
+    "otherChanges": "其他來源的變更",
+    "buildLog": "建置日誌",
+    "testLog": "測試日誌",
+    "accept": "接受",
+    "requestChanges": "要求修改",
+    "unverified": "未經系統驗證",
+    "acceptance": {
+      "no_delivery": "尚無交付",
+      "pending": "等待你的決定",
+      "accepted": "已接受",
+      "changes_requested": "已要求修改",
+      "superseded": "交付已過期"
+    },
+    "terminal": {
+      "cancelled": "任務已取消，既有結果已保留",
+      "error": "任務因錯誤結束，既有結果已保留"
+    },
+    "reverifyRequired": "交付已過期，需要重新驗證"
   }
 }

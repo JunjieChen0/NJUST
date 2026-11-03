@@ -1,4 +1,4 @@
-import type { ClineAsk, ClineSay } from "@njust-ai/types"
+import type { ClineAsk, ClineSay, VerificationSummary } from "@njust-ai/types"
 
 import type { ClineAskResponse } from "../../../shared/WebviewMessage"
 import type { RooIgnoreController } from "../../ignore/RooIgnoreController"
@@ -12,7 +12,9 @@ export interface ICloudAgentHost {
 	readonly rooIgnoreController?: RooIgnoreController
 	readonly rooProtectedController?: RooProtectedController
 
-	say(type: ClineSay, text?: string, images?: string[]): Promise<void>
+	say(type: ClineSay, text?: string, images?: string[], verification?: VerificationSummary): Promise<void>
+	verifyLocally?(writtenPaths: string[]): Promise<VerificationSummary | undefined>
+	beginRun?(): void
 	ask(
 		type: ClineAsk,
 		text?: string,

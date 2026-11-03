@@ -37,6 +37,7 @@ import { UserFeedbackRow } from "./rows/UserFeedbackRow"
 import { AssistantTextRow } from "./rows/AssistantTextRow"
 import { ApiRequestRow } from "./rows/ApiRequestRow"
 import { CompletionResultRow } from "./rows/CompletionResultRow"
+import { VerificationCard, isLatestVerificationMessage } from "./rows/VerificationCard"
 import { FollowUpRow } from "./rows/FollowUpRow"
 import { McpServerRow } from "./rows/McpServerRow"
 import { SayToolResultRow } from "./rows/SayToolResultRow"
@@ -474,6 +475,15 @@ export const ChatRowContent = ({
 							cloudAgentTextMessages={cloudAgentTextMessages}
 						/>
 					)
+
+				case "verification_summary":
+					return message.verification ? (
+						<VerificationCard
+							summary={message.verification}
+							ts={message.ts}
+							isLatest={isLatestVerificationMessage(message, clineMessages)}
+						/>
+					) : null
 
 				case "user_feedback":
 				case "user_feedback_diff":

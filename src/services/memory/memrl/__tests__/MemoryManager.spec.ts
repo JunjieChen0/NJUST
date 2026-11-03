@@ -51,8 +51,10 @@ describe("MemoryManager integration", () => {
 		expect(result.ltmRules).toBe("")
 	})
 
-	it("afterRun does not throw and is fire-and-forget", () => {
-		expect(() => mgr.afterRun("task-1", "build the feature", "summary text", 1.0)).not.toThrow()
+	it("afterRun persists system facts without throwing", async () => {
+		await expect(
+			mgr.afterRun("task-1", "build the feature", "summary text", { overall: "verified", acceptance: "pending" }),
+		).resolves.toBeUndefined()
 	})
 
 	it("getStm returns a ShortTermMemory", () => {
@@ -72,10 +74,25 @@ describe("MemoryManager integration", () => {
 
 	it("full flow: write then retrieve produces formatted hints", async () => {
 		// Write a high-reward episode
-		await (mgr as any).episodic?.write("implement login feature", "user: implement\nassistant: done", 1.0)
+		await mgr.afterRun("task-1", "implement login feature", "user: implement\nassistant: done", {
+			overall: "verified",
+			acceptance: "pending",
+		})
 		// Now retrieve
 		const result = await mgr.beforeRun("task-2", "implement login feature")
 		// Should have episodic hints since we wrote with same vector
 		expect(result.episodicHints).toContain("Past Episodes")
+		expect(result.episodicHints).toContain("[verified]")
+	})
+
+	it("labels failures and excludes unknown outcomes from prompt hints", async () => {
+		await mgr.afterRun("failed", "intent", "failure details", { overall: "failed", acceptance: "pending" })
+		await mgr.afterRun("unknown", "intent", "unverified declaration", {
+			overall: "no_record",
+			acceptance: "accepted",
+		})
+		const result = await mgr.beforeRun("next", "intent")
+		expect(result.episodicHints).toContain("[failed]")
+		expect(result.episodicHints).not.toContain("unverified declaration")
 	})
 })

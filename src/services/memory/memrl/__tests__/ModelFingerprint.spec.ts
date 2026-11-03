@@ -51,6 +51,8 @@ function makeEntry(): EpisodicEntry {
 	const now = Date.now()
 	return {
 		id: "ep_seed",
+		taskId: "seeded-task",
+		verification: { overall: "verified", acceptance: "pending" },
 		intent: "seeded intent",
 		embedding: [0.6, 0.8],
 		stmSummary: "seeded summary",

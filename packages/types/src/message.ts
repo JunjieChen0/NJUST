@@ -154,6 +154,7 @@ export const clineSays = [
 	"reasoning",
 	"completion_result",
 	"user_feedback",
+	"verification_summary",
 	"user_feedback_diff",
 	"command_output",
 	"shell_integration_warning",
@@ -236,6 +237,47 @@ export const contextTruncationSchema = z.object({
 
 export type ContextTruncation = z.infer<typeof contextTruncationSchema>
 
+export const verificationCheckSchema = z.object({
+	state: z.enum([
+		"not_run",
+		"running",
+		"passed",
+		"failed",
+		"blocked",
+		"cancelled",
+		"inconclusive",
+		"stale",
+		"zero_tests",
+	]),
+	exitCode: z.number().int().nullable().optional(),
+	logPath: z.string().optional(),
+	staleReason: z.enum(["code_changed", "environment_changed"]).optional(),
+	executed: z.number().int().nonnegative().optional(),
+	passed: z.number().int().nonnegative().optional(),
+	failed: z.number().int().nonnegative().optional(),
+	skipped: z.number().int().nonnegative().optional(),
+})
+
+export const verificationSummarySchema = z.object({
+	overall: z.enum(["verified", "failed", "incomplete", "no_record"]),
+	build: verificationCheckSchema,
+	test: verificationCheckSchema,
+	acceptance: z.enum(["no_delivery", "pending", "accepted", "changes_requested", "superseded"]),
+	claimId: z.string().optional(),
+	changes: z
+		.object({
+			taskTool: z.number().int().nonnegative(),
+			other: z.number().int().nonnegative(),
+			files: z.array(z.string()).max(10),
+			otherFiles: z.array(z.string()).max(10).optional(),
+		})
+		.optional(),
+	note: z.string().optional(),
+	terminal: z.enum(["cancelled", "error"]).optional(),
+})
+
+export type VerificationSummary = z.infer<typeof verificationSummarySchema>
+
 /**
  * ClineMessage
  *
@@ -261,6 +303,7 @@ export const clineMessageSchema = z.object({
 	conversationHistoryIndex: z.number().optional(),
 	checkpoint: z.record(z.string(), z.unknown()).optional(),
 	progressStatus: toolProgressStatusSchema.optional(),
+	verification: verificationSummarySchema.optional(),
 	/**
 	 * Data for successful context condensation.
 	 * Present when `say: "condense_context"` and `partial: false`.

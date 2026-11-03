@@ -119,6 +119,7 @@ function createHost(overrides: Record<string, unknown> = {}) {
 		},
 		abort: false,
 		abandoned: false,
+		taskCompleted: false,
 		abortReason: undefined,
 		isInitialized: false,
 		isDisposed: false,
@@ -246,6 +247,87 @@ describe("TaskLifecycleHandler", () => {
 		expect(host.emit).toHaveBeenCalledWith(expect.any(String))
 		expect(host.saveClineMessages).toHaveBeenCalled()
 		expect(disposeScopeMock).toHaveBeenCalledWith("task:task-1:instance-1")
+		expect(host.dispose).toHaveBeenCalled()
+	})
+
+	it("publishes cancellation verification facts after cancelling checks and before disposal", async () => {
+		const host = createHost({
+			cangjieVerification: { cancel: vi.fn() },
+			publishVerificationSummary: vi.fn().mockResolvedValue(undefined),
+			persistMemrlEpisode: vi.fn().mockResolvedValue(undefined),
+		})
+		await new TaskLifecycleHandler(host).abortTask()
+		expect(host.publishVerificationSummary).toHaveBeenCalledWith("cancelled")
+		expect(host.persistMemrlEpisode).toHaveBeenCalledWith("interrupted")
+		expect(host.cangjieVerification.cancel.mock.invocationCallOrder[0]).toBeLessThan(
+			host.publishVerificationSummary.mock.invocationCallOrder[0],
+		)
+		expect(host.publishVerificationSummary.mock.invocationCallOrder[0]).toBeLessThan(
+			host.dispose.mock.invocationCallOrder[0],
+		)
+	})
+
+	it.each([false, true])("does not record cancellation when leaving a task (completed=%s)", async (taskCompleted) => {
+		const host = createHost({
+			taskCompleted,
+			publishVerificationSummary: vi.fn(),
+			persistMemrlEpisode: vi.fn(),
+		})
+		await new TaskLifecycleHandler(host).abortTask(true)
+		expect(host.publishVerificationSummary).not.toHaveBeenCalled()
+		expect(host.persistMemrlEpisode).not.toHaveBeenCalled()
+	})
+
+	it("does not append a cancellation card to an already completed task", async () => {
+		const host = createHost({
+			taskCompleted: true,
+			publishVerificationSummary: vi.fn(),
+			persistMemrlEpisode: vi.fn(),
+		})
+		await new TaskLifecycleHandler(host).abortTask()
+		expect(host.publishVerificationSummary).not.toHaveBeenCalled()
+		expect(host.persistMemrlEpisode).not.toHaveBeenCalled()
+	})
+
+	it.each([false, true])(
+		"preserves a verified history task while waiting to resume (abandoned=%s)",
+		async (abandoned) => {
+			const delivery = { ts: 1, type: "ask", ask: "completion_result" }
+			const memory = { overall: "verified" }
+			let rejectResume!: (error: Error) => void
+			const host = createHost({
+				getSavedClineMessages: vi.fn().mockResolvedValue([delivery]),
+				ask: vi.fn(
+					() =>
+						new Promise((_resolve, reject) => {
+							rejectResume = reject
+						}),
+				),
+				publishVerificationSummary: vi.fn(async () => host.clineMessages.push({ say: "verification_summary" })),
+				persistMemrlEpisode: vi.fn(async () => {
+					memory.overall = "incomplete"
+				}),
+			})
+			const handler = new TaskLifecycleHandler(host)
+			const resuming = handler.resumeTaskFromHistory()
+			await vi.waitFor(() => expect(host.ask).toHaveBeenCalledWith("resume_completed_task"))
+			await handler.abortTask(abandoned)
+			rejectResume(new Error("Task aborted"))
+			await resuming
+			expect(host.publishVerificationSummary).not.toHaveBeenCalled()
+			expect(host.persistMemrlEpisode).not.toHaveBeenCalled()
+			expect(host.clineMessages).toEqual([delivery])
+			expect(memory.overall).toBe("verified")
+		},
+	)
+
+	it("marks streaming errors as errors and still disposes when the summary cannot be written", async () => {
+		const host = createHost({
+			abortReason: "streaming_failed",
+			publishVerificationSummary: vi.fn().mockRejectedValue(new Error("disk full")),
+		})
+		await new TaskLifecycleHandler(host).abortTask()
+		expect(host.publishVerificationSummary).toHaveBeenCalledWith("error")
 		expect(host.dispose).toHaveBeenCalled()
 	})
 

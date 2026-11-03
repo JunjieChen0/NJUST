@@ -13,6 +13,7 @@ import { safeWriteJson } from "../../../utils/safeWriteJson"
 import { logger } from "../../../shared/logger"
 import { MemoryEmbeddingAdapter } from "./MemoryEmbeddingAdapter"
 import { currentEmbedFingerprint } from "./memory-embedder"
+import type { MemrlOutcome, MemrlVerification } from "../interfaces/IMemoryManager"
 import {
 	ALPHA,
 	EPISODIC_FILE,
@@ -27,6 +28,9 @@ import {
 
 export interface EpisodicEntry {
 	id: string
+	taskId?: string
+	verification?: MemrlVerification
+	tags?: string[]
 	/** Plain-text intent / task description */
 	intent: string
 	/** Embedding vector for this intent */
@@ -52,6 +56,7 @@ export interface EpisodicStore {
 export class EpisodicMemoryService {
 	private store: EpisodicStore = { entries: [], totalWrites: 0 }
 	private loaded = false
+	private writes: Promise<void> = Promise.resolve()
 
 	constructor(
 		private readonly workspaceDir: string,
@@ -103,30 +108,48 @@ export class EpisodicMemoryService {
 	 * Store a new episodic entry and update totalWrites.
 	 * Triggers LTM distillation callback every LTM_DISTILL_INTERVAL writes.
 	 */
-	async write(intent: string, stmSummary: string, reward: number): Promise<void> {
+	write(intent: string, stmSummary: string, outcome: MemrlOutcome): Promise<void> {
+		this.writes = this.writes
+			.catch((error) => logger.debug("MemRL", "Previous episodic write failed", error))
+			.then(() => this.writeEntry(intent, stmSummary, outcome))
+		return this.writes
+	}
+
+	private async writeEntry(intent: string, stmSummary: string, outcome: MemrlOutcome): Promise<void> {
 		await this.load()
 
 		const embedding = await this.embedder.embed(intent)
 		const now = Date.now()
 		const id = `ep_${now}_${Math.random().toString(36).slice(2, 9)}`
+		const existing = this.store.entries.find((entry) => entry.taskId === outcome.taskId)
+		const known = outcome.overall === "verified" || outcome.overall === "failed"
+		const qValue = known ? Q_INIT + ALPHA * ((outcome.overall === "verified" ? 1 : 0) - Q_INIT) : Q_INIT
+		const tags = (existing?.tags ?? []).filter((tag) => tag !== "verification_unknown")
+		if (!known) tags.push("verification_unknown")
 
 		const entry: EpisodicEntry = {
-			id,
+			id: existing?.id ?? id,
+			taskId: outcome.taskId,
+			verification: { overall: outcome.overall, acceptance: outcome.acceptance },
+			tags,
 			intent,
 			embedding,
 			stmSummary,
-			qValue: Q_INIT + ALPHA * (reward - Q_INIT),
-			updateCount: 1,
-			createdAt: now,
+			qValue,
+			updateCount: (existing?.updateCount ?? 0) + 1,
+			createdAt: existing?.createdAt ?? now,
 			updatedAt: now,
 		}
 
-		this.store.entries.push(entry)
-		this.store.totalWrites++
+		if (existing) Object.assign(existing, entry)
+		else {
+			this.store.entries.push(entry)
+			this.store.totalWrites++
+		}
 
 		await this.persist()
 
-		if (this.store.totalWrites % LTM_DISTILL_INTERVAL === 0) {
+		if (!existing && this.store.totalWrites % LTM_DISTILL_INTERVAL === 0) {
 			this.onDistillTrigger?.()
 		}
 	}
@@ -159,13 +182,14 @@ export class EpisodicMemoryService {
 	async retrieve(queryIntent: string): Promise<EpisodicEntry[]> {
 		await this.load()
 
-		if (this.store.entries.length === 0) return []
+		const candidates = this.store.entries.filter(usableEpisode)
+		if (candidates.length === 0) return []
 
 		const queryVec = await this.embedder.embed(queryIntent)
 		if (queryVec.length === 0) return []
 
 		// ── Phase A ──────────────────────────────────────────────────────────
-		const withSim = this.store.entries
+		const withSim = candidates
 			.map((entry) => ({
 				entry,
 				sim: MemoryEmbeddingAdapter.cosineSim(queryVec, entry.embedding),
@@ -195,10 +219,20 @@ export class EpisodicMemoryService {
 
 	/** Return up to `n` most-recent entries (for LTM distillation). */
 	getRecent(n: number): EpisodicEntry[] {
-		return [...this.store.entries].sort((a, b) => b.createdAt - a.createdAt).slice(0, n)
+		return this.store.entries
+			.filter(usableEpisode)
+			.sort((a, b) => b.createdAt - a.createdAt)
+			.slice(0, n)
 	}
 
 	get totalWrites(): number {
 		return this.store.totalWrites
 	}
+}
+
+function usableEpisode(entry: EpisodicEntry): boolean {
+	return (
+		!entry.tags?.includes("verification_unknown") &&
+		(entry.verification?.overall === "verified" || entry.verification?.overall === "failed")
+	)
 }

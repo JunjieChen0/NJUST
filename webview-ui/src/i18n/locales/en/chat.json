@@ -551,5 +551,50 @@
   "apiConfigSelector": {
     "pinnedConfigurations": "Pinned configurations",
     "allConfigurations": "All configurations"
+  },
+  "verification": {
+    "title": "System verification",
+    "overall": {
+      "verified": "Verified",
+      "failed": "Failed",
+      "incomplete": "Incomplete",
+      "no_record": "Not verified"
+    },
+    "states": {
+      "not_run": "Not run",
+      "running": "Running",
+      "passed": "Passed",
+      "failed": "Failed",
+      "blocked": "Blocked",
+      "cancelled": "Cancelled",
+      "inconclusive": "Inconclusive",
+      "stale": "Outdated",
+      "zero_tests": "Zero tests executed"
+    },
+    "build": "Build",
+    "test": "Tests",
+    "exitCode": "Exit {{code}}",
+    "testCounts": "{{passed}} passed, {{failed}} failed, {{skipped}} skipped",
+    "codeChanged": "Outdated: code changed",
+    "environmentChanged": "Outdated: SDK or toolchain changed",
+    "changes": "{{taskTool}} file(s) changed by task tools; {{other}} by other sources",
+    "otherChanges": "Changes by other sources",
+    "buildLog": "Build log",
+    "testLog": "Test log",
+    "accept": "Accept",
+    "requestChanges": "Request changes",
+    "unverified": "Not system verified",
+    "acceptance": {
+      "no_delivery": "No delivery",
+      "pending": "Awaiting your decision",
+      "accepted": "Accepted",
+      "changes_requested": "Changes requested",
+      "superseded": "Delivery outdated"
+    },
+    "terminal": {
+      "cancelled": "Task cancelled; existing results are preserved",
+      "error": "Task ended with an error; existing results are preserved"
+    },
+    "reverifyRequired": "Delivery outdated; verify again before deciding"
   }
 }

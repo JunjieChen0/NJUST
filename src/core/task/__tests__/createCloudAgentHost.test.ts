@@ -27,6 +27,36 @@ function makeTask() {
 }
 
 describe("createCloudAgentHost.markCompleted", () => {
+	it("starts each cloud submission separately from prior completed state", () => {
+		const task = Object.assign(makeTask(), { markCloudRunStarted: vi.fn() })
+		createCloudAgentHost(task).beginRun?.()
+		expect(task.markCloudRunStarted).toHaveBeenCalledOnce()
+	})
+
+	it("records applied paths and uses normal command approval for local verification", async () => {
+		const summary = {
+			overall: "failed",
+			acceptance: "pending",
+			build: { state: "failed" },
+			test: { state: "not_run" },
+		}
+		let approve: ((command: string) => Promise<boolean>) | undefined
+		const task = Object.assign(makeTask(), {
+			cangjieRuntimePolicy: { noteDelegatedWrites: vi.fn() },
+			cangjieVerification: {
+				verifyForCompletion: vi.fn(async (callback: typeof approve) => {
+					approve = callback
+					return { action: "block" }
+				}),
+				currentSummary: vi.fn().mockResolvedValue(summary),
+			},
+		})
+		task.ask.mockResolvedValue({ response: "yesButtonClicked" })
+		await expect(createCloudAgentHost(task as any).verifyLocally?.(["/ws/src/a.cj"])).resolves.toEqual(summary)
+		expect(task.cangjieRuntimePolicy.noteDelegatedWrites).toHaveBeenCalledWith(["/ws/src/a.cj"])
+		await expect(approve!("cjpm test")).resolves.toBe(true)
+		expect(task.ask).toHaveBeenCalledWith("command", "cjpm test")
+	})
 	it("emits TaskCompleted and marks the task completed", () => {
 		const task = makeTask()
 		const onCompleted = vi.fn()

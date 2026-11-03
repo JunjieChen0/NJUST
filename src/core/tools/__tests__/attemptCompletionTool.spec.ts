@@ -1382,10 +1382,17 @@ describe("attemptCompletionTool", () => {
 			mockTask.taskMode = "cangjie" as any
 		})
 
-		it("lets the extension's build/test replace the model-run build gates and appends the recorded facts", async () => {
+		it("keeps system facts in the card and evaluation trace, separate from the model's completion text", async () => {
+			const summary = {
+				overall: "verified",
+				acceptance: "pending",
+				claimId: "claim",
+				build: { state: "passed" },
+				test: { state: "passed", executed: 1 },
+			}
 			const verifyForCompletion = vi
 				.fn()
-				.mockResolvedValue({ action: "allow", facts: "System verification:\n- Verdict: verified" })
+				.mockResolvedValue({ action: "allow", facts: "System verification:\n- Verdict: verified", summary })
 			;(mockTask as any).cangjieVerification = { verifyForCompletion }
 
 			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
@@ -1397,9 +1404,15 @@ describe("attemptCompletionTool", () => {
 			expect(verifyForCompletion).toHaveBeenCalledTimes(1)
 			expect(mockTask.say).toHaveBeenCalledWith(
 				"completion_result",
-				expect.stringMatching(/Implemented parseArgs\.[\s\S]*Verdict: verified/),
+				"Implemented parseArgs.",
 				undefined,
 				false,
+				undefined,
+				undefined,
+				{ verification: summary },
+			)
+			expect(mockAppendCangjieEvalTrace).toHaveBeenCalledWith(
+				expect.objectContaining({ result: expect.stringContaining("System verification:") }),
 			)
 		})
 

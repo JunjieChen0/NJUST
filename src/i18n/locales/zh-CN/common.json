@@ -497,5 +497,9 @@
 			"full": "全量",
 			"incremental": "增量"
 		}
+	},
+	"verification": {
+		"delivery_expired": "代码在交付后已改变，这次交付已过期，请重新验证后再决定",
+		"cloud_note": "Cloud Agent 的完成状态由服务器报告；此卡片展示本地系统验证。"
 	}
 }

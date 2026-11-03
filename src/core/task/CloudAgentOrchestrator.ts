@@ -99,6 +99,7 @@ function makeClientOptions(profile: CloudAgentProfile, signal: AbortSignal, requ
  * full Task surface area.
  */
 export class CloudAgentOrchestrator {
+	private readonly writtenPaths = new Set<string>()
 	constructor(
 		private readonly host: ICloudAgentHost,
 		private readonly service: ICloudAgentService = new CloudAgentService(),
@@ -120,6 +121,7 @@ export class CloudAgentOrchestrator {
 		// 3. 执行 → 进入终态 → 按用户回复决定是否继续（重试 / 追加反馈）
 		let request: RunRequest | undefined = { message: userMessage, images }
 		do {
+			this.host.beginRun?.()
 			const failures: RunFailures | undefined = await this.runOnce(profile, behavior, callbacks, request)
 			request = failures === undefined ? undefined : await this.finishRun(failures, request)
 		} while (request && !this.host.abort)
@@ -265,6 +267,30 @@ export class CloudAgentOrchestrator {
 
 		try {
 			if (failures.length === 0) {
+				if (this.writtenPaths.size && this.host.verifyLocally) {
+					try {
+						const verification = await this.host.verifyLocally([...this.writtenPaths])
+						if (this.host.abort) return undefined
+						if (verification)
+							await this.host.say("verification_summary", undefined, undefined, {
+								...verification,
+								note: [verification.note, t("common:verification.cloud_note")]
+									.filter(Boolean)
+									.join("\n"),
+							})
+					} catch (error) {
+						logger.debug("CloudAgentOrchestrator", "Local verification could not run", error)
+						if (this.host.abort) return undefined
+						await this.host.say("verification_summary", undefined, undefined, {
+							overall: "incomplete",
+							build: { state: "not_run" },
+							test: { state: "not_run" },
+							acceptance: "no_delivery",
+							note: getErrorMessage(error),
+						})
+					}
+					this.writtenPaths.clear()
+				}
 				this.host.markCompleted()
 				const { response, text, images } = await this.host.ask("completion_result", "")
 				if (response === "messageResponse" && (text?.trim() || images?.length)) {
@@ -427,6 +453,10 @@ export class CloudAgentOrchestrator {
 					writeProtector: this.host.rooProtectedController,
 				})
 				toolResults.push(result)
+				if (!result.is_error && (call.tool === "write_file" || call.tool === "apply_diff")) {
+					const op = this.getWorkspaceOpFromDeferredTool(call)
+					if (op) this.writtenPaths.add(path.resolve(this.host.cwd, op.path))
+				}
 				lifecycleGuard.recordToolCompletion()
 				if (result.is_error) {
 					await this.host.say("text", `[Deferred] tool ${call.tool} error: ${result.content.slice(0, 500)}`)
@@ -959,6 +989,7 @@ export class CloudAgentOrchestrator {
 					await this.host.say("error", `Workspace operation failed: ${single.message}`)
 					return failed
 				}
+				this.writtenPaths.add(path.resolve(this.host.cwd, op.path))
 			}
 			if (notApplied > 0) {
 				return { ok: false, reason: t("errors.cloud_agent.workspace_ops_rejected", { count: notApplied }) }
@@ -984,6 +1015,8 @@ export class CloudAgentOrchestrator {
 			)
 
 			const audit = getAuditLogger()
+			for (const result of applied.results)
+				if (result.ok) this.writtenPaths.add(path.resolve(this.host.cwd, result.path))
 			if (audit) {
 				const ts = new Date().toISOString()
 				for (let i = 0; i < ops.length; i++) {

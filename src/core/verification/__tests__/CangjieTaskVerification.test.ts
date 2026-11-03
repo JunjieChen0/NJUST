@@ -155,6 +155,36 @@ describe("CangjieTaskVerification", () => {
 		await expect(create(makePolicy()).recordAcceptance("accepted")).resolves.toBe("no_delivery")
 	})
 
+	it("has no summary or successful outcome before any verification record exists", async () => {
+		const session = create(makePolicy())
+		await expect(session.currentSummary()).resolves.toBeUndefined()
+		await expect(session.getOutcome()).resolves.toEqual({ overall: "no_record", acceptance: "no_delivery" })
+	})
+
+	it("reports unavailable evidence without overwriting a corrupt record", async () => {
+		await fs.mkdir(taskDir, { recursive: true })
+		await fs.writeFile(path.join(taskDir, "verification.json"), "{broken")
+		const session = create(makePolicy())
+		await expect(session.currentSummary()).resolves.toMatchObject({
+			overall: "no_record",
+			acceptance: "no_delivery",
+			note: expect.stringContaining("unavailable"),
+		})
+		expect(await fs.readFile(path.join(taskDir, "verification.json"), "utf8")).toBe("{broken")
+	})
+
+	it("exposes recorded facts and prevents accepting an unexpected delivery", async () => {
+		exec.mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok(TESTS_PASSED))
+		const session = create(makePolicy())
+		const outcome = await session.verifyForCompletion(approveAll)
+		if (outcome.action !== "allow") throw new Error("expected a delivery")
+		expect(outcome.summary).toMatchObject({ overall: "verified", acceptance: "pending", test: { executed: 4 } })
+		await expect(session.recordAcceptance("accepted", "different-claim")).resolves.toBe("superseded")
+		await expect(session.recordAcceptance("accepted", outcome.summary.claimId)).resolves.toBe("recorded")
+		await expect(session.getOutcome()).resolves.toEqual({ overall: "verified", acceptance: "accepted" })
+		session.dispose()
+	})
+
 	it("reports external edits on resume and preserves checkpoint invalidation cause", async () => {
 		const dependencies = deps()
 		dependencies.checkDeps.snapshot = computeProjectSnapshot
@@ -217,6 +247,16 @@ describe("CangjieTaskVerification", () => {
 		expect(approve).not.toHaveBeenCalled()
 		expect(exec).not.toHaveBeenCalled()
 		if (outcome.action === "allow") expect(outcome.facts).toMatch(/not trusted/)
+	})
+
+	it("can accept a fingerprinted but unverified delivery without running untrusted commands", async () => {
+		trusted = false
+		const session = create(makePolicy())
+		const result = await session.verifyForCompletion(approveAll)
+		expect(result.action).toBe("allow")
+		await expect(session.recordAcceptance("accepted")).resolves.toBe("recorded")
+		await expect(session.getOutcome()).resolves.toEqual({ overall: "incomplete", acceptance: "accepted" })
+		expect(exec).not.toHaveBeenCalled()
 	})
 
 	it("blocks a failed build with the build output and feeds the failure to the repair route", async () => {

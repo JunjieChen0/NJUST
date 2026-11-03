@@ -507,6 +507,7 @@ export interface WebviewMessage {
 		| "openCustomModesSettings"
 		| "checkpointDiff"
 		| "checkpointRestore"
+		| "verificationDecision"
 		| "deleteMcpServer"
 		| "codebaseIndexEnabled"
 		| "searchFiles"
@@ -696,6 +697,7 @@ export interface WebviewMessage {
 		}
 	/** Task configuration applied via `createTask()` when starting a cloud task. */
 	taskConfiguration?: NJUST_AISettings
+	verificationDecision?: { ts: number; decision: "accepted" | "changes_requested"; claimId?: string }
 	action?: string
 	planId?: string
 	stepId?: string
@@ -811,6 +813,7 @@ export const WEBVIEW_MESSAGE_TYPES = [
 	"openCustomModesSettings",
 	"checkpointDiff",
 	"checkpointRestore",
+	"verificationDecision",
 	"deleteMcpServer",
 	"codebaseIndexEnabled",
 	"searchFiles",
@@ -935,6 +938,12 @@ export const checkoutDiffPayloadSchema = z.object({
 	previousCommitHash: z.string().optional(),
 	commitHash: z.string(),
 	mode: z.enum(["full", "checkpoint", "from-init", "to-current"]),
+})
+
+export const verificationDecisionPayloadSchema = z.object({
+	ts: z.number(),
+	decision: z.enum(["accepted", "changes_requested"]),
+	claimId: z.string().optional(),
 })
 
 export type CheckpointDiffPayload = z.infer<typeof checkoutDiffPayloadSchema>

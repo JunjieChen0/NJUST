@@ -168,6 +168,46 @@ vi.mock("../../../shared/logger", () => ({
 // ── Tests ────────────────────────────────────────────────────────────────
 
 describe("CloudAgentOrchestrator", () => {
+	it.each(["verified", "failed"] as const)(
+		"runs local verification after applying remote edits and still completes with %s facts",
+		async (overall) => {
+			mockVscodeConfig({ "cloudAgent.deferredProtocol": false, "cloudAgent.compileLoop.enabled": false })
+			mockClientInstance.submitTask.mockResolvedValueOnce({
+				ok: true,
+				memorySummary: "done",
+				tokensIn: 1,
+				tokensOut: 1,
+				cost: 0,
+				workspaceOps: [{ op: "write_file", path: "src/demo.cj", content: "main() {}" }],
+			})
+			const verification = {
+				overall,
+				build: { state: overall === "verified" ? "passed" : "failed" },
+				test: { state: "not_run" },
+				acceptance: "pending",
+				claimId: "claim",
+			} as const
+			const host = createMockHost({ verifyLocally: vi.fn().mockResolvedValue(verification) })
+			await new CloudAgentOrchestrator(host).run("change the function")
+			expect(host.verifyLocally).toHaveBeenCalledWith([path.resolve(host.cwd, "src/demo.cj")])
+			expect(host.say).toHaveBeenCalledWith(
+				"verification_summary",
+				undefined,
+				undefined,
+				expect.objectContaining({ overall }),
+			)
+			expect(host.markCompleted).toHaveBeenCalledOnce()
+			expect(vi.mocked(host.verifyLocally!).mock.invocationCallOrder[0]).toBeLessThan(
+				vi.mocked(host.markCompleted).mock.invocationCallOrder[0],
+			)
+		},
+	)
+	it("does not verify Cloud Agent runs that did not apply edits", async () => {
+		mockVscodeConfig({ "cloudAgent.deferredProtocol": false })
+		const host = createMockHost({ verifyLocally: vi.fn() })
+		await new CloudAgentOrchestrator(host).run("inspect only")
+		expect(host.verifyLocally).not.toHaveBeenCalled()
+	})
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mockVscodeConfig()

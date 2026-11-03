@@ -11,6 +11,7 @@ import { isCloudAgentAssistantTextMessage } from "../cloud-agent/CloudAgentChatB
 import { CheckCircle2 } from "lucide-react"
 
 import { headerStyle, successColor } from "./constants"
+import { VerificationCard, isLatestVerificationMessage } from "./VerificationCard"
 
 interface CompletionResultRowProps {
 	message: ClineMessage
@@ -28,6 +29,13 @@ export const CompletionResultRow = ({
 	clineMessages,
 }: CompletionResultRowProps) => {
 	const { t } = useTranslation()
+	const verification = message.verification && (
+		<VerificationCard
+			summary={message.verification}
+			ts={message.ts}
+			isLatest={isLatestVerificationMessage(message, clineMessages)}
+		/>
+	)
 
 	if (message.type === "ask") {
 		if (message.text) {
@@ -42,6 +50,7 @@ export const CompletionResultRow = ({
 					<div style={{ color: successColor, paddingTop: 10 }}>
 						<Markdown markdown={message.text} partial={message.partial} />
 					</div>
+					{verification}
 				</div>
 			)
 		} else {
@@ -53,11 +62,7 @@ export const CompletionResultRow = ({
 	const crPrev = crIdx > 0 ? clineMessages[crIdx - 1] : undefined
 	const completionAttached = isCloudAgentAssistantTextMessage(crPrev)
 	return isCloudAgentUi ? (
-		<div
-			className={cn(
-				"ca-final-output",
-				completionAttached && "ca-final-output--run-completion",
-			)}>
+		<div className={cn("ca-final-output", completionAttached && "ca-final-output--run-completion")}>
 			<div className="ca-final-output-done">
 				<div className="ca-final-output-done__mark" aria-hidden>
 					<CheckCircle2 className="ca-final-output-done__check" strokeWidth={2} />
@@ -71,6 +76,7 @@ export const CompletionResultRow = ({
 					<Markdown markdown={message.text} />
 				</div>
 			) : null}
+			{verification}
 		</div>
 	) : (
 		<div className="group">
@@ -83,6 +89,7 @@ export const CompletionResultRow = ({
 			<div className="border-l border-green-600/30 ml-2 pl-4 pb-1">
 				<Markdown markdown={message.text} />
 			</div>
+			{verification}
 		</div>
 	)
 }

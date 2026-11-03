@@ -291,6 +291,7 @@ export class TaskAskSayHandler {
 		progressStatus?: ToolProgressStatus,
 		options: {
 			isNonInteractive?: boolean
+			verification?: import("@njust-ai/types").VerificationSummary
 		} = {},
 		contextCondense?: ContextCondense,
 		contextTruncation?: ContextTruncation,
@@ -310,6 +311,7 @@ export class TaskAskSayHandler {
 					lastMessage.images = images
 					lastMessage.partial = partial
 					lastMessage.progressStatus = progressStatus
+					lastMessage.verification = options.verification
 					void this.host.updateClineMessage(lastMessage)
 				} else {
 					const sayTs = Date.now()
@@ -325,6 +327,7 @@ export class TaskAskSayHandler {
 						partial,
 						contextCondense,
 						contextTruncation,
+						verification: options.verification,
 					})
 				}
 			} else {
@@ -336,6 +339,7 @@ export class TaskAskSayHandler {
 					lastMessage.images = images
 					lastMessage.partial = false
 					lastMessage.progressStatus = progressStatus
+					lastMessage.verification = options.verification
 					await this.host.saveClineMessages()
 					void this.host.updateClineMessage(lastMessage)
 				} else {
@@ -351,6 +355,7 @@ export class TaskAskSayHandler {
 						images,
 						contextCondense,
 						contextTruncation,
+						verification: options.verification,
 					})
 				}
 			}
@@ -368,6 +373,7 @@ export class TaskAskSayHandler {
 				checkpoint,
 				contextCondense,
 				contextTruncation,
+				verification: options.verification,
 			})
 		}
 	}

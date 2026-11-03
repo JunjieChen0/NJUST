@@ -75,6 +75,8 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 
 	async execute(params: AttemptCompletionParams, task: Task, callbacks: AttemptCompletionCallbacks): Promise<void> {
 		let { result } = params
+		let verificationSummary: import("@njust-ai/types").VerificationSummary | undefined
+		let verificationFacts: string | undefined
 		const { handleError, pushToolResult, askFinishSubTaskApproval } = callbacks
 
 		// Prevent attempt_completion if any tool failed in the current turn
@@ -243,16 +245,27 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 					await blockCangjieCompletion(verification.reason)
 					return
 				}
-				if (verification.action === "allow") result = `${result.trim()}\n\n${verification.facts}`
+				if (verification.action === "allow") {
+					verificationSummary = verification.summary
+					verificationFacts = verification.facts
+				}
 			}
 
-			await this.traceCangjieCompletion(task, result, "attempt_completion")
+			await this.traceCangjieCompletion(
+				task,
+				verificationFacts ? `${result.trim()}\n\n${verificationFacts}` : result,
+				"attempt_completion",
+			)
 		}
 
 		try {
 			task.consecutiveMistakeCount = 0
 
-			await task.say("completion_result", result, undefined, false)
+			if (verificationSummary)
+				await task.say("completion_result", result, undefined, false, undefined, undefined, {
+					verification: verificationSummary,
+				})
+			else await task.say("completion_result", result, undefined, false)
 
 			// Check for subtask using parentTaskId (metadata-driven delegation)
 			if (task.parentTaskId) {
@@ -307,8 +320,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 				}
 			}
 
-			// MemRL: the agent has declared the task done by invoking attempt_completion.
-			// Record this as the success signal regardless of the user's approval action.
+			// A completion claim triggers memory persistence; system facts determine its outcome.
 			task.markAttemptedCompletion()
 
 			// Cangjie completion gates and agent-route validation have already passed.

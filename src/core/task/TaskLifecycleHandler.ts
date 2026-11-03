@@ -52,6 +52,7 @@ export interface TaskLifecycleHost {
 
 	abort: boolean
 	abandoned: boolean
+	taskCompleted: boolean
 	abortReason?: string
 	isInitialized: boolean
 	isDisposed: boolean
@@ -100,6 +101,9 @@ export interface TaskLifecycleHost {
 	emitFinalTokenUsageUpdate(): void
 	dispose(): void
 	cancelCurrentRequest(): void
+	publishVerificationSummary?(terminal: "cancelled" | "error"): Promise<void>
+	refreshVerificationSummary?(): Promise<void>
+	persistMemrlEpisode?(reason: "interrupted"): Promise<void>
 	removeAllListeners(): void
 }
 
@@ -107,6 +111,7 @@ export interface TaskLifecycleHost {
 
 export class TaskLifecycleHandler {
 	private sandboxCleanupPromise: Promise<void> | undefined
+	private awaitingResume = false
 
 	constructor(private host: TaskLifecycleHost) {}
 
@@ -179,6 +184,7 @@ export class TaskLifecycleHandler {
 
 	async resumeTaskFromHistory(): Promise<void> {
 		const t = this.host
+		this.awaitingResume = true
 		try {
 			const modifiedClineMessages = await t.getSavedClineMessages()
 
@@ -240,12 +246,14 @@ export class TaskLifecycleHandler {
 			let verificationNotice: string | undefined
 			try {
 				verificationNotice = await t.cangjieVerification?.onTaskResumed?.()
+				await t.refreshVerificationSummary?.()
 				if (verificationNotice) await t.say("text", verificationNotice)
 			} catch (error) {
 				logger.debug("TaskLifecycleHandler", "Verification refresh on task resume failed", error)
 			}
 
 			const { response, text, images } = await t.ask(askType)
+			this.awaitingResume = false
 
 			let responseText: string | undefined
 			let responseImages: string[] | undefined
@@ -387,6 +395,8 @@ export class TaskLifecycleHandler {
 				return
 			}
 			throw error
+		} finally {
+			this.awaitingResume = false
 		}
 	}
 
@@ -436,6 +446,19 @@ export class TaskLifecycleHandler {
 		t.abort = true
 		// Kill running cjpm build/test first; the runner persists the partial facts as cancelled.
 		t.cangjieVerification?.cancel()
+		// Leaving a task or viewing its history is not a new cancellation outcome.
+		if (!t.abandoned && !t.taskCompleted && !this.awaitingResume) {
+			try {
+				await t.publishVerificationSummary?.(t.abortReason === "streaming_failed" ? "error" : "cancelled")
+				void t
+					.persistMemrlEpisode?.("interrupted")
+					.catch((error) =>
+						logger.debug("TaskLifecycleHandler", "Episode persistence during cancellation failed", error),
+					)
+			} catch (error) {
+				logger.debug("TaskLifecycleHandler", "Verification summary on cancellation failed", error)
+			}
+		}
 		t.persistentRetryHandler?.cancel()
 		t.persistentRetryHandler = undefined
 

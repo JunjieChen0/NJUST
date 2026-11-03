@@ -8,6 +8,7 @@ import {
 	checkoutDiffPayloadSchema,
 	checkoutRestorePayloadSchema,
 	TelemetryEventName,
+	verificationDecisionPayloadSchema,
 } from "@njust-ai/types"
 import { type ApiMessage } from "../../task-persistence/apiMessages"
 import { saveTaskMessages } from "../../task-persistence"
@@ -23,6 +24,7 @@ import { MessageRouter, type MessageHandlerContext } from "./MessageRouter"
 import { logger } from "../../../shared/logger"
 import { getErrorMessage } from "../../../shared/error-utils"
 import { TelemetryService } from "@njust-ai/telemetry"
+import { latestDeliveryMessage } from "../../verification/verificationMessages"
 
 export function registerTaskHandlers(router: MessageRouter): void {
 	router.register("webviewDidLaunch", handleWebviewDidLaunch)
@@ -51,6 +53,28 @@ export function registerTaskHandlers(router: MessageRouter): void {
 	router.register("checkpointDiff", handleCheckpointDiff)
 	router.register("checkpointRestore", handleCheckpointRestore)
 	router.register("planAction", handlePlanAction)
+	router.register("verificationDecision", handleVerificationDecision)
+}
+
+async function handleVerificationDecision(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
+	const parsed = verificationDecisionPayloadSchema.safeParse(message.verificationDecision)
+	const task = context.provider.getCurrentTask()
+	if (!parsed.success || !task) return
+	const latest = latestDeliveryMessage(task.clineMessages)
+	if (!latest || latest.ts !== parsed.data.ts || !latest.verification?.claimId || latest.verification.terminal) return
+	if (parsed.data.claimId !== undefined && latest.verification.claimId !== parsed.data.claimId) return
+	try {
+		const result = await task.cangjieVerification.recordAcceptance(
+			parsed.data.decision,
+			latest.verification.claimId,
+		)
+		if (result === "recorded") await task.persistMemrlEpisode("decision")
+		if (result === "superseded") {
+			await vscode.window.showWarningMessage(t("common:verification.delivery_expired"))
+		}
+	} finally {
+		await task.refreshVerificationSummary()
+	}
 }
 
 // ── Shared helpers (message modification, task-internal) ──

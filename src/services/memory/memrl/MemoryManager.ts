@@ -8,7 +8,7 @@
  *
  * Integration points:
  *  - beforeRun(taskId, intent) → returns hints to inject into prompt
- *  - afterRun(taskId, intent, stmSummary, reward) → persists & updates Q (fire-and-forget)
+ *  - afterRun(taskId, intent, stmSummary, outcome) → upserts verification facts
  *  - updateDependencies(embedder, api) → call when provider initialises
  */
 
@@ -22,6 +22,7 @@ import { LongTermMemoryService, type RuleCard } from "./LongTermMemoryService"
 import type { EpisodicEntry } from "./EpisodicMemoryService"
 import { LTM_DISTILL_BATCH } from "./constants"
 import { createMemoryEmbedder } from "./memory-embedder"
+import type { MemrlVerification } from "../interfaces/IMemoryManager"
 
 export interface MemrlBeforeRunResult {
 	/** Formatted episodic hints for prompt injection */
@@ -106,20 +107,17 @@ export class MemoryManager {
 	}
 
 	/**
-	 * Called when a task ends. Fire-and-forget — must NOT await in caller.
-	 * Writes episodic entry and updates Q-values.
+	 * Store verification facts when a task ends or the user decides on a delivery.
 	 */
-	afterRun(taskId: string, intent: string, stmSummary: string, reward: number): void {
+	async afterRun(taskId: string, intent: string, stmSummary: string, outcome: MemrlVerification): Promise<void> {
 		if (!this.episodic) return
-
-		this.episodic
-			.write(intent, stmSummary, reward)
-			.catch((err) => {
-				logger.warn("MemoryManager", "afterRun write failed", err)
-			})
-			.finally(() => {
-				this.stmManager.delete(taskId)
-			})
+		try {
+			await this.episodic.write(intent, stmSummary, { ...outcome, taskId })
+		} catch (error) {
+			logger.warn("MemoryManager", "afterRun write failed", error)
+		} finally {
+			this.stmManager.delete(taskId)
+		}
 	}
 
 	/** Access the STM for a task (for recording steps). */
@@ -142,7 +140,7 @@ export class MemoryManager {
 		if (entries.length === 0) return ""
 		const lines = entries.map(
 			(e, i) =>
-				`${i + 1}. [Q=${e.qValue.toFixed(2)}] Intent: ${e.intent}\n   Summary: ${e.stmSummary.slice(0, 300)}`,
+				`${i + 1}. [${e.verification?.overall}] [Q=${e.qValue.toFixed(2)}] Intent: ${e.intent}\n   Summary: ${e.stmSummary.slice(0, 300)}`,
 		)
 		return `### Relevant Past Episodes\n${lines.join("\n\n")}`
 	}

@@ -484,5 +484,9 @@
 			"full": "Full",
 			"incremental": "Incremental"
 		}
+	},
+	"verification": {
+		"delivery_expired": "The code changed after delivery. This delivery is outdated; verify it again before deciding.",
+		"cloud_note": "Cloud Agent completion is server-reported. This card shows local system verification."
 	}
 }

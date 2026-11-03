@@ -1,6 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as vscode from "vscode"
+import type { VerificationSummary } from "@njust-ai/types"
 
 import { logger } from "../../shared/logger"
 import { getErrorMessage } from "../../shared/error-utils"
@@ -21,6 +22,7 @@ import { evaluateVerification, type CheckState, type VerificationVerdict } from 
 import { loadVerificationRecord, updateVerificationRecord, withClaim, withAcceptance } from "./VerificationStore"
 import { saveSnapshot } from "./snapshotStore"
 import { CangjieChangeMonitor, type ChangeMonitorDeps } from "./CangjieChangeMonitor"
+import { buildVerificationSummary } from "./verificationSummary"
 
 const LOG_TAIL_CHARS = 4_000
 /** Upper bound on completions blocked by failed system verification, so a task always reaches an end. */
@@ -55,7 +57,7 @@ export interface TaskVerificationDeps {
 export type ApproveCommand = (command: string) => Promise<boolean>
 
 export type CompletionVerificationOutcome =
-	| { action: "allow"; facts: string }
+	| { action: "allow"; facts: string; summary: VerificationSummary }
 	| { action: "block"; reason: string }
 	| { action: "skip" }
 	| { action: "cancelled" }
@@ -78,6 +80,7 @@ export class CangjieTaskVerification {
 	private missingTestsRequested = false
 	private systemBlocks = 0
 	private readonly changeMonitor: CangjieChangeMonitor
+	private delivery: Promise<CompletionVerificationOutcome> | undefined
 
 	constructor(
 		private readonly task: { taskId: string; cwd: string; policy: TaskVerificationPolicy },
@@ -99,6 +102,39 @@ export class CangjieTaskVerification {
 
 	get onDidChange() {
 		return this.changeMonitor.onDidChange
+	}
+
+	async currentSummary(): Promise<VerificationSummary | undefined> {
+		try {
+			const taskDir = await this.deps.taskDir()
+			const record = await loadVerificationRecord(taskDir, this.task.taskId)
+			if (!record || (!record.runs.length && !record.claims.length)) return undefined
+			const changed = await this.changeMonitor.recheck("file_change")
+			const resolution = await this.resolveRoot()
+			const snapshot =
+				resolution.kind === "resolved" ? await this.deps.checkDeps.snapshot(resolution.root) : undefined
+			const verdict = evaluateVerification(
+				await loadVerificationRecord(taskDir, this.task.taskId),
+				snapshot?.fingerprint,
+				await this.deps.checkDeps.environment(),
+			)
+			return buildVerificationSummary(verdict, {
+				taskDir,
+				changes: changed?.changes,
+				note: resolution.kind === "blocked" ? resolution.reason : verdict.latestClaim?.summary,
+			})
+		} catch (error) {
+			logger.debug("CangjieTaskVerification", "Current verification evidence is unavailable", error)
+			return buildVerificationSummary(evaluateVerification(undefined, undefined), {
+				taskDir: this.task.cwd,
+				note: `System verification unavailable: ${getErrorMessage(error)}`,
+			})
+		}
+	}
+
+	async getOutcome(): Promise<Pick<VerificationSummary, "overall" | "acceptance">> {
+		const summary = await this.currentSummary()
+		return { overall: summary?.overall ?? "no_record", acceptance: summary?.acceptance ?? "no_delivery" }
 	}
 
 	async onCheckpointRestored(): Promise<void> {
@@ -142,7 +178,12 @@ export class CangjieTaskVerification {
 		await this.baseline
 	}
 
-	async verifyForCompletion(approve: ApproveCommand): Promise<CompletionVerificationOutcome> {
+	verifyForCompletion(approve: ApproveCommand): Promise<CompletionVerificationOutcome> {
+		this.delivery = this.verifyCompletion(approve)
+		return this.delivery
+	}
+
+	private async verifyCompletion(approve: ApproveCommand): Promise<CompletionVerificationOutcome> {
 		const signal = this.abortController.signal
 		if (signal.aborted) return { action: "cancelled" }
 		try {
@@ -154,6 +195,10 @@ export class CangjieTaskVerification {
 			logger.error("CangjieTaskVerification", "System verification could not run", error)
 			return {
 				action: "allow",
+				summary: buildVerificationSummary(evaluateVerification(undefined, undefined), {
+					taskDir: this.task.cwd,
+					note: getErrorMessage(error),
+				}),
 				facts:
 					`${FACTS_HEADER}\n- System verification could not run: ${getErrorMessage(error)}\n` +
 					"- No build or test result is available for the current code.",
@@ -166,6 +211,14 @@ export class CangjieTaskVerification {
 		this.abortController.abort()
 	}
 
+	async cancelAndWait(): Promise<void> {
+		this.cancel()
+		const results = await Promise.allSettled([this.baseline, this.delivery])
+		for (const result of results)
+			if (result.status === "rejected")
+				logger.debug("CangjieTaskVerification", "Verification ended during cancellation", result.reason)
+	}
+
 	dispose(): void {
 		this.cancel()
 		this.changeMonitor.dispose()
@@ -176,6 +229,7 @@ export class CangjieTaskVerification {
 	/** Explicit user decisions apply only to the newest delivery of the unchanged code. */
 	async recordAcceptance(
 		decision: "accepted" | "changes_requested",
+		expectedClaimId?: string,
 	): Promise<"recorded" | "superseded" | "no_delivery"> {
 		const taskDir = await this.deps.taskDir()
 		const record = await loadVerificationRecord(taskDir, this.task.taskId)
@@ -184,6 +238,7 @@ export class CangjieTaskVerification {
 			undefined,
 		)
 		if (!claim) return "no_delivery"
+		if (expectedClaimId !== undefined && claim.claimId !== expectedClaimId) return "superseded"
 		const root = await this.resolveRoot()
 		const snapshot = root.kind === "resolved" ? await this.deps.checkDeps.snapshot(root.root) : undefined
 		if (!snapshot || snapshot.fingerprint !== claim.inputFingerprint) return "superseded"
@@ -275,8 +330,17 @@ export class CangjieTaskVerification {
 	}
 
 	private async allowWithNote(taskDir: string, note: string): Promise<CompletionVerificationOutcome> {
-		const record = await this.recordClaim(taskDir, undefined, note)
-		return { action: "allow", facts: formatVerificationFacts(evaluateVerification(record, undefined), note) }
+		const resolution = await this.resolveRoot()
+		const snapshot =
+			resolution.kind === "resolved" ? await this.deps.checkDeps.snapshot(resolution.root) : undefined
+		const record = await this.recordClaim(taskDir, snapshot?.fingerprint, note)
+		if (snapshot) await saveSnapshot(taskDir, snapshot, [snapshot.fingerprint])
+		const verdict = evaluateVerification(record, snapshot?.fingerprint, await this.deps.checkDeps.environment())
+		return {
+			action: "allow",
+			facts: formatVerificationFacts(verdict, note),
+			summary: buildVerificationSummary(verdict, { taskDir, note }),
+		}
 	}
 
 	private async decide(
@@ -292,7 +356,11 @@ export class CangjieTaskVerification {
 			missingTestsAlreadyRequested: this.missingTestsRequested,
 		})
 		if (decision.action === "allow")
-			return { action: "allow", facts: formatVerificationFacts(verdict, note, changes) }
+			return {
+				action: "allow",
+				facts: formatVerificationFacts(verdict, note, changes),
+				summary: buildVerificationSummary(verdict, { taskDir, changes, note }),
+			}
 
 		this.systemBlocks += 1
 		if (decision.requestedMissingTests) this.missingTestsRequested = true

@@ -492,5 +492,9 @@
 			"full": "全量",
 			"incremental": "增量"
 		}
+	},
+	"verification": {
+		"delivery_expired": "程式碼在交付後已變更，這次交付已過期，請重新驗證後再決定",
+		"cloud_note": "Cloud Agent 的完成狀態由伺服器回報；此卡片顯示本機系統驗證。"
 	}
 }

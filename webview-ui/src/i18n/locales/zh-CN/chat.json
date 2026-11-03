@@ -564,5 +564,50 @@
   "apiConfigSelector": {
     "pinnedConfigurations": "已固定的配置",
     "allConfigurations": "所有配置"
+  },
+  "verification": {
+    "title": "系统验证",
+    "overall": {
+      "verified": "已验证",
+      "failed": "失败",
+      "incomplete": "不完整",
+      "no_record": "未验证"
+    },
+    "states": {
+      "not_run": "未运行",
+      "running": "运行中",
+      "passed": "通过",
+      "failed": "失败",
+      "blocked": "受阻",
+      "cancelled": "已取消",
+      "inconclusive": "不确定",
+      "stale": "已过期",
+      "zero_tests": "零测试，未执行任何测试"
+    },
+    "build": "构建",
+    "test": "测试",
+    "exitCode": "退出码 {{code}}",
+    "testCounts": "通过 {{passed}}，失败 {{failed}}，跳过 {{skipped}}",
+    "codeChanged": "已过期：代码已变化",
+    "environmentChanged": "已过期：SDK 或工具链已变化",
+    "changes": "任务编辑工具改动 {{taskTool}} 个文件，其他来源改动 {{other}} 个文件",
+    "otherChanges": "其他来源的改动",
+    "buildLog": "构建日志",
+    "testLog": "测试日志",
+    "accept": "接受",
+    "requestChanges": "要求修改",
+    "unverified": "未经系统验证",
+    "acceptance": {
+      "no_delivery": "尚无交付",
+      "pending": "等待你的决定",
+      "accepted": "已接受",
+      "changes_requested": "已要求修改",
+      "superseded": "交付已过期"
+    },
+    "terminal": {
+      "cancelled": "任务已取消，已有结果已保留",
+      "error": "任务因错误结束，已有结果已保留"
+    },
+    "reverifyRequired": "交付已过期，需要重新验证"
   }
 }

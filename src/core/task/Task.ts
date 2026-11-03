@@ -64,6 +64,7 @@ import { RooTerminalProcess } from "../../integrations/terminal/types"
 // utils
 import { getWorkspacePath } from "../../utils/path"
 import { createCloudAgentHost } from "./createCloudAgentHost"
+import { refreshVerificationMessage } from "../verification/verificationMessages"
 import { tokenCountCache } from "../../utils/tokenCountCache"
 
 // prompts
@@ -185,10 +186,10 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	public memrlLtmRules: string = ""
 	/** MemRL: intent captured at task start, reused when persisting the episode. */
 	public memrlIntent: string = ""
-	/** MemRL: guard so the episode is persisted exactly once per task. */
-	private memrlPersisted = false
-	/** MemRL: set when the agent invokes attempt_completion (its own success signal). */
-	private completionAttempted = false
+	private memrlWrites: Promise<void> = Promise.resolve()
+	private memrlSummary = ""
+	private verificationMessageUpdate: Promise<void> = Promise.resolve()
+	private verificationTerminal?: "cancelled" | "error"
 
 	private readonly modeHandler: TaskModeHandler
 
@@ -618,6 +619,11 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.hostRef = new WeakRef(host)
 		this.globalStoragePath = host.context.globalStorageUri.fsPath
 		this.cangjieVerification = createCangjieTaskVerification(this)
+		this.cangjieVerification.onDidChange(() => {
+			void this.refreshVerificationSummary().catch((error) =>
+				logger.debug("Task", "Cannot refresh verification card", error),
+			)
+		})
 		this.diffViewProvider = host.createDiffViewProvider?.(this.cwd, this) ?? new NullTaskDiffViewProvider()
 		this.enableCheckpoints = enableCheckpoints
 		this.checkpointTimeout = checkpointTimeout
@@ -935,6 +941,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		progressStatus?: ToolProgressStatus,
 		options: {
 			isNonInteractive?: boolean
+			verification?: import("@njust-ai/types").VerificationSummary
 		} = {},
 		contextCondense?: ContextCondense,
 		contextTruncation?: ContextTruncation,
@@ -1049,42 +1056,96 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.debouncedEmitTokenUsage.flush()
 	}
 
-	/** Signal the outer loop that the task has reached a terminal completed
-	 *  state via attempt_completion acceptance. */
+	/** Execution completed; explicit user acceptance is recorded separately. */
 	public markTaskCompleted(): void {
 		this.taskCompleted = true
-		// attempt_completion does NOT end the task — it stays open awaiting the
-		// user — so persist the successful episode now (reward 1.0). The loop's
-		// finally would otherwise only fire much later, on dispose.
-		this.persistMemrlEpisode()
+		void this.persistMemrlEpisode()
+	}
+
+	public refreshVerificationSummary(): Promise<void> {
+		this.verificationMessageUpdate = this.verificationMessageUpdate
+			.catch((error) => logger.debug("Task", "Previous verification card update failed", error))
+			.then(() =>
+				refreshVerificationMessage({
+					clineMessages: this.clineMessages,
+					currentSummary: () => this.cangjieVerification.currentSummary(),
+					update: (message) => this.updateClineMessage(message),
+					save: () => this.saveClineMessages(),
+				}),
+			)
+		return this.verificationMessageUpdate
+	}
+
+	public async publishVerificationSummary(terminal: "cancelled" | "error"): Promise<void> {
+		if (this.verificationTerminal || this.abandoned || this.taskCompleted) return
+		try {
+			await this.cangjieVerification.cancelAndWait()
+			const verification = await this.cangjieVerification.currentSummary()
+			if (!verification || this.verificationTerminal || this.abandoned || this.taskCompleted) return
+			this.verificationTerminal = terminal
+			await this.addToClineMessages({
+				ts: Date.now(),
+				type: "say",
+				say: "verification_summary",
+				verification: { ...verification, terminal },
+			})
+		} catch (error) {
+			logger.debug("Task", "Cannot publish terminal verification summary", error)
+		}
 	}
 
 	/**
-	 * MemRL: the agent invoked attempt_completion (declared the task done). This is
-	 * the success signal we reward on — independent of whether the user clicks the
-	 * approval button (which is a separate UX gate that often never fires).
+	 * Record a completion attempt using system verification facts, independently of user acceptance.
 	 */
 	public markAttemptedCompletion(): void {
-		this.completionAttempted = true
-		// Persist the episode the moment the agent declares completion — don't wait
-		// for the user's approval button or task dispose (which often never happen).
-		this.persistMemrlEpisode()
+		void this.persistMemrlEpisode()
 	}
 
 	/**
-	 * MemRL: persist the current task as an episodic memory exactly once.
-	 * Called on completion (markTaskCompleted, reward 1.0) and as a fallback when
-	 * the task loop unwinds on abort/error (reward 0.0). Idempotent per task.
+	 * Upsert the task's memory using verification facts. Repeated delivery decisions
+	 * update the same entry and never compound its reward.
 	 */
-	private persistMemrlEpisode(): void {
-		if (this.memrlPersisted) return
-		const memoryManager = this.hostRef.deref()?.getMemoryManager(this.cwd)
-		if (!memoryManager) return
-		this.memrlPersisted = true
-		const stm = memoryManager.getStm(this.taskId)
-		// Success = the agent reached attempt_completion OR the user accepted it.
-		const reward = this.taskCompleted || this.completionAttempted ? 1.0 : 0.0
-		memoryManager.afterRun(this.taskId, this.memrlIntent || this.taskId, stm.summarize(), reward)
+	public persistMemrlEpisode(reason: "completion" | "decision" | "interrupted" = "completion"): Promise<void> {
+		this.memrlWrites = this.memrlWrites
+			.catch((error) => logger.debug("Task", "Previous episode persistence failed", error))
+			.then(async () => {
+				if (reason === "interrupted" && this.abandoned) return
+				const memoryManager = this.hostRef.deref()?.getMemoryManager(this.cwd)
+				if (!memoryManager) return
+				let outcome: import("../../services/memory/interfaces/IMemoryManager").MemrlVerification = {
+					overall: "no_record",
+					acceptance: "no_delivery",
+				}
+				try {
+					outcome = await this.cangjieVerification.getOutcome()
+				} catch (error) {
+					logger.debug("Task", "Verification unavailable for episodic memory", error)
+				}
+				if (
+					reason === "interrupted" &&
+					!this.taskCompleted &&
+					outcome.acceptance === "no_delivery" &&
+					outcome.overall !== "failed"
+				)
+					outcome = { ...outcome, overall: "incomplete" }
+				const summary = memoryManager.getStm(this.taskId).summarize()
+				if (summary) this.memrlSummary = summary
+				if (!this.memrlSummary)
+					this.memrlSummary =
+						[...this.clineMessages]
+							.reverse()
+							.find((message) => message.say === "completion_result" || message.say === "text")?.text ??
+						""
+				await memoryManager.afterRun(this.taskId, this.memrlIntent || this.taskId, this.memrlSummary, outcome)
+			})
+			.catch((error) => logger.debug("Task", "Cannot persist episodic verification facts", error))
+		return this.memrlWrites
+	}
+
+	public markCloudRunStarted(): void {
+		this.taskCompleted = false
+		this.verificationTerminal = undefined
+		this.memrlSummary = ""
 	}
 
 	/** Return a Promise that resolves when background switch is requested */
@@ -1160,9 +1221,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	// Cloud Agent orchestration delegated to CloudAgentOrchestrator
 
 	private async initiateMemrlBeforeRun(intent: string): Promise<void> {
+		this.verificationTerminal = undefined
 		this.memrlIntent = intent
-		this.memrlPersisted = false
-		this.completionAttempted = false
+		this.memrlSummary = ""
 		const memoryManager = this.hostRef.deref()?.getMemoryManager(this.cwd)
 		if (memoryManager) {
 			memoryManager.updateDependencies(this.api)
@@ -1188,7 +1249,12 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		try {
 			await orchestrator.run(userMessage, images)
 		} finally {
-			this.persistMemrlEpisode()
+			if (!this.abandoned) {
+				if (!this.taskCompleted) await this.publishVerificationSummary(this.abort ? "cancelled" : "error")
+				void this.persistMemrlEpisode(this.taskCompleted ? "completion" : "interrupted").catch((error) =>
+					logger.debug("Task", "Cloud episode persistence after task end failed", error),
+				)
+			}
 		}
 	}
 
@@ -1254,8 +1320,15 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 				nextUserContent = [{ type: "text", text: formatResponse.noToolsUsed() }]
 			}
 		} finally {
-			// MemRL: persist episode (once) on task unwind — fallback for abort/error.
-			this.persistMemrlEpisode()
+			if (!this.abandoned) {
+				if (!this.taskCompleted && !this.isPaused)
+					await this.publishVerificationSummary(
+						this.abortReason === "streaming_failed" || !this.abort ? "error" : "cancelled",
+					)
+				void this.persistMemrlEpisode(this.taskCompleted ? "completion" : "interrupted").catch((error) =>
+					logger.debug("Task", "Episode persistence after task end failed", error),
+				)
+			}
 			this.activeTaskLoopCount = Math.max(0, this.activeTaskLoopCount - 1)
 			if (this.activeTaskLoopCount === 0) {
 				for (const resolve of this.taskLoopIdleResolvers) resolve()
