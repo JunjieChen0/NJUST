@@ -48,7 +48,10 @@ describe("validateCheckOnlyToolUse", () => {
 		'"C:\\Program Files\\Cangjie\\tools\\bin\\cjpm.exe" build',
 		'"C:\\Program Files (x86)\\Cangjie\\tools\\bin\\cjpm.exe" test',
 		"/opt/cangjie/tools/bin/cjpm test",
-		"where.exe cjpm",
+		"cjpm --help",
+		"cjc -v",
+		"cjc --help",
+		"'C:\\Program Files\\Cangjie\\bin\\cjc.exe' --version",
 		"cjlint -f src",
 		"cjc --version",
 	])("allows the read-only toolchain command %s", (command) => {
@@ -56,6 +59,20 @@ describe("validateCheckOnlyToolUse", () => {
 	})
 
 	it.each([
+		'cjc main.cj "-o" src/main.cj',
+		"cjc main.cj '-o' x",
+		'cjlint -f src "--output" r.cj',
+		"cjc main.cj",
+		"cjc main.cj -o=x",
+		"cjlint -f src --output=x",
+		"cjpm build --output=x",
+		"cjlint -f src -o=x",
+		"cjlint -f src --out`put r.cj",
+		"cjlint -f src --out^put r.cj",
+		'cjlint -f \\"src\\"',
+		"cjlint -f --output=x",
+		"where.exe cjpm",
+		'"$(Get-Command cjpm)" build',
 		"cjfmt -f src/main.cj",
 		"sed -i s/a/b/ src/main.cj",
 		"cjpm build > build.log",
