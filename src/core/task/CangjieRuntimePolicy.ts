@@ -1,6 +1,6 @@
 import path from "path"
 
-import { routeCangjieAgentTask, type CangjieAgentStage } from "../agent/CangjieAgentRouter"
+import { routeCangjieAgentTask, type CangjieAgentRouteKind, type CangjieAgentStage } from "../agent/CangjieAgentRouter"
 import { getMatchingCjcPatternsByCategory, parseCjpmToml } from "../prompts/sections/cangjie-context"
 import {
 	CRITICAL_SIGNATURE_MODULES,
@@ -15,6 +15,8 @@ const MAX_REPAIR_ATTEMPTS = 2
 const VERIFICATION_ONLY_RE =
 	/(?:\u53ea|\u4ec5)(?:\u8fd0\u884c|\u6267\u884c).{0,16}(?:cjpm\s+build|\u6784\u5efa|\u9a8c\u8bc1)|(?:\u4e0d\u8981|\u4e0d\u5141\u8bb8|\u7981\u6b62).{0,12}(?:\u4fee\u6539|\u4fee\u590d)|\bonly\s+(?:run|verify)\b|\bdo not\s+(?:modify|edit|repair)\b/i
 const REPAIR_REQUEST_RE = /\u4fee\u590d|\u4fee\u6539|\u81ea\u52a8\u5904\u7406|repair|\bfix\b/i
+const BUILD_ONLY_REQUEST_RE = /(?:只|仅)(?:运行|执行)\s*`?cjpm\s+build|\bonly\s+run\s+`?cjpm\s+build/i
+const TEST_MENTION_RE = /测试|\bcjpm\s+test\b|\btests?\b/i
 const SOURCE_DELETE_REQUEST_RE = /\u5220\u9664|\u79fb\u9664|\bdelete\b|\bremove\b/i
 const ALLOWED_SEGMENT_PREFIXES = [
 	"cjpm",
@@ -395,7 +397,12 @@ export class CangjieRuntimePolicy {
 	private delegatedAgentTypes: string[] = []
 	private agentRouteKey: string | undefined
 	private requiredAgentStages: CangjieAgentStage[] = []
+	private routeKind: CangjieAgentRouteKind | undefined
 	private verificationOnlyRoute = false
+	/** Absolute paths of build inputs written by this task or its delegated children. */
+	private readonly writtenPaths = new Set<string>()
+	/** Latest system-run tests failed; drives the same repair route as a failed build. */
+	private recentTestFailed = false
 	private sourceDeletionAllowed = false
 
 	readonly searchedStdModules = new Set<string>()
@@ -411,9 +418,45 @@ export class CangjieRuntimePolicy {
 		if (!routeKey || routeKey === this.agentRouteKey) return
 		this.agentRouteKey = routeKey
 		this.sourceDeletionAllowed = SOURCE_DELETE_REQUEST_RE.test(routeKey)
-		this.requiredAgentStages = routeCangjieAgentTask(routeKey).stages
+		const route = routeCangjieAgentTask(routeKey)
+		this.requiredAgentStages = route.stages
+		this.routeKind = route.kind
 		this.delegatedAgentTypes = []
 		this.verificationOnlyRoute = VERIFICATION_ONLY_RE.test(routeKey) && !REPAIR_REQUEST_RE.test(routeKey)
+	}
+
+	getRouteKind(): CangjieAgentRouteKind | undefined {
+		return this.routeKind
+	}
+
+	/** The request only checks or investigates: no source edits, formatting, or repair may happen. */
+	isCheckOnlyRoute(): boolean {
+		// "explore" is also the router's fallback for unclassified requests, so it must not forbid edits.
+		return this.verificationOnlyRoute || this.routeKind === "verify"
+	}
+
+	/** The user explicitly limited the work to `cjpm build`; system verification must not add `cjpm test`. */
+	isBuildOnlyRequest(): boolean {
+		const request = this.agentRouteKey
+		return request !== undefined && BUILD_ONLY_REQUEST_RE.test(request) && !TEST_MENTION_RE.test(request)
+	}
+
+	getWrittenPaths(): string[] {
+		return [...this.writtenPaths]
+	}
+
+	/** Record build inputs written by a delegated child task (absolute paths). */
+	noteDelegatedWrites(absolutePaths: readonly string[]): void {
+		for (const filePath of absolutePaths) this.writtenPaths.add(path.resolve(filePath))
+	}
+
+	/** Record the outcome of system-run tests; a failure routes into repair like a failed build. */
+	noteTestResult(passed: boolean): void {
+		this.recentTestFailed = !passed
+	}
+
+	private hasRecentVerificationFailure(): boolean {
+		return this.recentBuildFailed || this.recentTestFailed
 	}
 
 	getSourceDeletionBlockReason(relPath: string): string | null {
@@ -434,7 +477,7 @@ export class CangjieRuntimePolicy {
 		const nextStage = requiredStages[this.delegatedAgentTypes.length]
 		if (!nextStage) {
 			if (
-				this.recentBuildFailed &&
+				this.hasRecentVerificationFailure() &&
 				(this.verificationOnlyRoute || this.isRepairLoopExhausted()) &&
 				toolName !== "attempt_completion" &&
 				toolName !== "update_todo_list"
@@ -464,7 +507,7 @@ export class CangjieRuntimePolicy {
 	}
 
 	private getEffectiveRequiredAgentStages(): CangjieAgentStage[] {
-		if (!this.recentBuildFailed) return [...this.requiredAgentStages]
+		if (!this.hasRecentVerificationFailure()) return [...this.requiredAgentStages]
 
 		const stages = [...this.delegatedAgentTypes] as CangjieAgentStage[]
 		if (this.verificationOnlyRoute) return stages
@@ -771,6 +814,8 @@ export class CangjieRuntimePolicy {
 		const affectsBuild = lowerPath.endsWith(".cj") || lowerPath.endsWith(".toml")
 		if (!affectsBuild) return
 
+		this.writtenPaths.add(path.resolve(this.cwd, relPath))
+		this.recentTestFailed = false
 		this.writeRevision += 1
 		this.recentBuildSucceeded = false
 		this.recentBuildFailed = false
@@ -792,6 +837,8 @@ export class CangjieRuntimePolicy {
 	notePathDeleted(relPath: string): void {
 		const lowerPath = relPath.toLowerCase()
 		if (!lowerPath.endsWith(".cj") && !lowerPath.endsWith(".toml")) return
+		this.writtenPaths.add(path.resolve(this.cwd, relPath))
+		this.recentTestFailed = false
 		this.writeRevision += 1
 		this.recentBuildSucceeded = false
 		this.recentBuildFailed = false
@@ -1016,12 +1063,14 @@ export class CangjieRuntimePolicy {
 		return this.delegatedAgentTypes.filter((agentType) => agentType === "CangjieRepair").length
 	}
 
-	private isRepairLoopExhausted(): boolean {
+	isRepairLoopExhausted(): boolean {
 		return this.getRepairAttemptCount() >= MAX_REPAIR_ATTEMPTS
 	}
 
 	noteAgentDelegation(agentType: string): void {
 		this.delegatedAgentTypes.push(agentType)
+		// A repair attempt consumes the test failure; the next completion re-runs system verification.
+		if (agentType === "CangjieRepair") this.recentTestFailed = false
 	}
 
 	getDelegatedAgentTypes(): string[] {
@@ -1046,6 +1095,7 @@ export class CangjieRuntimePolicy {
 			repairAttemptCount: this.getRepairAttemptCount(),
 			repairLoopExhausted: this.isRepairLoopExhausted(),
 			verificationOnlyRoute: this.verificationOnlyRoute,
+			writtenPaths: [...this.writtenPaths].sort(),
 		}
 	}
 }

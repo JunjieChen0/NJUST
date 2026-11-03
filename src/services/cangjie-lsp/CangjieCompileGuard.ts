@@ -23,6 +23,8 @@ import {
 import type { CangjieMetricsCollector } from "./CangjieMetricsCollector"
 import { getErrorMessage } from "../../shared/error-utils"
 import { safeUnlink } from "./safeUnlink"
+import { isCangjieAutoFormatSuspended } from "./autoFormatSuspension"
+import { withCjpmProjectLock } from "./cjpmProjectLock"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
 import { t } from "../../i18n"
@@ -135,10 +137,16 @@ export class CangjieCompileGuard implements vscode.Disposable {
 			const cwd = this.findCjpmRoot(doc.uri)
 			if (!cwd) return
 
-			// Step 1: Auto-format with cjfmt (Phase 3.2)
-			const formatResult = await this.formatFile(doc.fileName)
-			if (formatResult.formatted) {
-				this.outputChannel.appendLine(`[CompileGuard] 🎨 cjfmt formatted ${path.basename(doc.fileName)}`)
+			// Step 1: Auto-format with cjfmt (Phase 3.2) — skipped while a check-only task must not change sources
+			if (isCangjieAutoFormatSuspended(doc.fileName)) {
+				this.outputChannel.appendLine(
+					`[CompileGuard] cjfmt skipped for ${path.basename(doc.fileName)}: a check-only task is active`,
+				)
+			} else {
+				const formatResult = await this.formatFile(doc.fileName)
+				if (formatResult.formatted) {
+					this.outputChannel.appendLine(`[CompileGuard] 🎨 cjfmt formatted ${path.basename(doc.fileName)}`)
+				}
 			}
 
 			this.lintReportUriByCwd.set(cwd, doc.uri)
@@ -223,8 +231,9 @@ export class CangjieCompileGuard implements vscode.Disposable {
 	async compile(cwd: string): Promise<CompileResult> {
 		const prev = this.compileTailByCwd.get(cwd) ?? Promise.resolve()
 		let result!: CompileResult
+		// The project lock also serializes against system verification runs on the same target/.
 		const done = prev.then(async () => {
-			result = await this.compileImpl(cwd)
+			result = await withCjpmProjectLock(cwd, () => this.compileImpl(cwd))
 		})
 		this.compileTailByCwd.set(
 			cwd,

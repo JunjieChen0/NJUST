@@ -1357,4 +1357,117 @@ describe("attemptCompletionTool", () => {
 			})
 		})
 	})
+
+	describe("system verification for top-level Cangjie tasks", () => {
+		const block: AttemptCompletionToolUse = {
+			type: "tool_use",
+			name: "attempt_completion",
+			params: { result: "Implemented parseArgs." },
+			nativeArgs: { result: "Implemented parseArgs." },
+			partial: false,
+		}
+
+		function callbacks(): AttemptCompletionCallbacks {
+			return {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
+				askFinishSubTaskApproval: mockAskFinishSubTaskApproval,
+				toolDescription: mockToolDescription,
+			}
+		}
+
+		beforeEach(() => {
+			mockTask.didToolFailInCurrentTurn = false
+			mockTask.taskMode = "cangjie" as any
+		})
+
+		it("lets the extension's build/test replace the model-run build gates and appends the recorded facts", async () => {
+			const verifyForCompletion = vi
+				.fn()
+				.mockResolvedValue({ action: "allow", facts: "System verification:\n- Verdict: verified" })
+			;(mockTask as any).cangjieVerification = { verifyForCompletion }
+
+			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
+
+			expect(mockTask.cangjieRuntimePolicy!.getAttemptCompletionBlockReason).toHaveBeenCalledWith({
+				allowPendingBuild: true,
+				allowFailedBuildHandoff: true,
+			})
+			expect(verifyForCompletion).toHaveBeenCalledTimes(1)
+			expect(mockTask.say).toHaveBeenCalledWith(
+				"completion_result",
+				expect.stringMatching(/Implemented parseArgs\.[\s\S]*Verdict: verified/),
+				undefined,
+				false,
+			)
+		})
+
+		it("approves verification commands through the command ask and treats a refusal as not approved", async () => {
+			let approve: ((command: string) => Promise<boolean>) | undefined
+			;(mockTask as any).cangjieVerification = {
+				verifyForCompletion: vi.fn(async (fn: (command: string) => Promise<boolean>) => {
+					approve = fn
+					return { action: "skip" }
+				}),
+			}
+			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
+
+			mockTask.ask = vi.fn().mockResolvedValueOnce({ response: "yesButtonClicked" })
+			await expect(approve!("cjpm build")).resolves.toBe(true)
+			expect(mockTask.ask).toHaveBeenCalledWith("command", "cjpm build")
+
+			mockTask.ask = vi.fn().mockResolvedValueOnce({ response: "noButtonClicked" })
+			await expect(approve!("cjpm test")).resolves.toBe(false)
+			expect(mockTask.didRejectTool).toBeFalsy()
+		})
+
+		it("does not append facts when system verification is skipped", async () => {
+			;(mockTask as any).cangjieVerification = {
+				verifyForCompletion: vi.fn().mockResolvedValue({ action: "skip" }),
+			}
+
+			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
+
+			expect(mockTask.say).toHaveBeenCalledWith("completion_result", "Implemented parseArgs.", undefined, false)
+		})
+
+		it("blocks completion with the system verification reason", async () => {
+			;(mockTask as any).cangjieVerification = {
+				verifyForCompletion: vi
+					.fn()
+					.mockResolvedValue({ action: "block", reason: "System verification failed: cjpm build exited 1" }),
+			}
+
+			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
+
+			expect(mockPushToolResult).toHaveBeenCalledWith(
+				expect.stringContaining("System verification failed: cjpm build exited 1"),
+				undefined,
+			)
+			expect(mockTask.say).not.toHaveBeenCalledWith("completion_result", expect.anything(), undefined, false)
+			expect(mockTask.consecutiveMistakeCount).toBe(1)
+		})
+
+		it("stops quietly when the task was cancelled during verification", async () => {
+			;(mockTask as any).cangjieVerification = {
+				verifyForCompletion: vi.fn().mockResolvedValue({ action: "cancelled" }),
+			}
+
+			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
+
+			expect(mockPushToolResult).not.toHaveBeenCalled()
+			expect(mockTask.say).not.toHaveBeenCalledWith("completion_result", expect.anything(), undefined, false)
+		})
+
+		it("does not run system verification for delegated child tasks", async () => {
+			const verifyForCompletion = vi.fn()
+			;(mockTask as any).cangjieVerification = { verifyForCompletion }
+			mockTask.parentTaskId = "parent-1"
+
+			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
+
+			expect(verifyForCompletion).not.toHaveBeenCalled()
+		})
+	})
 })

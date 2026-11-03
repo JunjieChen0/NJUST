@@ -12,6 +12,7 @@ import { TaskState } from "../task/TaskStateMachine"
 import { AskIgnoredError } from "../task/AskIgnoredError"
 import { toolRegistry } from "../tools/ToolRegistry"
 import { applyToolResultTokenBudget } from "./toolUseHelpers"
+import { isReadOnlyCangjieAgent, validateCheckOnlyToolUse } from "../verification/checkOnlyGuard"
 
 export async function handleMcpToolUseBlock(cline: Task, block: McpToolUse): Promise<void> {
 	if (cline.didRejectTool) {
@@ -25,6 +26,23 @@ export async function handleMcpToolUseBlock(cline: Task, block: McpToolUse): Pro
 				type: "tool_result",
 				tool_use_id: sanitizeToolUseId(toolCallId),
 				content: errorMessage,
+				is_error: true,
+			})
+		}
+		return
+	}
+
+	const checkOnlyError =
+		(cline.taskMode === "cangjie" && cline.cangjieRuntimePolicy?.isCheckOnlyRoute?.() === true) ||
+		isReadOnlyCangjieAgent(cline.agentType)
+			? validateCheckOnlyToolUse("use_mcp_tool", {})
+			: null
+	if (checkOnlyError) {
+		if (block.id && !block.partial) {
+			cline.pushToolResultToUserContent({
+				type: "tool_result",
+				tool_use_id: sanitizeToolUseId(block.id),
+				content: checkOnlyError,
 				is_error: true,
 			})
 		}

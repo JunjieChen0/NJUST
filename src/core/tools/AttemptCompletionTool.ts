@@ -35,6 +35,18 @@ function normalizeCangjieEvidenceAuditHeading(result: string): string {
 	return result.replace(CANGJIE_EVIDENCE_AUDIT_HEADING_RE, "Cangjie evidence audit:")
 }
 
+/**
+ * Approve one system verification command through the same path as execute_command:
+ * a "command" ask (honouring the user's auto-approval allow/deny lists) unless bypass mode
+ * is active. A refusal only marks verification as not approved; it does not reject the tool.
+ */
+async function approveVerificationCommand(task: Task, command: string): Promise<boolean> {
+	const ruleEngine = (task as Task & { permissionRuleEngine?: { getMode(): string } }).permissionRuleEngine
+	if (ruleEngine?.getMode?.() === "bypass") return true
+	const { response } = await task.ask("command", command)
+	return response === "yesButtonClicked"
+}
+
 export interface AttemptCompletionCallbacks extends ToolCallbacks {
 	askFinishSubTaskApproval: () => Promise<boolean>
 	toolDescription: () => string
@@ -113,8 +125,11 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 				allowPendingBuild?: boolean
 				allowFailedBuildHandoff?: boolean
 			} = {}
-			if (canHandOffPendingBuild) completionGateOptions.allowPendingBuild = true
-			if (canHandOffFailedBuild) completionGateOptions.allowFailedBuildHandoff = true
+			// Top-level Cangjie tasks: the extension itself runs build and tests below, so the
+			// model-run build gates give way to the system verification decision.
+			const isTopLevelCangjieTask = task.taskMode === "cangjie" && !task.parentTaskId
+			if (canHandOffPendingBuild || isTopLevelCangjieTask) completionGateOptions.allowPendingBuild = true
+			if (canHandOffFailedBuild || isTopLevelCangjieTask) completionGateOptions.allowFailedBuildHandoff = true
 			const cangjieBlockReason = task.cangjieRuntimePolicy.getAttemptCompletionBlockReason(completionGateOptions)
 			if (cangjieBlockReason) {
 				await blockCangjieCompletion(cangjieBlockReason)
@@ -217,6 +232,18 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 				result = normalizeCangjieEvidenceAuditHeading(result)
 			} else if (evidenceAudit) {
 				result = `${result.trim()}\n\n${evidenceAudit}`
+			}
+
+			if (isTopLevelCangjieTask && task.cangjieVerification) {
+				const verification = await task.cangjieVerification.verifyForCompletion((command) =>
+					approveVerificationCommand(task, command),
+				)
+				if (verification.action === "cancelled") return
+				if (verification.action === "block") {
+					await blockCangjieCompletion(verification.reason)
+					return
+				}
+				if (verification.action === "allow") result = `${result.trim()}\n\n${verification.facts}`
 			}
 
 			await this.traceCangjieCompletion(task, result, "attempt_completion")

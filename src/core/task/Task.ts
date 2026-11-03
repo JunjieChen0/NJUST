@@ -113,6 +113,7 @@ import { TaskExecutor, type TaskExecutorHost } from "./TaskExecutor"
 import { TaskLifecycleHandler, type TaskLifecycleHost } from "./TaskLifecycleHandler"
 import { TaskModeHandler } from "./TaskModeHandler"
 import { CangjieRuntimePolicy } from "./CangjieRuntimePolicy"
+import { CangjieTaskVerification, createCangjieTaskVerification } from "../verification/CangjieTaskVerification"
 
 export interface TaskOptions extends CreateTaskOptions {
 	host?: ITaskHost
@@ -283,6 +284,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	/** Std library module names observed via `search_files` on bundled Cangjie corpus (cangjie mode). Used for write/edit search-gate warnings. */
 	cangjieSearchHistory: Set<string> = new Set()
 	readonly cangjieRuntimePolicy: CangjieRuntimePolicy
+	/** System-run build/test verification for Cangjie completions (see core/verification). */
+	readonly cangjieVerification: CangjieTaskVerification
 
 	// LLM Messages & Chat Messages
 	apiConversationHistory: ApiMessage[] = []
@@ -614,6 +617,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.consecutiveMistakeLimit = consecutiveMistakeLimit ?? DEFAULT_CONSECUTIVE_MISTAKE_LIMIT
 		this.hostRef = new WeakRef(host)
 		this.globalStoragePath = host.context.globalStorageUri.fsPath
+		this.cangjieVerification = createCangjieTaskVerification(this)
 		this.diffViewProvider = host.createDiffViewProvider?.(this.cwd, this) ?? new NullTaskDiffViewProvider()
 		this.enableCheckpoints = enableCheckpoints
 		this.checkpointTimeout = checkpointTimeout

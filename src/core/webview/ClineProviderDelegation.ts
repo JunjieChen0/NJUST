@@ -398,6 +398,11 @@ export async function reopenParentFromDelegationWithProvider(
 			? stackedParent
 			: await provider.createTaskWithHistoryItem(updatedHistory, { startTask: false })
 
+	// Files the child wrote decide which cjpm project the parent's system verification targets.
+	if (parentInstance && completedChildRuntimeSnapshot?.writtenPaths?.length) {
+		parentInstance.cangjieRuntimePolicy.noteDelegatedWrites(completedChildRuntimeSnapshot.writtenPaths)
+	}
+
 	if (
 		parentInstance &&
 		completedChildAgentType === "CangjieVerify" &&

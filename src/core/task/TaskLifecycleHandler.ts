@@ -59,6 +59,8 @@ export interface TaskLifecycleHost {
 	consecutiveNoToolUseCount: number
 	consecutiveNoAssistantMessagesCount: number
 	persistentRetryHandler?: { cancel(): void } | undefined
+	/** Stops in-flight system build/test verification on abort and releases its resources on dispose. */
+	readonly cangjieVerification?: { cancel(): void; dispose(): void }
 	readonly modeHandler: {
 		providerProfileChangeListener: ((...args: any[]) => void) | undefined
 		dispose(): void
@@ -421,6 +423,8 @@ export class TaskLifecycleHandler {
 		}
 
 		t.abort = true
+		// Kill running cjpm build/test first; the runner persists the partial facts as cancelled.
+		t.cangjieVerification?.cancel()
 		t.persistentRetryHandler?.cancel()
 		t.persistentRetryHandler = undefined
 
@@ -492,6 +496,11 @@ export class TaskLifecycleHandler {
 		}
 		this.emitTaskSessionMetricsSummary(t.abort ? "abort" : "dispose")
 		clearMcpInstructionsDelta(t.taskId)
+		try {
+			t.cangjieVerification?.dispose()
+		} catch (error) {
+			logger.error("TaskLifecycleHandler", "Error disposing Cangjie verification:", error)
+		}
 
 		try {
 			transitionTaskFilesToDetached(t.taskId)

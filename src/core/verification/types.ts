@@ -28,6 +28,12 @@ export const verificationAbortReasonSchema = z.enum([
 	"signal",
 	"exit_code_unknown",
 	"input_changed",
+	"project_unresolved",
+	/** The user (or their auto-approval settings) did not approve running the command. */
+	"not_approved",
+	"untrusted_workspace",
+	/** The installed cjpm rejected the verification flags (older SDK). */
+	"unsupported_options",
 ])
 
 export const testScopeSchema = z.object({
@@ -50,6 +56,8 @@ export const verificationRunSchema = z.object({
 	runId: z.string().min(1),
 	taskId: z.string().min(1),
 	kind: verificationKindSchema,
+	/** "baseline" = before the task changed code; "delivery" = verifying the task's result. */
+	phase: z.enum(["baseline", "delivery"]).optional(),
 	executable: z.string().min(1),
 	args: z.array(z.string()),
 	cwd: z.string().min(1),

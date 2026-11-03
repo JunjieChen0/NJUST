@@ -355,6 +355,11 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 				},
 			}
 
+			// An unfinished background baseline must not race this cjpm run on the same target/ directory.
+			if (/\bcjpm\b/i.test(canonicalCommand)) {
+				;(task.rootTask ?? task).cangjieVerification?.preemptBaseline()
+			}
+
 			try {
 				const [rejected, result] = await executeCommandInTerminal(task, options)
 

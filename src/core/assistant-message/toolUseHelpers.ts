@@ -15,6 +15,7 @@ import { StreamingToolExecutor } from "../tools/StreamingToolExecutor"
 import { dedupeReadonlyToolCalls, partitionToolCalls } from "../tools/toolOrchestration"
 import type { ToolCallbacks } from "../tools/BaseTool"
 import { mergeToolParamsForValidation, validateToolUse } from "../tools/validateToolUse"
+import { isReadOnlyCangjieAgent, validateCheckOnlyToolUse } from "../verification/checkOnlyGuard"
 import { validateToolParams } from "../tools/toolParamValidator"
 import { getToolResultBudget, truncateToolResult, estimateTokens } from "../tools/toolResultBudget"
 import type { ModeConfig } from "@njust-ai/types"
@@ -143,6 +144,15 @@ export async function validateToolUseBlock(
 		)
 		if (agentStageError) {
 			throw new Error(agentStageError)
+		}
+		const isCheckOnlyContext =
+			(cline.taskMode === "cangjie" && cline.cangjieRuntimePolicy?.isCheckOnlyRoute?.() === true) ||
+			isReadOnlyCangjieAgent(cline.agentType)
+		const checkOnlyError = isCheckOnlyContext
+			? validateCheckOnlyToolUse(resolveToolAlias(block.name), merged)
+			: null
+		if (checkOnlyError) {
+			throw new Error(checkOnlyError)
 		}
 		const toolRequirements =
 			disabledTools?.reduce(

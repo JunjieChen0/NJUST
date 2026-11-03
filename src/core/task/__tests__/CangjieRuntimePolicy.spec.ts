@@ -188,6 +188,73 @@ describe("CangjieRuntimePolicy", () => {
 		expect(policy.getContextIntensity(2)).toBe("compact")
 	})
 
+	it("classifies check-only and implementation routes", () => {
+		const checkOnly = new CangjieRuntimePolicy(tempDir)
+		checkOnly.configureAgentRoute("只运行 cjpm build 检查项目")
+		const implement = new CangjieRuntimePolicy(tempDir)
+		implement.configureAgentRoute("新增一个 parseArgs 函数并补充测试")
+
+		expect(checkOnly.isCheckOnlyRoute()).toBe(true)
+		expect(implement.isCheckOnlyRoute()).toBe(false)
+		expect(implement.getRouteKind()).toBe("implement")
+		expect(new CangjieRuntimePolicy(tempDir).isCheckOnlyRoute()).toBe(false)
+	})
+
+	it("does not treat the default exploration route as check-only", () => {
+		const policy = new CangjieRuntimePolicy(tempDir)
+		policy.configureAgentRoute("rename foo to bar")
+
+		expect(policy.getRouteKind()).toBe("explore")
+		expect(policy.isCheckOnlyRoute()).toBe(false)
+	})
+
+	it("recognizes requests that only allow cjpm build", () => {
+		const buildOnly = new CangjieRuntimePolicy(tempDir)
+		buildOnly.configureAgentRoute("只运行 cjpm build 检查")
+		const buildAndTest = new CangjieRuntimePolicy(tempDir)
+		buildAndTest.configureAgentRoute("只运行 cjpm build 和测试")
+		const english = new CangjieRuntimePolicy(tempDir)
+		english.configureAgentRoute("only run cjpm build")
+
+		expect(buildOnly.isBuildOnlyRequest()).toBe(true)
+		expect(buildAndTest.isBuildOnlyRequest()).toBe(false)
+		expect(english.isBuildOnlyRequest()).toBe(true)
+		expect(new CangjieRuntimePolicy(tempDir).isBuildOnlyRequest()).toBe(false)
+	})
+
+	it("tracks written build inputs as absolute paths, including delegated writes", () => {
+		const policy = new CangjieRuntimePolicy(tempDir)
+		policy.noteWriteApplied("src/main.cj", undefined, "main() {}")
+		policy.noteWriteApplied("README.md", undefined, "docs")
+		policy.notePathDeleted("src/old.cj")
+		policy.noteDelegatedWrites([path.join(tempDir, "src", "child.cj")])
+
+		expect(policy.getWrittenPaths().sort()).toEqual(
+			[
+				path.join(tempDir, "src", "child.cj"),
+				path.join(tempDir, "src", "main.cj"),
+				path.join(tempDir, "src", "old.cj"),
+			].sort(),
+		)
+		expect(policy.getEvalRuntimeSnapshot().writtenPaths).toEqual(policy.getWrittenPaths().sort())
+	})
+
+	it("routes failing system tests into repair and clears the failure once repair is delegated", () => {
+		const policy = new CangjieRuntimePolicy(tempDir)
+		policy.configureAgentRoute("新增一个 parseArgs 函数")
+		policy.noteAgentDelegation("CangjieExplore")
+		policy.noteAgentDelegation("CangjieImplement")
+		policy.noteAgentDelegation("CangjieVerify")
+		expect(policy.validateAgentStageToolUse("attempt_completion")).toBeNull()
+
+		policy.noteTestResult(false)
+		expect(policy.validateAgentStageToolUse("attempt_completion")).toContain("CangjieRepair")
+
+		policy.noteAgentDelegation("CangjieRepair")
+		expect(policy.validateAgentStageToolUse("attempt_completion")).toBeNull()
+		expect(policy.isRepairLoopExhausted()).toBe(false)
+	})
+
 	it("treats a build with an unknown exit code as neither passed nor failed", () => {
 		const policy = new CangjieRuntimePolicy(tempDir)
 
