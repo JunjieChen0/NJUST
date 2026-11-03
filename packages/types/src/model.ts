@@ -210,7 +210,10 @@ export function mergeCatalogModelInfo(builtin?: ModelInfo, dynamic?: ModelInfo):
 		...(builtin ?? unknownCatalogModelInfo),
 		...facts,
 		metadataSource: dynamic.metadataSource ?? "api",
-		estimatedFields: builtin ? [] : dynamic.estimatedFields,
+		estimatedFields: (builtin
+			? (builtin.estimatedFields ?? [])
+			: (dynamic.estimatedFields ?? unknownCatalogModelInfo.estimatedFields ?? [])
+		).filter((field) => !(field in facts)),
 		pricingUnknown: builtin ? builtin.inputPrice === undefined || builtin.outputPrice === undefined : true,
 	}
 }

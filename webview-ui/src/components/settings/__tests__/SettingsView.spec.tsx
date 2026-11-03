@@ -1,6 +1,6 @@
 // pnpm --filter @shared/vscode-webview test src/components/settings/__tests__/SettingsView.spec.tsx
 
-import { render, screen, fireEvent, within } from "@/utils/test-utils"
+import { render, screen, fireEvent, within, act, waitFor } from "@/utils/test-utils"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 import { vscode } from "@/utils/vscode"
@@ -520,6 +520,64 @@ describe("SettingsView - API Configuration", () => {
 		renderSettingsView()
 
 		expect(screen.getByTestId("api-config-management")).toBeInTheDocument()
+	})
+	it("discards pending header edits when switching between profiles without saved headers", async () => {
+		renderSettingsView()
+		const loadProfile = async (name: string) => {
+			await act(async () => {
+				window.dispatchEvent(
+					new MessageEvent("message", {
+						data: {
+							type: "state",
+							state: {
+								version: "1.0.0",
+								clineMessages: [],
+								taskHistory: [],
+								allowedCommands: [],
+								currentApiConfigName: name,
+								apiConfiguration: {
+									apiProvider: "openai",
+									openAiApiKey: "fixture",
+									openAiBaseUrl: "https://profile.invalid/v1",
+									openAiModelId: "fixture-model",
+								},
+							},
+						},
+					}),
+				)
+			})
+			await waitFor(() => expect(screen.getByText(`Current config: ${name}`)).toBeInTheDocument())
+		}
+		await loadProfile("first")
+		const add = screen.getByTitle(/^(Add|settings:common.add)$/).querySelector("button")
+		if (!add) throw new Error("Missing add header button")
+		fireEvent.click(add)
+		const name = screen.getByPlaceholderText(/headerName|Header name/i)
+		fireEvent.change(name, { target: { value: "x-old-profile" } })
+		await loadProfile("next")
+		expect(screen.queryByDisplayValue("x-old-profile")).not.toBeInTheDocument()
+		await act(async () => {
+			await new Promise((resolve) => setTimeout(resolve, 350))
+		})
+		fireEvent.change(screen.getByDisplayValue("https://profile.invalid/v1"), {
+			target: { value: "https://next.invalid/v1" },
+		})
+		await waitFor(() => expect(screen.getByTestId("save-button")).not.toBeDisabled())
+		fireEvent.click(screen.getByTestId("save-button"))
+		expect(vscode.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "upsertApiConfiguration",
+				text: "next",
+				apiConfiguration: expect.objectContaining({ apiProvider: "openai" }),
+			}),
+		)
+		expect(vscode.postMessage).not.toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "upsertApiConfiguration",
+				text: "next",
+				apiConfiguration: expect.objectContaining({ openAiHeaders: { "x-old-profile": "" } }),
+			}),
+		)
 	})
 })
 

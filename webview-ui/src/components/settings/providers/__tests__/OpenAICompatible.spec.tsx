@@ -1,5 +1,6 @@
 import React from "react"
-import { render, screen, fireEvent } from "@/utils/test-utils"
+import { render, screen, fireEvent, act, cleanup } from "@/utils/test-utils"
+import { webcrypto } from "node:crypto"
 import { OpenAICompatible } from "../OpenAICompatible"
 import { ProviderSettings } from "@njust-ai/types"
 
@@ -311,5 +312,85 @@ describe("OpenAICompatible Component - includeMaxTokens checkbox", () => {
 			const description = screen.getByText("settings:includeMaxOutputTokensDescription")
 			expect(description).toHaveClass("text-sm", "text-vscode-descriptionForeground", "ml-6")
 		})
+	})
+})
+
+describe("OpenAI-compatible header drafts", () => {
+	const organizationAllowList = { allowAll: true, providers: {} }
+	beforeEach(() => {
+		vi.useFakeTimers()
+		vi.stubGlobal("crypto", webcrypto)
+	})
+	afterEach(() => {
+		cleanup()
+		vi.useRealTimers()
+		vi.unstubAllGlobals()
+	})
+	it("switches header drafts without writing a pending old value to the new profile", async () => {
+		const setField = vi.fn()
+		const first: ProviderSettings = { apiProvider: "openai", openAiHeaders: { "x-tenant": "first" } }
+		const next: ProviderSettings = { apiProvider: "openai", openAiHeaders: { "x-tenant": "next" } }
+		const { rerender } = render(
+			<OpenAICompatible
+				apiConfiguration={first}
+				setApiConfigurationField={setField}
+				organizationAllowList={organizationAllowList}
+			/>,
+		)
+		fireEvent.change(screen.getByDisplayValue("first"), { target: { value: "pending" } })
+		rerender(
+			<OpenAICompatible
+				apiConfiguration={next}
+				setApiConfigurationField={setField}
+				organizationAllowList={organizationAllowList}
+			/>,
+		)
+		expect(screen.getByDisplayValue("next")).toBeInTheDocument()
+		expect(screen.queryByDisplayValue("pending")).not.toBeInTheDocument()
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(350)
+		})
+		expect(setField).not.toHaveBeenCalledWith("openAiHeaders", { "x-tenant": "pending" }, false)
+		expect(setField).not.toHaveBeenCalledWith("openAiHeaders", { "x-tenant": "first" }, false)
+	})
+	it("does not rewrite unchanged headers when the component mounts", async () => {
+		const setField = vi.fn()
+		render(
+			<OpenAICompatible
+				apiConfiguration={{ apiProvider: "openai", openAiHeaders: { "x-tenant": "same" } }}
+				setApiConfigurationField={setField}
+				organizationAllowList={organizationAllowList}
+			/>,
+		)
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(350)
+		})
+		expect(setField).not.toHaveBeenCalledWith("openAiHeaders", expect.anything(), false)
+	})
+	it("keeps an empty row editable when saved headers are echoed back", async () => {
+		const setField = vi.fn()
+		const configuration: ProviderSettings = { apiProvider: "openai", openAiHeaders: { "x-tenant": "same" } }
+		const { rerender } = render(
+			<OpenAICompatible
+				apiConfiguration={configuration}
+				setApiConfigurationField={setField}
+				organizationAllowList={organizationAllowList}
+			/>,
+		)
+		fireEvent.click(screen.getByTitle("settings:common.add").querySelector("button")!)
+		rerender(
+			<OpenAICompatible
+				apiConfiguration={{ ...configuration, openAiHeaders: { "x-tenant": "same" } }}
+				setApiConfigurationField={setField}
+				organizationAllowList={organizationAllowList}
+			/>,
+		)
+		const names = screen.getAllByPlaceholderText("settings:providers.headerName")
+		expect(names).toHaveLength(2)
+		fireEvent.change(names[1]!, { target: { value: "x-extra" } })
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(350)
+		})
+		expect(setField).toHaveBeenCalledWith("openAiHeaders", { "x-tenant": "same", "x-extra": "" }, false)
 	})
 })

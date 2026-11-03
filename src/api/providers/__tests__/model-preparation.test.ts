@@ -4,6 +4,7 @@ import { ProviderRegistry } from "../../registry/ProviderRegistry"
 import { OpenAiNativeHandler } from "../openai-native"
 import { AnthropicHandler } from "../anthropic"
 import { GeminiHandler } from "../gemini"
+import { FireworksHandler } from "../fireworks"
 import { listProviderModels } from "../fetchers/modelCache"
 import { setModelCacheStore } from "../fetchers/modelCacheStore"
 import { resolveModelInfo } from "../resolveModelInfo"
@@ -16,6 +17,33 @@ afterEach(() => {
 })
 
 describe("model preparation before request construction", () => {
+	it.each(["openai-native", "fireworks"] as const)(
+		"%s keeps missing model limits marked as estimates after preparation",
+		async (provider) => {
+			const id = `partial-${provider}-model`
+			vi.stubGlobal(
+				"fetch",
+				vi.fn(async () => json({ data: [{ id, context_window: 64000 }] })),
+			)
+			const registry = new ProviderRegistry()
+			registry.register(provider, (options) =>
+				provider === "openai-native" ? new OpenAiNativeHandler(options) : new FireworksHandler(options),
+			)
+			const api = registry.createHandler({
+				apiProvider: provider,
+				apiModelId: id,
+				openAiNativeApiKey: "partial",
+				fireworksApiKey: "partial",
+			})
+			await api.prepareModel?.()
+			expect(api.getModel().info).toMatchObject({
+				contextWindow: 64000,
+				maxTokens: 1024,
+				pricingUnknown: true,
+				estimatedFields: ["maxTokens", "supportsPromptCache"],
+			})
+		},
+	)
 	it("freezes the selected model's discovered limits until the next preparation", async () => {
 		const id = "discovered-request-model"
 		const key = "preparation-fixture"

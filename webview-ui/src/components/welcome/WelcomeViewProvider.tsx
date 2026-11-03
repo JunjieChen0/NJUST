@@ -18,12 +18,7 @@ import { Brain } from "lucide-react"
 type ProviderOption = "custom"
 
 const WelcomeViewProvider = () => {
-	const {
-		apiConfiguration,
-		currentApiConfigName,
-		setApiConfiguration,
-		uriScheme,
-	} = useExtensionState()
+	const { apiConfiguration, currentApiConfigName, setApiConfiguration, uriScheme } = useExtensionState()
 	const { t } = useAppTranslation()
 	const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined)
 	const [selectedProvider, setSelectedProvider] = useState<ProviderOption | null>(null)
@@ -78,9 +73,7 @@ const WelcomeViewProvider = () => {
 					<h2 className="mt-0 mb-0 text-xl">{t("welcome:landing.greeting")}</h2>
 
 					<div className="space-y-3 leading-normal">
-						<p className="text-base text-vscode-foreground">
-							{t("welcome:landing.introduction")}
-						</p>
+						<p className="text-base text-vscode-foreground">{t("welcome:landing.introduction")}</p>
 
 						<div className="flex flex-col gap-2 text-sm text-vscode-descriptionForeground">
 							<div className="flex items-center gap-2">
@@ -122,9 +115,7 @@ const WelcomeViewProvider = () => {
 				<Brain className="size-8" strokeWidth={1.5} />
 				<h2 className="mt-0 mb-0 text-xl">{t("welcome:providerSignup.heading")}</h2>
 
-				<p className="text-base text-vscode-foreground">
-					{t("welcome:providerSignup.chooseProviderLocal")}
-				</p>
+				<p className="text-base text-vscode-foreground">{t("welcome:providerSignup.chooseProviderLocal")}</p>
 
 				<div>
 					<VSCodeRadioGroup
@@ -148,6 +139,7 @@ const WelcomeViewProvider = () => {
 
 					<div className="mb-8 border-l-2 border-vscode-panel-border pl-6 ml-[7px]">
 						<ApiOptions
+							key={currentApiConfigName}
 							fromWelcomeView
 							apiConfiguration={apiConfiguration || {}}
 							uriScheme={uriScheme}

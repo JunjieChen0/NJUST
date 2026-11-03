@@ -57,6 +57,12 @@ export const OpenAICompatible = ({
 		const headers = apiConfiguration?.openAiHeaders || {}
 		return Object.entries(headers)
 	})
+	useEffect(() => {
+		const headers = apiConfiguration.openAiHeaders ?? {}
+		setCustomHeaders((draft) =>
+			JSON.stringify(convertHeadersToObject(draft)) === JSON.stringify(headers) ? draft : Object.entries(headers),
+		)
+	}, [apiConfiguration.openAiHeaders])
 
 	const handleAddCustomHeader = useCallback(() => {
 		// Only update the local state to show the new row in the UI.
@@ -96,13 +102,14 @@ export const OpenAICompatible = ({
 
 	// Add effect to update the parent component's state when local headers change
 	useEffect(() => {
+		const headerObject = convertHeadersToObject(customHeaders)
+		if (JSON.stringify(headerObject) === JSON.stringify(apiConfiguration.openAiHeaders ?? {})) return
 		const timer = setTimeout(() => {
-			const headerObject = convertHeadersToObject(customHeaders)
 			setApiConfigurationField("openAiHeaders", headerObject, false)
 		}, 300)
 
 		return () => clearTimeout(timer)
-	}, [customHeaders, setApiConfigurationField])
+	}, [customHeaders, apiConfiguration.openAiHeaders, setApiConfigurationField])
 
 	const handleInputChange = useCallback(
 		<K extends keyof ProviderSettings, E>(

@@ -845,6 +845,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 										}
 									/>
 									<ApiOptions
+										key={currentApiConfigName}
 										uriScheme={uriScheme}
 										apiConfiguration={apiConfiguration}
 										setApiConfigurationField={setApiConfigurationField}

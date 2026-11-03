@@ -83,8 +83,6 @@ export async function readBodyWithLimit(resp: Response, maxBytes: number): Promi
 
 				totalBytes += value.byteLength
 				if (totalBytes > maxBytes) {
-					// Cancel the stream to stop receiving further chunks
-					await reader.cancel().catch((err) => logger.debug("SafeFetch", "cancel reader on size limit", err))
 					throw new Error(`Response body exceeds size limit (${(maxBytes / 1024 / 1024).toFixed(1)} MB)`)
 				}
 
