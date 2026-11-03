@@ -19,7 +19,7 @@ import {
 	runCangjieVerification,
 	type CangjieCheckDeps,
 } from "./CangjieVerificationRunner"
-import { resolveVerificationProjectRoot } from "./projectRoot"
+import { canonicalVerificationPath, resolveVerificationProjectRoot } from "./projectRoot"
 import type { TaskVerificationRecord, CompletionClaim } from "./types"
 import { evaluateVerification, type CheckState, type VerificationVerdict } from "./verdict"
 import { loadVerificationRecord, updateVerificationRecord, withClaim, withAcceptance } from "./VerificationStore"
@@ -387,7 +387,7 @@ export class CangjieTaskVerification {
 			(previous, next) => (!previous || next.claimedAt >= previous.claimedAt ? next : previous),
 			undefined,
 		)
-		const written = this.task.policy.getWrittenPaths().map((file) => path.resolve(file))
+		const written = await Promise.all(this.task.policy.getWrittenPaths().map(canonicalVerificationPath))
 		const related = [...owned].filter(
 			(candidate) =>
 				candidate !== canonicalRoot &&

@@ -19,6 +19,23 @@ async function fixture(run: (root: string, taskDir: string) => Promise<void>) {
 }
 
 describe("task delivery evidence", () => {
+	it("attributes tool edits through project aliases to the canonical delivery", async () =>
+		fixture(async (root, taskDir) => {
+			const alias = path.join(path.dirname(root), "project-alias")
+			await fs.symlink(root, alias, process.platform === "win32" ? "junction" : "dir")
+			await captureDeliveryBaseline(taskDir, root, await computeProjectSnapshot(root))
+			await fs.writeFile(path.join(alias, "src/main.cj"), "main() { 42 }\n")
+			const canonicalRoot = await fs.realpath(root)
+			const delivery = await buildTaskDelivery(
+				taskDir,
+				canonicalRoot,
+				await computeProjectSnapshot(canonicalRoot),
+				[path.join(alias, "src/main.cj")],
+				"alias",
+				1,
+			)
+			expect(delivery.files).toEqual([{ path: "src/main.cj", change: "modified", source: "task_tool" }])
+		}))
 	it("keeps the initial inputs and a delivered diff after subsequent external edits", async () =>
 		fixture(async (root, taskDir) => {
 			const baseline = await computeProjectSnapshot(root)

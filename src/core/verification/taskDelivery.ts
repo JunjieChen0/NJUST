@@ -7,6 +7,7 @@ import type { VerificationDelivery } from "@njust-ai/types"
 import type { ProjectSnapshot } from "./projectFingerprint"
 import { attributeChanges, diffSnapshots } from "./changeAttribution"
 import { logger } from "../../shared/logger"
+import { canonicalVerificationPath } from "./projectRoot"
 
 const MAX_FILE_BYTES = 256 * 1024
 const MAX_BASELINE_BYTES = 4 * 1024 * 1024
@@ -111,7 +112,8 @@ export async function buildTaskDelivery(
 		coverage: "complete",
 		gaps: [],
 	}
-	const changes = attributeChanges(diffSnapshots(previous, snapshot), root, writtenPaths)
+	const canonicalWrites = await Promise.all(writtenPaths.map(canonicalVerificationPath))
+	const changes = attributeChanges(diffSnapshots(previous, snapshot), await fs.realpath(root), canonicalWrites)
 	const patches: string[] = []
 	const omitted: string[] = []
 	let bytes = 0

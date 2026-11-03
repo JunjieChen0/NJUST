@@ -128,7 +128,11 @@ describe("CangjieTaskVerification", () => {
 				'[package]\nname = "app"\n[dependencies]\npricing = { path = "libs/pricing" }\n',
 			)
 			await fs.writeFile(path.join(dependency, "cjpm.toml"), '[package]\nname = "pricing"\n')
-			const policy = makePolicy({ getWrittenPaths: () => [path.join(dependency, "src", "price.cj")] })
+			const alias = path.join(base, "project-alias")
+			await fs.symlink(projectRoot, alias, process.platform === "win32" ? "junction" : "dir")
+			const policy = makePolicy({
+				getWrittenPaths: () => [path.join(alias, "libs", "pricing", "src", "price.cj")],
+			})
 			const dependencies = deps()
 			const snapshot = vi.fn(dependencies.checkDeps.snapshot)
 			dependencies.checkDeps.snapshot = snapshot

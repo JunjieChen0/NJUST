@@ -4,6 +4,7 @@ import { logger } from "../../shared/logger"
 import { attributeChanges, diffSnapshots } from "./changeAttribution"
 import type { ProjectSnapshot } from "./projectFingerprint"
 import type { ProjectRootResolution } from "./projectRoot"
+import { canonicalVerificationPath } from "./projectRoot"
 import { loadSnapshot, saveSnapshot } from "./snapshotStore"
 import type {
 	AttributedChange,
@@ -119,9 +120,11 @@ export class CangjieChangeMonitor {
 		const changesSince = async (fingerprint: string | undefined): Promise<AttributedChange[]> => {
 			if (!fingerprint || fingerprint === snapshot.fingerprint) return []
 			const before = await loadSnapshot(taskDir, fingerprint)
-			return before
-				? attributeChanges(diffSnapshots(before, snapshot), resolution.root, this.task.writtenPaths())
-				: []
+			if (!before) return []
+			const [root, ...written] = await Promise.all(
+				[resolution.root, ...this.task.writtenPaths()].map(canonicalVerificationPath),
+			)
+			return attributeChanges(diffSnapshots(before, snapshot), root!, written)
 		}
 		const changes = await changesSince(reference?.fingerprint)
 		// History records each transition; delivery facts include ALL changes since the latest check/claim.

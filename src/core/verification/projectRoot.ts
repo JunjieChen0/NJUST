@@ -1,8 +1,27 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 import { discoverProjectRoots } from "./projectFingerprint"
+import { logger } from "../../shared/logger"
 
 const MANIFEST = "cjpm.toml"
+
+/** Native realpath also expands Windows short names; retain missing/deleted path segments. */
+export async function canonicalVerificationPath(file: string): Promise<string> {
+	let current = path.resolve(file)
+	const missing: string[] = []
+	while (true) {
+		try {
+			return path.join(await fs.realpath(current), ...missing)
+		} catch (error) {
+			logger.debug("projectRoot", "Resolving input path through an existing ancestor", error)
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+			const parent = path.dirname(current)
+			if (parent === current) throw error
+			missing.unshift(path.basename(current))
+			current = parent
+		}
+	}
+}
 
 export type ProjectRootResolution =
 	| { kind: "resolved"; root: string }
