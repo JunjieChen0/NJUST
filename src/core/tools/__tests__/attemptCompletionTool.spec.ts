@@ -1,8 +1,10 @@
+import type { VerificationApproval } from "../../verification/verificationApproval"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 import { NJUST_AIEventName, TodoItem } from "@njust-ai/types"
 
 import { AttemptCompletionToolUse } from "../../../shared/tools"
+import { formatResponse } from "../../prompts/responses"
 
 // Mock the formatResponse module before importing the tool
 vi.mock("../../prompts/responses", () => ({
@@ -1417,9 +1419,9 @@ describe("attemptCompletionTool", () => {
 		})
 
 		it("approves verification commands through the command ask and treats a refusal as not approved", async () => {
-			let approve: ((command: string) => Promise<boolean>) | undefined
+			let approve: ((command: string) => Promise<VerificationApproval>) | undefined
 			;(mockTask as any).cangjieVerification = {
-				verifyForCompletion: vi.fn(async (fn: (command: string) => Promise<boolean>) => {
+				verifyForCompletion: vi.fn(async (fn: (command: string) => Promise<VerificationApproval>) => {
 					approve = fn
 					return { action: "skip" }
 				}),
@@ -1427,11 +1429,11 @@ describe("attemptCompletionTool", () => {
 			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
 
 			mockTask.ask = vi.fn().mockResolvedValueOnce({ response: "yesButtonClicked" })
-			await expect(approve!("cjpm build")).resolves.toBe(true)
+			await expect(approve!("cjpm build")).resolves.toEqual({ approved: true })
 			expect(mockTask.ask).toHaveBeenCalledWith("command", "cjpm build")
 
 			mockTask.ask = vi.fn().mockResolvedValueOnce({ response: "noButtonClicked" })
-			await expect(approve!("cjpm test")).resolves.toBe(false)
+			await expect(approve!("cjpm test")).resolves.toEqual({ approved: false })
 			expect(mockTask.didRejectTool).toBeFalsy()
 		})
 
@@ -1443,6 +1445,33 @@ describe("attemptCompletionTool", () => {
 			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
 
 			expect(mockTask.say).toHaveBeenCalledWith("completion_result", "Implemented parseArgs.", undefined, false)
+		})
+
+		it("returns approval feedback and images to the model without completing or writing memory", async () => {
+			const text = "先修复边界问题，不要结束"
+			const images = ["data:image/png;base64,eA=="]
+			mockTask.ask = vi.fn().mockResolvedValue({ response: "messageResponse", text, images })
+			;(mockTask as any).cangjieVerification = {
+				verifyForCompletion: vi.fn(async (approve: (command: string) => Promise<VerificationApproval>) => {
+					const result = await approve("cjpm build")
+					return { action: "feedback", feedback: result.feedback }
+				}),
+			}
+			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
+			expect(mockTask.say).toHaveBeenCalledWith("user_feedback", text, images)
+			expect(formatResponse.toolResult).toHaveBeenCalledWith(
+				expect.stringContaining(`[USER-MESSAGE]\n${text}`),
+				images,
+			)
+			expect(mockPushToolResult.mock.calls[0][0]).toContain(text)
+			expect(mockTask.markTaskCompleted).not.toHaveBeenCalled()
+			expect(mockTask.markAttemptedCompletion).not.toHaveBeenCalled()
+			expect(mockTask.say).not.toHaveBeenCalledWith(
+				"completion_result",
+				expect.anything(),
+				expect.anything(),
+				expect.anything(),
+			)
 		})
 
 		it("blocks completion with the system verification reason", async () => {

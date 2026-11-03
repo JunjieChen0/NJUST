@@ -17,6 +17,7 @@ import { BaseTool, ToolCallbacks } from "./BaseTool"
 import { logger } from "../../shared/logger"
 import { appendCangjieEvalTrace } from "../../services/CangjieEvalTraceLogger"
 import { buildStdModuleEvidenceSuggestions } from "../task/CangjieRuntimePolicy"
+import { verificationApprovalFromResponse, type VerificationApproval } from "../verification/verificationApproval"
 
 interface AttemptCompletionParams {
 	result: string
@@ -40,11 +41,10 @@ function normalizeCangjieEvidenceAuditHeading(result: string): string {
  * a "command" ask (honouring the user's auto-approval allow/deny lists) unless bypass mode
  * is active. A refusal only marks verification as not approved; it does not reject the tool.
  */
-async function approveVerificationCommand(task: Task, command: string): Promise<boolean> {
+async function approveVerificationCommand(task: Task, command: string): Promise<VerificationApproval> {
 	const ruleEngine = (task as Task & { permissionRuleEngine?: { getMode(): string } }).permissionRuleEngine
-	if (ruleEngine?.getMode?.() === "bypass") return true
-	const { response } = await task.ask("command", command)
-	return response === "yesButtonClicked"
+	if (ruleEngine?.getMode?.() === "bypass") return { approved: true }
+	return verificationApprovalFromResponse(await task.ask("command", command))
 }
 
 export interface AttemptCompletionCallbacks extends ToolCallbacks {
@@ -241,6 +241,12 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 					approveVerificationCommand(task, command),
 				)
 				if (verification.action === "cancelled") return
+				if (verification.action === "feedback") {
+					const { text, images } = verification.feedback
+					await task.say("user_feedback", text, images)
+					pushToolResult(formatResponse.toolResult(`[USER-MESSAGE]\n${text}\n[END USER-MESSAGE]`, images))
+					return
+				}
 				if (verification.action === "block") {
 					await blockCangjieCompletion(verification.reason)
 					return

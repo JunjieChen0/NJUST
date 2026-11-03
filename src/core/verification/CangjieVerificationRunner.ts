@@ -16,6 +16,7 @@ import { CjpmLockUnavailableError, withCjpmProjectLock } from "../../services/ca
 import { buildCangjieTestScope, parseCangjieTestSummary, readCangjieTestReportDir } from "./cangjieTestReport"
 import { computeProjectSnapshot, type ProjectSnapshot } from "./projectFingerprint"
 import { saveSnapshot } from "./snapshotStore"
+import { VerificationFeedbackError, type VerificationApproval } from "./verificationApproval"
 import type { VerificationKind, VerificationRun, VerificationEnvironment } from "./types"
 import { updateVerificationRecord, withRun } from "./VerificationStore"
 
@@ -54,7 +55,7 @@ export interface CangjieCheckContext {
 	 * Approval gate, called with the plain command (e.g. "cjpm build") right before it runs.
 	 * The caller routes it through the same command approval/auto-approval as execute_command.
 	 */
-	approve: (command: string) => Promise<boolean>
+	approve: (command: string) => Promise<VerificationApproval>
 }
 
 export interface CangjieCheckDeps {
@@ -158,7 +159,9 @@ export async function runCangjieCheck(
 		return blocked
 	}
 	if (!executable) return block("spawn_failed", "cjpm executable could not be resolved")
-	if (!(await ctx.approve(displayCommand(kind)))) {
+	const approval = await ctx.approve(displayCommand(kind))
+	if (approval.feedback) throw new VerificationFeedbackError(approval.feedback)
+	if (!approval.approved) {
 		return block(
 			"not_approved",
 			`\`${displayCommand(kind)}\` was not approved by the user or auto-approval settings`,

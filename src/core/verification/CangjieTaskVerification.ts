@@ -23,6 +23,7 @@ import { loadVerificationRecord, updateVerificationRecord, withClaim, withAccept
 import { saveSnapshot } from "./snapshotStore"
 import { CangjieChangeMonitor, type ChangeMonitorDeps } from "./CangjieChangeMonitor"
 import { buildVerificationSummary } from "./verificationSummary"
+import { VerificationFeedbackError, type VerificationApproval, type VerificationFeedback } from "./verificationApproval"
 
 const LOG_TAIL_CHARS = 4_000
 /** Upper bound on completions blocked by failed system verification, so a task always reaches an end. */
@@ -54,13 +55,14 @@ export interface TaskVerificationDeps {
 }
 
 /** Interactive approval for one verification command, using the same approval flow as execute_command. */
-export type ApproveCommand = (command: string) => Promise<boolean>
+export type ApproveCommand = (command: string) => Promise<VerificationApproval>
 
 export type CompletionVerificationOutcome =
 	| { action: "allow"; facts: string; summary: VerificationSummary }
 	| { action: "block"; reason: string }
 	| { action: "skip" }
 	| { action: "cancelled" }
+	| { action: "feedback"; feedback: VerificationFeedback }
 
 /** A result for the current code that re-running the same commands could not change. */
 function hasReusableResult(verdict: VerificationVerdict): boolean {
@@ -192,6 +194,10 @@ export class CangjieTaskVerification {
 			return signal.aborted ? { action: "cancelled" } : outcome
 		} catch (error) {
 			if (signal.aborted) return { action: "cancelled" }
+			if (error instanceof VerificationFeedbackError) {
+				logger.debug("CangjieTaskVerification", "Verification yielded to user feedback")
+				return { action: "feedback", feedback: error.feedback }
+			}
 			logger.error("CangjieTaskVerification", "System verification could not run", error)
 			return {
 				action: "allow",
@@ -280,7 +286,7 @@ export class CangjieTaskVerification {
 				phase: "baseline",
 				preempt: () => controller.abort(),
 				// Both commands were already confirmed auto-approvable above.
-				approve: () => Promise.resolve(true),
+				approve: () => Promise.resolve({ approved: true }),
 			},
 			this.deps.checkDeps,
 			{ skipTests: this.task.policy.isBuildOnlyRequest() },

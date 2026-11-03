@@ -9,6 +9,7 @@ import { NJUST_AIEventName, type TokenUsage, type ToolUsage, type VerificationSu
 import { TelemetryService } from "@njust-ai/telemetry"
 import { t } from "../../i18n"
 import type { CangjieTaskVerification } from "../verification/CangjieTaskVerification"
+import { verificationApprovalFromResponse } from "../verification/verificationApproval"
 
 /** Minimal shape of Task needed to build a cloud agent host. */
 interface CloudAgentTaskRef {
@@ -59,9 +60,10 @@ export function createCloudAgentHost(task: CloudAgentTaskRef & EventEmitter): IC
 			if (!task.cangjieVerification) return undefined
 			task.cangjieRuntimePolicy?.noteDelegatedWrites(writtenPaths)
 			const outcome = await task.cangjieVerification.verifyForCompletion(async (command) => {
-				if (task.permissionRuleEngine?.getMode() === "bypass") return true
-				return (await task.ask("command", command)).response === "yesButtonClicked"
+				if (task.permissionRuleEngine?.getMode() === "bypass") return { approved: true }
+				return verificationApprovalFromResponse(await task.ask("command", command))
 			})
+			if (outcome.action === "feedback") return outcome
 			return outcome.action === "allow" ? outcome.summary : task.cangjieVerification.currentSummary()
 		},
 		ask: (type, text?, partial?) => task.ask(type, text, partial),

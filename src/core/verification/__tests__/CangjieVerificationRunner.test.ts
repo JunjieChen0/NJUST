@@ -61,13 +61,13 @@ describe("CangjieVerificationRunner", () => {
 			projectRoot: "/ws/app",
 			signal: new AbortController().signal,
 			phase: "delivery",
-			approve: async () => true,
+			approve: async () => ({ approved: true }),
 		}
 	})
 
 	it("asks for approval with the plain command and records a refusal as blocked without running", async () => {
 		const exec = vi.fn()
-		const approve = vi.fn(async () => false)
+		const approve = vi.fn(async () => ({ approved: false }))
 
 		const run = await runCangjieCheck("build", { ...ctx, approve }, deps(exec))
 

@@ -1,3 +1,4 @@
+import type { VerificationApproval } from "../../verification/verificationApproval"
 import { EventEmitter } from "events"
 import { describe, expect, it, vi } from "vitest"
 import { NJUST_AIEventName } from "@njust-ai/types"
@@ -40,7 +41,7 @@ describe("createCloudAgentHost.markCompleted", () => {
 			build: { state: "failed" },
 			test: { state: "not_run" },
 		}
-		let approve: ((command: string) => Promise<boolean>) | undefined
+		let approve: ((command: string) => Promise<VerificationApproval>) | undefined
 		const task = Object.assign(makeTask(), {
 			cangjieRuntimePolicy: { noteDelegatedWrites: vi.fn() },
 			cangjieVerification: {
@@ -54,7 +55,7 @@ describe("createCloudAgentHost.markCompleted", () => {
 		task.ask.mockResolvedValue({ response: "yesButtonClicked" })
 		await expect(createCloudAgentHost(task as any).verifyLocally?.(["/ws/src/a.cj"])).resolves.toEqual(summary)
 		expect(task.cangjieRuntimePolicy.noteDelegatedWrites).toHaveBeenCalledWith(["/ws/src/a.cj"])
-		await expect(approve!("cjpm test")).resolves.toBe(true)
+		await expect(approve!("cjpm test")).resolves.toEqual({ approved: true })
 		expect(task.ask).toHaveBeenCalledWith("command", "cjpm test")
 	})
 	it("emits TaskCompleted and marks the task completed", () => {
@@ -68,5 +69,23 @@ describe("createCloudAgentHost.markCompleted", () => {
 		expect(captureTaskCompleted).toHaveBeenCalledWith("task-1")
 		expect(onCompleted).toHaveBeenCalledWith("task-1", task.getTokenUsage(), task.toolUsage, { isSubtask: true })
 		expect(task.markTaskCompleted).toHaveBeenCalled()
+	})
+	it("returns approval feedback without substituting an old summary", async () => {
+		const feedback = { text: "先修复边界问题，不要结束", images: ["data:image/png;base64,eA=="] }
+		const task = Object.assign(makeTask(), {
+			cangjieVerification: {
+				verifyForCompletion: vi.fn(async (approve: (command: string) => Promise<VerificationApproval>) => {
+					const result = await approve("cjpm test")
+					return { action: "feedback", feedback: result.feedback }
+				}),
+				currentSummary: vi.fn(),
+			},
+		})
+		task.ask.mockResolvedValue({ response: "messageResponse", ...feedback })
+		await expect(createCloudAgentHost(task as any).verifyLocally?.(["/ws/a.cj"])).resolves.toEqual({
+			action: "feedback",
+			feedback,
+		})
+		expect(task.cangjieVerification.currentSummary).not.toHaveBeenCalled()
 	})
 })

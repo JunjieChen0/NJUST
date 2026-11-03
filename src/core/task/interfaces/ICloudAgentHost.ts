@@ -3,6 +3,7 @@ import type { ClineAsk, ClineSay, VerificationSummary } from "@njust-ai/types"
 import type { ClineAskResponse } from "../../../shared/WebviewMessage"
 import type { RooIgnoreController } from "../../ignore/RooIgnoreController"
 import type { RooProtectedController } from "../../protect/RooProtectedController"
+import type { VerificationFeedback } from "../../verification/verificationApproval"
 
 export interface ICloudAgentHost {
 	readonly taskId: string
@@ -13,7 +14,9 @@ export interface ICloudAgentHost {
 	readonly rooProtectedController?: RooProtectedController
 
 	say(type: ClineSay, text?: string, images?: string[], verification?: VerificationSummary): Promise<void>
-	verifyLocally?(writtenPaths: string[]): Promise<VerificationSummary | undefined>
+	verifyLocally?(
+		writtenPaths: string[],
+	): Promise<VerificationSummary | { action: "feedback"; feedback: VerificationFeedback } | undefined>
 	beginRun?(): void
 	ask(
 		type: ClineAsk,

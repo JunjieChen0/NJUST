@@ -73,7 +73,14 @@ describe.skipIf(!enabled)("Cangjie verification with a real SDK", () => {
 	async function verify(signal = new AbortController().signal) {
 		const deps = createDefaultCangjieCheckDeps()
 		const result = await runCangjieVerification(
-			{ taskId: "smoke", taskDir, projectRoot, signal, phase: "delivery", approve: async () => true },
+			{
+				taskId: "smoke",
+				taskDir,
+				projectRoot,
+				signal,
+				phase: "delivery",
+				approve: async () => ({ approved: true }),
+			},
 			deps,
 		)
 		const fingerprint = (await deps.snapshot(projectRoot))?.fingerprint

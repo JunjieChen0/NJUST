@@ -31,7 +31,7 @@ function fail(output: string): ProcessResult {
 	return { exitCode: 1, output, timedOut: false, cancelled: false }
 }
 
-const approveAll = async () => true
+const approveAll = async () => ({ approved: true })
 
 function makePolicy(overrides: Partial<TaskVerificationPolicy> = {}): TaskVerificationPolicy {
 	return {
@@ -116,6 +116,16 @@ describe("CangjieTaskVerification", () => {
 		const record = await loadVerificationRecord(taskDir, "task-1")
 		expect(record?.claims).toHaveLength(1)
 		expect(record?.claims[0]?.inputFingerprint).toBe("fp-1")
+	})
+
+	it("returns approval feedback without running or recording a new delivery", async () => {
+		const feedback = { text: "先修复边界问题，不要结束", images: ["data:image/png;base64,eA=="] }
+		const outcome = await create(makePolicy()).verifyForCompletion(async () => ({ approved: false, feedback }))
+		expect(outcome).toEqual({ action: "feedback", feedback })
+		expect(exec).not.toHaveBeenCalled()
+		const record = await loadVerificationRecord(taskDir, "task-1")
+		expect(record?.claims ?? []).toEqual([])
+		expect(record?.runs ?? []).toEqual([])
 	})
 
 	it.each(["accepted", "changes_requested"] as const)(

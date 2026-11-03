@@ -271,6 +271,14 @@ export class CloudAgentOrchestrator {
 					try {
 						const verification = await this.host.verifyLocally([...this.writtenPaths])
 						if (this.host.abort) return undefined
+						if (verification && "action" in verification) {
+							await this.host.say(
+								"user_feedback",
+								verification.feedback.text,
+								verification.feedback.images,
+							)
+							return { message: verification.feedback.text, images: verification.feedback.images }
+						}
 						if (verification)
 							await this.host.say("verification_summary", undefined, undefined, {
 								...verification,

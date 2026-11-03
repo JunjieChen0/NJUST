@@ -208,6 +208,29 @@ describe("CloudAgentOrchestrator", () => {
 		await new CloudAgentOrchestrator(host).run("inspect only")
 		expect(host.verifyLocally).not.toHaveBeenCalled()
 	})
+	it("submits verification feedback as the next run before marking anything completed", async () => {
+		mockVscodeConfig({ "cloudAgent.deferredProtocol": false, "cloudAgent.compileLoop.enabled": false })
+		mockClientInstance.submitTask.mockResolvedValueOnce({
+			ok: true,
+			workspaceOps: [{ op: "write_file", path: "a.cj", content: "x" }],
+		})
+		const feedback = { text: "先修复边界问题，不要结束", images: ["data:image/png;base64,eA=="] }
+		const host = createMockHost({
+			verifyLocally: vi.fn().mockResolvedValueOnce({ action: "feedback", feedback }).mockResolvedValue(undefined),
+		})
+		mockClientInstance.submitTask.mockImplementationOnce(async () => ({
+			ok: true,
+			workspaceOps: [{ op: "write_file", path: "a.cj", content: "x" }],
+		}))
+		await new CloudAgentOrchestrator(host).run("change function")
+		expect(host.say).toHaveBeenCalledWith("user_feedback", feedback.text, feedback.images)
+		expect(mockClientInstance.submitTask).toHaveBeenCalledTimes(2)
+		expect(JSON.stringify(mockClientInstance.submitTask.mock.calls[1])).toContain(feedback.text)
+		expect(host.markCompleted).toHaveBeenCalledOnce()
+		expect(vi.mocked(mockClientInstance.submitTask).mock.invocationCallOrder[1]).toBeLessThan(
+			vi.mocked(host.markCompleted).mock.invocationCallOrder[0],
+		)
+	})
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mockVscodeConfig()
