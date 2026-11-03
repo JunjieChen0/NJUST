@@ -6,6 +6,7 @@ import * as vscode from "vscode"
 import { NJUST_AIEventName, type NJUST_AIAPI } from "@njust-ai/types"
 
 import { waitFor } from "./utils"
+import { verificationTestControl } from "./test-utils"
 
 type TestApiWithCurrentTask = NJUST_AIAPI & {
 	sidebarProvider?: {
@@ -138,7 +139,7 @@ export async function run() {
 					console.error("Failed to auto-approve mock use_mcp_server:", error)
 				})
 			}
-			if (message.type === "ask" && message.ask === "command") {
+			if (message.type === "ask" && message.ask === "command" && !verificationTestControl.manualApprovals) {
 				void approveMockAskWithRetry(api).catch((error) => {
 					console.error("Failed to auto-approve mock command:", error)
 				})
@@ -178,6 +179,7 @@ export async function run() {
 	if (process.env.MOCK_API_URL && !process.env.TEST_FILE) {
 		const mockSupportedTests = new Set([
 			"extension.test.js",
+			"verification.test.js",
 			"subtasks.test.js",
 			"tools/apply-diff.test.js",
 			"tools/execute-command.test.js",

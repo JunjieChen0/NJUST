@@ -40,7 +40,9 @@ const hasToolResult = (body: Record<string, unknown>): boolean => {
 		if ("tool_call_id" in message) return true
 		const content = "content" in message ? message.content : undefined
 		return Array.isArray(content)
-			? content.some((block) => block && typeof block === "object" && "type" in block && block.type === "tool_result")
+			? content.some(
+					(block) => block && typeof block === "object" && "type" in block && block.type === "tool_result",
+				)
 			: typeof content === "string" && /\b(Result:|\[.*? for ['"])/.test(content)
 	})
 }
@@ -135,10 +137,12 @@ const getMessageText = (message: unknown): string => {
 
 const getLastUserText = (body: Record<string, unknown>): string => {
 	const messages = Array.isArray(body.messages) ? body.messages : []
-	return messages
-		.filter((message) => message && typeof message === "object" && "role" in message && message.role === "user")
-		.map(getMessageText)
-		.at(-1) ?? ""
+	return (
+		messages
+			.filter((message) => message && typeof message === "object" && "role" in message && message.role === "user")
+			.map(getMessageText)
+			.at(-1) ?? ""
+	)
 }
 
 const firstQuoted = (text: string): string | undefined => text.match(/"([^"]+)"/)?.[1]
@@ -151,15 +155,15 @@ const quotedAfter = (text: string, label: string): string | undefined => {
 const lineAfter = (text: string, marker: string): string | undefined => {
 	const index = text.toLowerCase().indexOf(marker.toLowerCase())
 	if (index < 0) return undefined
-	return text.slice(index + marker.length).trimStart().split(/\r?\n/)[0]?.trim()
+	return text
+		.slice(index + marker.length)
+		.trimStart()
+		.split(/\r?\n/)[0]
+		?.trim()
 }
 
 const extractListFilesArgs = (text: string): Record<string, unknown> => ({
-	path:
-		text.match(/directory\s+"([^"]+)"/i)?.[1] ??
-		text.match(/at\s+"([^"]+)"/i)?.[1] ??
-		firstQuoted(text) ??
-		".",
+	path: text.match(/directory\s+"([^"]+)"/i)?.[1] ?? text.match(/at\s+"([^"]+)"/i)?.[1] ?? firstQuoted(text) ?? ".",
 	recursive: !/non-recursive|not recursive/i.test(text) && /recursive|all contents|subdirectories/i.test(text),
 })
 
@@ -182,10 +186,7 @@ const extractWriteFileArgs = (text: string): Record<string, unknown> => {
 
 const extractSearchFilesArgs = (text: string): Record<string, unknown> => ({
 	path: ".",
-	regex:
-		quotedAfter(text, "regex pattern") ??
-		quotedAfter(text, "pattern") ??
-		"TODO.*",
+	regex: quotedAfter(text, "regex pattern") ?? quotedAfter(text, "pattern") ?? "TODO.*",
 	file_pattern: quotedAfter(text, "file pattern"),
 })
 
@@ -376,7 +377,11 @@ const scenarioList: MockScenario[] = [
 						type: "tool_calls",
 						toolCalls: [
 							{ id: "call_read_file", name: "read_file", arguments: { path: "src/app.ts" } },
-							{ id: "call_search_files", name: "search_files", arguments: { path: "src", regex: "TODO" } },
+							{
+								id: "call_search_files",
+								name: "search_files",
+								arguments: { path: "src", regex: "TODO" },
+							},
 						],
 					},
 	},
@@ -393,6 +398,9 @@ export function resolveScenario(name: string | undefined): MockScenario {
 }
 
 export function autoResolveScenario(body: Record<string, unknown>): MockScenario {
+	if (JSON.stringify(body.messages ?? []).includes("[cangjie-verification-e2e]")) {
+		return { name: "cangjie-verification", resolve: ({ body }) => verificationResponse(body) }
+	}
 	if (hasAttemptCompletionResult(body)) return resolveScenario("text-only")
 	if (hasToolResult(body)) {
 		return {
@@ -436,11 +444,16 @@ export function autoResolveScenario(body: Record<string, unknown>): MockScenario
 			resolve: () => completionResponse("- Main item\n  - Sub-item A\n  - Sub-item B"),
 		}
 	}
-	if (bodyText.includes("both numbered items and bullet points") || bodyText.includes("mixed ordered and unordered")) {
+	if (
+		bodyText.includes("both numbered items and bullet points") ||
+		bodyText.includes("mixed ordered and unordered")
+	) {
 		return {
 			name: "auto-complete",
 			resolve: () =>
-				completionResponse("1. First ordered item\n   - First bullet point\n2. Second ordered item\n   - Second bullet point"),
+				completionResponse(
+					"1. First ordered item\n   - First bullet point\n2. Second ordered item\n   - Second bullet point",
+				),
 		}
 	}
 	if (bodyText.includes("use the `switch_mode` tool") || bodyText.includes("switch to ask mode")) {
@@ -457,7 +470,13 @@ export function autoResolveScenario(body: Record<string, unknown>): MockScenario
 		return resolveScenario("read-file")
 	}
 	if (lower.includes("apply_diff")) return resolveScenario("apply-diff")
-	if (lower.includes("search_files") || lower.includes("search the") || lower.includes("search for") || lower.includes("use search")) return resolveScenario("search-files")
+	if (
+		lower.includes("search_files") ||
+		lower.includes("search the") ||
+		lower.includes("search for") ||
+		lower.includes("use search")
+	)
+		return resolveScenario("search-files")
 	if (wantsWriteFile) return resolveScenario("write-file")
 	if (wantsExecuteCommand && /(?:^|\n)\s*\d+\.\s*/.test(text)) {
 		return resolveScenario("execute-command-multiple")
@@ -467,4 +486,50 @@ export function autoResolveScenario(body: Record<string, unknown>): MockScenario
 		name: "auto-complete",
 		resolve: () => completionResponse(textOnlyResult(text)),
 	}
+}
+
+/** Drive the actual Cangjie stages; build/test evidence still comes from the extension's runner. */
+function verificationResponse(body: Record<string, unknown>): MockScenarioResponse {
+	const messages = Array.isArray(body.messages) ? body.messages : []
+	const firstUser = messages.find(
+		(message) => message && typeof message === "object" && "role" in message && message.role === "user",
+	)
+	const initial = getMessageText(firstUser)
+	const stage = initial.match(/\[Sub-Agent Type: (Cangjie\w+)\]/)?.[1]
+	const results = messages.filter(
+		(message) => message && typeof message === "object" && "role" in message && message.role === "tool",
+	)
+	const tool = (id: string, name: string, args: Record<string, unknown>): MockScenarioResponse => ({
+		type: "tool_calls",
+		toolCalls: [{ id, name, arguments: args }],
+	})
+	const serialized = JSON.stringify(results)
+	if (serialized.includes("先修复边界问题，不要结束")) {
+		return tool("call_verification_feedback", "ask_followup_question", {
+			question: "已收到：先修复边界问题，不要结束。请说明边界要求。",
+			follow_up: [{ text: "继续检查边界" }],
+		})
+	}
+	if (stage) {
+		if (stage === "CangjieImplement" && results.length > 0 && !serialized.includes("call_verification_write")) {
+			return tool("call_verification_write", "apply_patch", {
+				patch: makePatch("src/main.cj", [{ search: "    0", replace: "    42" }]),
+			})
+		}
+		if (results.length > 0) return completionResponse("Stage inspection complete.")
+		return tool("call_verification_read", "read_file", { path: "src/main.cj" })
+	}
+	const stages = initial.includes("modify-feature")
+		? ["CangjieExplore", "CangjieImplement", "CangjieVerify"]
+		: ["CangjieVerify"]
+	const done = results.filter(
+		(message) => "tool_call_id" in message && String(message.tool_call_id).startsWith("call_verification_stage_"),
+	).length
+	const next = stages[done]
+	if (next)
+		return tool(`call_verification_stage_${next}`, "agent", {
+			agentType: next,
+			task: `[cangjie-verification-e2e] Inspect the existing demo project. ${next === "CangjieImplement" ? "Change its exit value to 42." : "Report the source contents."}`,
+		})
+	return completionResponse("Requested project work is ready for system verification.")
 }
