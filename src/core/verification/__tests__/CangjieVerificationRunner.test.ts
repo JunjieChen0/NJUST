@@ -14,6 +14,8 @@ import {
 } from "../CangjieVerificationRunner"
 import { loadVerificationRecord } from "../VerificationStore"
 import { loadSnapshot } from "../snapshotStore"
+import { computeProjectSnapshot } from "../projectFingerprint"
+import { evaluateVerification } from "../verdict"
 import { acquireCjpmProjectLock } from "../../../services/cangjie-lsp/cjpmProjectLock"
 
 vi.mock("../../../utils/safeWriteJson", () => ({
@@ -139,6 +141,29 @@ describe("CangjieVerificationRunner", () => {
 		expect(run.abortDetail).toContain("/project/libs/pricing")
 		expect(approve).not.toHaveBeenCalled()
 		expect(exec).not.toHaveBeenCalled()
+	})
+
+	it("can verify a project with native library inputs and no native cjpm manifest", async () => {
+		await fs.mkdir(path.join(ctx.projectRoot, "native"), { recursive: true })
+		await fs.writeFile(
+			path.join(ctx.projectRoot, "cjpm.toml"),
+			'[package]\nname="app"\n[ffi.c]\nhello={path="native"}\n',
+		)
+		await fs.writeFile(path.join(ctx.projectRoot, "native/libhello.a"), "native library")
+		const exec = vi.fn(async () => processResult({ output: PASSING_TEST_OUTPUT }))
+		const checks = await runCangjieVerification(ctx, deps(exec, { snapshot: computeProjectSnapshot }))
+		const current = await computeProjectSnapshot(ctx.projectRoot)
+		expect(checks.build).toMatchObject({ status: "passed", inputCoverage: "complete" })
+		expect(checks.test).toMatchObject({ status: "passed", inputCoverage: "complete", testScope: { executed: 3 } })
+		expect(exec).toHaveBeenCalledTimes(2)
+		expect(
+			evaluateVerification(
+				await loadVerificationRecord(taskDir, ctx.taskId),
+				current?.fingerprint,
+				undefined,
+				current,
+			).overall,
+		).toBe("verified")
 	})
 
 	it.each(["timeout", "aborted"] as const)(

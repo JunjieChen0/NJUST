@@ -5,7 +5,7 @@ import * as os from "os"
 import * as path from "path"
 
 import { createHash } from "crypto"
-import { computeProjectFingerprint, computeProjectSnapshot } from "../projectFingerprint"
+import { computeProjectFingerprint, computeProjectSnapshot, discoverProjectRoots } from "../projectFingerprint"
 
 async function write(root: string, rel: string, content: string): Promise<void> {
 	const filePath = path.join(root, rel)
@@ -115,6 +115,66 @@ describe("computeProjectFingerprint", () => {
 		await write(base, "lib/src/lib.cj", "package lib\npublic func g() {}\n")
 
 		await expect(computeProjectFingerprint(root)).resolves.not.toBe(before)
+	})
+
+	it.each(["native", "../native"])(
+		"hashes FFI inputs at %s without treating them as cjpm projects",
+		async (nativePath) => {
+			await write(root, "cjpm.toml", `[package]\nname="app"\n[ffi.c]\nhello={path="${nativePath}"}\n`)
+			const native = path.resolve(root, nativePath)
+			await write(native, "hello.c", "int hello() { return 1; }\n")
+			await write(native, "target/libhello.a", "native library")
+			const before = await computeProjectSnapshot(root)
+			expect(before?.coverage).toBe("complete")
+			expect(before?.gaps).toEqual([])
+			expect(await discoverProjectRoots(root)).toEqual(new Set([await fs.realpath(root)]))
+			await write(native, "target/libhello.a", "changed native library")
+			await expect(computeProjectFingerprint(root)).resolves.not.toBe(before?.fingerprint)
+		},
+	)
+
+	it("does not turn other path settings into cjpm projects", async () => {
+		await write(root, "cjpm.toml", '[package]\nname="app"\n[profile.customized-option]\npath="not-a-project"\n')
+		expect((await computeProjectSnapshot(root))?.coverage).toBe("complete")
+	})
+
+	it.each(["dependencies", "test-dependencies", "script-dependencies", "replace"])(
+		"follows %s in root and target configurations",
+		async (section) => {
+			for (const dependency of ["lib", "platform", "debug"]) {
+				await write(base, `${dependency}/cjpm.toml`, `[package]\nname="${dependency}"\n`)
+				await write(base, `${dependency}/src/lib.cj`, `package ${dependency}\n`)
+			}
+			await write(
+				root,
+				"cjpm.toml",
+				`[package]\nname="app"\n[${section}]\nlib={path="../lib"}\n[target.x86_64-w64-mingw32.${section}]\nplatform={path="../platform"}\n[target.x86_64-w64-mingw32.debug.${section}]\ndebug={path="../debug"}\n`,
+			)
+			const snapshot = await computeProjectSnapshot(root)
+			expect(snapshot?.coverage).toBe("complete")
+			for (const dependency of ["lib", "platform", "debug"]) {
+				expect(snapshot?.files).toHaveProperty(`../${dependency}/src/lib.cj`)
+			}
+		},
+	)
+
+	it("keeps missing source dependencies and native inputs as coverage gaps", async () => {
+		await write(
+			root,
+			"cjpm.toml",
+			'[package]\nname="app"\n[dependencies]\nlib={path="../missing-source"}\n[ffi.c]\nhello={path="../missing-native"}\n',
+		)
+		const snapshot = await computeProjectSnapshot(root)
+		expect(snapshot?.coverage).toBe("partial")
+		expect(snapshot?.gaps).toContainEqual(expect.stringContaining("missing-source"))
+		expect(snapshot?.gaps).toContainEqual(expect.stringContaining("missing-native"))
+	})
+	it("still requires a manifest for an existing source dependency directory", async () => {
+		await write(base, "lib/src/lib.cj", "package lib\n")
+		await write(root, "cjpm.toml", '[package]\nname="app"\n[dependencies]\nlib={path="../lib"}\n')
+		const snapshot = await computeProjectSnapshot(root)
+		expect(snapshot?.coverage).toBe("partial")
+		expect(snapshot?.gaps).toContainEqual(expect.stringContaining(path.join("lib", "cjpm.toml")))
 	})
 
 	it("returns undefined when the project root has no manifest", async () => {

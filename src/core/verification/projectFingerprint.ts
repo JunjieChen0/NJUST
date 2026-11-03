@@ -18,7 +18,12 @@ export interface ProjectSnapshot {
 
 /** Discover members and path dependencies before excluding each root's build output. */
 export async function discoverProjectRoots(root: string, gaps: string[] = []): Promise<Set<string>> {
+	return (await discoverProjectInputs(root, gaps)).roots
+}
+
+async function discoverProjectInputs(root: string, gaps: string[]) {
 	const roots = new Set<string>()
+	const nativePaths = new Set<string>()
 	const queue = [root]
 	while (queue.length) {
 		const requested = queue.shift()!
@@ -34,13 +39,45 @@ export async function discoverProjectRoots(root: string, gaps: string[] = []): P
 		roots.add(dir)
 		try {
 			const manifest = parseToml(await fs.readFile(path.join(dir, MANIFEST), "utf8"))
-			const visit = (table: object): void => {
-				for (const [key, value] of Object.entries(table)) {
-					if (key === "path" && typeof value === "string") queue.push(path.resolve(dir, value))
-					else if (value && typeof value === "object") visit(value)
+			const visit = (table: Record<string, unknown>): void => {
+				for (const section of ["dependencies", "test-dependencies", "script-dependencies", "replace"]) {
+					const dependencies = table[section]
+					if (!dependencies || typeof dependencies !== "object") continue
+					for (const dependency of Object.values(dependencies)) {
+						if (
+							dependency &&
+							typeof dependency === "object" &&
+							"path" in dependency &&
+							typeof dependency.path === "string"
+						)
+							queue.push(path.resolve(dir, dependency.path))
+					}
+				}
+				const ffi = table.ffi
+				if (ffi && typeof ffi === "object" && "c" in ffi && ffi.c && typeof ffi.c === "object") {
+					for (const library of Object.values(ffi.c)) {
+						if (
+							library &&
+							typeof library === "object" &&
+							"path" in library &&
+							typeof library.path === "string"
+						)
+							nativePaths.add(path.resolve(dir, library.path))
+					}
+				}
+				// Target configuration may nest debug/release dependency tables.
+				for (const profile of [table.debug, table.release]) {
+					if (profile && typeof profile === "object" && !Array.isArray(profile))
+						visit(profile as Record<string, unknown>)
 				}
 			}
 			visit(manifest)
+			if (manifest.target && typeof manifest.target === "object") {
+				for (const target of Object.values(manifest.target)) {
+					if (target && typeof target === "object" && !Array.isArray(target))
+						visit(target as Record<string, unknown>)
+				}
+			}
 			const workspace = manifest.workspace
 			if (workspace && typeof workspace === "object" && !Array.isArray(workspace)) {
 				const members = "members" in workspace ? workspace.members : undefined
@@ -79,7 +116,16 @@ export async function discoverProjectRoots(root: string, gaps: string[] = []): P
 			gaps.push(`Cannot read or parse manifest: ${path.join(dir, MANIFEST)}`)
 		}
 	}
-	return roots
+	const nativeRoots = new Set<string>()
+	for (const native of nativePaths) {
+		try {
+			nativeRoots.add(await fs.realpath(native))
+		} catch (error) {
+			logger.debug("projectFingerprint", "Native library input directory unavailable", error)
+			gaps.push(`Cannot read native library input: ${native}`)
+		}
+	}
+	return { roots, nativeRoots }
 }
 
 /** Hash all inputs, including test data and FFI; incomplete traversal never certifies success. */
@@ -93,7 +139,7 @@ export async function computeProjectSnapshot(projectRoot: string): Promise<Proje
 		return undefined
 	}
 	const gaps: string[] = []
-	const roots = await discoverProjectRoots(root, gaps)
+	const { roots, nativeRoots } = await discoverProjectInputs(root, gaps)
 	const visited = new Set<string>()
 	const files = new Set<string>()
 	const collect = async (dir: string): Promise<void> => {
@@ -126,6 +172,7 @@ export async function computeProjectSnapshot(projectRoot: string): Promise<Proje
 		}
 	}
 	for (const dir of roots) await collect(dir)
+	for (const dir of nativeRoots) await collect(dir)
 	const inputs: Record<string, string> = {}
 	const hash = crypto.createHash("sha256").update("cangjie-all-inputs-v2\0")
 	for (const file of [...files].sort()) {

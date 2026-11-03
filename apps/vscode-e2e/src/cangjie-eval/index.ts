@@ -15,23 +15,19 @@ import { contentFingerprint, inputFiles, writeFinalDiff } from "../../../../pack
 import { addOracle } from "../../../../packages/evals/src/cangjie/projects.js"
 import {
 	hasAssistantResponse,
+	hasPassingDependencyTests,
 	scoreCangjieTask,
 	type CangjieTaskEvidence,
+	type CangjieTestRunEvidence,
 } from "../../../../packages/evals/src/cangjie/evidence.js"
 
 const exec = promisify(execFile)
 type RecordFacts = {
-	runs: {
-		kind: string
-		status: string
-		exitCode?: number
-		startedAt: number
+	runs: (CangjieTestRunEvidence & {
 		abortReason?: string
 		abortDetail?: string
-		inputFingerprint?: string
-		inputFingerprintAfter?: string
 		logRef?: string
-	}[]
+	})[]
 	claims: { claimId: string; inputFingerprint?: string }[]
 	acceptances: { decision: string }[]
 }
@@ -74,6 +70,8 @@ export async function run(): Promise<void> {
 	}
 	const taskCase = CANGJIE_TASK_SUITE.cases.find((item) => item.id === input.caseId) as CangjieTaskCase
 	if (!taskCase) throw new Error("Unknown evaluation case")
+	if (taskCase.variants && (!input.variant || !Object.hasOwn(taskCase.variants, input.variant)))
+		throw new Error("Unknown evaluation variant")
 	const artifactDir = path.join(input.root, `${taskCase.id}${input.variant ? `-${input.variant}` : ""}`)
 	await fs.mkdir(artifactDir, { recursive: true })
 	const secret = process.env[input.config.apiKeyEnv]!
@@ -340,8 +338,11 @@ export async function run(): Promise<void> {
 	assertions["delivery-bound-to-code"] =
 		!!delivered?.delivery?.fingerprint && delivered.delivery.fingerprint === delivered.currentFingerprint
 	assertions["dependency-covered"] =
-		runs.some((run) => run.status === "passed" && run.inputFingerprint === delivered?.delivery?.fingerprint) &&
-		changed.includes("libs/pricing/src/pricing.cj")
+		(await hasPassingDependencyTests(
+			runs,
+			path.join(input.workspace, "libs/pricing"),
+			delivered?.delivery?.fingerprint,
+		)) && changed.includes("libs/pricing/src/pricing.cj")
 	assertions["feedback-returned-to-model"] =
 		feedbackAt > 0 && events.some((event) => event.message.ask === "followup" && event.message.ts > feedbackAt)
 	assertions["no-premature-delivery"] = noClaimAtFeedback && facts.claims.length === 0
@@ -430,17 +431,12 @@ export async function run(): Promise<void> {
 	}
 	assertions["artifacts-preserved"] =
 		!!rootId && rawMessages.length > 0 && (commands.length > 0 || runs.some((run) => !!run.logRef))
-	const required =
-		taskCase.id === "CJ12"
-			? taskCase.requiredAssertions.filter(
-					(name) =>
-						name !== (input.variant === "sdk" ? "missing-dependency-explained" : "missing-sdk-explained"),
-				)
-			: taskCase.requiredAssertions
+	const required = [...taskCase.requiredAssertions, ...(taskCase.variants?.[input.variant ?? ""] ?? [])]
 	await save("assertions.json", assertions)
 	const evidence: CangjieTaskEvidence = {
 		modelResponseObserved: hasAssistantResponse(rootTask?.apiConversationHistory ?? []),
 		caseId: taskCase.id,
+		variant: input.variant,
 		execution: input.execution,
 		outcome,
 		assertions: required.map((name) => ({

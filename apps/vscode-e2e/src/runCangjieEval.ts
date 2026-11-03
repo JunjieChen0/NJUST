@@ -4,10 +4,14 @@ import * as path from "node:path"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { runTests } from "@vscode/test-electron"
-import { CANGJIE_TASK_SUITE } from "../../../packages/evals/src/cangjie/suite.js"
+import { CANGJIE_TASK_SUITE, type CangjieTaskCase } from "../../../packages/evals/src/cangjie/suite.js"
 import { contentFingerprint, inputFiles } from "../../../packages/evals/src/cangjie/artifacts.js"
 import { prepareCase } from "../../../packages/evals/src/cangjie/projects.js"
-import { scoreCangjieTask, type CangjieTaskEvidence } from "../../../packages/evals/src/cangjie/evidence.js"
+import {
+	scoreCangjieTask,
+	scoreCangjieTaskVariants,
+	type CangjieTaskEvidence,
+} from "../../../packages/evals/src/cangjie/evidence.js"
 import { createHash } from "node:crypto"
 import { startMockServer } from "../../../packages/mock-api-server/src/runtime.js"
 
@@ -234,12 +238,15 @@ async function main(): Promise<void> {
 	if (selected?.some((id) => !CANGJIE_TASK_SUITE.cases.some((task) => task.id === id)))
 		throw new Error("Unknown evaluation case selected")
 	const scores: ReturnType<typeof scoreCangjieTask>[] = []
-	for (const task of CANGJIE_TASK_SUITE.cases.filter((item) => !selected || selected.includes(item.id))) {
+	const tasks: readonly CangjieTaskCase[] = CANGJIE_TASK_SUITE.cases.filter(
+		(item) => !selected || selected.includes(item.id),
+	)
+	for (const task of tasks) {
 		if (mockServer && task.id !== "CJ02" && task.id !== "CJ05")
 			throw new Error(
 				"The deterministic project regression supports only CJ02 and CJ05; it is not the genuine 12-task baseline",
 			)
-		const variants = task.id === "CJ12" ? ["sdk", "dependency"] : [undefined]
+		const variants = task.variants ? Object.keys(task.variants) : [undefined]
 		const evidence: CangjieTaskEvidence[] = []
 		for (const variant of variants) {
 			const label = `${task.id}${variant ? `-${variant}` : ""}`
@@ -314,6 +321,10 @@ async function main(): Promise<void> {
 				)
 			}
 		}
+		if (task.variants) {
+			scores.push(scoreCangjieTaskVariants(task, evidence))
+			continue
+		}
 		if (evidence.length !== variants.length) {
 			scores.push({
 				caseId: task.id,
@@ -331,21 +342,16 @@ async function main(): Promise<void> {
 			})
 			continue
 		}
-		const combined: CangjieTaskEvidence = {
-			...evidence[0]!,
-			modelResponseObserved: evidence.every((item) => item.modelResponseObserved),
-			assertions: evidence.flatMap((item) => item.assertions),
-			interventions: evidence.flatMap((item) => item.interventions),
-			violations: evidence.flatMap((item) => item.violations),
-			outcome:
-				evidence.find((item) => item.outcome === "failed" || item.outcome === "timeout")?.outcome ??
-				evidence[0]!.outcome,
-		}
-		scores.push(scoreCangjieTask(task, combined))
+		scores.push(scoreCangjieTask(task, evidence[0]!))
 	}
 	const report = {
 		...metadata,
-		agentBaseline: execution === "real-agent" ? scores.every((score) => score.modelResponseObserved) ? "executed" : "incomplete" : "not-run",
+		agentBaseline:
+			execution === "real-agent"
+				? scores.every((score) => score.modelResponseObserved)
+					? "executed"
+					: "incomplete"
+				: "not-run",
 		suiteComplete: scores.length === 12,
 		safetyGate:
 			scores.length === 12 &&
