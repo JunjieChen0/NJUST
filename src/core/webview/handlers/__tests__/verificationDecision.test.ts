@@ -20,7 +20,7 @@ describe("verification decisions", () => {
 			],
 			cangjieVerification: { recordAcceptance: vi.fn().mockResolvedValue("recorded") },
 			refreshVerificationSummary: vi.fn(),
-			persistMemrlEpisode: vi.fn(),
+			updateMemoryAcceptance: vi.fn(),
 		}
 		context = { provider: { getCurrentTask: () => task } }
 		router = new MessageRouter()
@@ -33,7 +33,7 @@ describe("verification decisions", () => {
 		})
 		expect(task.cangjieVerification.recordAcceptance).toHaveBeenCalledWith("accepted", "claim")
 		expect(task.refreshVerificationSummary).toHaveBeenCalledOnce()
-		expect(task.persistMemrlEpisode).toHaveBeenCalledWith("decision")
+		expect(task.updateMemoryAcceptance).toHaveBeenCalledWith("accepted")
 	})
 	it("warns when a delivery was superseded and still refreshes the card", async () => {
 		const warn = vi.spyOn(vscode.window, "showWarningMessage").mockResolvedValue(undefined)

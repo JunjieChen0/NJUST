@@ -21,6 +21,18 @@ function host(outcome: { overall: string; acceptance: string }) {
 }
 
 describe("Task memory uses verification facts", () => {
+	it("accepts a cold history task without replacing its intent or summary", async () => {
+		const { task, manager } = host({ overall: "verified", acceptance: "pending" })
+		const ready = vi.fn()
+		const update = vi.fn().mockResolvedValue(undefined)
+		Object.assign(manager, { ensureReady: ready, updateAcceptance: update })
+		task.memrlIntent = ""
+		await Task.prototype.updateMemoryAcceptance.call(task, "accepted")
+		expect(ready).toHaveBeenCalledWith(task.api)
+		expect(update).toHaveBeenCalledWith("task", "accepted")
+		expect(manager.afterRun).not.toHaveBeenCalled()
+		expect(task.cangjieVerification.getOutcome).not.toHaveBeenCalled()
+	})
 	it("does not recheck or overwrite memory for an abandoned task", async () => {
 		const { task, manager } = host({ overall: "verified", acceptance: "accepted" })
 		task.abandoned = true

@@ -37,6 +37,33 @@ function makeEmbedder(vecFn: (text: string) => number[]): MemoryEmbeddingAdapter
 }
 
 describe("EpisodicMemoryService", () => {
+	it("updates only acceptance after reopening history without embedding again", async () => {
+		await service.write("original intent", "original summary", {
+			taskId: "history",
+			overall: "verified",
+			acceptance: "pending",
+		})
+		const before = JSON.parse(JSON.stringify((await service.retrieve("original intent"))[0]))
+		const adapter = makeEmbedder(() => {
+			throw new Error("Acceptance must not embed")
+		})
+		const restored = new EpisodicMemoryService(tmpDir, adapter)
+		await restored.updateAcceptance("history", "accepted")
+		const file = vi.mocked(safeWriteJson).mock.calls.at(-1)![0]
+		const after = JSON.parse(await fs.readFile(file, "utf8")).entries[0]
+		expect(after).toEqual({
+			...before,
+			verification: { ...before.verification, acceptance: "accepted" },
+			updatedAt: expect.any(Number),
+		})
+	})
+
+	it("does not create a missing episode while accepting history", async () => {
+		vi.mocked(safeWriteJson).mockClear()
+		await service.updateAcceptance("missing", "accepted")
+		expect(safeWriteJson).not.toHaveBeenCalled()
+		expect(service.totalWrites).toBe(0)
+	})
 	let tmpDir: string
 	let service: EpisodicMemoryService
 	let distillCalled: boolean

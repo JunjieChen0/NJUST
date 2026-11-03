@@ -19,6 +19,8 @@ export interface MemrlBeforeRunResult {
 export interface IMemoryManager {
 	readonly workspaceDir: string
 	updateDependencies(api: ApiHandler, embedder?: IEmbedder): void
+	ensureReady(api: ApiHandler): void
+	updateAcceptance(taskId: string, acceptance: MemrlVerification["acceptance"]): Promise<void>
 	beforeRun(taskId: string, intent: string): Promise<MemrlBeforeRunResult>
 	afterRun(taskId: string, intent: string, stmSummary: string, outcome: MemrlVerification): Promise<void>
 	getStm(taskId: string): IShortTermMemory

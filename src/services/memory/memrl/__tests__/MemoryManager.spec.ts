@@ -6,6 +6,7 @@ import os from "os"
 import path from "path"
 import * as fs from "fs/promises"
 import { MemoryManager } from "../MemoryManager"
+import { EpisodicMemoryService } from "../EpisodicMemoryService"
 import type { IEmbedder } from "../../../code-index/interfaces/embedder"
 import type { ApiHandler } from "../../../../api"
 import { asMock } from "../../../../__tests__/helpers/asMock"
@@ -32,6 +33,20 @@ function makeApi(): ApiHandler {
 }
 
 describe("MemoryManager integration", () => {
+	it("initializes a cold history manager once before updating acceptance", async () => {
+		const cold = new MemoryManager(tmpDir)
+		const initialize = vi.spyOn(cold, "updateDependencies")
+		const update = vi.spyOn(EpisodicMemoryService.prototype, "updateAcceptance").mockResolvedValue(undefined)
+		try {
+			cold.ensureReady(makeApi())
+			cold.ensureReady(makeApi())
+			await cold.updateAcceptance("history", "accepted")
+			expect(initialize).toHaveBeenCalledOnce()
+			expect(update).toHaveBeenCalledWith("history", "accepted")
+		} finally {
+			update.mockRestore()
+		}
+	})
 	let mgr: MemoryManager
 	let tmpDir: string
 

@@ -1101,6 +1101,21 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		void this.persistMemrlEpisode()
 	}
 
+	public updateMemoryAcceptance(
+		acceptance: import("../../services/memory/interfaces/IMemoryManager").MemrlVerification["acceptance"],
+	): Promise<void> {
+		this.memrlWrites = this.memrlWrites
+			.catch((error) => logger.debug("Task", "Previous episode persistence failed", error))
+			.then(async () => {
+				const manager = this.hostRef.deref()?.getMemoryManager(this.cwd)
+				if (!manager) return
+				manager.ensureReady(this.api)
+				await manager.updateAcceptance(this.taskId, acceptance)
+			})
+			.catch((error) => logger.debug("Task", "Cannot update episodic acceptance", error))
+		return this.memrlWrites
+	}
+
 	/**
 	 * Upsert the task's memory using verification facts. Repeated delivery decisions
 	 * update the same entry and never compound its reward.

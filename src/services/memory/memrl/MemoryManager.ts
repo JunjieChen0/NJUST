@@ -57,6 +57,14 @@ export class MemoryManager {
 		)
 	}
 
+	ensureReady(api: ApiHandler): void {
+		if (!this.episodic) this.updateDependencies(api)
+	}
+
+	async updateAcceptance(taskId: string, acceptance: MemrlVerification["acceptance"]): Promise<void> {
+		await this.episodic?.updateAcceptance(taskId, acceptance)
+	}
+
 	private static makeNoopEmbedder(): IEmbedder {
 		return {
 			createEmbeddings: async () => ({ embeddings: [] }),

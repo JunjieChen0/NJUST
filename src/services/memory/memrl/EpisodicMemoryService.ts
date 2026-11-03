@@ -154,6 +154,32 @@ export class EpisodicMemoryService {
 		}
 	}
 
+	/** Accepting history never embeds again or changes the original verification reward. */
+	updateAcceptance(taskId: string, acceptance: MemrlVerification["acceptance"]): Promise<void> {
+		this.writes = this.writes
+			.catch((error) => logger.debug("MemRL", "Previous episodic write failed", error))
+			.then(async () => {
+				let stored: EpisodicStore
+				try {
+					stored = JSON.parse(await fs.readFile(this.primaryPath, "utf8")) as EpisodicStore
+				} catch (error) {
+					logger.debug("MemRL", "No readable episode to update acceptance", error)
+					return
+				}
+				const entry = stored.entries.find((item) => item.taskId === taskId)
+				if (!entry?.verification) return
+				entry.verification.acceptance = acceptance
+				entry.updatedAt = Date.now()
+				await safeWriteJson(this.primaryPath, stored)
+				const loaded = this.store.entries.find((item) => item.id === entry.id)
+				if (loaded?.verification) {
+					loaded.verification.acceptance = acceptance
+					loaded.updatedAt = entry.updatedAt
+				}
+			})
+		return this.writes
+	}
+
 	/**
 	 * Update Q-value for an existing entry via Monte Carlo rule:
 	 *   Q_new = Q_old + α·(r - Q_old)

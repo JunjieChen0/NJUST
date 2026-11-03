@@ -68,7 +68,7 @@ async function handleVerificationDecision(context: MessageHandlerContext, messag
 			parsed.data.decision,
 			latest.verification.claimId,
 		)
-		if (result === "recorded") await task.persistMemrlEpisode("decision")
+		if (result === "recorded") await task.updateMemoryAcceptance(parsed.data.decision)
 		if (result === "superseded") {
 			await vscode.window.showWarningMessage(t("common:verification.delivery_expired"))
 		}
