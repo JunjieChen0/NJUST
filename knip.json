@@ -74,7 +74,12 @@
 			"project": ["src/**/*.ts"],
 			"ignore": ["src/providers/index.ts", "src/providers/*.ts"]
 		},
-		"packages/{build,evals,telemetry,vscode-shim}": {
+		"packages/{build,telemetry,vscode-shim}": {
+			"project": ["src/**/*.ts"],
+			"ignore": ["src/docker-policy-proxy/index.ts", "src/docker-policy-proxy/main.ts"]
+		},
+		"packages/evals": {
+			"entry": ["src/cangjie/artifacts.ts", "src/cangjie/projects.ts"],
 			"project": ["src/**/*.ts"],
 			"ignore": ["src/docker-policy-proxy/index.ts", "src/docker-policy-proxy/main.ts"]
 		},

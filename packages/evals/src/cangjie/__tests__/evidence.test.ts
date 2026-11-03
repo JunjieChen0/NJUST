@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { CANGJIE_TASK_SUITE } from "../suite.js"
-import { scoreCangjieTask, type CangjieTaskEvidence } from "../evidence.js"
+import { hasAssistantResponse, scoreCangjieTask, type CangjieTaskEvidence } from "../evidence.js"
 
 const task = CANGJIE_TASK_SUITE.cases[1]!
 const evidence = (): CangjieTaskEvidence => ({
@@ -20,6 +20,19 @@ const evidence = (): CangjieTaskEvidence => ({
 })
 
 describe("Cangjie task evidence", () => {
+	it("requires actual assistant content without relying on provider usage statistics", () => {
+		expect(hasAssistantResponse([])).toBe(false)
+		expect(
+			hasAssistantResponse([
+				{ role: "user", content: "do the task" },
+				{ role: "assistant", content: [{ type: "text", text: "" }] },
+			]),
+		).toBe(false)
+		expect(hasAssistantResponse([{ role: "assistant", content: [{ type: "tool_use", name: "read_file" }] }])).toBe(
+			true,
+		)
+		expect(hasAssistantResponse([{ role: "assistant", content: "SDK is unavailable" }])).toBe(true)
+	})
 	it("defines 12 unique tasks and leaves the performance threshold undecided", () => {
 		expect(new Set(CANGJIE_TASK_SUITE.cases.map((item) => item.id)).size).toBe(12)
 		expect(CANGJIE_TASK_SUITE.performanceThreshold).toBeNull()
@@ -32,7 +45,9 @@ describe("Cangjie task evidence", () => {
 		})
 	})
 	it("does not count system-only evidence as an independent model task", () => {
-		expect(scoreCangjieTask(task, { ...evidence(), modelResponseObserved: false }).independentAgentSuccess).toBe(false)
+		expect(scoreCangjieTask(task, { ...evidence(), modelResponseObserved: false }).independentAgentSuccess).toBe(
+			false,
+		)
 	})
 	it("does not certify a timed out functional task even if it has earlier passing assertions", () => {
 		expect(scoreCangjieTask(task, { ...evidence(), outcome: "timeout" }).independentAgentSuccess).toBe(false)

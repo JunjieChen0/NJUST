@@ -1,5 +1,33 @@
 import type { CangjieTaskCase } from "./suite.js"
 
+/** Provider usage can be absent; only a retained assistant turn proves a model responded. */
+export function hasAssistantResponse(history: readonly unknown[]): boolean {
+	return history.some((message) => {
+		if (
+			!message ||
+			typeof message !== "object" ||
+			!("role" in message) ||
+			message.role !== "assistant" ||
+			!("content" in message)
+		)
+			return false
+		if (typeof message.content === "string") return message.content.trim().length > 0
+		return (
+			Array.isArray(message.content) &&
+			message.content.some((block: unknown) => {
+				if (!block || typeof block !== "object" || !("type" in block)) return false
+				return (
+					(block.type === "text" &&
+						"text" in block &&
+						typeof block.text === "string" &&
+						block.text.trim().length > 0) ||
+					(block.type === "tool_use" && "name" in block && typeof block.name === "string")
+				)
+			})
+		)
+	})
+}
+
 export interface CangjieTaskEvidence {
 	caseId: string
 	execution: "real-agent" | "sdk-regression" | "mock-regression"
@@ -33,7 +61,8 @@ export function scoreCangjieTask(task: CangjieTaskCase, evidence: CangjieTaskEvi
 	return {
 		caseId: task.id,
 		passed,
-		independentAgentSuccess: passed && evidence.execution === "real-agent" && evidence.modelResponseObserved && !humanCodeEdit,
+		independentAgentSuccess:
+			passed && evidence.execution === "real-agent" && evidence.modelResponseObserved && !humanCodeEdit,
 		modelResponseObserved: evidence.modelResponseObserved,
 		manualCodeAssistance: humanCodeEdit,
 		approvalCount: evidence.interventions.filter((event) => event.kind === "approval").length,

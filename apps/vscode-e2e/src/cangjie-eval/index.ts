@@ -13,7 +13,11 @@ import {
 import { CANGJIE_TASK_SUITE, type CangjieTaskCase } from "../../../../packages/evals/src/cangjie/suite.js"
 import { contentFingerprint, inputFiles, writeFinalDiff } from "../../../../packages/evals/src/cangjie/artifacts.js"
 import { addOracle } from "../../../../packages/evals/src/cangjie/projects.js"
-import { scoreCangjieTask, type CangjieTaskEvidence } from "../../../../packages/evals/src/cangjie/evidence.js"
+import {
+	hasAssistantResponse,
+	scoreCangjieTask,
+	type CangjieTaskEvidence,
+} from "../../../../packages/evals/src/cangjie/evidence.js"
 
 const exec = promisify(execFile)
 type RecordFacts = {
@@ -264,7 +268,11 @@ export async function run(): Promise<void> {
 		else outcome = "completed"
 	} catch (error) {
 		failureReason = redact(error instanceof Error ? error.message : String(error))
-		outcome = /Model API unavailable/.test(failureReason) ? "blocked" : /timed out/.test(failureReason) ? "timeout" : "failed"
+		outcome = /Model API unavailable/.test(failureReason)
+			? "blocked"
+			: /timed out/.test(failureReason)
+				? "timeout"
+				: "failed"
 	} finally {
 		if (api && outcome !== "completed" && !cancelledAt) {
 			cancelledAt = Date.now()
@@ -431,7 +439,7 @@ export async function run(): Promise<void> {
 			: taskCase.requiredAssertions
 	await save("assertions.json", assertions)
 	const evidence: CangjieTaskEvidence = {
-		modelResponseObserved: events.some((event) => { if (event.message.say !== "api_req_started" || !event.message.text) return false; try { return Number(JSON.parse(event.message.text).tokensOut) > 0 } catch { return false } }),
+		modelResponseObserved: hasAssistantResponse(rootTask?.apiConversationHistory ?? []),
 		caseId: taskCase.id,
 		execution: input.execution,
 		outcome,
