@@ -398,6 +398,9 @@ export function resolveScenario(name: string | undefined): MockScenario {
 }
 
 export function autoResolveScenario(body: Record<string, unknown>): MockScenario {
+	if (JSON.stringify(body.messages ?? []).includes("[cangjie-project-e2e:")) {
+		return { name: "cangjie-project", resolve: ({ body }) => projectVerificationResponse(body) }
+	}
 	if (JSON.stringify(body.messages ?? []).includes("[cangjie-verification-e2e]")) {
 		return { name: "cangjie-verification", resolve: ({ body }) => verificationResponse(body) }
 	}
@@ -486,6 +489,72 @@ export function autoResolveScenario(body: Record<string, unknown>): MockScenario
 		name: "auto-complete",
 		resolve: () => completionResponse(textOnlyResult(text)),
 	}
+}
+
+/** Deterministic model regression on the two versioned projects, with the real local SDK. */
+function projectVerificationResponse(body: Record<string, unknown>): MockScenarioResponse {
+	const messages = Array.isArray(body.messages) ? body.messages : []
+	const firstUser = messages.find(
+		(message) => message && typeof message === "object" && "role" in message && message.role === "user",
+	)
+	const initial = getMessageText(firstUser)
+	const orders = initial.includes("[cangjie-project-e2e:orders]")
+	const marker = `[cangjie-project-e2e:${orders ? "orders" : "minimal"}]`
+	const stage = initial.match(/\[Sub-Agent Type: (Cangjie\w+)\]/)?.[1]
+	const results = messages.filter(
+		(message) => message && typeof message === "object" && "role" in message && message.role === "tool",
+	)
+	const serialized = JSON.stringify(results)
+	const tool = (id: string, name: string, args: Record<string, unknown>): MockScenarioResponse => ({
+		type: "tool_calls",
+		toolCalls: [{ id, name, arguments: args }],
+	})
+	if (stage) {
+		if (results.length === 0)
+			return tool("call_project_read", "read_file", {
+				path: orders ? "libs/pricing/src/pricing.cj" : "src/bounded.cj",
+			})
+		if (stage === "CangjieImplement" && !serialized.includes("call_project_read_tests"))
+			return tool("call_project_read_tests", "read_file", {
+				path: orders ? "libs/pricing/src/pricing_test.cj" : "src/bounded_test.cj",
+			})
+		if (stage === "CangjieImplement" && !serialized.includes("call_project_write"))
+			return tool("call_project_write", "apply_patch", {
+				patch: makePatch(orders ? "libs/pricing/src/pricing.cj" : "src/bounded.cj", [
+					{
+						search: orders ? "    unitPrice * quantity" : "        value",
+						replace: orders
+							? "    let subtotal = unitPrice * quantity\n    if (quantity >= 10) { subtotal * 9 / 10 } else { subtotal }"
+							: "        if (value > 100) { 100 } else { value }",
+					},
+				]),
+			})
+		if (stage === "CangjieImplement" && !serialized.includes("call_project_tests"))
+			return tool("call_project_tests", "apply_patch", {
+				patch: makePatch(orders ? "libs/pricing/src/pricing_test.cj" : "src/bounded_test.cj", [
+					{
+						search: orders
+							? "        @Expect(discountedSubtotal(199, 3), 597)"
+							: "        @Expect(bounded(7), 7)",
+						replace: orders
+							? "        @Expect(discountedSubtotal(199, 3), 597)\n        @Expect(discountedSubtotal(199, 10), 1791)"
+							: "        @Expect(bounded(7), 7)\n        @Expect(bounded(101), 100)",
+					},
+				]),
+			})
+		return completionResponse("Project stage complete.")
+	}
+	const stages = ["CangjieExplore", "CangjieImplement", "CangjieVerify"]
+	const done = results.filter(
+		(message) => "tool_call_id" in message && String(message.tool_call_id).startsWith("call_project_stage_"),
+	).length
+	const next = stages[done]
+	if (next)
+		return tool(`call_project_stage_${next}`, "agent", {
+			agentType: next,
+			task: `${marker} ${next === "CangjieImplement" ? "Apply the requested feature change to the existing function." : "Read and check the existing project."}`,
+		})
+	return completionResponse("Feature change is ready for system build and tests.")
 }
 
 /** Drive the actual Cangjie stages; build/test evidence still comes from the extension's runner. */

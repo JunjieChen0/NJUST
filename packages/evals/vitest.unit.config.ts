@@ -6,7 +6,7 @@ export default defineConfig({
 	test: {
 		globals: true,
 		environment: "node",
-		include: ["src/docker-policy-proxy/**/*.test.ts"],
+		include: ["src/docker-policy-proxy/**/*.test.ts", "src/cangjie/**/*.test.ts"],
 		watch: false,
 	},
 })

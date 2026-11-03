@@ -1,0 +1,5 @@
+[package]
+cjc-version = "1.0.5"
+name = "pricing"
+version = "1.0.0"
+output-type = "static"

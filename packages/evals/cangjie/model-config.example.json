@@ -1,0 +1,5 @@
+{
+	"baseUrl": "https://your-provider.example/v1",
+	"model": "your-pinned-model-id",
+	"apiKeyEnv": "NJUST_CANGJIE_EVAL_API_KEY"
+}
