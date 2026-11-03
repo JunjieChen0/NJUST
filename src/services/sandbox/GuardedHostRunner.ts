@@ -17,6 +17,8 @@
  */
 
 import { StringDecoder } from "string_decoder"
+import { execFile } from "child_process"
+import { promisify } from "util"
 import { execa, ExecaError } from "execa"
 
 import { logger } from "../../shared/logger"
@@ -51,6 +53,19 @@ const COMMAND_SUBSTITUTION = /\$\(|`|\$\{/
  * Local/user-approved commands may use &&, ||, |, ; for normal workflow.
  */
 const SHELL_CHAINING = /[;&|]/
+const execFileAsync = promisify(execFile)
+
+async function terminateProcessTree(pid: number): Promise<void> {
+	try {
+		if (process.platform === "win32") {
+			await execFileAsync("taskkill", ["/PID", String(pid), "/T", "/F"], { timeout: 5_000, windowsHide: true })
+		} else {
+			process.kill(-pid, "SIGKILL")
+		}
+	} catch (error) {
+		logger.debug("GuardedHostRunner", "Process tree termination ended", error)
+	}
+}
 
 function buildExecutionEnvironment(environment?: Record<string, string>): Record<string, string | undefined> {
 	const filteredHostEnv = mergeSafeEnv({}, filterSensitiveEnv(), "GuardedHostRunner host environment")
@@ -149,6 +164,8 @@ export class GuardedHostRunner implements CommandRunner {
 			settled,
 		}
 		this.activeExecutions.set(executionId, active)
+		let termination: Promise<void> | undefined
+		let removeTerminationListener: (() => void) | undefined
 
 		// Handle external signal
 		if (request.signal) {
@@ -201,6 +218,7 @@ export class GuardedHostRunner implements CommandRunner {
 				}
 			}
 
+			const executionController = new AbortController()
 			const execaOptions = {
 				cwd,
 				stdin: "ignore" as const,
@@ -209,12 +227,25 @@ export class GuardedHostRunner implements CommandRunner {
 					: buildExecutionEnvironment(request.environment),
 				extendEnv: false,
 				buffer: false,
-				cancelSignal: abortController.signal,
+				cancelSignal: executionController.signal,
+				// A separate process group lets POSIX cancellation terminate descendants too.
+				detached: process.platform !== "win32",
 				timeout: timeoutMs > 0 ? timeoutMs + 5000 : undefined,
 			}
 			const subprocess = trustedGitCommand
 				? execa(trustedGitCommand.executable, trustedGitCommand.args, { ...execaOptions, shell: false })
 				: execa({ ...execaOptions, shell: shellPath || true })`${normalizedCommand}`
+			const terminate = () => {
+				if (!subprocess.pid) {
+					executionController.abort()
+					return
+				}
+				// Kill the tree before aborting execa: killing its shell first can orphan children.
+				termination ??= terminateProcessTree(subprocess.pid).finally(() => executionController.abort())
+			}
+			abortController.signal.addEventListener("abort", terminate, { once: true })
+			removeTerminationListener = () => abortController.signal.removeEventListener("abort", terminate)
+			if (abortController.signal.aborted) terminate()
 
 			if (subprocess.stdout) {
 				subprocess.stdout.on("data", (chunk: Buffer | string) => {
@@ -311,6 +342,8 @@ export class GuardedHostRunner implements CommandRunner {
 			const errMsg = error instanceof Error ? error.message : String(error)
 			throw new CommandFailedError(1, errMsg)
 		} finally {
+			removeTerminationListener?.()
+			await termination
 			this.activeExecutions.delete(executionId)
 			if (timeoutHandle) clearTimeout(timeoutHandle)
 			resolveSettled()

@@ -61,10 +61,11 @@ export class CangjieChangeMonitor {
 		if (this.started || this.disposed) return
 		this.started = true
 		const inputs = this.deps.watchInputs?.((filePath) => {
+			if (/(?:^|[\\/])\.njust-ai[\\/]cangjie-eval-trace\.jsonl$/.test(filePath)) return
 			if (
 				filePath
 					.split(/[\\/]/)
-					.some((part) => ["target", ".git", "node_modules", ".njust_ai"].includes(part.toLowerCase()))
+					.some((part) => [".git", "node_modules", ".njust_ai"].includes(part.toLowerCase()))
 			)
 				return
 			this.schedule("file_change")

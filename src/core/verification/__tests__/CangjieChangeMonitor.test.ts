@@ -209,7 +209,7 @@ describe("CangjieChangeMonitor", () => {
 	it("ignores generated paths and releases subscriptions and pending work on dispose", async () => {
 		vi.useFakeTimers()
 		monitor.start()
-		for (const dir of ["target", ".git", "node_modules"]) inputChanged(path.join(taskDir, dir, "a.cj"))
+		for (const dir of [".git", "node_modules", ".njust_ai"]) inputChanged(path.join(taskDir, dir, "a.cj"))
 		await vi.advanceTimersByTimeAsync(2_001)
 		expect(deps.snapshot).not.toHaveBeenCalled()
 		inputChanged(path.join(taskDir, "src/a.cj"))
@@ -219,6 +219,16 @@ describe("CangjieChangeMonitor", () => {
 		expect(deps.snapshot).not.toHaveBeenCalled()
 		expect(disposeInputs).toHaveBeenCalledOnce()
 		expect(disposeEnvironment).toHaveBeenCalledOnce()
+	})
+
+	it("rechecks input directories named target instead of treating all of them as build output", async () => {
+		vi.useFakeTimers()
+		monitor.start()
+		current = { ...original, fingerprint: "nested-target-edit" }
+		inputChanged(path.join(taskDir, "test-data", "target", "expected.txt"))
+		await vi.advanceTimersByTimeAsync(2_001)
+		await vi.waitFor(async () => expect((await read())?.invalidations).toHaveLength(1))
+		expect(deps.snapshot).toHaveBeenCalledOnce()
 	})
 
 	it("preserves checkpoint cause when task resume rechecks the same code, including after disposal", async () => {

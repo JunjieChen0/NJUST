@@ -62,11 +62,18 @@ describe("computeProjectFingerprint", () => {
 		["build output", "target/release/bin/main.cj"],
 		["git metadata", ".git/HEAD"],
 		["extension state", ".njust_ai/memrl/episodes.json"],
+		["extension completion audit", ".njust-ai/cangjie-eval-trace.jsonl"],
 	])("ignores %s", async (_label, rel) => {
 		const before = await computeProjectFingerprint(root)
 		await write(root, rel, "noise")
 
 		await expect(computeProjectFingerprint(root)).resolves.toBe(before)
+	})
+
+	it("still fingerprints other files beside the extension's completion audit", async () => {
+		const before = await computeProjectFingerprint(root)
+		await write(root, ".njust-ai/project-config.json", "project input")
+		await expect(computeProjectFingerprint(root)).resolves.not.toBe(before)
 	})
 
 	it("still fingerprints a source package that happens to be named target below the root", async () => {

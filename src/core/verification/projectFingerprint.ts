@@ -105,6 +105,7 @@ export async function computeProjectSnapshot(projectRoot: string): Promise<Proje
 		try {
 			for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
 				const file = path.join(dir, entry.name)
+				if (entry.name === "cangjie-eval-trace.jsonl" && path.basename(dir) === ".njust-ai") continue
 				if (entry.isDirectory()) {
 					if (!EXCLUDED_DIRS.has(entry.name) && !(roots.has(dir) && entry.name === "target"))
 						await collect(file)
