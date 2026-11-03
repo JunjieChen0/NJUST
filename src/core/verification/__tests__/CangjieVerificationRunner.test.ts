@@ -248,11 +248,11 @@ describe("CangjieVerificationRunner", () => {
 	})
 
 	it("runs tests with an xml report outside the project and records the counts", async () => {
-		const exec = vi.fn(async () => processResult({ output: PASSING_TEST_OUTPUT }))
+		const exec = vi.fn<CangjieCheckDeps["exec"]>().mockResolvedValue(processResult({ output: PASSING_TEST_OUTPUT }))
 
 		const run = await runCangjieCheck("test", ctx, deps(exec))
 
-		const [, args] = exec.mock.calls[0] as unknown as [string, string[]]
+		const [, args] = exec.mock.calls[0]
 		expect(args.slice(0, 1)).toEqual(["test"])
 		expect(args).toEqual(expect.arrayContaining(["--report-format", "xml", "--no-progress", "--no-color"]))
 		const reportDir = args[args.indexOf("--report-path") + 1]

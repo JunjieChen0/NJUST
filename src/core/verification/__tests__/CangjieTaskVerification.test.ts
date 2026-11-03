@@ -50,7 +50,7 @@ describe("CangjieTaskVerification", () => {
 	let base: string
 	let projectRoot: string
 	let taskDir: string
-	let exec: ReturnType<typeof vi.fn>
+	let exec: ReturnType<typeof vi.fn<CangjieCheckDeps["exec"]>>
 	let suspendAutoFormat: ReturnType<typeof vi.fn>
 	let release: ReturnType<typeof vi.fn>
 	let trusted: boolean
@@ -59,7 +59,7 @@ describe("CangjieTaskVerification", () => {
 
 	function deps(): TaskVerificationDeps {
 		const checkDeps: CangjieCheckDeps = {
-			exec: exec as unknown as CangjieCheckDeps["exec"],
+			exec,
 			resolveCjpm: () => "cjpm",
 			buildEnv: () => ({}),
 			sdkInfo: async () => ({ version: "1.0.5" }),
@@ -92,7 +92,7 @@ describe("CangjieTaskVerification", () => {
 		taskDir = path.join(base, "task")
 		await fs.mkdir(path.join(projectRoot, "src"), { recursive: true })
 		await fs.writeFile(path.join(projectRoot, "cjpm.toml"), '[package]\nname = "app"\n', "utf8")
-		exec = vi.fn()
+		exec = vi.fn<CangjieCheckDeps["exec"]>()
 		release = vi.fn()
 		suspendAutoFormat = vi.fn(() => release)
 	})

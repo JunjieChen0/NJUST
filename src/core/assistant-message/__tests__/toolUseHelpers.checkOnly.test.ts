@@ -21,7 +21,7 @@ function makeTask(overrides: Record<string, unknown>): Task {
 			isCheckOnlyRoute: () => true,
 		},
 		...overrides,
-	} as unknown as Task
+	} as Task
 }
 
 const writeBlock: ToolUse = {
@@ -37,7 +37,7 @@ describe("validateToolUseBlock check-only isolation", () => {
 		const has = vi.spyOn(customToolRegistry, "has").mockImplementation((name) => name === "write_project_file")
 		try {
 			const task = makeTask({ taskMode: "cangjie" })
-			const block = { ...writeBlock, name: "write_project_file" } as unknown as ToolUse
+			const block: ToolUse = { ...writeBlock, name: "write_project_file" as ToolUse["name"] }
 
 			const ok = await validateToolUseBlock(
 				task,

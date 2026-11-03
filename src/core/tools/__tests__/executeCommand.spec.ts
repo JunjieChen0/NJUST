@@ -10,6 +10,8 @@ import { ExecuteCommandOptions } from "../ExecuteCommandTool"
 import { TerminalRegistry } from "../../../integrations/terminal/TerminalRegistry"
 import { Terminal } from "../../../integrations/terminal/Terminal"
 import { ExecaTerminal } from "../../../integrations/terminal/ExecaTerminal"
+import { TerminalProcess } from "../../../integrations/terminal/TerminalProcess"
+import { mergePromise } from "../../../integrations/terminal/mergePromise"
 import type { RooTerminalCallbacks } from "../../../integrations/terminal/types"
 import { withCjpmProjectLock } from "../../../services/cangjie-lsp/cjpmProjectLock"
 
@@ -123,14 +125,14 @@ describe("executeCommand", () => {
 			async (cause) => {
 				let callbacks!: RooTerminalCallbacks
 				let continueProcess!: () => void
-				const process = Object.assign(
+				const process = mergePromise(
+					Object.assign(new TerminalProcess(mockTerminal), {
+						continue: () => continueProcess(),
+						abort: vi.fn(),
+					}),
 					new Promise<void>((resolve) => {
 						continueProcess = resolve
 					}),
-					{
-						continue: () => continueProcess(),
-						abort: vi.fn(),
-					},
 				)
 				mockTask.supersedePendingAsk = vi.fn()
 				mockTask.ask = vi.fn().mockResolvedValue({ response: "messageResponse", text: "continue" })
@@ -138,10 +140,7 @@ describe("executeCommand", () => {
 					callbacks = cb
 					if (cause === "user feedback")
 						queueMicrotask(() => {
-							void cb.onLine(
-								"running",
-								process as unknown as Parameters<RooTerminalCallbacks["onCompleted"]>[1],
-							)
+							void cb.onLine("running", process)
 						})
 					return process
 				})
@@ -158,14 +157,8 @@ describe("executeCommand", () => {
 					await new Promise((resolve) => setTimeout(resolve, 10))
 					expect(acquired).toBe(true)
 				} finally {
-					callbacks.onShellExecutionComplete(
-						{ exitCode: 0 },
-						process as unknown as Parameters<RooTerminalCallbacks["onCompleted"]>[1],
-					)
-					await callbacks.onCompleted(
-						"done",
-						process as unknown as Parameters<RooTerminalCallbacks["onCompleted"]>[1],
-					)
+					callbacks.onShellExecutionComplete({ exitCode: 0 }, process)
+					await callbacks.onCompleted("done", process)
 					await nextBuild
 				}
 				expect(acquired).toBe(true)
