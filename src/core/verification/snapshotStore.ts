@@ -8,7 +8,12 @@ import type { ProjectSnapshot } from "./projectFingerprint"
 const SNAPSHOT_DIR = "verification-snapshots"
 const MAX_SNAPSHOTS = 30
 const fingerprintSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/)
-const snapshotSchema = z.object({ fingerprint: fingerprintSchema, files: z.record(z.string(), z.string()) })
+const snapshotSchema = z.object({
+	fingerprint: fingerprintSchema,
+	files: z.record(z.string(), z.string()),
+	coverage: z.enum(["complete", "partial"]).default("partial"),
+	gaps: z.array(z.string()).default(["Snapshot coverage was not recorded"]),
+})
 const writes = new Map<string, Promise<void>>()
 
 /** Serialize saves and retention per task. Only extension-owned snapshot JSON files are pruned. */

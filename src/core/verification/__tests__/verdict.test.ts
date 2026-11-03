@@ -36,6 +36,17 @@ function record(parts: Partial<TaskVerificationRecord> = {}): TaskVerificationRe
 }
 
 describe("evaluateVerification", () => {
+	it("never verifies partial input coverage even with passing commands", () => {
+		const evidence = record({ runs: [run({ kind: "build" }), passingTest()] })
+		const result = evaluateVerification(evidence, FP, undefined, {
+			coverage: "partial",
+			gaps: ["Missing workspace member"],
+		})
+		expect(result.overall).toBe("incomplete")
+		expect(result.gaps).toContain("Missing workspace member")
+		evidence.runs[0].inputCoverage = "partial"
+		expect(evaluateVerification(evidence, FP).overall).toBe("incomplete")
+	})
 	it.each([{ sdkVersion: "2" }, { sdkHome: "/other/sdk" }, { cjpmPath: "/other/cjpm" }])(
 		"marks a changed environment stale: %o",
 		(environment) => {

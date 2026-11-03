@@ -141,6 +141,8 @@ export async function runCangjieCheck(
 		status: "running",
 		sdk: await deps.sdkInfo(),
 		inputFingerprint: before?.fingerprint,
+		inputCoverage: before?.coverage ?? "partial",
+		coverageGaps: before?.gaps ?? ["Project inputs could not be fingerprinted"],
 		stale: false,
 		...(kind === "test" ? { testScope: { description: WHOLE_PROJECT_SCOPE } } : {}),
 	}
@@ -228,6 +230,13 @@ export async function runCangjieCheck(
 		endedAt: deps.now(),
 		logRef: await writeLog(ctx.taskDir, runId, result.output),
 		inputFingerprintAfter: after?.fingerprint,
+		inputCoverage: before?.coverage === "complete" && after?.coverage === "complete" ? "complete" : "partial",
+		coverageGaps: [
+			...new Set([
+				...(base.coverageGaps ?? []),
+				...(after?.gaps ?? ["Final project inputs could not be fingerprinted"]),
+			]),
+		],
 	}
 	await persist(ctx, finished)
 	return finished

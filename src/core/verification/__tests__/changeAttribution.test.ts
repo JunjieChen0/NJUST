@@ -9,8 +9,18 @@ describe("change attribution", () => {
 	it("sorts added, modified and deleted inputs and ignores unchanged ones", () => {
 		expect(
 			diffSnapshots(
-				{ fingerprint: "before", files: { "z.cj": "old", "a.cj": "old", "keep.cj": "same" } },
-				{ fingerprint: "after", files: { "a.cj": "new", "b.cj": "new", "keep.cj": "same" } },
+				{
+					coverage: "complete" as const,
+					gaps: [],
+					fingerprint: "before",
+					files: { "z.cj": "old", "a.cj": "old", "keep.cj": "same" },
+				},
+				{
+					coverage: "complete" as const,
+					gaps: [],
+					fingerprint: "after",
+					files: { "a.cj": "new", "b.cj": "new", "keep.cj": "same" },
+				},
 			),
 		).toEqual([
 			{ path: "a.cj", change: "modified" },

@@ -61,7 +61,7 @@ describe("computeProjectFingerprint", () => {
 	it.each([
 		["build output", "target/release/bin/main.cj"],
 		["git metadata", ".git/HEAD"],
-		["a non-input file", "README.md"],
+		["extension state", ".njust_ai/memrl/episodes.json"],
 	])("ignores %s", async (_label, rel) => {
 		const before = await computeProjectFingerprint(root)
 		await write(root, rel, "noise")
@@ -105,6 +105,48 @@ describe("computeProjectFingerprint", () => {
 
 	it("returns undefined when the project root has no manifest", async () => {
 		await expect(computeProjectFingerprint(path.join(base, "missing"))).resolves.toBeUndefined()
+	})
+
+	it("includes workspace members and their external dependencies transitively", async () => {
+		await write(root, "cjpm.toml", '[workspace]\nmembers = ["members/*"]\n')
+		await write(
+			root,
+			"members/app/cjpm.toml",
+			'[package]\nname="member"\n[dependencies]\nlib={path="../../../lib"}\n',
+		)
+		await write(base, "lib/cjpm.toml", '[package]\nname="lib"\n')
+		await write(base, "lib/src/lib.cj", "package lib\n")
+		const before = await computeProjectSnapshot(root)
+		expect(before?.coverage).toBe("complete")
+		await write(base, "lib/src/lib.cj", "package lib\npublic func changed() {}\n")
+		await expect(computeProjectFingerprint(root)).resolves.not.toBe(before?.fingerprint)
+		const stable = await computeProjectFingerprint(root)
+		await write(root, "members/app/target/output.bin", "generated")
+		await expect(computeProjectFingerprint(root)).resolves.toBe(stable)
+	})
+
+	it("fingerprints test data, resource files and native sources", async () => {
+		for (const file of ["testdata/cases.json", "assets/template.txt", "native/ffi.c"]) {
+			const before = await computeProjectFingerprint(root)
+			await write(root, file, "new input")
+			await expect(computeProjectFingerprint(root)).resolves.not.toBe(before)
+		}
+	})
+
+	it.each(["missing member", "invalid manifest"])("records partial coverage for %s", async (reason) => {
+		await write(root, "cjpm.toml", reason === "missing member" ? '[workspace]\nmembers=["missing"]' : "[invalid")
+		const snapshot = await computeProjectSnapshot(root)
+		expect(snapshot?.coverage).toBe("partial")
+		expect(snapshot?.gaps.length).toBeGreaterThan(0)
+	})
+
+	it("uses metadata for files larger than five MB", async () => {
+		const file = path.join(root, "large.bin")
+		await fs.writeFile(file, Buffer.alloc(6 * 1024 * 1024))
+		const before = await computeProjectSnapshot(root)
+		expect(before?.coverage).toBe("complete")
+		await fs.utimes(file, new Date(1000), new Date(1000))
+		await expect(computeProjectFingerprint(root)).resolves.not.toBe(before?.fingerprint)
 	})
 
 	it.each(["'../lib'", '"../li\\u0062"'])(

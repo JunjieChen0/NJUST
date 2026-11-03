@@ -28,7 +28,12 @@ describe("CangjieChangeMonitor", () => {
 	let disposeInputs: ReturnType<typeof vi.fn>
 	let disposeEnvironment: ReturnType<typeof vi.fn>
 	let now: number
-	const original = { fingerprint: "fp-a", files: { "src/a.cj": "a", "src/b.cj": "b" } }
+	const original = {
+		coverage: "complete" as const,
+		gaps: [],
+		fingerprint: "fp-a",
+		files: { "src/a.cj": "a", "src/b.cj": "b" },
+	}
 	const read = () => loadVerificationRecord(taskDir, "task-1")
 
 	beforeEach(async () => {
@@ -102,7 +107,12 @@ describe("CangjieChangeMonitor", () => {
 
 	it("attributes changed files, preserves original runs and saves the new snapshot", async () => {
 		writtenPaths = [path.join(taskDir, "src/a.cj")]
-		current = { fingerprint: "fp-b", files: { "src/a.cj": "new", "src/b.cj": "external" } }
+		current = {
+			coverage: "complete" as const,
+			gaps: [],
+			fingerprint: "fp-b",
+			files: { "src/a.cj": "new", "src/b.cj": "external" },
+		}
 		const originalRuns = (await read())?.runs
 		const listener = vi.fn()
 		monitor.onDidChange(listener)
@@ -120,9 +130,19 @@ describe("CangjieChangeMonitor", () => {
 	})
 
 	it("keeps all changes since the last check in the delivery summary across multiple events", async () => {
-		current = { fingerprint: "fp-b", files: { ...original.files, "src/a.cj": "new" } }
+		current = {
+			coverage: "complete" as const,
+			gaps: [],
+			fingerprint: "fp-b",
+			files: { ...original.files, "src/a.cj": "new" },
+		}
 		await monitor.recheck("file_change")
-		current = { fingerprint: "fp-c", files: { "src/a.cj": "new", "src/b.cj": "new" } }
+		current = {
+			coverage: "complete" as const,
+			gaps: [],
+			fingerprint: "fp-c",
+			files: { "src/a.cj": "new", "src/b.cj": "new" },
+		}
 		await monitor.recheck("file_change")
 		const result = await monitor.recheck("task_resume")
 		expect(result?.changes.map((change) => change.path)).toEqual(["src/a.cj", "src/b.cj"])
@@ -130,7 +150,12 @@ describe("CangjieChangeMonitor", () => {
 	})
 
 	it("preserves the latest delivery and check snapshots through more than 30 external changes", async () => {
-		const delivery = { fingerprint: "delivery", files: { ...original.files, "src/a.cj": "delivered" } }
+		const delivery = {
+			coverage: "complete" as const,
+			gaps: [],
+			fingerprint: "delivery",
+			files: { ...original.files, "src/a.cj": "delivered" },
+		}
 		await saveSnapshot(taskDir, delivery)
 		await updateVerificationRecord(taskDir, "task-1", (record) => ({
 			...record,
@@ -144,7 +169,12 @@ describe("CangjieChangeMonitor", () => {
 			)
 		}
 		for (let i = 0; i < 31; i++) {
-			current = { fingerprint: `edit-${i}`, files: { ...original.files, "src/a.cj": `edit ${i}` } }
+			current = {
+				coverage: "complete" as const,
+				gaps: [],
+				fingerprint: `edit-${i}`,
+				files: { ...original.files, "src/a.cj": `edit ${i}` },
+			}
 			await monitor.recheck("file_change")
 		}
 		await expect(loadSnapshot(taskDir, original.fingerprint)).resolves.toEqual(original)
@@ -158,7 +188,12 @@ describe("CangjieChangeMonitor", () => {
 	it("debounces rapid input changes into one recheck", async () => {
 		vi.useFakeTimers()
 		monitor.start()
-		current = { fingerprint: "fp-b", files: { ...original.files, "src/a.cj": "new" } }
+		current = {
+			coverage: "complete" as const,
+			gaps: [],
+			fingerprint: "fp-b",
+			files: { ...original.files, "src/a.cj": "new" },
+		}
 		inputChanged(path.join(taskDir, "src/a.cj"))
 		await vi.advanceTimersByTimeAsync(1_500)
 		inputChanged(path.join(taskDir, "src/b.cj"))
@@ -188,7 +223,12 @@ describe("CangjieChangeMonitor", () => {
 
 	it("preserves checkpoint cause when task resume rechecks the same code, including after disposal", async () => {
 		monitor.dispose()
-		current = { fingerprint: "fp-b", files: { ...original.files, "src/a.cj": "restored" } }
+		current = {
+			coverage: "complete" as const,
+			gaps: [],
+			fingerprint: "fp-b",
+			files: { ...original.files, "src/a.cj": "restored" },
+		}
 		await monitor.recheck("checkpoint_restore")
 		const resumed = await monitor.recheck("task_resume")
 		expect(resumed?.codeChanged).toBe(true)
@@ -198,7 +238,12 @@ describe("CangjieChangeMonitor", () => {
 	it("makes previous successful results usable again when code returns to the verified snapshot", async () => {
 		const listener = vi.fn()
 		monitor.onDidChange(listener)
-		current = { fingerprint: "fp-b", files: { ...original.files, "src/a.cj": "new" } }
+		current = {
+			coverage: "complete" as const,
+			gaps: [],
+			fingerprint: "fp-b",
+			files: { ...original.files, "src/a.cj": "new" },
+		}
 		await monitor.recheck("file_change")
 		current = original
 		const result = await monitor.recheck("file_change")
@@ -236,7 +281,12 @@ describe("CangjieChangeMonitor", () => {
 	})
 
 	it("serializes concurrent rechecks without duplicate history", async () => {
-		current = { fingerprint: "fp-b", files: { ...original.files, "src/a.cj": "new" } }
+		current = {
+			coverage: "complete" as const,
+			gaps: [],
+			fingerprint: "fp-b",
+			files: { ...original.files, "src/a.cj": "new" },
+		}
 		await Promise.all([monitor.recheck("checkpoint_restore"), monitor.recheck("task_resume")])
 		expect((await read())?.invalidations).toMatchObject([{ cause: "checkpoint_restore" }])
 	})

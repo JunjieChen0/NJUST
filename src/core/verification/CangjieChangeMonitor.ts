@@ -61,7 +61,11 @@ export class CangjieChangeMonitor {
 		if (this.started || this.disposed) return
 		this.started = true
 		const inputs = this.deps.watchInputs?.((filePath) => {
-			if (filePath.split(/[\\/]/).some((part) => ["target", ".git", "node_modules"].includes(part.toLowerCase())))
+			if (
+				filePath
+					.split(/[\\/]/)
+					.some((part) => ["target", ".git", "node_modules", ".njust_ai"].includes(part.toLowerCase()))
+			)
 				return
 			this.schedule("file_change")
 		})
@@ -102,7 +106,7 @@ export class CangjieChangeMonitor {
 		const snapshot = await this.deps.snapshot(resolution.root)
 		if (!snapshot) return undefined
 		const environment = await this.deps.environment()
-		const verdict = evaluateVerification(record, snapshot.fingerprint, environment)
+		const verdict = evaluateVerification(record, snapshot.fingerprint, environment, snapshot)
 		const reference = latestBinding(record)
 		const delivery = latestBinding(record, false)
 		const codeChanged = reference?.fingerprint !== undefined && reference.fingerprint !== snapshot.fingerprint

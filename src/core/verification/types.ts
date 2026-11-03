@@ -77,6 +77,8 @@ export const verificationRunSchema = z.object({
 	inputFingerprint: z.string().optional(),
 	/** Project input fingerprint captured after the run ended. */
 	inputFingerprintAfter: z.string().optional(),
+	inputCoverage: z.enum(["complete", "partial"]).optional(),
+	coverageGaps: z.array(z.string()).optional(),
 	/** Set when a later change invalidated this run; the original facts are kept. */
 	stale: z.boolean(),
 })

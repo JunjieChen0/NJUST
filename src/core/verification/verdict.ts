@@ -7,6 +7,7 @@ import type {
 	VerificationEnvironment,
 } from "./types"
 import * as path from "path"
+import type { ProjectSnapshot } from "./projectFingerprint"
 
 /**
  * State of one check (build or test) as it applies to the CURRENT code.
@@ -33,6 +34,7 @@ export interface VerificationVerdict {
 	test: CheckState
 	acceptance: AcceptanceState
 	latestClaim?: CompletionClaim
+	gaps?: string[]
 }
 
 /**
@@ -45,6 +47,7 @@ export function evaluateVerification(
 	record: TaskVerificationRecord | undefined,
 	currentFingerprint: string | undefined,
 	currentEnvironment?: VerificationEnvironment,
+	currentSnapshot?: Pick<ProjectSnapshot, "coverage" | "gaps">,
 ): VerificationVerdict {
 	if (!record) {
 		return {
@@ -58,13 +61,18 @@ export function evaluateVerification(
 	const build = evaluateCheck(record.runs, "build", currentFingerprint, currentEnvironment)
 	const test = evaluateCheck(record.runs, "test", currentFingerprint, currentEnvironment)
 	const latestClaim = latestBy(record.claims, (c) => c.claimedAt)
+	const checkedRuns = [build, test].flatMap((check) => (check.state === "not_run" ? [] : [check.run]))
+	const partial =
+		currentSnapshot?.coverage === "partial" || checkedRuns.some((run) => run.inputCoverage === "partial")
+	const overall = deriveOverall(build, test)
 
 	return {
-		overall: deriveOverall(build, test),
+		overall: partial && overall === "verified" ? "incomplete" : overall,
 		build,
 		test,
 		acceptance: evaluateAcceptance(record, latestClaim, currentFingerprint),
 		latestClaim,
+		gaps: [...new Set([...(currentSnapshot?.gaps ?? []), ...checkedRuns.flatMap((run) => run.coverageGaps ?? [])])],
 	}
 }
 

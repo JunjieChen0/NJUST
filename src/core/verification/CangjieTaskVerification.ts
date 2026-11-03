@@ -119,6 +119,7 @@ export class CangjieTaskVerification {
 				await loadVerificationRecord(taskDir, this.task.taskId),
 				snapshot?.fingerprint,
 				await this.deps.checkDeps.environment(),
+				snapshot,
 			)
 			return buildVerificationSummary(verdict, {
 				taskDir,
@@ -315,7 +316,9 @@ export class CangjieTaskVerification {
 		const existing = await loadVerificationRecord(taskDir, this.task.taskId)
 		if (
 			skipTests ||
-			!hasReusableResult(evaluateVerification(existing, fingerprint, await this.deps.checkDeps.environment()))
+			!hasReusableResult(
+				evaluateVerification(existing, fingerprint, await this.deps.checkDeps.environment(), snapshot),
+			)
 		) {
 			await runCangjieVerification(
 				{ taskId: this.task.taskId, taskDir, projectRoot: root, signal, phase: "delivery", approve },
@@ -329,7 +332,7 @@ export class CangjieTaskVerification {
 
 		const record = await this.recordClaim(taskDir, fingerprint)
 		if (snapshot) await saveSnapshot(taskDir, snapshot, [snapshot.fingerprint])
-		const verdict = evaluateVerification(record, fingerprint, await this.deps.checkDeps.environment())
+		const verdict = evaluateVerification(record, fingerprint, await this.deps.checkDeps.environment(), snapshot)
 		await this.feedPolicy(verdict, taskDir)
 		const note = skipTests ? "Tests were not run because the request only allowed `cjpm build`" : undefined
 		return this.decide(verdict, taskDir, note, changed?.changes)
@@ -341,7 +344,12 @@ export class CangjieTaskVerification {
 			resolution.kind === "resolved" ? await this.deps.checkDeps.snapshot(resolution.root) : undefined
 		const record = await this.recordClaim(taskDir, snapshot?.fingerprint, note)
 		if (snapshot) await saveSnapshot(taskDir, snapshot, [snapshot.fingerprint])
-		const verdict = evaluateVerification(record, snapshot?.fingerprint, await this.deps.checkDeps.environment())
+		const verdict = evaluateVerification(
+			record,
+			snapshot?.fingerprint,
+			await this.deps.checkDeps.environment(),
+			snapshot,
+		)
 		return {
 			action: "allow",
 			facts: formatVerificationFacts(verdict, note),
@@ -430,7 +438,7 @@ export function createCangjieTaskVerification(task: {
 			workspaceFolders: () => (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
 			checkDeps: createDefaultCangjieCheckDeps(),
 			watchInputs: (onChange) => {
-				const watcher = vscode.workspace.createFileSystemWatcher("**/{*.cj,cjpm.toml,cjpm.lock}")
+				const watcher = vscode.workspace.createFileSystemWatcher("**/*")
 				const subscriptions = [
 					watcher.onDidChange((uri) => onChange(uri.fsPath)),
 					watcher.onDidCreate((uri) => onChange(uri.fsPath)),

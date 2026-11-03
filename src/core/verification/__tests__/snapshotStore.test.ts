@@ -15,7 +15,12 @@ describe("snapshotStore", () => {
 	})
 
 	it("round-trips a snapshot and refreshes an existing fingerprint without rewriting its contents", async () => {
-		const snapshot = { fingerprint: "fp-1", files: { "src/main.cj": "hash" } }
+		const snapshot = {
+			coverage: "complete" as const,
+			gaps: [],
+			fingerprint: "fp-1",
+			files: { "src/main.cj": "hash" },
+		}
 		await saveSnapshot(dir, snapshot)
 		const file = path.join(dir, "verification-snapshots", "fp-1.json")
 		await fs.utimes(file, new Date(1000), new Date(1000))
@@ -27,27 +32,34 @@ describe("snapshotStore", () => {
 
 	it("keeps a reused snapshot when pruning the oldest entry", async () => {
 		for (let i = 0; i < 30; i++) {
-			await saveSnapshot(dir, { fingerprint: `fp-${i}`, files: {} })
+			await saveSnapshot(dir, { coverage: "complete" as const, gaps: [], fingerprint: `fp-${i}`, files: {} })
 			await fs.utimes(
 				path.join(dir, "verification-snapshots", `fp-${i}.json`),
 				new Date(1000 + i),
 				new Date(1000 + i),
 			)
 		}
-		await saveSnapshot(dir, { fingerprint: "fp-0", files: {} })
-		await saveSnapshot(dir, { fingerprint: "fp-new", files: {} })
+		await saveSnapshot(dir, { coverage: "complete" as const, gaps: [], fingerprint: "fp-0", files: {} })
+		await saveSnapshot(dir, { coverage: "complete" as const, gaps: [], fingerprint: "fp-new", files: {} })
 		await expect(loadSnapshot(dir, "fp-0")).resolves.toBeDefined()
 		await expect(loadSnapshot(dir, "fp-1")).resolves.toBeUndefined()
 	})
 
 	it("preserves keep fingerprints across 31 new snapshots while respecting the retention limit", async () => {
-		const snapshot = { fingerprint: "delivery", files: { "src/main.cj": "hash" } }
+		const snapshot = {
+			coverage: "complete" as const,
+			gaps: [],
+			fingerprint: "delivery",
+			files: { "src/main.cj": "hash" },
+		}
 		await saveSnapshot(dir, snapshot)
 		await saveSnapshot(dir, snapshot)
 		const file = path.join(dir, "verification-snapshots", "delivery.json")
 		await fs.utimes(file, new Date(1000), new Date(1000))
 		for (let i = 0; i < 31; i++) {
-			await saveSnapshot(dir, { fingerprint: `new-${i}`, files: {} }, ["delivery"])
+			await saveSnapshot(dir, { coverage: "complete" as const, gaps: [], fingerprint: `new-${i}`, files: {} }, [
+				"delivery",
+			])
 		}
 		await expect(loadSnapshot(dir, "delivery")).resolves.toEqual(snapshot)
 		expect(await fs.readdir(path.join(dir, "verification-snapshots"))).toHaveLength(30)
@@ -55,12 +67,12 @@ describe("snapshotStore", () => {
 
 	it("returns undefined for missing, corrupt, mismatched, and invalid snapshot paths", async () => {
 		await expect(loadSnapshot(dir, "missing")).resolves.toBeUndefined()
-		await saveSnapshot(dir, { fingerprint: "broken", files: {} })
+		await saveSnapshot(dir, { coverage: "complete" as const, gaps: [], fingerprint: "broken", files: {} })
 		await fs.writeFile(path.join(dir, "verification-snapshots", "broken.json"), "{bad")
 		await expect(loadSnapshot(dir, "broken")).resolves.toBeUndefined()
 		await fs.writeFile(
 			path.join(dir, "verification-snapshots", "broken.json"),
-			JSON.stringify({ fingerprint: "other", files: {} }),
+			JSON.stringify({ coverage: "complete" as const, gaps: [], fingerprint: "other", files: {} }),
 		)
 		await expect(loadSnapshot(dir, "broken")).resolves.toBeUndefined()
 		await expect(loadSnapshot(dir, "../escape")).resolves.toBeUndefined()
@@ -69,7 +81,7 @@ describe("snapshotStore", () => {
 	it("keeps the newest 30 snapshots without touching other task data", async () => {
 		await fs.writeFile(path.join(dir, "keep.json"), "user task data")
 		for (let i = 0; i < 31; i++) {
-			await saveSnapshot(dir, { fingerprint: `fp-${i}`, files: {} })
+			await saveSnapshot(dir, { coverage: "complete" as const, gaps: [], fingerprint: `fp-${i}`, files: {} })
 			await fs.utimes(
 				path.join(dir, "verification-snapshots", `fp-${i}.json`),
 				new Date(1000 + i),
@@ -83,7 +95,11 @@ describe("snapshotStore", () => {
 	})
 
 	it("serializes concurrent saves of the same fingerprint", async () => {
-		await Promise.all(Array.from({ length: 5 }, () => saveSnapshot(dir, { fingerprint: "same", files: {} })))
+		await Promise.all(
+			Array.from({ length: 5 }, () =>
+				saveSnapshot(dir, { coverage: "complete" as const, gaps: [], fingerprint: "same", files: {} }),
+			),
+		)
 		expect(await fs.readdir(path.join(dir, "verification-snapshots"))).toEqual(["same.json"])
 	})
 })

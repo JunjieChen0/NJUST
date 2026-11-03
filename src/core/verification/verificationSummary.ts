@@ -27,7 +27,7 @@ export function buildVerificationSummary(
 		}
 	}
 	const changes = options.changes ?? []
-	const notes = [options.note]
+	const notes = [options.note, ...(verdict.gaps ?? []).map((gap) => `Input coverage: ${gap}`)]
 	for (const value of [verdict.build, verdict.test]) {
 		if (value.state === "not_run" || value.state === "stale") continue
 		const run = value.run

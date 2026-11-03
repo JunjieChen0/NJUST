@@ -43,7 +43,7 @@ describe("CangjieVerificationRunner", () => {
 			resolveCjpm: () => "/sdk/tools/bin/cjpm",
 			buildEnv: () => ({ PATH: "/sdk/bin" }),
 			sdkInfo: async () => ({ home: "/sdk", version: "1.0.5" }),
-			snapshot: async () => ({ fingerprint: "fp-1", files: {} }),
+			snapshot: async () => ({ coverage: "complete" as const, gaps: [], fingerprint: "fp-1", files: {} }),
 			environment: async () => ({ sdkHome: "/sdk", sdkVersion: "1.0.5", cjpmPath: "/sdk/tools/bin/cjpm" }),
 			now: () => 1_000,
 			newId: () => `run-${++ids}`,
@@ -235,8 +235,18 @@ describe("CangjieVerificationRunner", () => {
 	it("captures the fingerprint after the run so mid-run edits are visible", async () => {
 		const snapshot = vi
 			.fn()
-			.mockResolvedValueOnce({ fingerprint: "fp-before", files: { "cjpm.lock": "before" } })
-			.mockResolvedValueOnce({ fingerprint: "fp-after", files: { "cjpm.lock": "after" } })
+			.mockResolvedValueOnce({
+				coverage: "complete" as const,
+				gaps: [],
+				fingerprint: "fp-before",
+				files: { "cjpm.lock": "before" },
+			})
+			.mockResolvedValueOnce({
+				coverage: "complete" as const,
+				gaps: [],
+				fingerprint: "fp-after",
+				files: { "cjpm.lock": "after" },
+			})
 
 		const run = await runCangjieCheck(
 			"build",
