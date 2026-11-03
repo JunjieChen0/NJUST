@@ -1,5 +1,6 @@
 import * as fs from "fs/promises"
 import * as path from "path"
+import { discoverProjectRoots } from "./projectFingerprint"
 
 const MANIFEST = "cjpm.toml"
 
@@ -55,13 +56,16 @@ export async function resolveVerificationProjectRoot(input: {
 	cwd: string
 	workspaceFolders: readonly string[]
 }): Promise<ProjectRootResolution> {
-	const fromWrites = decide(
-		await uniqueRoots(input.writtenPaths.map((p) => path.dirname(p))),
-		"Files written by this task",
-	)
+	const writtenRoots = await uniqueRoots(input.writtenPaths.map((p) => path.dirname(p)))
+	const fromCwd = await findNearestCjpmRoot(input.cwd)
+	if (fromCwd) {
+		const ownedRoots = await discoverProjectRoots(fromCwd)
+		const canonicalWrites = await Promise.all(writtenRoots.map((root) => fs.realpath(root)))
+		if (canonicalWrites.every((root) => ownedRoots.has(root))) return { kind: "resolved", root: fromCwd }
+	}
+	const fromWrites = decide(writtenRoots, "Files written by this task")
 	if (fromWrites) return fromWrites
 
-	const fromCwd = await findNearestCjpmRoot(input.cwd)
 	if (fromCwd) return { kind: "resolved", root: fromCwd }
 
 	const workspaceRoots: string[] = []

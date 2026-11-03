@@ -76,6 +76,71 @@ describe("CangjieVerificationRunner", () => {
 		expect(run).toMatchObject({ status: "blocked", abortReason: "not_approved" })
 	})
 
+	it("does not start a command when cancellation arrives while approval is pending", async () => {
+		const controller = new AbortController()
+		const exec = vi.fn()
+		const run = await runCangjieCheck(
+			"build",
+			{
+				...ctx,
+				signal: controller.signal,
+				approve: async () => {
+					controller.abort()
+					return { approved: true }
+				},
+			},
+			deps(exec),
+		)
+		expect(run).toMatchObject({ status: "cancelled", inputFingerprintAfter: "fp-1" })
+		expect(exec).not.toHaveBeenCalled()
+	})
+
+	it("finishes cancellation even when the approval dialog never resolves", async () => {
+		const controller = new AbortController()
+		const exec = vi.fn()
+		let awaiting!: () => void
+		const approvalAsked = new Promise<void>((resolve) => {
+			awaiting = resolve
+		})
+		const checking = runCangjieCheck(
+			"build",
+			{
+				...ctx,
+				signal: controller.signal,
+				approve: () => {
+					awaiting()
+					return new Promise(() => {})
+				},
+			},
+			deps(exec),
+		)
+		await approvalAsked
+		controller.abort()
+		expect(await checking).toMatchObject({ status: "cancelled", inputFingerprintAfter: "fp-1" })
+		expect(exec).not.toHaveBeenCalled()
+	})
+
+	it("reports the unavailable dependency path before asking to run a command", async () => {
+		const exec = vi.fn()
+		const approve = vi.fn()
+		const run = await runCangjieCheck(
+			"build",
+			{ ...ctx, approve },
+			deps(exec, {
+				snapshot: async () => ({
+					fingerprint: "partial",
+					files: {},
+					coverage: "partial",
+					gaps: ["Cannot read member/dependency: /project/libs/pricing"],
+				}),
+			}),
+		)
+		expect(run).toMatchObject({ status: "blocked", abortReason: "dependency_unavailable" })
+		expect(run.abortDetail).toContain("/project/libs/pricing")
+		expect(approve).not.toHaveBeenCalled()
+		expect(exec).not.toHaveBeenCalled()
+	})
+
 	it.each(["timeout", "aborted"] as const)(
 		"records verification that never started after lock wait %s",
 		async (reason) => {

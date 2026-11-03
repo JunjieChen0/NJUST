@@ -1,0 +1,32 @@
+{
+	"projectRoot": "專案",
+	"deliveredCode": "交付時的程式碼",
+	"currentCode": "目前程式碼",
+	"unknownCode": "無法確認程式碼狀態",
+	"workingDirectory": "工作目錄",
+	"testScopeNote": "統計僅涵蓋該工作目錄的本次命令；相依工程如有獨立測試，需要另行檢查。",
+	"relatedTests": "相關工程測試",
+	"deliveredFiles": "本次交付的變更",
+	"noInitialSnapshot": "未記錄任務起點，無法確認完整變更清單。",
+	"noChanges": "未偵測到任務期間的輸入檔案變更。",
+	"filesTruncated": "檔案清單已截斷，請查看 diff 了解詳情。",
+	"diffUnavailable": "下列檔案無法顯示完整 diff",
+	"viewDiff": "查看交付 diff",
+	"fileChanges": { "added": "新增", "modified": "修改", "deleted": "刪除" },
+	"stages": {
+		"project": "識別專案",
+		"sdk": "偵測 SDK",
+		"read": "閱讀程式碼",
+		"edit": "修改程式碼",
+		"build": "建置",
+		"test": "測試",
+		"delivery": "交付"
+	},
+	"progressStates": {
+		"running": "進行中",
+		"waiting": "等待核准或專案資源",
+		"blocked": "受阻或失敗，請查看檢查結果",
+		"completed": "已完成",
+		"cancelled": "已取消"
+	}
+}

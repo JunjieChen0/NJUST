@@ -77,4 +77,81 @@ describe("VerificationCard", () => {
 		fireEvent.click(screen.getByRole("button", { name: "chat:verification.buildLog" }))
 		expect(vscode.postMessage).toHaveBeenCalledWith({ type: "openFile", text: "/task/logs/build.log" })
 	})
+	it("shows delivered files, code identity, command working directory and the saved diff", () => {
+		render(
+			<VerificationCard
+				ts={1}
+				isLatest
+				summary={{
+					...base,
+					build: { state: "passed", executable: "/sdk/cjpm", args: ["build"], cwd: "/project" },
+					currentFingerprint: "current-hash",
+					delivery: {
+						projectRoot: "/project",
+						fingerprint: "delivered-hash",
+						baselineFingerprint: "baseline",
+						capturedAt: 1,
+						files: [{ path: "src/main.cj", change: "modified", source: "task_tool" }],
+						filesTruncated: false,
+						diffPath: "/task/claim.patch",
+						diffOmittedPaths: [],
+					},
+				}}
+			/>,
+		)
+		expect(screen.getByText(/src\/main.cj/)).toBeInTheDocument()
+		expect(screen.getByText("/sdk/cjpm build")).toBeInTheDocument()
+		expect(screen.getByText("current-hash")).toBeInTheDocument()
+		fireEvent.click(screen.getByRole("button", { name: "delivery:viewDiff" }))
+		expect(vscode.postMessage).toHaveBeenCalledWith({ type: "openFile", text: "/task/claim.patch" })
+	})
+	it("expires an unverified delivery when its code changes, even when no check ever ran", () => {
+		render(
+			<VerificationCard
+				ts={1}
+				isLatest
+				summary={{
+					...base,
+					overall: "no_record",
+					build: { state: "not_run" },
+					test: { state: "not_run" },
+					currentFingerprint: "new",
+					delivery: {
+						projectRoot: "/project",
+						fingerprint: "old",
+						capturedAt: 1,
+						files: [],
+						filesTruncated: false,
+						diffOmittedPaths: [],
+					},
+				}}
+			/>,
+		)
+		expect(screen.queryByRole("button", { name: "chat:verification.accept" })).toBeNull()
+		expect(screen.getByText("chat:verification.reverifyRequired")).toBeInTheDocument()
+	})
+	it("shows related suite commands, working directories and separate counts", () => {
+		render(
+			<VerificationCard
+				ts={1}
+				isLatest
+				summary={{
+					...base,
+					relatedTests: [
+						{
+							state: "passed",
+							cwd: "/orders/libs/pricing",
+							executable: "cjpm",
+							args: ["test"],
+							executed: 1,
+							passed: 1,
+						},
+					],
+				}}
+			/>,
+		)
+		expect(screen.getByText("delivery:relatedTests")).toBeInTheDocument()
+		expect(screen.getByText("cjpm test")).toBeInTheDocument()
+		expect(screen.getByText(/\/orders\/libs\/pricing/)).toBeInTheDocument()
+	})
 })

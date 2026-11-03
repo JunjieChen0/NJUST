@@ -1,7 +1,9 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as vscode from "vscode"
-import type { VerificationSummary } from "@njust-ai/types"
+import { EventEmitter } from "events"
+import { randomUUID } from "crypto"
+import type { VerificationSummary, CangjieTaskProgress } from "@njust-ai/types"
 
 import { logger } from "../../shared/logger"
 import { getErrorMessage } from "../../shared/error-utils"
@@ -13,6 +15,7 @@ import type { CangjieAgentRouteKind } from "../agent/CangjieAgentRouter"
 import { decideCangjieCompletion, formatVerificationFacts } from "./completionDecision"
 import {
 	createDefaultCangjieCheckDeps,
+	runCangjieCheck,
 	runCangjieVerification,
 	type CangjieCheckDeps,
 } from "./CangjieVerificationRunner"
@@ -24,6 +27,8 @@ import { saveSnapshot } from "./snapshotStore"
 import { CangjieChangeMonitor, type ChangeMonitorDeps } from "./CangjieChangeMonitor"
 import { buildVerificationSummary } from "./verificationSummary"
 import { VerificationFeedbackError, type VerificationApproval, type VerificationFeedback } from "./verificationApproval"
+import { captureDeliveryBaseline, buildTaskDelivery } from "./taskDelivery"
+import { discoverProjectRoots } from "./projectFingerprint"
 
 const LOG_TAIL_CHARS = 4_000
 /** Upper bound on completions blocked by failed system verification, so a task always reaches an end. */
@@ -83,6 +88,85 @@ export class CangjieTaskVerification {
 	private systemBlocks = 0
 	private readonly changeMonitor: CangjieChangeMonitor
 	private delivery: Promise<CompletionVerificationOutcome> | undefined
+	private preparation: Promise<void> | undefined
+	private readonly progressEvents = new EventEmitter()
+	private lastProgressKey: string | undefined
+
+	readonly onDidProgress = (listener: (progress: CangjieTaskProgress) => void) => {
+		this.progressEvents.on("progress", listener)
+		return {
+			dispose: () => {
+				this.progressEvents.off("progress", listener)
+			},
+		}
+	}
+
+	private progress(update: Omit<CangjieTaskProgress, "at">): void {
+		if (this.abortController.signal.aborted && update.status !== "cancelled") return
+		const key = `${update.stage}:${update.status}:${update.detail ?? ""}`
+		if (key === this.lastProgressKey) return
+		this.lastProgressKey = key
+		this.progressEvents.emit("progress", { ...update, at: this.deps.checkDeps.now() })
+	}
+
+	/** Awaited before the first model request, so the baseline cannot follow a model edit. */
+	prepareForTask(): Promise<void> {
+		return (this.preparation ??= this.captureInitialInputs().catch((error) => {
+			logger.debug("CangjieTaskVerification", "Initial delivery inputs could not be captured", error)
+			this.progress({ stage: "project", status: "blocked", detail: getErrorMessage(error) })
+		}))
+	}
+
+	private async captureInitialInputs(): Promise<void> {
+		if (this.abortController.signal.aborted) return
+		this.progress({ stage: "project", status: "running" })
+		const resolution = await this.resolveRoot()
+		if (this.abortController.signal.aborted) return
+		if (resolution.kind !== "resolved") {
+			this.progress({ stage: "project", status: "blocked", detail: resolution.reason })
+			return
+		}
+		const snapshot = await this.deps.checkDeps.snapshot(resolution.root)
+		if (this.abortController.signal.aborted) return
+		if (snapshot)
+			await captureDeliveryBaseline(
+				await this.deps.taskDir(),
+				resolution.root,
+				snapshot,
+				!this.task.policy.isCheckOnlyRoute(),
+				this.abortController.signal,
+			)
+		if (this.abortController.signal.aborted) return
+		this.progress({
+			stage: "project",
+			status: snapshot?.coverage === "complete" ? "completed" : "blocked",
+			projectRoot: resolution.root,
+			detail: snapshot?.gaps.join("; ") || (!snapshot ? "Project inputs could not be read" : undefined),
+		})
+		this.progress({ stage: "sdk", status: "running", projectRoot: resolution.root })
+		const sdk = await this.deps.checkDeps.sdkInfo()
+		const cjpmAvailable = Boolean(this.deps.checkDeps.resolveCjpm())
+		this.progress({
+			stage: "sdk",
+			status: (sdk.version || sdk.image) && cjpmAvailable ? "completed" : "blocked",
+			projectRoot: resolution.root,
+			sdkVersion: sdk.version,
+			detail: !cjpmAvailable
+				? (this.deps.checkDeps.unavailableReason?.() ??
+					"cjpm executable is unavailable; check CANGJIE_HOME and the configured cjpm path")
+				: (sdk.image ??
+					(!sdk.version
+						? "SDK version could not be detected; check CANGJIE_HOME and the configured compiler path"
+						: undefined)),
+		})
+	}
+
+	noteToolStarted(tool: string): void {
+		if (["read_file", "search_files", "list_files", "codebase_search"].includes(tool))
+			this.progress({ stage: "read", status: "running" })
+		if (["apply_patch", "apply_diff", "write_to_file", "edit", "edit_file", "search_and_replace"].includes(tool))
+			this.progress({ stage: "edit", status: "running" })
+	}
 
 	constructor(
 		private readonly task: { taskId: string; cwd: string; policy: TaskVerificationPolicy },
@@ -110,7 +194,7 @@ export class CangjieTaskVerification {
 		try {
 			const taskDir = await this.deps.taskDir()
 			const record = await loadVerificationRecord(taskDir, this.task.taskId)
-			if (!record || (!record.runs.length && !record.claims.length)) return undefined
+			if ((!record || (!record.runs.length && !record.claims.length)) && !this.preparation) return undefined
 			const changed = await this.changeMonitor.recheck("file_change")
 			const resolution = await this.resolveRoot()
 			const snapshot =
@@ -120,12 +204,28 @@ export class CangjieTaskVerification {
 				snapshot?.fingerprint,
 				await this.deps.checkDeps.environment(),
 				snapshot,
+				resolution.kind === "resolved" ? await this.requiredTestRoots(resolution.root, record) : undefined,
 			)
-			return buildVerificationSummary(verdict, {
-				taskDir,
-				changes: changed?.changes,
-				note: resolution.kind === "blocked" ? resolution.reason : verdict.latestClaim?.summary,
-			})
+			const summary = buildVerificationSummary(
+				verdict,
+				{
+					taskDir,
+					changes: changed?.changes,
+					note: resolution.kind === "blocked" ? resolution.reason : verdict.latestClaim?.summary,
+				},
+				snapshot?.fingerprint,
+			)
+			if (!summary.delivery && snapshot && resolution.kind === "resolved" && this.preparation) {
+				summary.delivery = await buildTaskDelivery(
+					taskDir,
+					resolution.root,
+					snapshot,
+					this.task.policy.getWrittenPaths(),
+					"interrupted",
+					this.deps.checkDeps.now(),
+				)
+			}
+			return summary
 		} catch (error) {
 			logger.debug("CangjieTaskVerification", "Current verification evidence is unavailable", error)
 			return buildVerificationSummary(evaluateVerification(undefined, undefined), {
@@ -220,7 +320,7 @@ export class CangjieTaskVerification {
 
 	async cancelAndWait(): Promise<void> {
 		this.cancel()
-		const results = await Promise.allSettled([this.baseline, this.delivery])
+		const results = await Promise.allSettled([this.baseline, this.delivery, this.preparation])
 		for (const result of results)
 			if (result.status === "rejected")
 				logger.debug("CangjieTaskVerification", "Verification ended during cancellation", result.reason)
@@ -229,6 +329,7 @@ export class CangjieTaskVerification {
 	dispose(): void {
 		this.cancel()
 		this.changeMonitor.dispose()
+		this.progressEvents.removeAllListeners()
 		this.releaseAutoFormat?.()
 		this.releaseAutoFormat = undefined
 	}
@@ -249,6 +350,14 @@ export class CangjieTaskVerification {
 		const root = await this.resolveRoot()
 		const snapshot = root.kind === "resolved" ? await this.deps.checkDeps.snapshot(root.root) : undefined
 		if (!snapshot || snapshot.fingerprint !== claim.inputFingerprint) return "superseded"
+		const verdict = evaluateVerification(
+			record,
+			snapshot.fingerprint,
+			await this.deps.checkDeps.environment(),
+			snapshot,
+		)
+		if ([verdict.build, verdict.test, ...(verdict.relatedTests ?? [])].some((check) => check.state === "stale"))
+			return "superseded"
 		let outcome: "recorded" | "superseded" = "superseded"
 		await updateVerificationRecord(taskDir, this.task.taskId, (current) => {
 			const latest = current.claims.reduce<CompletionClaim | undefined>(
@@ -270,8 +379,31 @@ export class CangjieTaskVerification {
 		})
 	}
 
+	/** Keep the root suite, plus declared packages touched by this task or its previous delivery. */
+	private async requiredTestRoots(root: string, record?: TaskVerificationRecord): Promise<string[]> {
+		const owned = await discoverProjectRoots(root)
+		const canonicalRoot = await fs.realpath(root)
+		const latest = record?.claims.reduce<CompletionClaim | undefined>(
+			(previous, next) => (!previous || next.claimedAt >= previous.claimedAt ? next : previous),
+			undefined,
+		)
+		const written = this.task.policy.getWrittenPaths().map((file) => path.resolve(file))
+		const related = [...owned].filter(
+			(candidate) =>
+				candidate !== canonicalRoot &&
+				(latest?.testProjectRoots?.some((scope) => path.relative(scope, candidate) === "") ||
+					written.some((file) => {
+						const relative = path.relative(candidate, file)
+						return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+					})),
+		)
+		return related.length ? [canonicalRoot, ...related.sort()] : [root]
+	}
+
 	/** Baseline never prompts: it runs only when the workspace is trusted and both commands are auto-approved. */
 	private async runBaseline(controller: AbortController): Promise<void> {
+		await this.prepareForTask()
+		if (controller.signal.aborted) return
 		if (!this.deps.isWorkspaceTrusted()) return
 		for (const command of VERIFICATION_COMMANDS) {
 			if (!(await this.deps.canAutoApprove(command))) return
@@ -308,31 +440,81 @@ export class CangjieTaskVerification {
 			return this.allowWithNote(taskDir, `${resolution.reason}${candidates}`)
 		}
 
-		const root = resolution.root
+		const existing = await loadVerificationRecord(taskDir, this.task.taskId)
+		const testRoots = await this.requiredTestRoots(resolution.root, existing)
+		const root = testRoots[0]!
 		const changed = await this.changeMonitor.recheck("file_change")
 		const skipTests = policy.isBuildOnlyRequest()
 		let snapshot = await this.deps.checkDeps.snapshot(root)
 		let fingerprint = snapshot?.fingerprint
-		const existing = await loadVerificationRecord(taskDir, this.task.taskId)
 		if (
 			skipTests ||
 			!hasReusableResult(
-				evaluateVerification(existing, fingerprint, await this.deps.checkDeps.environment(), snapshot),
+				evaluateVerification(
+					existing,
+					fingerprint,
+					await this.deps.checkDeps.environment(),
+					snapshot,
+					testRoots,
+				),
 			)
 		) {
 			await runCangjieVerification(
-				{ taskId: this.task.taskId, taskDir, projectRoot: root, signal, phase: "delivery", approve },
+				{
+					taskId: this.task.taskId,
+					taskDir,
+					projectRoot: root,
+					signal,
+					phase: "delivery",
+					approve,
+					progress: (update) => this.progress(update),
+				},
 				this.deps.checkDeps,
 				{ skipTests },
 			)
+			if (signal.aborted) return { action: "cancelled" }
+			if (!skipTests) {
+				const rootVerdict = evaluateVerification(
+					await loadVerificationRecord(taskDir, this.task.taskId),
+					(await this.deps.checkDeps.snapshot(root))?.fingerprint,
+					await this.deps.checkDeps.environment(),
+					undefined,
+					[root],
+				)
+				if (rootVerdict.overall === "verified")
+					for (const relatedRoot of testRoots.slice(1)) {
+						if (signal.aborted) return { action: "cancelled" }
+						const result = await runCangjieCheck(
+							"test",
+							{
+								taskId: this.task.taskId,
+								taskDir,
+								projectRoot: relatedRoot,
+								inputRoot: root,
+								signal,
+								phase: "delivery",
+								approve,
+								progress: (update) => this.progress(update),
+							},
+							this.deps.checkDeps,
+						)
+						if (result.status !== "passed" || !result.testScope?.executed) break
+					}
+			}
 			if (signal.aborted) return { action: "cancelled" }
 			snapshot = await this.deps.checkDeps.snapshot(root)
 			fingerprint = snapshot?.fingerprint
 		}
 
-		const record = await this.recordClaim(taskDir, fingerprint)
+		const record = await this.recordClaim(taskDir, fingerprint, undefined, root, snapshot, testRoots)
 		if (snapshot) await saveSnapshot(taskDir, snapshot, [snapshot.fingerprint])
-		const verdict = evaluateVerification(record, fingerprint, await this.deps.checkDeps.environment(), snapshot)
+		const verdict = evaluateVerification(
+			record,
+			fingerprint,
+			await this.deps.checkDeps.environment(),
+			snapshot,
+			testRoots,
+		)
 		await this.feedPolicy(verdict, taskDir)
 		const note = skipTests ? "Tests were not run because the request only allowed `cjpm build`" : undefined
 		return this.decide(verdict, taskDir, note, changed?.changes)
@@ -342,7 +524,13 @@ export class CangjieTaskVerification {
 		const resolution = await this.resolveRoot()
 		const snapshot =
 			resolution.kind === "resolved" ? await this.deps.checkDeps.snapshot(resolution.root) : undefined
-		const record = await this.recordClaim(taskDir, snapshot?.fingerprint, note)
+		const record = await this.recordClaim(
+			taskDir,
+			snapshot?.fingerprint,
+			note,
+			resolution.kind === "resolved" ? resolution.root : undefined,
+			snapshot,
+		)
 		if (snapshot) await saveSnapshot(taskDir, snapshot, [snapshot.fingerprint])
 		const verdict = evaluateVerification(
 			record,
@@ -369,12 +557,18 @@ export class CangjieTaskVerification {
 			repairExhausted: policy.isRepairLoopExhausted() || this.systemBlocks >= MAX_SYSTEM_VERIFICATION_BLOCKS,
 			missingTestsAlreadyRequested: this.missingTestsRequested,
 		})
-		if (decision.action === "allow")
+		if (decision.action === "allow") {
+			this.progress({ stage: "delivery", status: "completed" })
 			return {
 				action: "allow",
 				facts: formatVerificationFacts(verdict, note, changes),
-				summary: buildVerificationSummary(verdict, { taskDir, changes, note }),
+				summary: buildVerificationSummary(
+					verdict,
+					{ taskDir, changes, note },
+					verdict.latestClaim?.inputFingerprint,
+				),
 			}
+		}
 
 		this.systemBlocks += 1
 		if (decision.requestedMissingTests) this.missingTestsRequested = true
@@ -394,19 +588,39 @@ export class CangjieTaskVerification {
 		if (verdict.test.state === "failed") policy.noteTestResult(false)
 	}
 
-	private recordClaim(
+	private async recordClaim(
 		taskDir: string,
 		fingerprint: string | undefined,
 		summary?: string,
+		root?: string,
+		snapshot?: import("./projectFingerprint").ProjectSnapshot,
+		testProjectRoots?: string[],
 	): Promise<TaskVerificationRecord> {
 		const claimedAt = this.deps.checkDeps.now()
+		const claimId = `${this.task.taskId}-claim-${randomUUID()}`
+		testProjectRoots ??= root
+			? await this.requiredTestRoots(root, await loadVerificationRecord(taskDir, this.task.taskId))
+			: undefined
+		const delivery =
+			root && snapshot
+				? await buildTaskDelivery(
+						taskDir,
+						root,
+						snapshot,
+						this.task.policy.getWrittenPaths(),
+						claimId,
+						claimedAt,
+					)
+				: undefined
 		return updateVerificationRecord(taskDir, this.task.taskId, (record) =>
 			withClaim(record, {
-				claimId: `${this.task.taskId}-claim-${record.claims.length + 1}`,
+				testProjectRoots,
+				claimId,
 				taskId: this.task.taskId,
 				claimedAt,
 				inputFingerprint: fingerprint,
 				summary,
+				delivery,
 			}),
 		)
 	}

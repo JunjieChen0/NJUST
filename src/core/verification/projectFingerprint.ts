@@ -5,7 +5,7 @@ import { parse as parseToml } from "smol-toml"
 import { logger } from "../../shared/logger"
 
 const MANIFEST = "cjpm.toml"
-const EXCLUDED_DIRS = new Set([".git", "node_modules", ".njust_ai"])
+const EXCLUDED_DIRS = new Set([".git", "node_modules", ".njust_ai", ".cangjie-index"])
 const MAX_INPUT_FILES = 20_000
 const MAX_CONTENT_BYTES = 5 * 1024 * 1024
 
@@ -17,7 +17,7 @@ export interface ProjectSnapshot {
 }
 
 /** Discover members and path dependencies before excluding each root's build output. */
-async function projectRoots(root: string, gaps: string[]): Promise<Set<string>> {
+export async function discoverProjectRoots(root: string, gaps: string[] = []): Promise<Set<string>> {
 	const roots = new Set<string>()
 	const queue = [root]
 	while (queue.length) {
@@ -93,7 +93,7 @@ export async function computeProjectSnapshot(projectRoot: string): Promise<Proje
 		return undefined
 	}
 	const gaps: string[] = []
-	const roots = await projectRoots(root, gaps)
+	const roots = await discoverProjectRoots(root, gaps)
 	const visited = new Set<string>()
 	const files = new Set<string>()
 	const collect = async (dir: string): Promise<void> => {
@@ -131,6 +131,8 @@ export async function computeProjectSnapshot(projectRoot: string): Promise<Proje
 	for (const file of [...files].sort()) {
 		try {
 			const stat = await fs.stat(file)
+			if (stat.size > MAX_CONTENT_BYTES)
+				gaps.push(`Input content exceeds five MB and was not hashed: ${path.relative(root, file)}`)
 			const content =
 				stat.size > MAX_CONTENT_BYTES ? `metadata:${stat.size}:${stat.mtimeMs}` : await fs.readFile(file)
 			const key = path.relative(root, file).split(path.sep).join("/")

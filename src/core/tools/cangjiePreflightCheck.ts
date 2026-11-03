@@ -1,4 +1,7 @@
 import { STDLIB_CRITICAL_SIGNATURES, parseCjpmToml } from "../prompts/sections/cangjie-context"
+import * as path from "path"
+import { findNearestCjpmRoot } from "../verification/projectRoot"
+import { logger } from "../../shared/logger"
 
 /**
  * Pre-built set of std.* module keys that have detailed parameter-level signatures
@@ -216,7 +219,19 @@ export async function resolveRootPackageName(cwd: string): Promise<string | unde
 	try {
 		const info = await parseCjpmToml(cwd)
 		return info?.name || undefined
-	} catch {
+	} catch (error) {
+		logger.debug("CangjiePreflight", "Cannot resolve root package name", error)
 		return undefined
+	}
+}
+
+/** Local dependencies and workspace members have their own package/source layout. */
+export async function resolvePreflightProject(cwd: string, target: string) {
+	const absolute = path.resolve(cwd, target)
+	const projectRoot = (await findNearestCjpmRoot(path.dirname(absolute))) ?? cwd
+	return {
+		cwd: projectRoot,
+		path: path.relative(projectRoot, absolute),
+		rootPackageName: await resolveRootPackageName(projectRoot),
 	}
 }

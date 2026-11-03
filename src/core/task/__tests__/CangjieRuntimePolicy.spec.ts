@@ -197,6 +197,28 @@ describe("CangjieRuntimePolicy", () => {
 		).resolves.toContain('expected "package member_pkg.feature"')
 	})
 
+	it("allows declared local dependency sources while preserving source layout and package checks", async () => {
+		await fs.mkdir(path.join(tempDir, "libs/pricing/src"), { recursive: true })
+		await fs.writeFile(
+			path.join(tempDir, "cjpm.toml"),
+			'[package]\nname = "orders"\n[dependencies]\npricing = { path = "libs/pricing" }\n',
+		)
+		await fs.writeFile(path.join(tempDir, "libs/pricing/cjpm.toml"), '[package]\nname = "pricing"\n')
+		const policy = new CangjieRuntimePolicy(tempDir)
+		await expect(
+			policy.validateProjectStructureForWrite("libs/pricing/src/price.cj", "package pricing\n"),
+		).resolves.toBeNull()
+		await expect(
+			policy.validateProjectStructureForWrite("libs/pricing/src/price.cj", "package orders\n"),
+		).resolves.toContain('expected "package pricing"')
+		await expect(
+			policy.validateProjectStructureForWrite("libs/pricing/price.cj", "package pricing\n"),
+		).resolves.toContain("Allowed source roots")
+		await expect(
+			policy.validateProjectStructureForWrite("libs/unrelated/src/price.cj", "package unrelated\n"),
+		).resolves.toContain("Allowed source roots")
+	})
+
 	it("validates cjpm.toml does not mix package and workspace roots", async () => {
 		const policy = new CangjieRuntimePolicy(tempDir)
 
@@ -256,7 +278,7 @@ describe("CangjieRuntimePolicy", () => {
 		expect(new CangjieRuntimePolicy(tempDir).isBuildOnlyRequest()).toBe(false)
 	})
 
-	it("tracks written build inputs as absolute paths, including delegated writes", () => {
+	it("tracks all changed files as absolute paths, including delegated writes", () => {
 		const policy = new CangjieRuntimePolicy(tempDir)
 		policy.noteWriteApplied("src/main.cj", undefined, "main() {}")
 		policy.noteWriteApplied("README.md", undefined, "docs")
@@ -265,6 +287,7 @@ describe("CangjieRuntimePolicy", () => {
 
 		expect(policy.getWrittenPaths().sort()).toEqual(
 			[
+				path.join(tempDir, "README.md"),
 				path.join(tempDir, "src", "child.cj"),
 				path.join(tempDir, "src", "main.cj"),
 				path.join(tempDir, "src", "old.cj"),

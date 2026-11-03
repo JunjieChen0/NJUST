@@ -405,7 +405,7 @@ describe("SandboxExecutionService", () => {
 			})
 			const process = Object.assign(settled, { abort: vi.fn() })
 			const resourceScopeId = "task:test:external-instance"
-			const unregister = service.registerExternalProcess(resourceScopeId, process as any)
+			const unregister = service.registerExternalProcess(resourceScopeId, process as any, settled)
 
 			let disposalSettled = false
 			const disposing = service.disposeScope(resourceScopeId).then(() => {
@@ -427,7 +427,7 @@ describe("SandboxExecutionService", () => {
 				resolveProcess = resolve
 			})
 			const process = Object.assign(settled, { abort: vi.fn() })
-			service.registerExternalProcess("task:test:service-dispose", process as any)
+			service.registerExternalProcess("task:test:service-dispose", process as any, settled)
 			let disposalSettled = false
 			const disposing = service.dispose().then(() => {
 				disposalSettled = true
@@ -441,6 +441,45 @@ describe("SandboxExecutionService", () => {
 			expect(disposalSettled).toBe(false)
 			resolveProcess()
 			await disposing
+		})
+
+		it("keeps background terminals tracked until actual completion", async () => {
+			let complete!: () => void
+			const completed = new Promise<void>((resolve) => {
+				complete = resolve
+			})
+			const process = Object.assign(Promise.resolve(), { abort: vi.fn(() => complete()) })
+			service.registerExternalProcess("background", process as any, completed)
+			await Promise.resolve()
+			await Promise.resolve()
+			expect(serviceInternals(service).externalProcesses.has("background")).toBe(true)
+			await service.disposeScope("background")
+			expect(process.abort).toHaveBeenCalledOnce()
+			expect(serviceInternals(service).externalProcesses.has("background")).toBe(false)
+		})
+
+		it("bounds cancellation without claiming that an unresponsive terminal exited", async () => {
+			vi.useFakeTimers()
+			let complete!: () => void
+			const completed = new Promise<void>((resolve) => {
+				complete = resolve
+			})
+			const process = Object.assign(Promise.resolve(), { abort: vi.fn() })
+			service.registerExternalProcess("unresponsive", process as any, completed)
+			const disposing = service.disposeScope("unresponsive").catch((error: unknown) => error)
+			await vi.advanceTimersByTimeAsync(4_100)
+			const error = await disposing
+			expect(error).toBeInstanceOf(AggregateError)
+			expect(
+				(error as AggregateError).errors.every((failure) =>
+					String(failure).includes("Terminal process exit could not be confirmed"),
+				),
+			).toBe(true)
+			expect(serviceInternals(service).externalProcesses.has("unresponsive")).toBe(true)
+			complete()
+			await service.disposeScope("unresponsive")
+			expect(serviceInternals(service).externalProcesses.has("unresponsive")).toBe(false)
+			vi.useRealTimers()
 		})
 
 		it("preserves cancellation when the runner settles after the deadline", async () => {

@@ -32,6 +32,42 @@ describe("verification messages", () => {
 			clineMessageSchema.safeParse({ ...old, say: "verification_summary", verification: minimal }).success,
 		).toBe(true)
 	})
+	test("retains code identity, command provenance and structured workflow progress", () => {
+		const delivery = {
+			projectRoot: "/project",
+			fingerprint: "after",
+			baselineFingerprint: "before",
+			capturedAt: 1,
+			files: [{ path: "src/main.cj", change: "modified", source: "task_tool" }],
+			filesTruncated: false,
+			diffOmittedPaths: [],
+			diffPath: "/task/diff.patch",
+		}
+		expect(
+			verificationSummarySchema.parse({
+				...minimal,
+				currentFingerprint: "after",
+				delivery,
+				build: {
+					state: "passed",
+					executable: "cjpm",
+					args: ["build"],
+					cwd: "/project",
+					startedAt: 1,
+					endedAt: 2,
+				},
+			}),
+		).toMatchObject({ delivery, currentFingerprint: "after", build: { args: ["build"], cwd: "/project" } })
+		expect(
+			clineMessageSchema.parse({
+				id: "p",
+				ts: 1,
+				type: "say",
+				say: "cangjie_progress",
+				cangjieProgress: { stage: "build", status: "waiting", at: 1, projectRoot: "/project" },
+			}).cangjieProgress,
+		).toMatchObject({ stage: "build", status: "waiting" })
+	})
 	test("rejects invalid states and overlong file lists", () => {
 		expect(verificationSummarySchema.safeParse({ ...minimal, build: { state: "success" } }).success).toBe(false)
 		expect(

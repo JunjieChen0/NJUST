@@ -933,6 +933,7 @@ async function executeCommandAtCwd(
 		unregisterScopedProcess = sandboxService.registerExternalProcess(
 			sandboxRequest.resourceScopeId ?? sandboxRequest.taskId,
 			process,
+			onCompletedPromise,
 		)
 	} catch (error) {
 		try {

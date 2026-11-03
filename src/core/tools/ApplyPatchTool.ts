@@ -23,7 +23,7 @@ import {
 	cangjiePreflightCheck,
 	buildSearchGateWarning,
 	CRITICAL_SIGNATURE_MODULES,
-	resolveRootPackageName,
+	resolvePreflightProject,
 } from "./cangjiePreflightCheck"
 import { logger } from "../../shared/logger"
 import { getErrorMessage, wrapAsError } from "../../shared/error-utils"
@@ -246,8 +246,8 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				pushToolResult(formatResponse.toolError(initError))
 				return
 			}
-			const rootPkg = await resolveRootPackageName(task.cwd)
-			const preflight = cangjiePreflightCheck(newContent, relPath, task.cwd, rootPkg)
+			const project = await resolvePreflightProject(task.cwd, relPath)
+			const preflight = cangjiePreflightCheck(newContent, project.path, project.cwd, project.rootPackageName)
 			if (!preflight.pass) {
 				const errorMsg =
 					`Cangjie preflight failed; patch was not applied:\n` +
@@ -497,8 +497,8 @@ export class ApplyPatchTool extends BaseTool<"apply_patch"> {
 				pushToolResult(formatResponse.toolError(initError))
 				return
 			}
-			const rootPkg = await resolveRootPackageName(task.cwd)
-			const preflight = cangjiePreflightCheck(newContent, targetRelPath, task.cwd, rootPkg)
+			const project = await resolvePreflightProject(task.cwd, targetRelPath)
+			const preflight = cangjiePreflightCheck(newContent, project.path, project.cwd, project.rootPackageName)
 			if (!preflight.pass) {
 				const errorMsg =
 					`Cangjie preflight failed; patch was not applied:\n` +

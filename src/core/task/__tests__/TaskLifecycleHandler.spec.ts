@@ -371,6 +371,18 @@ describe("TaskLifecycleHandler", () => {
 		expect(host.dispose).toHaveBeenCalledTimes(2)
 	})
 
+	it("persists a warning when terminal exit cannot be confirmed", async () => {
+		disposeScopeMock.mockRejectedValueOnce(new Error("Terminal process exit could not be confirmed"))
+		const reportCommandCleanupFailure = vi.fn().mockResolvedValue(undefined)
+		const host = createHost({ reportCommandCleanupFailure })
+		await new TaskLifecycleHandler(host).abortTask()
+		expect(reportCommandCleanupFailure).toHaveBeenCalledWith(expect.stringContaining("could not be confirmed"))
+		expect(reportCommandCleanupFailure.mock.invocationCallOrder[0]).toBeLessThan(
+			host.dispose.mock.invocationCallOrder[0],
+		)
+		expect(host.emit).toHaveBeenCalled()
+	})
+
 	it("continues abort cleanup when save and dispose throw", async () => {
 		const host = createHost({
 			saveClineMessages: vi.fn().mockRejectedValue(new Error("save failed")),

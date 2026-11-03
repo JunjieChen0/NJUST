@@ -75,7 +75,7 @@ export function createSandboxProcessExecutor(service = SandboxExecutionService.g
 			const handle = await service.run({
 				executionId,
 				taskId: options.taskId ?? "cangjie-sdk-probe",
-				workspacePath: options.cwd,
+				workspacePath: options.workspacePath ?? options.cwd,
 				cwd: options.cwd,
 				command: verificationCommand(docker ? "cjpm" : file, args, docker),
 				timeoutMs: options.timeoutMs,

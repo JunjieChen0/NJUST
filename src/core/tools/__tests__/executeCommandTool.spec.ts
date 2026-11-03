@@ -809,6 +809,7 @@ describe("executeCommandTool", () => {
 			expect(service.registerExternalProcess).toHaveBeenCalledWith(
 				"task:test-task-id:test-instance-id",
 				expect.anything(),
+				expect.any(Promise),
 			)
 			getInstance.mockRestore()
 		})
@@ -861,7 +862,11 @@ describe("executeCommandTool", () => {
 				await service.disposeScope("task:test-task-id:test-instance-id")
 				await execution
 
-				expect(registerSpy).toHaveBeenCalledWith("task:test-task-id:test-instance-id", processPromise)
+				expect(registerSpy).toHaveBeenCalledWith(
+					"task:test-task-id:test-instance-id",
+					processPromise,
+					expect.any(Promise),
+				)
 				expect(processPromise.abort).toHaveBeenCalledOnce()
 			} finally {
 				getInstance.mockRestore()

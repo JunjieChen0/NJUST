@@ -26,7 +26,7 @@ import {
 	cangjiePreflightCheck,
 	buildSearchGateWarning,
 	CRITICAL_SIGNATURE_MODULES,
-	resolveRootPackageName,
+	resolvePreflightProject,
 } from "./cangjiePreflightCheck"
 import { t } from "../../i18n"
 
@@ -187,8 +187,8 @@ export class WriteToFileTool extends BaseTool<"write_to_file"> {
 					previousContent = undefined
 				}
 			}
-			const rootPkg = await resolveRootPackageName(task.cwd)
-			const preflight = cangjiePreflightCheck(newContent, relPath, task.cwd, rootPkg)
+			const project = await resolvePreflightProject(task.cwd, relPath)
+			const preflight = cangjiePreflightCheck(newContent, project.path, project.cwd, project.rootPackageName)
 			if (!preflight.pass) {
 				task.consecutiveMistakeCount++
 				task.didToolFailInCurrentTurn = true

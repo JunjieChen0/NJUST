@@ -16,7 +16,7 @@ import type { ProjectSnapshot } from "./projectFingerprint"
  * - zero_tests: tests ran but none were executed (e.g. filter matched nothing)
  */
 export type CheckState =
-	| { state: "not_run" }
+	| { state: "not_run"; cwd?: string }
 	| { state: VerificationRunStatus | "zero_tests"; run: VerificationRun }
 	| { state: "stale"; run: VerificationRun; staleReason: "code_changed" | "environment_changed" }
 
@@ -32,6 +32,7 @@ export interface VerificationVerdict {
 	overall: OverallVerdict
 	build: CheckState
 	test: CheckState
+	relatedTests?: CheckState[]
 	acceptance: AcceptanceState
 	latestClaim?: CompletionClaim
 	gaps?: string[]
@@ -48,6 +49,7 @@ export function evaluateVerification(
 	currentFingerprint: string | undefined,
 	currentEnvironment?: VerificationEnvironment,
 	currentSnapshot?: Pick<ProjectSnapshot, "coverage" | "gaps">,
+	requiredTestRoots?: readonly string[],
 ): VerificationVerdict {
 	if (!record) {
 		return {
@@ -58,10 +60,21 @@ export function evaluateVerification(
 		}
 	}
 
-	const build = evaluateCheck(record.runs, "build", currentFingerprint, currentEnvironment)
-	const test = evaluateCheck(record.runs, "test", currentFingerprint, currentEnvironment)
 	const latestClaim = latestBy(record.claims, (c) => c.claimedAt)
-	const checkedRuns = [build, test].flatMap((check) => (check.state === "not_run" ? [] : [check.run]))
+	const roots = requiredTestRoots ?? latestClaim?.testProjectRoots
+	const key = (cwd: string) =>
+		process.platform === "win32" ? path.normalize(cwd).toLowerCase() : path.normalize(cwd)
+	const scopedCheck = (kind: VerificationKind, cwd?: string): CheckState => {
+		const runs = cwd ? record.runs.filter((run) => key(run.cwd) === key(cwd)) : record.runs
+		const check = evaluateCheck(runs, kind, currentFingerprint, currentEnvironment)
+		return check.state === "not_run" && cwd ? { ...check, cwd } : check
+	}
+	const build = scopedCheck("build", roots?.[0])
+	const tests = roots?.length ? roots.map((cwd) => scopedCheck("test", cwd)) : [scopedCheck("test")]
+	const test =
+		tests.find((check) => check.state === "failed") ?? tests.find((check) => check.state !== "passed") ?? tests[0]!
+	const relatedTests = tests.filter((check) => check !== test)
+	const checkedRuns = [build, ...tests].flatMap((check) => (check.state === "not_run" ? [] : [check.run]))
 	const partial =
 		currentSnapshot?.coverage === "partial" || checkedRuns.some((run) => run.inputCoverage === "partial")
 	const overall = deriveOverall(build, test)
@@ -70,6 +83,7 @@ export function evaluateVerification(
 		overall: partial && overall === "verified" ? "incomplete" : overall,
 		build,
 		test,
+		relatedTests: relatedTests.length ? relatedTests : undefined,
 		acceptance: evaluateAcceptance(record, latestClaim, currentFingerprint),
 		latestClaim,
 		gaps: [...new Set([...(currentSnapshot?.gaps ?? []), ...checkedRuns.flatMap((run) => run.coverageGaps ?? [])])],

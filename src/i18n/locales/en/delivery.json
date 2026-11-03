@@ -1,0 +1,4 @@
+{
+	"followup_prompt": "Please continue with these additional requirements:\n",
+	"unconfirmedProcess": "Command cleanup is incomplete. A background process may still be running; check the terminal before starting another command."
+}

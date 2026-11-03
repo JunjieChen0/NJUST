@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { verificationDeliverySchema } from "@njust-ai/types"
 
 /**
  * Verification facts for a task. These records are the single source of truth
@@ -37,6 +38,7 @@ export const verificationAbortReasonSchema = z.enum([
 	/** The installed cjpm rejected the verification flags (older SDK). */
 	"unsupported_options",
 	"sandbox_denied",
+	"dependency_unavailable",
 ])
 
 export const testScopeSchema = z.object({
@@ -90,12 +92,14 @@ export const verificationRunSchema = z.object({
 
 /** The model declared the work done (attempt_completion). Never implies success. */
 export const completionClaimSchema = z.object({
+	testProjectRoots: z.array(z.string()).optional(),
 	claimId: z.string().min(1),
 	taskId: z.string().min(1),
 	claimedAt: z.number(),
 	/** Code state the delivery was made against. */
 	inputFingerprint: z.string().optional(),
 	summary: z.string().optional(),
+	delivery: verificationDeliverySchema.optional(),
 })
 
 /** An explicit user decision on one delivery. */

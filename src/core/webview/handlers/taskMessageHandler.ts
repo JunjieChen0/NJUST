@@ -69,6 +69,13 @@ async function handleVerificationDecision(context: MessageHandlerContext, messag
 			latest.verification.claimId,
 		)
 		if (result === "recorded") await task.updateMemoryAcceptance(parsed.data.decision)
+		if (result === "recorded" && parsed.data.decision === "changes_requested") {
+			await context.provider.postMessageToWebview({
+				type: "invoke",
+				invoke: "setChatBoxMessage",
+				text: t("delivery:followup_prompt"),
+			})
+		}
 		if (result === "superseded") {
 			await vscode.window.showWarningMessage(t("common:verification.delivery_expired"))
 		}

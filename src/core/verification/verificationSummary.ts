@@ -12,14 +12,21 @@ export function buildVerificationSummary(
 		note?: string
 		terminal?: VerificationSummary["terminal"]
 	},
+	currentFingerprint?: string,
 ): VerificationSummary {
 	const check = (value: CheckState): VerificationSummary["build"] => {
-		if (value.state === "not_run") return { state: value.state }
+		if (value.state === "not_run")
+			return value.cwd ? { state: value.state, cwd: value.cwd } : { state: value.state }
 		return {
 			state: value.state,
 			exitCode: value.run.exitCode,
 			logPath: value.run.logRef ? path.resolve(options.taskDir, value.run.logRef) : undefined,
 			staleReason: value.state === "stale" ? value.staleReason : undefined,
+			executable: value.run.executable,
+			args: value.run.args,
+			cwd: value.run.cwd,
+			startedAt: value.run.startedAt,
+			endedAt: value.run.endedAt,
 			executed: value.run.testScope?.executed,
 			passed: value.run.testScope?.passed,
 			failed: value.run.testScope?.failed,
@@ -28,7 +35,7 @@ export function buildVerificationSummary(
 	}
 	const changes = options.changes ?? []
 	const notes = [options.note, ...(verdict.gaps ?? []).map((gap) => `Input coverage: ${gap}`)]
-	for (const value of [verdict.build, verdict.test]) {
+	for (const value of [verdict.build, verdict.test, ...(verdict.relatedTests ?? [])]) {
 		if (value.state === "not_run" || value.state === "stale") continue
 		const run = value.run
 		const detail = run.abortDetail ?? run.abortReason?.replaceAll("_", " ")
@@ -47,8 +54,11 @@ export function buildVerificationSummary(
 		overall: verdict.overall,
 		build: check(verdict.build),
 		test: check(verdict.test),
+		relatedTests: verdict.relatedTests?.map(check),
 		acceptance: verdict.acceptance,
 		claimId: verdict.latestClaim?.claimId,
+		delivery: verdict.latestClaim?.delivery,
+		currentFingerprint,
 		changes: changes.length
 			? {
 					taskTool: changes.filter((change) => change.source === "task_tool").length,

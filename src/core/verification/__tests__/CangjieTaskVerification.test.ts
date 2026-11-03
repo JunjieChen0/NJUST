@@ -118,6 +118,57 @@ describe("CangjieTaskVerification", () => {
 		expect(record?.claims[0]?.inputFingerprint).toBe("fp-1")
 	})
 
+	it.each(["passed", "failed", "denied", "cancelled"] as const)(
+		"runs a changed dependency's test suite and retains its %s outcome",
+		async (state) => {
+			const dependency = path.join(projectRoot, "libs", "pricing")
+			await fs.mkdir(path.join(dependency, "src"), { recursive: true })
+			await fs.writeFile(
+				path.join(projectRoot, "cjpm.toml"),
+				'[package]\nname = "app"\n[dependencies]\npricing = { path = "libs/pricing" }\n',
+			)
+			await fs.writeFile(path.join(dependency, "cjpm.toml"), '[package]\nname = "pricing"\n')
+			const policy = makePolicy({ getWrittenPaths: () => [path.join(dependency, "src", "price.cj")] })
+			const dependencies = deps()
+			const snapshot = vi.fn(dependencies.checkDeps.snapshot)
+			dependencies.checkDeps.snapshot = snapshot
+			exec.mockResolvedValueOnce(ok())
+				.mockResolvedValueOnce(ok(TESTS_PASSED))
+				.mockResolvedValueOnce(state === "failed" ? fail(TESTS_FAILED) : ok(TESTS_PASSED))
+			const session = new CangjieTaskVerification({ taskId: "task-1", cwd: projectRoot, policy }, dependencies)
+			let approvals = 0
+			const outcome = await session.verifyForCompletion(async () => {
+				if (++approvals === 3 && state === "cancelled") session.cancel()
+				return { approved: !(approvals === 3 && state === "denied") }
+			})
+			expect(approvals).toBe(3)
+			const canonicalRoot = await fs.realpath(projectRoot)
+			const canonicalDependency = await fs.realpath(dependency)
+			expect(snapshot.mock.calls.every(([root]) => root === canonicalRoot || root === projectRoot)).toBe(true)
+			const record = await loadVerificationRecord(taskDir, "task-1")
+			expect(record?.runs.at(-1)).toMatchObject({
+				cwd: canonicalDependency,
+				inputFingerprint: "fp-1",
+				inputFingerprintAfter: "fp-1",
+				status: state === "denied" ? "blocked" : state,
+			})
+			if (state === "passed" || state === "failed")
+				expect(exec.mock.calls.at(-1)?.[2]).toMatchObject({
+					cwd: canonicalDependency,
+					workspacePath: canonicalRoot,
+				})
+			expect(outcome.action).toBe(state === "failed" ? "block" : state === "cancelled" ? "cancelled" : "allow")
+			if (state !== "cancelled")
+				expect(record?.claims.at(-1)?.testProjectRoots).toEqual([canonicalRoot, canonicalDependency])
+			const summary = await session.currentSummary()
+			expect(summary?.overall).toBe(
+				state === "passed" ? "verified" : state === "failed" ? "failed" : "incomplete",
+			)
+			expect(summary?.relatedTests).toHaveLength(1)
+			session.dispose()
+		},
+	)
+
 	it("returns approval feedback without running or recording a new delivery", async () => {
 		const feedback = { text: "先修复边界问题，不要结束", images: ["data:image/png;base64,eA=="] }
 		const outcome = await create(makePolicy()).verifyForCompletion(async () => ({ approved: false, feedback }))
@@ -169,6 +220,61 @@ describe("CangjieTaskVerification", () => {
 		const session = create(makePolicy())
 		await expect(session.currentSummary()).resolves.toBeUndefined()
 		await expect(session.getOutcome()).resolves.toEqual({ overall: "no_record", acceptance: "no_delivery" })
+	})
+
+	it("preserves the edited file list and diff when cancelled before any completion claim", async () => {
+		const dependencies = deps()
+		dependencies.checkDeps.snapshot = computeProjectSnapshot
+		const policy = makePolicy()
+		const file = path.join(projectRoot, "src", "main.cj")
+		await fs.writeFile(file, "main() { 1 }\n")
+		vi.mocked(policy.getWrittenPaths).mockReturnValue([file])
+		const session = new CangjieTaskVerification({ taskId: "task-1", cwd: projectRoot, policy }, dependencies)
+		const progress: { stage: string; status: string }[] = []
+		session.onDidProgress((event) => progress.push(event))
+		await session.prepareForTask()
+		await fs.writeFile(file, "main() { 2 }\n")
+		session.cancel()
+		session.noteToolStarted("write_to_file")
+		const summary = await session.currentSummary()
+		expect(summary?.overall).toBe("no_record")
+		expect(summary?.delivery?.files).toContainEqual({
+			path: "src/main.cj",
+			change: "modified",
+			source: "task_tool",
+		})
+		expect(await fs.readFile(summary!.delivery!.diffPath!, "utf8")).toContain("+main() { 2 }")
+		expect(progress.some((event) => event.stage === "sdk" && event.status === "completed")).toBe(true)
+		expect(progress.some((event) => event.stage === "edit")).toBe(false)
+		expect(exec).not.toHaveBeenCalled()
+		expect(await loadVerificationRecord(taskDir, "task-1")).toBeUndefined()
+		session.dispose()
+	})
+
+	it("shows a missing cjpm path even for read-only environment inspection", async () => {
+		const dependencies = deps()
+		dependencies.checkDeps.resolveCjpm = () => undefined
+		dependencies.checkDeps.unavailableReason = () => "Configured cjpm executable is missing: /missing-sdk/cjpm"
+		const session = new CangjieTaskVerification(
+			{
+				taskId: "task-1",
+				cwd: projectRoot,
+				policy: makePolicy({ getRouteKind: () => "explore", isCheckOnlyRoute: () => true }),
+			},
+			dependencies,
+		)
+		const progress: { stage: string; status: string; detail?: string }[] = []
+		session.onDidProgress((event) => progress.push(event))
+		await session.prepareForTask()
+		expect(progress).toContainEqual(
+			expect.objectContaining({
+				stage: "sdk",
+				status: "blocked",
+				detail: expect.stringContaining("/missing-sdk/cjpm"),
+			}),
+		)
+		expect(exec).not.toHaveBeenCalled()
+		session.dispose()
 	})
 
 	it("reports unavailable evidence without overwriting a corrupt record", async () => {

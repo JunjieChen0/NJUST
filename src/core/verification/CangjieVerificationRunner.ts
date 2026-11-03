@@ -1,6 +1,9 @@
 import * as crypto from "crypto"
 import * as fs from "fs/promises"
 import * as path from "path"
+import * as vscode from "vscode"
+import type { CangjieTaskProgress } from "@njust-ai/types"
+import { Package } from "../../shared/package"
 
 import { logger } from "../../shared/logger"
 import { detectCangjieHome, resolveCangjieToolPath, CJC_CONFIG_KEY } from "../../services/cangjie-lsp/cangjieToolUtils"
@@ -41,6 +44,7 @@ export type ProcessExecutor = (
 	args: string[],
 	options: {
 		cwd: string
+		workspacePath?: string
 		env: Record<string, string>
 		signal: AbortSignal
 		timeoutMs: number
@@ -54,6 +58,8 @@ export interface CangjieCheckContext {
 	/** Task storage directory: records, logs and test reports live here, never in the project. */
 	taskDir: string
 	projectRoot: string
+	/** Related packages run in their own cwd, against the owning project's full input state. */
+	inputRoot?: string
 	signal: AbortSignal
 	phase: "baseline" | "delivery"
 	/** Set for background work that must yield the project's cjpm lock to anyone else who needs it. */
@@ -63,11 +69,13 @@ export interface CangjieCheckContext {
 	 * The caller routes it through the same command approval/auto-approval as execute_command.
 	 */
 	approve: (command: string) => Promise<VerificationApproval>
+	progress?: (update: Omit<CangjieTaskProgress, "at">) => void
 }
 
 export interface CangjieCheckDeps {
 	exec: ProcessExecutor
 	resolveCjpm: () => string | undefined
+	unavailableReason?: () => string
 	buildEnv: () => Record<string, string>
 	sdkInfo: () => Promise<NonNullable<VerificationRun["sdk"]>>
 	snapshot: (projectRoot: string) => Promise<ProjectSnapshot | undefined>
@@ -136,7 +144,7 @@ export async function runCangjieCheck(
 	const runId = deps.newId()
 	const reportDir = path.join(ctx.projectRoot, "target", ".njust-verification", runId)
 	const executable = deps.resolveCjpm()
-	const before = await deps.snapshot(ctx.projectRoot)
+	const before = await deps.snapshot(ctx.inputRoot ?? ctx.projectRoot)
 	if (before) await saveSnapshot(ctx.taskDir, before)
 	const base: VerificationRun = {
 		runId,
@@ -148,7 +156,7 @@ export async function runCangjieCheck(
 		cwd: ctx.projectRoot,
 		startedAt: deps.now(),
 		status: "running",
-		sdk: await deps.sdkInfo(),
+		sdk: ctx.signal.aborted ? undefined : await deps.sdkInfo(),
 		inputFingerprint: before?.fingerprint,
 		inputCoverage: before?.coverage ?? "partial",
 		coverageGaps: before?.gaps ?? ["Project inputs could not be fingerprinted"],
@@ -167,10 +175,48 @@ export async function runCangjieCheck(
 			inputFingerprintAfter: base.inputFingerprint,
 		}
 		await persist(ctx, blocked)
+		ctx.progress?.({ stage: kind, status: "blocked", projectRoot: ctx.projectRoot, detail: abortDetail })
 		return blocked
 	}
-	if (!executable) return block("spawn_failed", "cjpm executable could not be resolved")
-	const approval = await ctx.approve(displayCommand(kind))
+	const cancelledBeforeStart = async () => {
+		const run: VerificationRun = {
+			...base,
+			endedAt: deps.now(),
+			status: "cancelled",
+			abortReason: "cancelled",
+			inputFingerprintAfter: base.inputFingerprint,
+		}
+		await persist(ctx, run)
+		ctx.progress?.({ stage: kind, status: "cancelled", projectRoot: ctx.projectRoot })
+		return run
+	}
+	if (ctx.signal.aborted) return cancelledBeforeStart()
+	if (!executable)
+		return block(
+			"spawn_failed",
+			deps.unavailableReason?.() ??
+				"cjpm executable could not be resolved; configure CANGJIE_HOME or the cjpm path",
+		)
+	const missingDependency = before?.gaps.filter((gap) => gap.startsWith("Cannot read member/dependency:"))
+	if (missingDependency?.length)
+		return block(
+			"dependency_unavailable",
+			`Local dependency is unavailable: ${missingDependency.join("; ")}. Restore the dependency directory or correct its path in cjpm.toml.`,
+		)
+	ctx.progress?.({ stage: kind, status: "waiting", projectRoot: ctx.projectRoot })
+	if (ctx.signal.aborted) return cancelledBeforeStart()
+	let onAbort!: () => void
+	const cancelledApproval = new Promise<VerificationApproval>((resolve) => {
+		onAbort = () => resolve({ approved: false })
+		ctx.signal.addEventListener("abort", onAbort, { once: true })
+	})
+	let approval: VerificationApproval
+	try {
+		approval = await Promise.race([ctx.approve(displayCommand(kind)), cancelledApproval])
+	} finally {
+		ctx.signal.removeEventListener("abort", onAbort)
+	}
+	if (ctx.signal.aborted) return cancelledBeforeStart()
 	if (approval.feedback) throw new VerificationFeedbackError(approval.feedback)
 	if (!approval.approved) {
 		return block(
@@ -184,16 +230,19 @@ export async function runCangjieCheck(
 	let result: ProcessResult
 	try {
 		result = await withCjpmProjectLock(
-			ctx.projectRoot,
-			() =>
-				deps.exec(executable, base.args, {
+			ctx.inputRoot ?? ctx.projectRoot,
+			() => {
+				ctx.progress?.({ stage: kind, status: "running", projectRoot: ctx.projectRoot })
+				return deps.exec(executable, base.args, {
 					cwd: ctx.projectRoot,
+					...(ctx.inputRoot ? { workspacePath: ctx.inputRoot } : {}),
 					env: deps.buildEnv(),
 					signal: ctx.signal,
 					timeoutMs: deps.timeoutMs,
 					taskId: ctx.taskId,
 					executionId: runId,
-				}),
+				})
+			},
 			{
 				preempt: ctx.preempt,
 				signal: ctx.signal,
@@ -236,7 +285,7 @@ export async function runCangjieCheck(
 			.catch((error) => logger.debug("CangjieVerificationRunner", "Cannot archive test reports", error))
 	}
 
-	const after = await deps.snapshot(ctx.projectRoot)
+	const after = await deps.snapshot(ctx.inputRoot ?? ctx.projectRoot)
 	if (after) await saveSnapshot(ctx.taskDir, after)
 	const finished: VerificationRun = {
 		...base,
@@ -260,6 +309,12 @@ export async function runCangjieCheck(
 		],
 	}
 	await persist(ctx, finished)
+	ctx.progress?.({
+		stage: kind,
+		status: finished.status === "passed" ? "completed" : finished.status === "cancelled" ? "cancelled" : "blocked",
+		projectRoot: ctx.projectRoot,
+		detail: finished.abortDetail,
+	})
 	return finished
 }
 
@@ -317,6 +372,12 @@ export function createDefaultCangjieCheckDeps(): CangjieCheckDeps {
 	return {
 		exec: createSandboxProcessExecutor(),
 		resolveCjpm,
+		unavailableReason: () => {
+			const configured = vscode.workspace.getConfiguration(Package.name).get<string>("cangjieTools.cjpmPath")
+			return configured
+				? `Configured cjpm executable is missing: ${configured}. Correct njust-ai.cangjieTools.cjpmPath or install the SDK.`
+				: "Cangjie SDK is unavailable. Configure CANGJIE_HOME or njust-ai.cangjieTools.cjpmPath, then retry verification."
+		},
 		buildEnv: buildVerificationSdkEnv,
 		sdkInfo,
 		environment: async () => {

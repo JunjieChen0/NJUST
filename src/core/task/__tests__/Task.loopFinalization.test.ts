@@ -11,6 +11,20 @@ vi.mock("../CloudAgentOrchestrator", () => ({
 }))
 
 describe("task loop finalization", () => {
+	it("does not start Cloud execution when cancelled during SDK preparation", async () => {
+		const host: any = {
+			abort: false,
+			cangjieRuntimePolicy: { hasCjpmProject: async () => true },
+			cangjieVerification: {
+				prepareForTask: async () => {
+					host.abort = true
+				},
+			},
+			initiateMemrlBeforeRun: vi.fn(),
+		}
+		await (Task.prototype as any).initiateCloudAgentLoop.call(host, "update the project")
+		expect(host.initiateMemrlBeforeRun).not.toHaveBeenCalled()
+	})
 	it.each([
 		["initiateTaskLoop", false],
 		["initiateTaskLoop", true],
@@ -23,6 +37,7 @@ describe("task loop finalization", () => {
 		})
 		const host: any = {
 			taskId: "task",
+			cangjieRuntimePolicy: { hasCjpmProject: vi.fn().mockResolvedValue(false) },
 			hostRef: { deref: () => undefined },
 			activeTaskLoopCount: 0,
 			taskLoopIdleResolvers: new Set(),
@@ -54,6 +69,7 @@ describe("task loop finalization", () => {
 		async (method) => {
 			const host: any = {
 				taskId: "task",
+				cangjieRuntimePolicy: { hasCjpmProject: vi.fn().mockResolvedValue(false) },
 				hostRef: { deref: () => undefined },
 				activeTaskLoopCount: 0,
 				taskLoopIdleResolvers: new Set(),

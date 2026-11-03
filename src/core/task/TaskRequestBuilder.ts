@@ -187,6 +187,7 @@ export class TaskRequestBuilder {
 			if ((mode ?? defaultModeSlug) === "cangjie" && !this.task.parentTaskId && !this.task.allowedTools) {
 				this.task.cangjieRuntimePolicy.configureAgentRoute(lastUserForCangjie)
 				this.task.cangjieVerification?.onRouteConfigured()
+				await this.task.cangjieVerification?.prepareForTask?.()
 			}
 			const staticKey = JSON.stringify({
 				cwd: this.task.cwd,

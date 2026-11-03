@@ -87,7 +87,11 @@ vi.mock("../cangjiePreflightCheck", () => ({
 	cangjiePreflightCheck: cangjiePreflightCheckMock,
 	buildSearchGateWarning: buildSearchGateWarningMock,
 	CRITICAL_SIGNATURE_MODULES: [],
-	resolveRootPackageName: resolveRootPackageNameMock,
+	resolvePreflightProject: vi.fn(async (cwd: string, path: string) => ({
+		cwd,
+		path,
+		rootPackageName: await resolveRootPackageNameMock(),
+	})),
 }))
 
 import { ApplyPatchTool, applyPatchTool } from "../ApplyPatchTool"

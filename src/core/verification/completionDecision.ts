@@ -122,12 +122,17 @@ export function formatVerificationFacts(
 		`- Verdict: ${verdict.overall}`,
 		`- Build: ${describeBuild(verdict.build)}`,
 		`- Tests: ${describeTests(verdict.test)}`,
+		...(verdict.relatedTests ?? []).map(
+			(check) =>
+				`- Related tests (${check.state === "not_run" ? check.cwd : check.run.cwd}): ${describeTests(check)}`,
+		),
 		stale && changes.length > 0
 			? `- Changed since last verification: ${taskChanges.length} file(s) by task tools, ${otherChanges.length} by other sources (${names(changes)})`
 			: undefined,
 		stale && otherChanges.length > 0 ? `- Changes by other sources: ${names(otherChanges)}` : undefined,
 		logLine(verdict.build, "Build"),
 		logLine(verdict.test, "Test"),
+		...(verdict.relatedTests ?? []).map((check) => logLine(check, "Related test")),
 		note ? `- Note: ${note}` : undefined,
 		`- User acceptance: ${verdict.acceptance}`,
 	]

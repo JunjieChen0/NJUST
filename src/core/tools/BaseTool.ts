@@ -667,6 +667,8 @@ export abstract class BaseTool<TName extends ToolName> {
 			while (attempt < maxAttempts) {
 				attempt++
 				try {
+					if (task.taskMode === "cangjie")
+						(task.rootTask ?? task).cangjieVerification?.noteToolStarted?.(this.name)
 					await this.execute(params, task, wrappedCallbacks)
 
 					// Wait for any pending persistence operations to complete

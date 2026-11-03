@@ -22,7 +22,7 @@ import {
 	cangjiePreflightCheck,
 	buildSearchGateWarning,
 	CRITICAL_SIGNATURE_MODULES,
-	resolveRootPackageName,
+	resolvePreflightProject,
 } from "./cangjiePreflightCheck"
 import {
 	countOccurrences,
@@ -139,8 +139,22 @@ export class EditTool extends BaseTool<"edit"> {
 					}
 				}
 				if (isCangjieSourceWrite) {
-					const rootPkg = await resolveRootPackageName(task.cwd)
-					const preflight = cangjiePreflightCheck(new_string, relPath, task.cwd, rootPkg)
+					const structureError = await task.cangjieRuntimePolicy.validateProjectStructureForWrite(
+						relPath,
+						new_string,
+					)
+					if (structureError) {
+						task.recordToolError("edit", structureError)
+						pushToolResult(formatResponse.toolError(structureError))
+						return
+					}
+					const project = await resolvePreflightProject(task.cwd, relPath)
+					const preflight = cangjiePreflightCheck(
+						new_string,
+						project.path,
+						project.cwd,
+						project.rootPackageName,
+					)
 					if (!preflight.pass) {
 						const errorMsg =
 							`Cangjie preflight failed before creating file:\n` +
@@ -386,8 +400,8 @@ export class EditTool extends BaseTool<"edit"> {
 					pushToolResult(formatResponse.toolError(structureError))
 					return
 				}
-				const rootPkg = await resolveRootPackageName(task.cwd)
-				const preflight = cangjiePreflightCheck(newContent, relPath, task.cwd, rootPkg)
+				const project = await resolvePreflightProject(task.cwd, relPath)
+				const preflight = cangjiePreflightCheck(newContent, project.path, project.cwd, project.rootPackageName)
 				if (!preflight.pass) {
 					const errorMsg =
 						`Cangjie preflight failed before applying edit:\n` +

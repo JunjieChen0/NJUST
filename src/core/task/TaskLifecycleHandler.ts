@@ -73,6 +73,7 @@ export interface TaskLifecycleHost {
 	apiConversationHistory: ApiMessage[]
 
 	refreshWebviewState(): Promise<void>
+	reportCommandCleanupFailure?(detail: string): Promise<void>
 	say(
 		type: ClineSay,
 		text?: string,
@@ -487,6 +488,13 @@ export class TaskLifecycleHandler {
 			await this.cleanupSandboxScope()
 		} catch (error) {
 			sandboxCleanupError = error
+		}
+		if (sandboxCleanupError && !t.abandoned) {
+			try {
+				await t.reportCommandCleanupFailure?.(String(sandboxCleanupError))
+			} catch (error) {
+				logger.debug("TaskLifecycleHandler", "Cannot persist process cleanup warning", error)
+			}
 		}
 
 		// Always emit — listeners depend on this for UI state reset and parent

@@ -362,6 +362,19 @@ describe("editTool", () => {
 	})
 
 	describe("approval workflow", () => {
+		it("blocks new Cangjie files outside declared source layouts before any write", async () => {
+			mockedPathResolve.mockReturnValue("/project/libs/unrelated/src/new.cj")
+			mockTask.cangjieRuntimePolicy.hasCjpmProject.mockResolvedValue(true)
+			mockTask.cangjieRuntimePolicy.validateProjectStructureForWrite.mockResolvedValue(
+				"Allowed source roots: src/",
+			)
+			const result = await executeEditTool(
+				{ file_path: "libs/unrelated/src/new.cj", old_string: "", new_string: "package unrelated\n" },
+				{ fileExists: false },
+			)
+			expect(result).toContain("Allowed source roots")
+			expect(mockTask.diffViewProvider.saveDirectly).not.toHaveBeenCalled()
+		})
 		it("saves changes when user approves", async () => {
 			mockAskApproval.mockResolvedValue(true)
 

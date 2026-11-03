@@ -58,6 +58,29 @@ describe("resolveVerificationProjectRoot", () => {
 		expect(result).toEqual({ kind: "resolved", root: appA })
 	})
 
+	it("verifies the owning application when edits touch a local dependency and the application", async () => {
+		const dependency = await makeProject(path.join(appA, "libs", "pricing"))
+		await fs.writeFile(
+			path.join(appA, "cjpm.toml"),
+			'[package]\nname = "app"\n[dependencies]\npricing = { path = "libs/pricing" }\n',
+		)
+		const result = await resolveVerificationProjectRoot({
+			writtenPaths: [path.join(dependency, "src", "price.cj"), path.join(appA, "src", "main.cj")],
+			cwd: appA,
+			workspaceFolders: [appA],
+		})
+		expect(result).toEqual({ kind: "resolved", root: appA })
+	})
+
+	it("does not treat an unrelated project as an owned dependency", async () => {
+		const result = await resolveVerificationProjectRoot({
+			writtenPaths: [path.join(appA, "src", "main.cj"), path.join(appB, "src", "main.cj")],
+			cwd: appA,
+			workspaceFolders: [appA, appB],
+		})
+		expect(result.kind).toBe("blocked")
+	})
+
 	it("uses a single workspace project when nothing else identifies one", async () => {
 		const result = await resolveVerificationProjectRoot({ writtenPaths: [], cwd: ws, workspaceFolders: [appA, ws] })
 

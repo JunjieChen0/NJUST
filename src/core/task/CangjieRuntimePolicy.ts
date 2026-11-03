@@ -1,4 +1,7 @@
 import path from "path"
+import * as fs from "fs/promises"
+import { discoverProjectRoots } from "../verification/projectFingerprint"
+import { logger } from "../../shared/logger"
 
 import {
 	isExplicitCangjieReadOnlyRequest,
@@ -587,6 +590,27 @@ export class CangjieRuntimePolicy {
 					rootPackageName: member.name,
 				}))
 			: [{ prefix: normalizeRelPath(info.srcDir || "src").replace(/\/+$/, ""), rootPackageName: info.name }]
+		const canonicalCwd = await fs.realpath(this.cwd)
+		for (const dependency of await discoverProjectRoots(this.cwd)) {
+			const relative = path.relative(canonicalCwd, dependency)
+			// Declared dependencies outside the workspace do not expand write permission.
+			if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
+				continue
+			try {
+				const dependencyInfo = await parseCjpmToml(dependency)
+				if (dependencyInfo && !dependencyInfo.isWorkspace)
+					projectRoots.push({
+						prefix: normalizeRelPath(path.join(relative, dependencyInfo.srcDir || "src")).replace(
+							/\/+$/,
+							"",
+						),
+						rootPackageName: dependencyInfo.name,
+					})
+			} catch (error) {
+				logger.debug("CangjieRuntimePolicy", "Cannot read local dependency source layout", error)
+			}
+		}
+		projectRoots.sort((a, b) => b.prefix.length - a.prefix.length)
 
 		const match = projectRoots.find(
 			(root) => normalized === root.prefix || normalized.startsWith(`${root.prefix}/`),
@@ -817,11 +841,11 @@ export class CangjieRuntimePolicy {
 	}
 
 	noteWriteApplied(relPath: string, previousContent: string | undefined, nextContent: string | undefined): void {
+		this.writtenPaths.add(path.resolve(this.cwd, relPath))
 		const lowerPath = relPath.toLowerCase()
 		const affectsBuild = lowerPath.endsWith(".cj") || lowerPath.endsWith(".toml")
 		if (!affectsBuild) return
 
-		this.writtenPaths.add(path.resolve(this.cwd, relPath))
 		this.recentTestFailed = false
 		this.writeRevision += 1
 		this.recentBuildSucceeded = false

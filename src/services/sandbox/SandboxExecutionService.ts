@@ -249,16 +249,27 @@ export class SandboxExecutionService {
 	}
 
 	/** Register a terminal-backed process so scope disposal can abort and await it. */
-	registerExternalProcess(resourceScopeId: string, process: RooTerminalProcessResultPromise): () => void {
+	registerExternalProcess(
+		resourceScopeId: string,
+		process: RooTerminalProcessResultPromise,
+		completed: Promise<void>,
+	): () => void {
 		let unregistered = false
+		let resolveSettled!: () => void
+		const settled = new Promise<void>((resolve) => {
+			resolveSettled = resolve
+		})
 		const unregister = (): void => {
 			if (unregistered) return
 			unregistered = true
 			const scopedProcesses = this.externalProcesses.get(resourceScopeId)
 			scopedProcesses?.delete(tracked)
 			if (scopedProcesses?.size === 0) this.externalProcesses.delete(resourceScopeId)
+			resolveSettled()
 		}
-		const settled = Promise.resolve(process).then(
+		// The terminal promise resolves on "continue", including backgrounding.
+		// Only the completion callback (or a rejected terminal) ends tracking.
+		void Promise.race([completed, process.then(() => completed)]).then(
 			() => unregister(),
 			(error: unknown) => {
 				logger.debug("SandboxExecutionService", "External terminal process failed", {
@@ -803,14 +814,27 @@ export class SandboxExecutionService {
 
 	private async drainExternalProcesses(resourceScopeId?: string): Promise<unknown[]> {
 		const failures: unknown[] = []
-		while (true) {
-			const processes = resourceScopeId
-				? Array.from(this.externalProcesses.get(resourceScopeId) ?? [])
-				: Array.from(this.externalProcesses.values()).flatMap((entries) => Array.from(entries))
-			if (processes.length === 0) return failures
-			failures.push(...this.abortExternalProcesses(processes, resourceScopeId))
-			await Promise.all(processes.map((tracked) => tracked.settled))
+		const processes = resourceScopeId
+			? Array.from(this.externalProcesses.get(resourceScopeId) ?? [])
+			: Array.from(this.externalProcesses.values()).flatMap((entries) => Array.from(entries))
+		if (processes.length === 0) return failures
+		failures.push(...this.abortExternalProcesses(processes, resourceScopeId))
+		let timeout: ReturnType<typeof setTimeout> | undefined
+		const stopped = await Promise.race([
+			Promise.all(processes.map((tracked) => tracked.settled)).then(() => true),
+			new Promise<false>((resolve) => {
+				timeout = setTimeout(() => resolve(false), EXTERNAL_TERMINAL_INTERRUPT_GRACE_MS)
+			}),
+		])
+		if (timeout) clearTimeout(timeout)
+		if (!stopped) {
+			const error = new Error(
+				"Terminal process exit could not be confirmed after cancellation; it may still be running. Check the terminal before starting another command.",
+			)
+			logger.warn("SandboxExecutionService", error.message, { resourceScopeId })
+			failures.push(error)
 		}
+		return failures
 	}
 
 	private requestForRunner(

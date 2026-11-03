@@ -24,7 +24,21 @@ export function VerificationCard({
 					`chat:verification.${check.staleReason === "environment_changed" ? "environmentChanged" : "codeChanged"}`,
 				)
 			: t(`chat:verification.states.${check.state}`)
-	const stale = summary.build.state === "stale" || summary.test.state === "stale"
+	const stale =
+		summary.build.state === "stale" ||
+		summary.test.state === "stale" ||
+		summary.relatedTests?.some((check) => check.state === "stale") ||
+		Boolean(
+			summary.currentFingerprint &&
+				summary.delivery?.fingerprint &&
+				summary.currentFingerprint !== summary.delivery.fingerprint,
+		)
+	const command = (check: VerificationSummary["build"]) =>
+		check.executable
+			? [check.executable, ...(check.args ?? [])]
+					.map((part) => (/\s/.test(part) ? JSON.stringify(part) : part))
+					.join(" ")
+			: undefined
 	const decide = (decision: "accepted" | "changes_requested") =>
 		vscode.postMessage({
 			type: "verificationDecision",
@@ -39,16 +53,103 @@ export function VerificationCard({
 				{t(`chat:verification.overall.${summary.overall}`)}
 			</strong>
 			{summary.terminal && <div>{t(`chat:verification.terminal.${summary.terminal}`)}</div>}
+			{summary.delivery && (
+				<div className="mt-2 break-all">
+					<div>
+						{t("delivery:projectRoot")}: {summary.delivery.projectRoot}
+					</div>
+					<div>
+						{t("delivery:deliveredCode")}:{" "}
+						<code title={summary.delivery.fingerprint}>
+							{summary.delivery.fingerprint?.slice(0, 12) ?? t("delivery:unknownCode")}
+						</code>
+					</div>
+					{summary.currentFingerprint && summary.currentFingerprint !== summary.delivery.fingerprint && (
+						<div>
+							{t("delivery:currentCode")}:{" "}
+							<code title={summary.currentFingerprint}>{summary.currentFingerprint.slice(0, 12)}</code>
+						</div>
+					)}
+				</div>
+			)}
 			<div>
 				{t("chat:verification.build")}: {state(summary.build)}
 				{summary.build.exitCode != null &&
 					` (${t("chat:verification.exitCode", { code: summary.build.exitCode })})`}
 			</div>
+			{command(summary.build) && (
+				<div className="mt-1 break-all">
+					<code>{command(summary.build)}</code>
+					<div>
+						{t("delivery:workingDirectory")}: {summary.build.cwd}
+					</div>
+				</div>
+			)}
 			<div>
 				{t("chat:verification.test")}: {state(summary.test)}
 				{summary.test.executed !== undefined &&
 					` — ${t("chat:verification.testCounts", { passed: summary.test.passed ?? 0, failed: summary.test.failed ?? 0, skipped: summary.test.skipped ?? 0 })}`}
 			</div>
+			{(command(summary.test) || summary.test.cwd) && (
+				<div className="mt-1 break-all">
+					<code>{command(summary.test)}</code>
+					<div>
+						{t("delivery:workingDirectory")}: {summary.test.cwd}
+					</div>
+				</div>
+			)}
+			{command(summary.test) && (
+				<div className="mt-1 text-vscode-descriptionForeground">{t("delivery:testScopeNote")}</div>
+			)}
+			{summary.relatedTests?.length ? (
+				<div className="mt-2">
+					<strong>{t("delivery:relatedTests")}</strong>
+					{summary.relatedTests.map((check, index) => (
+						<div key={`${check.cwd}-${index}`} className="mt-1 break-all">
+							<div>
+								{state(check)}
+								{check.executed !== undefined &&
+									` — ${t("chat:verification.testCounts", { passed: check.passed ?? 0, failed: check.failed ?? 0, skipped: check.skipped ?? 0 })}`}
+							</div>
+							<code>{command(check)}</code>
+							<div>
+								{t("delivery:workingDirectory")}: {check.cwd}
+							</div>
+							{check.logPath && (
+								<button
+									className="text-vscode-textLink-foreground underline"
+									onClick={() => vscode.postMessage({ type: "openFile", text: check.logPath })}>
+									{t("chat:verification.testLog")}
+								</button>
+							)}
+						</div>
+					))}
+				</div>
+			) : null}
+			{summary.delivery && (
+				<div className="mt-2">
+					<strong>{t("delivery:deliveredFiles")}</strong>
+					{!summary.delivery.baselineFingerprint ? (
+						<div>{t("delivery:noInitialSnapshot")}</div>
+					) : summary.delivery.files.length === 0 ? (
+						<div>{t("delivery:noChanges")}</div>
+					) : (
+						<ul className="my-1 pl-5">
+							{summary.delivery.files.map((file) => (
+								<li key={file.path} className="break-all">
+									{t(`delivery:fileChanges.${file.change}`)}: {file.path}
+								</li>
+							))}
+						</ul>
+					)}
+					{summary.delivery.filesTruncated && <div>{t("delivery:filesTruncated")}</div>}
+					{summary.delivery.diffOmittedPaths.length > 0 && (
+						<div>
+							{t("delivery:diffUnavailable")}: {summary.delivery.diffOmittedPaths.join(", ")}
+						</div>
+					)}
+				</div>
+			)}
 			{stale && summary.changes && (
 				<div className="mt-2">
 					<div>
@@ -67,6 +168,13 @@ export function VerificationCard({
 				</div>
 			)}
 			<div className="mt-2 flex gap-3">
+				{summary.delivery?.diffPath && (
+					<button
+						className="text-vscode-textLink-foreground underline"
+						onClick={() => vscode.postMessage({ type: "openFile", text: summary.delivery!.diffPath })}>
+						{t("delivery:viewDiff")}
+					</button>
+				)}
 				{summary.build.logPath && (
 					<button
 						className="text-vscode-textLink-foreground underline"

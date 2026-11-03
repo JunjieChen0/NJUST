@@ -1,0 +1,32 @@
+{
+	"projectRoot": "Project",
+	"deliveredCode": "Delivered code",
+	"currentCode": "Current code",
+	"unknownCode": "Code state unavailable",
+	"workingDirectory": "Working directory",
+	"testScopeNote": "Counts cover this command in this working directory. Dependency projects with separate test suites need their own checks.",
+	"relatedTests": "Related project tests",
+	"deliveredFiles": "Changes in this delivery",
+	"noInitialSnapshot": "Initial inputs were not captured; the complete change list is unavailable.",
+	"noChanges": "No input file changes detected during this task.",
+	"filesTruncated": "The file list is truncated; inspect the diff for details.",
+	"diffUnavailable": "Full diff unavailable for",
+	"viewDiff": "View delivery diff",
+	"fileChanges": { "added": "Added", "modified": "Modified", "deleted": "Deleted" },
+	"stages": {
+		"project": "Identify project",
+		"sdk": "Detect SDK",
+		"read": "Read code",
+		"edit": "Modify code",
+		"build": "Build",
+		"test": "Test",
+		"delivery": "Deliver"
+	},
+	"progressStates": {
+		"running": "In progress",
+		"waiting": "Waiting for approval or project resources",
+		"blocked": "Blocked or failed; inspect the result",
+		"completed": "Completed",
+		"cancelled": "Cancelled"
+	}
+}

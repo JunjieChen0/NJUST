@@ -1,4 +1,5 @@
 import * as path from "path"
+import { t } from "../../i18n"
 import os from "os"
 import crypto from "crypto"
 import { v7 as uuidv7 } from "uuid"
@@ -619,6 +620,15 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.hostRef = new WeakRef(host)
 		this.globalStoragePath = host.context.globalStorageUri.fsPath
 		this.cangjieVerification = createCangjieTaskVerification(this)
+		this.cangjieVerification.onDidProgress?.((cangjieProgress) => {
+			if (this.abort || this.abandoned || this.taskCompleted) return
+			void this.addToClineMessages({
+				ts: Date.now(),
+				type: "say",
+				say: "cangjie_progress",
+				cangjieProgress,
+			}).catch((error) => logger.debug("Task", "Cannot publish Cangjie progress", error))
+		})
 		this.cangjieVerification.onDidChange(() => {
 			void this.refreshVerificationSummary().catch((error) =>
 				logger.debug("Task", "Cannot refresh verification card", error),
@@ -1076,6 +1086,15 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		return this.verificationMessageUpdate
 	}
 
+	public async reportCommandCleanupFailure(detail: string): Promise<void> {
+		await this.addToClineMessages({
+			ts: Date.now(),
+			type: "say",
+			say: "text",
+			text: `${t("delivery:unconfirmedProcess")}\n${detail}`,
+		})
+	}
+
 	public async publishVerificationSummary(terminal: "cancelled" | "error"): Promise<void> {
 		if (this.verificationTerminal || this.abandoned || this.taskCompleted) return
 		try {
@@ -1254,6 +1273,9 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	private async initiateCloudAgentLoop(userMessage: string, images?: string[]): Promise<void> {
+		if (this.abort || this.abandoned) return
+		if (await this.cangjieRuntimePolicy.hasCjpmProject()) await this.cangjieVerification.prepareForTask()
+		if (this.abort || this.abandoned) return
 		const host = createCloudAgentHost(this as Parameters<typeof createCloudAgentHost>[0])
 		const { CloudAgentOrchestrator } = await import("./CloudAgentOrchestrator")
 		const orchestrator = new CloudAgentOrchestrator(host)

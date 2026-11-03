@@ -155,6 +155,7 @@ export const clineSays = [
 	"completion_result",
 	"user_feedback",
 	"verification_summary",
+	"cangjie_progress",
 	"user_feedback_diff",
 	"command_output",
 	"shell_integration_warning",
@@ -252,18 +253,56 @@ export const verificationCheckSchema = z.object({
 	exitCode: z.number().int().nullable().optional(),
 	logPath: z.string().optional(),
 	staleReason: z.enum(["code_changed", "environment_changed"]).optional(),
+	executable: z.string().optional(),
+	args: z.array(z.string()).optional(),
+	cwd: z.string().optional(),
+	startedAt: z.number().optional(),
+	endedAt: z.number().optional(),
 	executed: z.number().int().nonnegative().optional(),
 	passed: z.number().int().nonnegative().optional(),
 	failed: z.number().int().nonnegative().optional(),
 	skipped: z.number().int().nonnegative().optional(),
 })
 
+export const verificationDeliverySchema = z.object({
+	projectRoot: z.string(),
+	fingerprint: z.string().optional(),
+	baselineFingerprint: z.string().optional(),
+	capturedAt: z.number(),
+	files: z
+		.array(
+			z.object({
+				path: z.string(),
+				change: z.enum(["added", "modified", "deleted"]),
+				source: z.enum(["task_tool", "other"]),
+			}),
+		)
+		.max(100),
+	filesTruncated: z.boolean(),
+	diffPath: z.string().optional(),
+	diffOmittedPaths: z.array(z.string()),
+})
+
+export const cangjieTaskProgressSchema = z.object({
+	stage: z.enum(["project", "sdk", "read", "edit", "build", "test", "delivery"]),
+	status: z.enum(["running", "waiting", "blocked", "completed", "cancelled"]),
+	at: z.number(),
+	projectRoot: z.string().optional(),
+	sdkVersion: z.string().optional(),
+	detail: z.string().optional(),
+})
+export type CangjieTaskProgress = z.infer<typeof cangjieTaskProgressSchema>
+export type VerificationDelivery = z.infer<typeof verificationDeliverySchema>
+
 export const verificationSummarySchema = z.object({
 	overall: z.enum(["verified", "failed", "incomplete", "no_record"]),
 	build: verificationCheckSchema,
 	test: verificationCheckSchema,
+	relatedTests: z.array(verificationCheckSchema).optional(),
 	acceptance: z.enum(["no_delivery", "pending", "accepted", "changes_requested", "superseded"]),
 	claimId: z.string().optional(),
+	delivery: verificationDeliverySchema.optional(),
+	currentFingerprint: z.string().optional(),
 	changes: z
 		.object({
 			taskTool: z.number().int().nonnegative(),
@@ -304,6 +343,7 @@ export const clineMessageSchema = z.object({
 	checkpoint: z.record(z.string(), z.unknown()).optional(),
 	progressStatus: toolProgressStatusSchema.optional(),
 	verification: verificationSummarySchema.optional(),
+	cangjieProgress: cangjieTaskProgressSchema.optional(),
 	/**
 	 * Data for successful context condensation.
 	 * Present when `say: "condense_context"` and `partial: false`.

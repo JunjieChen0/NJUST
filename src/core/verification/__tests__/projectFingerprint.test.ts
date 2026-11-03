@@ -68,6 +68,7 @@ describe("computeProjectFingerprint", () => {
 		["build output", "target/release/bin/main.cj"],
 		["git metadata", ".git/HEAD"],
 		["extension state", ".njust_ai/memrl/episodes.json"],
+		["extension symbol index", ".cangjie-index/symbols.json"],
 		["extension completion audit", ".njust-ai/cangjie-eval-trace.jsonl"],
 	])("ignores %s", async (_label, rel) => {
 		const before = await computeProjectFingerprint(root)
@@ -153,11 +154,12 @@ describe("computeProjectFingerprint", () => {
 		expect(snapshot?.gaps.length).toBeGreaterThan(0)
 	})
 
-	it("uses metadata for files larger than five MB", async () => {
+	it("marks metadata-only coverage as incomplete for files larger than five MB", async () => {
 		const file = path.join(root, "large.bin")
 		await fs.writeFile(file, Buffer.alloc(6 * 1024 * 1024))
 		const before = await computeProjectSnapshot(root)
-		expect(before?.coverage).toBe("complete")
+		expect(before?.coverage).toBe("partial")
+		expect(before?.gaps).toContainEqual(expect.stringContaining("large.bin"))
 		await fs.utimes(file, new Date(1000), new Date(1000))
 		await expect(computeProjectFingerprint(root)).resolves.not.toBe(before?.fingerprint)
 	})

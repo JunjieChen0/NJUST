@@ -38,6 +38,7 @@ import { AssistantTextRow } from "./rows/AssistantTextRow"
 import { ApiRequestRow } from "./rows/ApiRequestRow"
 import { CompletionResultRow } from "./rows/CompletionResultRow"
 import { VerificationCard, isLatestVerificationMessage } from "./rows/VerificationCard"
+import { CangjieProgressRow } from "./rows/CangjieProgressRow"
 import { FollowUpRow } from "./rows/FollowUpRow"
 import { McpServerRow } from "./rows/McpServerRow"
 import { SayToolResultRow } from "./rows/SayToolResultRow"
@@ -508,6 +509,8 @@ export const ChatRowContent = ({
 							isExpanded={isExpanded}
 						/>
 					)
+				case "cangjie_progress":
+					return message.cangjieProgress ? <CangjieProgressRow progress={message.cangjieProgress} /> : null
 
 				case "completion_result":
 					return (

@@ -1,0 +1,32 @@
+{
+	"projectRoot": "工程",
+	"deliveredCode": "交付时的代码",
+	"currentCode": "当前代码",
+	"unknownCode": "无法确认代码状态",
+	"workingDirectory": "工作目录",
+	"testScopeNote": "统计仅涵盖该工作目录的本次命令；依赖工程如有独立测试，需要另行检查。",
+	"relatedTests": "相关工程测试",
+	"deliveredFiles": "本次交付的改动",
+	"noInitialSnapshot": "未记录任务起点，无法确定完整改动清单。",
+	"noChanges": "未检测到任务期间的输入文件改动。",
+	"filesTruncated": "文件清单已截断，请查看 diff 了解详情。",
+	"diffUnavailable": "以下文件无法展示完整 diff",
+	"viewDiff": "查看交付 diff",
+	"fileChanges": { "added": "新增", "modified": "修改", "deleted": "删除" },
+	"stages": {
+		"project": "识别工程",
+		"sdk": "检测 SDK",
+		"read": "阅读代码",
+		"edit": "修改代码",
+		"build": "构建",
+		"test": "测试",
+		"delivery": "交付"
+	},
+	"progressStates": {
+		"running": "进行中",
+		"waiting": "等待批准或项目资源",
+		"blocked": "受阻或失败，请查看检查结果",
+		"completed": "已完成",
+		"cancelled": "已取消"
+	}
+}
