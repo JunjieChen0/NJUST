@@ -24,6 +24,7 @@ import { BaseProvider } from "./base-provider"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../types"
 import { requireApiKey } from "../interfaces/api-key-validator"
 import { getApiRequestTimeout } from "./utils/timeout-config"
+import { unknownModelInfo } from "./resolveModelInfo"
 
 // https://docs.anthropic.com/en/api/claude-on-vertex-ai
 export class AnthropicVertexHandler extends BaseProvider implements SingleCompletionHandler {
@@ -227,8 +228,8 @@ export class AnthropicVertexHandler extends BaseProvider implements SingleComple
 
 	getModel() {
 		const modelId = this.options.apiModelId
-		const id = modelId && modelId in vertexModels ? (modelId as VertexModelId) : vertexDefaultModelId
-		let info: ModelInfo = vertexModels[id]
+		const id = modelId || vertexDefaultModelId
+		let info: ModelInfo = vertexModels[id as VertexModelId] ?? unknownModelInfo
 
 		// Check if 1M context beta should be enabled for supported models
 		const supports1MContext = VERTEX_1M_CONTEXT_MODEL_IDS.includes(

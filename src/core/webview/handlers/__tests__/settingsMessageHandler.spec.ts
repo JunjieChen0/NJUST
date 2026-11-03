@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const mockGetModels = vi.fn()
-const mockListProviderModels = vi.fn()
+const mockResolveProviderCatalog = vi.fn()
 const mockFlushModels = vi.fn()
 
 vi.mock("../../../../api/providers/fetchers/modelCache", () => ({
 	getModels: (...args: any[]) => mockGetModels(...args),
-	listProviderModels: (...args: any[]) => mockListProviderModels(...args),
+	resolveProviderCatalog: (...args: any[]) => mockResolveProviderCatalog(...args),
+	refreshModels: (...args: any[]) => mockGetModels(...args),
 	flushModels: (...args: any[]) => mockFlushModels(...args),
 }))
 
@@ -93,8 +94,13 @@ describe("settingsMessageHandler - requestRouterModels", () => {
 		router = new MessageRouter()
 		registerSettingsHandlers(router)
 		mockGetModels.mockResolvedValue({ "model-a": { maxTokens: 4096 } })
-		mockListProviderModels.mockResolvedValue({
-			"deepseek-v4-flash": { maxTokens: 8192, contextWindow: 64000 },
+		mockResolveProviderCatalog.mockResolvedValue({
+			provider: "deepseek",
+			configFingerprint: "fixture",
+			source: "api",
+			fetchedAt: 1234,
+			stale: false,
+			models: { "deepseek-v4-flash": { maxTokens: 8192, contextWindow: 64000 } },
 		})
 		mockFlushModels.mockResolvedValue(undefined)
 	})
@@ -112,7 +118,7 @@ describe("settingsMessageHandler - requestRouterModels", () => {
 
 		await router.route(context, message)
 
-		expect(mockListProviderModels).toHaveBeenCalledWith(
+		expect(mockResolveProviderCatalog).toHaveBeenCalledWith(
 			"deepseek",
 			expect.objectContaining({
 				apiKey: "test-key",
@@ -154,11 +160,11 @@ describe("settingsMessageHandler - requestRouterModels", () => {
 		await router.route(context, message)
 
 		expect(mockGetModels).toHaveBeenCalledWith(expect.objectContaining({ provider: "openrouter" }))
-		expect(mockListProviderModels).not.toHaveBeenCalled()
+		expect(mockResolveProviderCatalog).not.toHaveBeenCalled()
 	})
 
 	it("should handle deepseek fetch failure gracefully", async () => {
-		mockListProviderModels.mockRejectedValue(new Error("API error"))
+		mockResolveProviderCatalog.mockRejectedValue(new Error("API error"))
 
 		const context = createMockContext({
 			deepSeekApiKey: "test-key",
@@ -183,7 +189,7 @@ describe("settingsMessageHandler - requestRouterModels", () => {
 		expect(errorCall).toBeDefined()
 	})
 
-	it("should flush cache when refresh is true for deepseek", async () => {
+	it("forces one catalog refresh without a second legacy fetch for deepseek", async () => {
 		const context = createMockContext({
 			deepSeekApiKey: "test-key",
 		})
@@ -195,6 +201,38 @@ describe("settingsMessageHandler - requestRouterModels", () => {
 
 		await router.route(context, message)
 
-		expect(mockFlushModels).toHaveBeenCalled()
+		expect(mockResolveProviderCatalog).toHaveBeenCalledWith(
+			"deepseek",
+			expect.objectContaining({ forceRefresh: true }),
+		)
+		expect(mockFlushModels).not.toHaveBeenCalled()
+	})
+
+	it("uses draft credentials and echoes the request ID without persisting settings", async () => {
+		const context = createMockContext({ deepSeekApiKey: "saved", deepSeekBaseUrl: "https://saved.invalid" })
+		await router.route(context, {
+			type: "requestRouterModels",
+			values: { provider: "deepseek", requestId: "draft-request", refresh: true },
+			apiConfiguration: {
+				apiProvider: "deepseek",
+				deepSeekApiKey: "draft",
+				deepSeekBaseUrl: "https://draft.invalid",
+			},
+		})
+		expect(mockResolveProviderCatalog).toHaveBeenCalledWith(
+			"deepseek",
+			expect.objectContaining({ apiKey: "draft", baseUrl: "https://draft.invalid", forceRefresh: true }),
+		)
+		expect(context.updateGlobalState).not.toHaveBeenCalled()
+		const message = context.provider.postMessageToWebview.mock.calls.find(
+			(call: any[]) => call[0].type === "routerModels",
+		)[0]
+		expect(message.values).toEqual({ provider: "deepseek", requestId: "draft-request" })
+		expect(message.routerModelCatalogs.deepseek.fetchedAt).toBe(1234)
+	})
+
+	it.each(["mimo", "mimo-token-plan"])("routes %s through the catalog", async (provider) => {
+		await router.route(createMockContext(), { type: "requestRouterModels", values: { provider } })
+		expect(mockResolveProviderCatalog).toHaveBeenCalledWith(provider, expect.any(Object))
 	})
 })

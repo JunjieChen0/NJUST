@@ -36,7 +36,8 @@ vi.mock("fs", () => ({
 	readFileSync: vi.fn().mockReturnValue("{}"),
 }))
 
-vi.mock("../openai-compatible", () => ({
+vi.mock("../openai-compatible", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../openai-compatible")>()),
 	fetchOpenAICompatibleModels: vi.fn(),
 }))
 vi.mock("../anthropic", () => ({
@@ -54,6 +55,9 @@ import { setModelCacheStore } from "../modelCacheStore"
 import { fetchOpenAICompatibleModels } from "../openai-compatible"
 import { fetchAnthropicModels } from "../anthropic"
 import { fetchGeminiModels } from "../gemini"
+import { modelCatalogIdentity } from "../../modelCatalogIdentity"
+
+const configFingerprint = modelCatalogIdentity("openai", { apiKey: "k", baseUrl: "https://api.openai.com/v1" })
 
 const mockFetchOpenAI = fetchOpenAICompatibleModels as Mock<typeof fetchOpenAICompatibleModels>
 const mockFetchAnthropic = fetchAnthropicModels as Mock<typeof fetchAnthropicModels>
@@ -89,7 +93,15 @@ describe("listProviderModels", () => {
 
 	it("returns memory cache hit without calling API", async () => {
 		sharedMockGet.mockImplementation(function (key: string) {
-			if (key === "openai") return FAKE_MODELS_API
+			if (key === configFingerprint)
+				return {
+					provider: "openai",
+					configFingerprint,
+					models: FAKE_MODELS_API,
+					source: "api",
+					fetchedAt: Date.now(),
+					stale: false,
+				}
 			return undefined
 		})
 
@@ -104,7 +116,10 @@ describe("listProviderModels", () => {
 
 		const result = await listProviderModels("openai", { apiKey: "k" })
 
-		expect(mockFetchOpenAI).toHaveBeenCalledWith("openai", { apiKey: "k" })
+		expect(mockFetchOpenAI).toHaveBeenCalledWith(
+			"openai",
+			expect.objectContaining({ apiKey: "k", baseUrl: "https://api.openai.com/v1" }),
+		)
 		expect(result["gpt-5.4"].source).toBe("api")
 	})
 
@@ -121,7 +136,7 @@ describe("listProviderModels", () => {
 
 		const result = await listProviderModels("anthropic", { apiKey: "k" })
 
-		expect(mockFetchAnthropic).toHaveBeenCalledWith({ apiKey: "k" })
+		expect(mockFetchAnthropic).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "k" }))
 		expect(result["claude-sonnet-4-6"].source).toBe("api")
 	})
 
@@ -138,7 +153,7 @@ describe("listProviderModels", () => {
 
 		const result = await listProviderModels("gemini", { apiKey: "k" })
 
-		expect(mockFetchGemini).toHaveBeenCalledWith({ apiKey: "k" })
+		expect(mockFetchGemini).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "k" }))
 		expect(result["gemini-2.5-flash"].source).toBe("api")
 	})
 
@@ -153,12 +168,14 @@ describe("listProviderModels", () => {
 
 	it("returns stale-disk-cache when API fails and old cache exists", async () => {
 		const staleEntry = JSON.stringify({
+			provider: "openai",
+			configFingerprint,
 			timestamp: Date.now() - 48 * 60 * 60 * 1000,
 			models: FAKE_MODELS_API,
 		})
 		vi.mocked(fsSync.existsSync).mockReturnValue(true)
 		vi.mocked(fsSync.readFileSync).mockImplementation(function (p: any) {
-			if (String(p).includes("dynamic_openai")) return staleEntry
+			if (String(p).includes("catalog_" + configFingerprint)) return staleEntry
 			return "{}"
 		})
 
@@ -181,12 +198,14 @@ describe("listProviderModels", () => {
 
 	it("returns stale cache when API returns empty and disk cache exists", async () => {
 		const diskEntry = JSON.stringify({
+			provider: "openai",
+			configFingerprint,
 			timestamp: Date.now() - 48 * 60 * 60 * 1000,
 			models: FAKE_MODELS_API,
 		})
 		vi.mocked(fsSync.existsSync).mockReturnValue(true)
 		vi.mocked(fsSync.readFileSync).mockImplementation(function (p: any) {
-			if (String(p).includes("dynamic_openai")) return diskEntry
+			if (String(p).includes("catalog_" + configFingerprint)) return diskEntry
 			return "{}"
 		})
 

@@ -18,11 +18,12 @@ describe("OpenAiCodexHandler.getModel", () => {
 		},
 	)
 
-	it("should fall back to default model when an invalid model id is provided", () => {
+	it("preserves a custom model ID and labels unknown capabilities", () => {
 		const handler = new OpenAiCodexHandler({ apiModelId: "not-a-real-model" })
 		const model = handler.getModel()
 
-		expect(model.id).toBe("gpt-5.5-codex")
+		expect(model.id).toBe("not-a-real-model")
+		expect(model.info.metadataSource).toBe("estimated")
 		expect(model.info).toBeDefined()
 	})
 

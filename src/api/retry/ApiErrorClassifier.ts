@@ -37,7 +37,8 @@ export function getRetryAfterSecondsFromError(error: unknown): number | undefine
 		return e.retryAfter
 	}
 	const raw =
-		e?.headers?.get?.("retry-after") ??
+		getHeader(e.headers, "retry-after") ??
+		getHeader(e.responseHeaders, "retry-after") ??
 		(e?.response?.headers && typeof e.response.headers.get === "function"
 			? e.response.headers.get("retry-after")
 			: undefined)
@@ -58,9 +59,17 @@ export function getRetryAfterSecondsFromError(error: unknown): number | undefine
 
 type RetryErrorLike = {
 	status?: unknown
+	statusCode?: unknown
 	response?: { status?: unknown; headers?: Headers }
-	headers?: { get?: (name: string) => string | null }
+	headers?: Headers | Record<string, string>
+	responseHeaders?: Headers | Record<string, string>
 	retryAfter?: unknown
+}
+
+function getHeader(headers: RetryErrorLike["headers"], name: string): string | undefined {
+	if (!headers) return undefined
+	if ("get" in headers && typeof headers.get === "function") return headers.get(name) ?? undefined
+	return Object.entries(headers).find(([key]) => key.toLowerCase() === name)?.[1]
 }
 
 function asRetryErrorLike(error: unknown): RetryErrorLike {
@@ -69,7 +78,8 @@ function asRetryErrorLike(error: unknown): RetryErrorLike {
 
 function getStatusFromError(error: unknown): number | undefined {
 	const e = asRetryErrorLike(error)
-	const status = typeof e.status === "number" ? e.status : e.response?.status
+	const status =
+		typeof e.status === "number" ? e.status : typeof e.statusCode === "number" ? e.statusCode : e.response?.status
 	return typeof status === "number" && Number.isFinite(status) ? status : undefined
 }
 

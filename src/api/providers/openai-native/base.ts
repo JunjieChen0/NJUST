@@ -1,3 +1,6 @@
+import { resolveModelInfo } from "../resolveModelInfo"
+import { modelConnection } from "../modelConnection"
+import { joinUrl } from "../fetchers/safeFetch"
 import * as os from "os"
 import { v7 as uuidv7 } from "uuid"
 import { Anthropic } from "@anthropic-ai/sdk"
@@ -170,6 +173,7 @@ export abstract class OpenAiNativeHandlerBase extends BaseProvider implements Si
 	lastResponseOutput: ResponsesOutputItem[] | undefined
 	lastResponseId: string | undefined
 	abortController?: AbortController
+	readonly responsesUrl: string
 
 	constructor(options: ApiHandlerOptions) {
 		super()
@@ -180,9 +184,19 @@ export abstract class OpenAiNativeHandlerBase extends BaseProvider implements Si
 		}
 		const apiKey = requireApiKey(this.options.openAiNativeApiKey, "OpenAI Native")
 		const userAgent = `Njust-AI/${Package.version} (${os.platform()} ${os.release()}; ${os.arch()}) node/${process.version.slice(1)}`
+		const baseUrl = modelConnection("openai-native", options).baseUrl!
+		this.responsesUrl = joinUrl(baseUrl, "responses")
+		const parsedBase = URL.canParse(baseUrl) ? new URL(baseUrl) : undefined
+		const defaultQuery = parsedBase?.search ? Object.fromEntries(parsedBase.searchParams) : undefined
+		if (parsedBase) {
+			parsedBase.search = ""
+			parsedBase.hash = ""
+		}
 		this.client = new OpenAI({
-			baseURL: this.options.openAiNativeBaseUrl || undefined,
+			baseURL: parsedBase?.toString() ?? baseUrl,
+			defaultQuery,
 			apiKey,
+			maxRetries: 0,
 			defaultHeaders: {
 				originator: "Njust-AI",
 				session_id: this.sessionId,
@@ -258,9 +272,13 @@ export abstract class OpenAiNativeHandlerBase extends BaseProvider implements Si
 
 	override getModel() {
 		const modelId = this.options.apiModelId
-		const id =
-			modelId && modelId in openAiNativeModels ? (modelId as OpenAiNativeModelId) : openAiNativeDefaultModelId
-		const info: ModelInfo = openAiNativeModels[id]
+		const id = modelId || openAiNativeDefaultModelId
+		const info: ModelInfo = resolveModelInfo(
+			"openai-native",
+			this.options,
+			id,
+			openAiNativeModels[id as OpenAiNativeModelId],
+		)
 		const params = getModelParams({
 			format: "openai",
 			modelId: id,
@@ -268,7 +286,12 @@ export abstract class OpenAiNativeHandlerBase extends BaseProvider implements Si
 			settings: this.options,
 			defaultTemperature: OPENAI_NATIVE_DEFAULT_TEMPERATURE,
 		})
-		return { id: id.startsWith("o3-mini") ? "o3-mini" : id, info, ...params, verbosity: params.verbosity }
+		return {
+			id: id in openAiNativeModels && id.startsWith("o3-mini") ? "o3-mini" : id,
+			info,
+			...params,
+			verbosity: params.verbosity,
+		}
 	}
 
 	getEncryptedContent(): { encrypted_content: string; id?: string } | undefined {

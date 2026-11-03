@@ -6,12 +6,7 @@ import { renderHook } from "@testing-library/react"
 import type { Mock } from "vitest"
 
 import { ProviderSettings, ModelInfo } from "@njust-ai/types"
-import {
-	BEDROCK_1M_CONTEXT_MODEL_IDS,
-	deepSeekModels,
-	litellmDefaultModelInfo,
-	openAiModelInfoSaneDefaults,
-} from "@njust-ai/core/providers"
+import { BEDROCK_1M_CONTEXT_MODEL_IDS, deepSeekModels } from "@njust-ai/core/providers"
 
 import { useSelectedModel } from "../useSelectedModel"
 import { useRouterModels } from "../useRouterModels"
@@ -96,7 +91,7 @@ describe("useSelectedModel", () => {
 			})
 		})
 
-		it("should fall back to default when configured model doesn't exist in available models", () => {
+		it("preserves a selected router model when listing is unavailable", () => {
 			const specificProviderInfo: ModelInfo = {
 				maxTokens: 8192,
 				contextWindow: 16384,
@@ -145,22 +140,9 @@ describe("useSelectedModel", () => {
 			const wrapper = createWrapper()
 			const { result } = renderHook(() => useSelectedModel(apiConfiguration), { wrapper })
 
-			// Should fall back to provider default since "test-model" doesn't exist
-			expect(result.current.id).toBe("anthropic/claude-sonnet-4.5")
-			// Should still use specific provider info for the default model if specified
-			expect(result.current.info).toEqual({
-				...{
-					maxTokens: 8192,
-					contextWindow: 200_000,
-					supportsImages: true,
-					supportsPromptCache: true,
-					inputPrice: 3.0,
-					outputPrice: 15.0,
-					cacheWritesPrice: 3.75,
-					cacheReadsPrice: 0.3,
-				},
-				...specificProviderInfo,
-			})
+			expect(result.current.id).toBe("test-model")
+			// Endpoint metadata belongs to the selected model, even if the base list omits it.
+			expect(result.current.info).toEqual(specificProviderInfo)
 		})
 
 		it("should demonstrate the merging behavior validates the comment about missing fields", () => {
@@ -301,19 +283,8 @@ describe("useSelectedModel", () => {
 			const wrapper = createWrapper()
 			const { result } = renderHook(() => useSelectedModel(apiConfiguration), { wrapper })
 
-			// Should fall back to provider default since "non-existent-model" doesn't exist
-			expect(result.current.id).toBe("anthropic/claude-sonnet-4.5")
-			// Should use base model info since provider doesn't exist
-			expect(result.current.info).toEqual({
-				maxTokens: 8192,
-				contextWindow: 200_000,
-				supportsImages: true,
-				supportsPromptCache: true,
-				inputPrice: 3.0,
-				outputPrice: 15.0,
-				cacheWritesPrice: 3.75,
-				cacheReadsPrice: 0.3,
-			})
+			expect(result.current.id).toBe("non-existent-model")
+			expect(result.current.info).toBeUndefined()
 		})
 	})
 
@@ -570,9 +541,9 @@ describe("useSelectedModel", () => {
 
 			expect(result.current.provider).toBe("litellm")
 			// Should fall back to default model ID since "some-model" doesn't exist in empty litellm models
-			expect(result.current.id).toBe("claude-3-7-sonnet-20250219")
+			expect(result.current.id).toBe("some-model")
 			// Should use litellmDefaultModelInfo as fallback
-			expect(result.current.info).toEqual(litellmDefaultModelInfo)
+			expect(result.current.info).toMatchObject({ metadataSource: "estimated", pricingUnknown: true })
 		})
 
 		it("should use litellmDefaultModelInfo when selected model not found in routerModels", () => {
@@ -602,10 +573,10 @@ describe("useSelectedModel", () => {
 			const { result } = renderHook(() => useSelectedModel(apiConfiguration), { wrapper })
 
 			expect(result.current.provider).toBe("litellm")
-			// Falls back to default model ID
-			expect(result.current.id).toBe("claude-3-7-sonnet-20250219")
+			// Preserve the selected model even when discovery is unavailable.
+			expect(result.current.id).toBe("non-existing-model")
 			// Should use litellmDefaultModelInfo as fallback since default model also not in router models
-			expect(result.current.info).toEqual(litellmDefaultModelInfo)
+			expect(result.current.info).toMatchObject({ metadataSource: "estimated", pricingUnknown: true })
 		})
 
 		it("should return routerModels info when model exists", () => {
@@ -683,7 +654,7 @@ describe("useSelectedModel", () => {
 
 			expect(result.current.provider).toBe("deepseek")
 			expect(result.current.id).toBe("deepseek-v4-flash")
-			expect(result.current.info).toEqual({
+			expect(result.current.info).toMatchObject({
 				...(deepSeekModels["deepseek-v4-flash"] as ModelInfo),
 				...dynamicModelInfo,
 			})
@@ -738,7 +709,7 @@ describe("useSelectedModel", () => {
 			expect(result.current.info).toEqual(deepSeekModels["deepseek-v4-pro"] as ModelInfo)
 		})
 
-		it("should use default model when configured id not found in dynamic or static models", () => {
+		it("preserves the configured model when it is missing from both catalogs", () => {
 			const dynamicModelInfo: ModelInfo = {
 				maxTokens: 8192,
 				contextWindow: 64000,
@@ -768,7 +739,8 @@ describe("useSelectedModel", () => {
 			const { result } = renderHook(() => useSelectedModel(apiConfiguration), { wrapper })
 
 			expect(result.current.provider).toBe("deepseek")
-			expect(result.current.id).toBe("deepseek-v4-flash")
+			expect(result.current.id).toBe("non-existent-model")
+			expect(result.current.info?.metadataSource).toBe("estimated")
 		})
 
 		it("should merge dynamic info over static info when both exist", () => {
@@ -802,7 +774,7 @@ describe("useSelectedModel", () => {
 			const wrapper = createWrapper()
 			const { result } = renderHook(() => useSelectedModel(apiConfiguration), { wrapper })
 
-			expect(result.current.info).toEqual({
+			expect(result.current.info).toMatchObject({
 				...(deepSeekModels["deepseek-v4-flash"] as ModelInfo),
 				...dynamicModelInfo,
 			})
@@ -866,7 +838,7 @@ describe("useSelectedModel", () => {
 			} as any)
 		})
 
-		it("should use openAiModelInfoSaneDefaults when no custom model info is provided", () => {
+		it("labels undiscovered model information as estimated", () => {
 			const apiConfiguration: ProviderSettings = {
 				apiProvider: "openai",
 				openAiModelId: "gpt-4o",
@@ -877,7 +849,7 @@ describe("useSelectedModel", () => {
 
 			expect(result.current.provider).toBe("openai")
 			expect(result.current.id).toBe("gpt-4o")
-			expect(result.current.info).toEqual(openAiModelInfoSaneDefaults)
+			expect(result.current.info).toMatchObject({ metadataSource: "estimated", pricingUnknown: true })
 		})
 
 		it("should return custom model info when provided", () => {

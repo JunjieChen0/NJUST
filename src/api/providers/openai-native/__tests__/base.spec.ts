@@ -94,10 +94,12 @@ describe("OpenAiNativeHandlerBase", () => {
 			expect(OpenAI).toHaveBeenCalledWith(expect.objectContaining({ baseURL: "https://custom.example.com/v1" }))
 		})
 
-		it("should pass undefined baseURL when openAiNativeBaseUrl is empty", () => {
+		it("resolves the effective default endpoint when the configured base URL is empty", () => {
 			vi.mocked(OpenAI).mockClear()
 			new TestOpenAiNativeHandler(makeOptions({ openAiNativeBaseUrl: "" }))
-			expect(OpenAI).toHaveBeenCalledWith(expect.objectContaining({ baseURL: undefined }))
+			expect(OpenAI).toHaveBeenCalledWith(
+				expect.objectContaining({ baseURL: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1" }),
+			)
 		})
 
 		it("should generate a session ID", () => {

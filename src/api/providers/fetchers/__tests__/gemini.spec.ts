@@ -38,7 +38,7 @@ describe("fetchGeminiModels", () => {
 		expect((init.headers as Record<string, string>)["x-goog-api-key"]).toBe("my-key")
 	})
 
-	it("falls back to query-param auth on a custom baseUrl (proxy compatibility)", async () => {
+	it("uses the same header authentication on a custom endpoint without putting credentials in URLs", async () => {
 		mockFetch.mockResolvedValueOnce({
 			ok: true,
 			json: () => Promise.resolve({ models: [] }),
@@ -47,7 +47,8 @@ describe("fetchGeminiModels", () => {
 		await fetchGeminiModels({ apiKey: "my-key", baseUrl: "https://my-proxy.example.com/v1beta" })
 
 		const calledUrl = mockFetch.mock.calls[0][0] as string
-		expect(calledUrl).toContain("key=my-key")
+		expect(calledUrl).not.toContain("key=")
+		expect(mockFetch.mock.calls[0][1].headers["x-goog-api-key"]).toBe("my-key")
 	})
 
 	it("strips 'models/' prefix from model names", async () => {

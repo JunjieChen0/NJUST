@@ -128,7 +128,7 @@ import OpenAI from "openai"
 import type { Anthropic } from "@anthropic-ai/sdk"
 
 import { type ModelInfo } from "@njust-ai/types"
-import { deepSeekDefaultModelId, deepSeekModels, DEEP_SEEK_DEFAULT_TEMPERATURE } from "@njust-ai/core/providers"
+import { deepSeekDefaultModelId, DEEP_SEEK_DEFAULT_TEMPERATURE } from "@njust-ai/core/providers"
 
 import type { ApiHandlerOptions } from "../../../shared/api"
 
@@ -253,7 +253,7 @@ describe("DeepSeekHandler", () => {
 			expect((model.info as ModelInfo).preserveReasoning).toBeUndefined()
 		})
 
-		it("should return provided model ID with default model info if model does not exist", () => {
+		it("preserves custom model IDs and marks unknown capabilities as estimates", () => {
 			const handlerWithInvalidModel = new DeepSeekHandler({
 				...mockOptions,
 				apiModelId: "invalid-model",
@@ -261,12 +261,11 @@ describe("DeepSeekHandler", () => {
 			const model = handlerWithInvalidModel.getModel()
 			expect(model.id).toBe("invalid-model") // Returns provided ID
 			expect(model.info).toBeDefined()
-			// With the current implementation, it's the same object reference when using default model info
-			expect(model.info).toBe(deepSeekModels[deepSeekDefaultModelId])
-			// Should match default catalog context
-			expect(model.info.contextWindow).toBe(deepSeekModels[deepSeekDefaultModelId].contextWindow)
-			// And should have supportsPromptCache set to true
-			expect(model.info.supportsPromptCache).toBe(true)
+			expect(model.info).toMatchObject({
+				metadataSource: "estimated",
+				pricingUnknown: true,
+				supportsPromptCache: false,
+			})
 		})
 
 		it("should return default model if no model ID is provided", () => {

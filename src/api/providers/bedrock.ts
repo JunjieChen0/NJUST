@@ -436,7 +436,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			// Use heuristics for model info, then allow overrides from ProviderSettings
 			const guessed = this.guessModelInfoFromId(modelId)
 			model = {
-				id: bedrockDefaultModelId,
+				id: modelId || bedrockDefaultModelId,
 				info: {
 					...JSON.parse(JSON.stringify(bedrockModels[bedrockDefaultModelId])),
 					...guessed,

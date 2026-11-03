@@ -1,3 +1,5 @@
+import { resolveModelInfo } from "./resolveModelInfo"
+import { resolveMinimaxAnthropicBaseUrl } from "../../shared/provider-endpoints"
 import { Anthropic } from "@anthropic-ai/sdk"
 import { Stream as AnthropicStream } from "@anthropic-ai/sdk/streaming"
 import { CacheControlEphemeral } from "@anthropic-ai/sdk/resources"
@@ -63,14 +65,7 @@ export class MiniMaxHandler extends BaseProvider implements SingleCompletionHand
 		// Use Anthropic-compatible endpoint
 		// Default to international endpoint: https://api.minimax.io/anthropic
 		// China endpoint: https://api.minimaxi.com/anthropic
-		let baseURL = options.minimaxBaseUrl || "https://api.minimax.io/anthropic"
-
-		// If user provided a /v1 endpoint, convert to /anthropic
-		if (baseURL.endsWith("/v1")) {
-			baseURL = baseURL.replace(/\/v1$/, "/anthropic")
-		} else if (!baseURL.toLowerCase().endsWith("/anthropic")) {
-			baseURL = `${baseURL.replace(/\/$/, "")}/anthropic`
-		}
+		const baseURL = resolveMinimaxAnthropicBaseUrl(options.minimaxBaseUrl)
 
 		this.client = new Anthropic({
 			baseURL,
@@ -291,8 +286,8 @@ export class MiniMaxHandler extends BaseProvider implements SingleCompletionHand
 
 	getModel() {
 		const modelId = this.options.apiModelId
-		const id = modelId && modelId in minimaxModels ? (modelId as MinimaxModelId) : minimaxDefaultModelId
-		const info = minimaxModels[id]
+		const id = modelId || minimaxDefaultModelId
+		const info = resolveModelInfo("minimax", this.options, id, minimaxModels[id as MinimaxModelId])
 
 		const params = getModelParams({
 			format: "anthropic",

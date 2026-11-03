@@ -47,3 +47,9 @@ export const API_PATHS = {
 	qwenCompatible: "/compatible-mode/v1",
 	volcengineVersion: "/api/v3",
 } as const
+
+export function resolveMinimaxAnthropicBaseUrl(configured?: string): string {
+	const baseUrl = configured || PROVIDER_BASE_URLS.minimaxAnthropic
+	if (baseUrl.endsWith("/v1")) return baseUrl.replace(/\/v1$/, "/anthropic")
+	return baseUrl.toLowerCase().endsWith("/anthropic") ? baseUrl : `${baseUrl.replace(/\/$/, "")}/anthropic`
+}

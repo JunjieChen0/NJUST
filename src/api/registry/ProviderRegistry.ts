@@ -5,6 +5,10 @@ import type { ApiHandlerOptions } from "../../shared/api"
 import type { IToolCallParser } from "../interfaces/IToolCallParser"
 import { wrapApiHandler } from "../retry/ApiRetryWrapper"
 import { logger } from "../../shared/logger"
+import { resolveProviderCatalog } from "../providers/fetchers/modelCache"
+import { modelConnection } from "../providers/modelConnection"
+import { resolveModelInfo } from "../providers/resolveModelInfo"
+import { providerFetcherMap } from "../providers/providerFetcherMap"
 
 export type ProviderId = NonNullable<ProviderSettings["apiProvider"]>
 
@@ -100,6 +104,7 @@ export class ProviderRegistry {
 			...optionsBase,
 			toolCallParser: dependencies.toolCallParser ?? this.dependencies.toolCallParser,
 			storeSecret: dependencies.storeSecret ?? this.dependencies.storeSecret,
+			modelSnapshot: {},
 		}
 
 		if (apiProvider && isRetiredProvider(apiProvider)) {
@@ -115,6 +120,35 @@ export class ProviderRegistry {
 			throw new Error(`API provider "${id}" is not registered`)
 		}
 		const handler = factory(options)
+		const kind = providerFetcherMap[id]
+		if (kind && kind !== "existing" && kind !== "fallback-only") {
+			handler.prepareModel = async (signal) => {
+				await resolveProviderCatalog(id, { ...modelConnection(id, options), signal })
+				signal?.throwIfAborted()
+				options.modelSnapshot!.current = undefined
+				const model = handler.getModel()
+				const selectedId = id === "openai" ? options.openAiModelId || model.id : options.apiModelId || model.id
+				options.modelSnapshot!.current = {
+					id: selectedId,
+					info: resolveModelInfo(
+						id,
+						options,
+						selectedId,
+						model.info.metadataSource === "estimated" ? undefined : model.info,
+					),
+				}
+			}
+		} else if (kind === "existing" && "fetchModel" in handler && typeof handler.fetchModel === "function") {
+			const fetchModel = handler.fetchModel.bind(handler)
+			handler.prepareModel = async (signal) => {
+				signal?.throwIfAborted()
+				options.modelSnapshot!.current = undefined
+				await fetchModel()
+				signal?.throwIfAborted()
+				const model = handler.getModel()
+				options.modelSnapshot!.current = { id: model.id, info: model.info }
+			}
+		}
 		return wrapApiHandler(handler)
 	}
 }

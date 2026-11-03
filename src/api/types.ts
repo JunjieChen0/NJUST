@@ -64,6 +64,8 @@ export interface ApiHandlerCreateMessageMetadata {
 }
 
 export interface ApiHandler {
+	/** Resolve and freeze metadata before prompt construction and token budgeting. */
+	prepareModel?(signal?: AbortSignal): Promise<void>
 	createMessage(
 		systemPrompt: string,
 		messages: Anthropic.Messages.MessageParam[],

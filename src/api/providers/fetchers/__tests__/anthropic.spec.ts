@@ -80,7 +80,9 @@ describe("fetchAnthropicModels", () => {
 			supportsImages: true,
 			supportsPromptCache: true,
 			supportsReasoningBudget: true,
-			deprecated: false,
+			estimatedFields: [],
+			metadataSource: "api",
+			pricingUnknown: true,
 			source: "api",
 		})
 	})

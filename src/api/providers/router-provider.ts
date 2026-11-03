@@ -10,6 +10,7 @@ import { getModels, getModelsFromCache } from "./fetchers/modelCache"
 import { DEFAULT_HEADERS } from "./constants"
 import { requireApiKey } from "../interfaces/api-key-validator"
 import { getApiRequestTimeout } from "./utils/timeout-config"
+import { unknownModelInfo } from "./resolveModelInfo"
 
 type RouterProviderOptions = {
 	name: RouterName
@@ -59,6 +60,7 @@ export abstract class RouterProvider extends BaseProvider {
 
 	override getModel(): { id: string; info: ModelInfo } {
 		const id = this.modelId ?? this.defaultModelId
+		if (this.options.modelSnapshot?.current?.id === id) return { id, info: this.options.modelSnapshot.current.info }
 
 		// First check instance models (populated by fetchModel)
 		if (this.models[id]) {
@@ -67,15 +69,14 @@ export abstract class RouterProvider extends BaseProvider {
 
 		// Fall back to global cache (synchronous disk/memory cache)
 		// This ensures models are available before fetchModel() is called
-		const cachedModels = getModelsFromCache(this.name)
+		const cachedModels = getModelsFromCache(this.name, { apiKey: this.client.apiKey, baseUrl: this.client.baseURL })
 		if (cachedModels?.[id]) {
 			// Also populate instance models for future calls
 			this.models = cachedModels
 			return { id, info: cachedModels[id] }
 		}
 
-		// Last resort: return default model
-		return { id: this.defaultModelId, info: this.defaultModelInfo }
+		return { id, info: id === this.defaultModelId ? this.defaultModelInfo : unknownModelInfo }
 	}
 
 	protected supportsTemperature(modelId: string): boolean {

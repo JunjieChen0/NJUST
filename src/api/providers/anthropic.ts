@@ -1,8 +1,8 @@
+import { resolveModelInfo } from "./resolveModelInfo"
 import { Anthropic } from "@anthropic-ai/sdk"
 import { Stream as AnthropicStream } from "@anthropic-ai/sdk/streaming"
 import { CacheControlEphemeral } from "@anthropic-ai/sdk/resources"
 
-import { type ModelInfo } from "@njust-ai/types"
 import {
 	type AnthropicModelId,
 	anthropicDefaultModelId,
@@ -389,8 +389,8 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 
 	getModel() {
 		const modelId = this.options.apiModelId
-		const id = modelId && modelId in anthropicModels ? (modelId as AnthropicModelId) : anthropicDefaultModelId
-		let info: ModelInfo = anthropicModels[id]
+		const id = modelId || anthropicDefaultModelId
+		let info = resolveModelInfo("anthropic", this.options, id, anthropicModels[id as AnthropicModelId])
 
 		// If 1M context beta is enabled for supported models, update the model info
 		if (

@@ -310,6 +310,14 @@ vi.mock("../../../api/providers/fetchers/modelCache", () => ({
 	flushModels: vi.fn(),
 	getModelsFromCache: vi.fn().mockReturnValue(undefined),
 	listProviderModels: vi.fn().mockResolvedValue({}),
+	resolveProviderCatalog: vi.fn().mockResolvedValue({
+		provider: "deepseek",
+		configFingerprint: "fixture",
+		source: "api",
+		stale: false,
+		models: {},
+	}),
+	refreshModels: vi.fn().mockResolvedValue({}),
 }))
 
 vi.mock("../../../shared/modes", () => ({
@@ -381,6 +389,14 @@ vi.mock("../../../api/providers/fetchers/modelCache", () => ({
 	flushModels: vi.fn(),
 	getModelsFromCache: vi.fn().mockReturnValue(undefined),
 	listProviderModels: vi.fn().mockResolvedValue({}),
+	resolveProviderCatalog: vi.fn().mockResolvedValue({
+		provider: "deepseek",
+		configFingerprint: "fixture",
+		source: "api",
+		stale: false,
+		models: {},
+	}),
+	refreshModels: vi.fn().mockResolvedValue({}),
 }))
 
 vi.mock("../diff/strategies/multi-search-replace", () => ({
@@ -2504,34 +2520,36 @@ describe("ClineProvider - Router Models", () => {
 		vi.mocked(listProviderModels).mockResolvedValue({})
 
 		// Verify response was sent
-		expect(mockPostMessage).toHaveBeenCalledWith({
-			type: "routerModels",
-			routerModels: {
-				openrouter: mockModels,
-				requesty: mockModels,
-				unbound: mockModels,
-				"njust-ai": mockModels,
-				litellm: mockModels,
-				ollama: {},
-				lmstudio: {},
-				"vercel-ai-gateway": mockModels,
-				deepseek: {},
-				gemini: {},
-				anthropic: {},
-				"openai-native": {},
-				mistral: {},
-				xai: {},
-				qwen: {},
-				moonshot: {},
-				glm: {},
-				minimax: {},
-				fireworks: {},
-				sambanova: {},
-				baseten: {},
-				doubao: {},
-			},
-			values: undefined,
-		})
+		expect(mockPostMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "routerModels",
+				routerModels: expect.objectContaining({
+					openrouter: mockModels,
+					requesty: mockModels,
+					unbound: mockModels,
+					"njust-ai": mockModels,
+					litellm: mockModels,
+					ollama: {},
+					lmstudio: {},
+					"vercel-ai-gateway": mockModels,
+					deepseek: {},
+					gemini: {},
+					anthropic: {},
+					"openai-native": {},
+					mistral: {},
+					xai: {},
+					qwen: {},
+					moonshot: {},
+					glm: {},
+					minimax: {},
+					fireworks: {},
+					sambanova: {},
+					baseten: {},
+					doubao: {},
+				}),
+				values: undefined,
+			}),
+		)
 	})
 
 	it("handles requestRouterModels with individual provider failures", async () => {
@@ -2567,34 +2585,36 @@ describe("ClineProvider - Router Models", () => {
 		vi.mocked(listProviderModels).mockResolvedValue({})
 
 		// Verify main response includes successful providers and empty objects for failed ones
-		expect(mockPostMessage).toHaveBeenCalledWith({
-			type: "routerModels",
-			routerModels: {
-				openrouter: mockModels,
-				requesty: {},
-				unbound: mockModels,
-				"njust-ai": mockModels,
-				ollama: {},
-				lmstudio: {},
-				litellm: {},
-				"vercel-ai-gateway": mockModels,
-				deepseek: {},
-				gemini: {},
-				anthropic: {},
-				"openai-native": {},
-				mistral: {},
-				xai: {},
-				qwen: {},
-				moonshot: {},
-				glm: {},
-				minimax: {},
-				fireworks: {},
-				sambanova: {},
-				baseten: {},
-				doubao: {},
-			},
-			values: undefined,
-		})
+		expect(mockPostMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "routerModels",
+				routerModels: expect.objectContaining({
+					openrouter: mockModels,
+					requesty: {},
+					unbound: mockModels,
+					"njust-ai": mockModels,
+					ollama: {},
+					lmstudio: {},
+					litellm: {},
+					"vercel-ai-gateway": mockModels,
+					deepseek: {},
+					gemini: {},
+					anthropic: {},
+					"openai-native": {},
+					mistral: {},
+					xai: {},
+					qwen: {},
+					moonshot: {},
+					glm: {},
+					minimax: {},
+					fireworks: {},
+					sambanova: {},
+					baseten: {},
+					doubao: {},
+				}),
+				values: undefined,
+			}),
+		)
 
 		// Verify error messages were sent for failed providers
 		expect(mockPostMessage).toHaveBeenCalledWith({
@@ -2678,34 +2698,36 @@ describe("ClineProvider - Router Models", () => {
 		vi.mocked(listProviderModels).mockResolvedValue({})
 
 		// Verify response includes empty object for LiteLLM
-		expect(mockPostMessage).toHaveBeenCalledWith({
-			type: "routerModels",
-			routerModels: {
-				openrouter: mockModels,
-				requesty: mockModels,
-				unbound: mockModels,
-				"njust-ai": mockModels,
-				litellm: {},
-				ollama: {},
-				lmstudio: {},
-				"vercel-ai-gateway": mockModels,
-				deepseek: {},
-				gemini: {},
-				anthropic: {},
-				"openai-native": {},
-				mistral: {},
-				xai: {},
-				qwen: {},
-				moonshot: {},
-				glm: {},
-				minimax: {},
-				fireworks: {},
-				sambanova: {},
-				baseten: {},
-				doubao: {},
-			},
-			values: undefined,
-		})
+		expect(mockPostMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "routerModels",
+				routerModels: expect.objectContaining({
+					openrouter: mockModels,
+					requesty: mockModels,
+					unbound: mockModels,
+					"njust-ai": mockModels,
+					litellm: {},
+					ollama: {},
+					lmstudio: {},
+					"vercel-ai-gateway": mockModels,
+					deepseek: {},
+					gemini: {},
+					anthropic: {},
+					"openai-native": {},
+					mistral: {},
+					xai: {},
+					qwen: {},
+					moonshot: {},
+					glm: {},
+					minimax: {},
+					fireworks: {},
+					sambanova: {},
+					baseten: {},
+					doubao: {},
+				}),
+				values: undefined,
+			}),
+		)
 	})
 
 	it("handles requestLmStudioModels with proper response", async () => {

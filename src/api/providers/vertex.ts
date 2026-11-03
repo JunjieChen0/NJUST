@@ -7,6 +7,7 @@ import { getModelParams } from "../transform/model-params"
 
 import { GeminiHandler } from "./gemini"
 import { SingleCompletionHandler } from "../types"
+import { unknownModelInfo } from "./resolveModelInfo"
 
 export class VertexHandler extends GeminiHandler implements SingleCompletionHandler {
 	constructor(options: ApiHandlerOptions) {
@@ -15,8 +16,8 @@ export class VertexHandler extends GeminiHandler implements SingleCompletionHand
 
 	override getModel() {
 		const modelId = this.options.apiModelId
-		const id = modelId && modelId in vertexModels ? (modelId as VertexModelId) : vertexDefaultModelId
-		let info: ModelInfo = vertexModels[id]
+		const id = modelId || vertexDefaultModelId
+		let info: ModelInfo = vertexModels[id as VertexModelId] ?? unknownModelInfo
 		const params = getModelParams({
 			format: "gemini",
 			modelId: id,

@@ -1,16 +1,14 @@
 import { useState, useCallback, useEffect } from "react"
-import { useEvent } from "react-use"
 import { Checkbox } from "vscrui"
 import { VSCodeButton, VSCodeTextField } from "@vscode/webview-ui-toolkit/react"
 
 import {
 	type ProviderSettings,
-	type ModelInfo,
+	unknownCatalogModelInfo,
 	type ReasoningEffort,
 	type OrganizationAllowList,
-	type ExtensionMessage,
 } from "@njust-ai/types"
-import { azureOpenAiDefaultApiVersion, openAiModelInfoSaneDefaults } from "@njust-ai/core/providers"
+import { azureOpenAiDefaultApiVersion } from "@njust-ai/core/providers"
 
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { Button, StandardTooltip } from "@src/components/ui"
@@ -18,6 +16,9 @@ import { Button, StandardTooltip } from "@src/components/ui"
 import { convertHeadersToObject } from "../utils/headers"
 import { inputEventTransform, noTransform } from "../transforms"
 import { ModelPicker } from "../ModelPicker"
+import { useSelectedModel } from "@src/components/ui/hooks/useSelectedModel"
+import { ModelCatalogStatusView } from "../ModelCatalogStatusView"
+import { useRouterModels } from "@src/components/ui/hooks/useRouterModels"
 import { R1FormatSetting } from "../R1FormatSetting"
 import { ThinkingBudget } from "../ThinkingBudget"
 
@@ -44,7 +45,13 @@ export const OpenAICompatible = ({
 
 	const [azureApiVersionSelected, setAzureApiVersionSelected] = useState(!!apiConfiguration?.azureApiVersion)
 
-	const [openAiModels, setOpenAiModels] = useState<Record<string, ModelInfo> | null>(null)
+	const { data, catalog, isFetching, isLoading, isError, refetch } = useRouterModels({
+		provider: "openai",
+		configuration: apiConfiguration,
+	})
+	const openAiModels = data?.openai ?? null
+	const { info: selectedModelInfo } = useSelectedModel(apiConfiguration)
+	const defaultModelInfo = selectedModelInfo ?? unknownCatalogModelInfo
 
 	const [customHeaders, setCustomHeaders] = useState<[string, string][]>(() => {
 		const headers = apiConfiguration?.openAiHeaders || {}
@@ -108,20 +115,6 @@ export const OpenAICompatible = ({
 		[setApiConfigurationField],
 	)
 
-	const onMessage = useCallback((event: MessageEvent) => {
-		const message: ExtensionMessage = event.data
-
-		switch (message.type) {
-			case "openAiModels": {
-				const updatedModels = message.openAiModels ?? []
-				setOpenAiModels(Object.fromEntries(updatedModels.map((item) => [item, openAiModelInfoSaneDefaults])))
-				break
-			}
-		}
-	}, [])
-
-	useEvent("message", onMessage)
-
 	return (
 		<>
 			<VSCodeTextField
@@ -140,10 +133,17 @@ export const OpenAICompatible = ({
 				className="w-full">
 				<label className="block font-medium mb-1">{t("settings:providers.apiKey")}</label>
 			</VSCodeTextField>
+			<ModelCatalogStatusView
+				catalog={catalog}
+				loading={isFetching || isLoading}
+				failed={isError}
+				onRefresh={() => void refetch()}
+			/>
 			<ModelPicker
 				apiConfiguration={apiConfiguration}
 				setApiConfigurationField={setApiConfigurationField}
 				defaultModelId="gpt-4o"
+				showDirectModelIdInput
 				models={openAiModels}
 				modelIdKey="openAiModelId"
 				serviceName="OpenAI"
@@ -245,7 +245,7 @@ export const OpenAICompatible = ({
 
 						if (!checked) {
 							const { reasoningEffort: _, ...openAiCustomModelInfo } =
-								apiConfiguration.openAiCustomModelInfo || openAiModelInfoSaneDefaults
+								apiConfiguration.openAiCustomModelInfo || defaultModelInfo
 
 							setApiConfigurationField("openAiCustomModelInfo", openAiCustomModelInfo)
 						}
@@ -260,8 +260,7 @@ export const OpenAICompatible = ({
 						}}
 						setApiConfigurationField={(field, value) => {
 							if (field === "reasoningEffort") {
-								const openAiCustomModelInfo =
-									apiConfiguration.openAiCustomModelInfo || openAiModelInfoSaneDefaults
+								const openAiCustomModelInfo = apiConfiguration.openAiCustomModelInfo || defaultModelInfo
 
 								setApiConfigurationField("openAiCustomModelInfo", {
 									...openAiCustomModelInfo,
@@ -270,7 +269,7 @@ export const OpenAICompatible = ({
 							}
 						}}
 						modelInfo={{
-							...(apiConfiguration.openAiCustomModelInfo || openAiModelInfoSaneDefaults),
+							...(apiConfiguration.openAiCustomModelInfo || defaultModelInfo),
 							supportsReasoningEffort: ["low", "medium", "high", "xhigh"],
 						}}
 					/>
@@ -285,7 +284,7 @@ export const OpenAICompatible = ({
 					<VSCodeTextField
 						value={
 							apiConfiguration?.openAiCustomModelInfo?.maxTokens?.toString() ||
-							openAiModelInfoSaneDefaults.maxTokens?.toString() ||
+							defaultModelInfo.maxTokens?.toString() ||
 							""
 						}
 						type="text"
@@ -304,7 +303,7 @@ export const OpenAICompatible = ({
 							const value = parseInt((e.target as HTMLInputElement).value)
 
 							return {
-								...(apiConfiguration?.openAiCustomModelInfo || openAiModelInfoSaneDefaults),
+								...(apiConfiguration?.openAiCustomModelInfo || defaultModelInfo),
 								maxTokens: isNaN(value) ? undefined : value,
 							}
 						})}
@@ -323,7 +322,7 @@ export const OpenAICompatible = ({
 					<VSCodeTextField
 						value={
 							apiConfiguration?.openAiCustomModelInfo?.contextWindow?.toString() ||
-							openAiModelInfoSaneDefaults.contextWindow?.toString() ||
+							defaultModelInfo.contextWindow?.toString() ||
 							""
 						}
 						type="text"
@@ -343,8 +342,8 @@ export const OpenAICompatible = ({
 							const parsed = parseInt(value)
 
 							return {
-								...(apiConfiguration?.openAiCustomModelInfo || openAiModelInfoSaneDefaults),
-								contextWindow: isNaN(parsed) ? openAiModelInfoSaneDefaults.contextWindow : parsed,
+								...(apiConfiguration?.openAiCustomModelInfo || defaultModelInfo),
+								contextWindow: isNaN(parsed) ? defaultModelInfo.contextWindow : parsed,
 							}
 						})}
 						placeholder={t("settings:placeholders.numbers.contextWindow")}
@@ -363,11 +362,11 @@ export const OpenAICompatible = ({
 						<Checkbox
 							checked={
 								apiConfiguration?.openAiCustomModelInfo?.supportsImages ??
-								openAiModelInfoSaneDefaults.supportsImages
+								defaultModelInfo.supportsImages
 							}
 							onChange={handleInputChange("openAiCustomModelInfo", (checked) => {
 								return {
-									...(apiConfiguration?.openAiCustomModelInfo || openAiModelInfoSaneDefaults),
+									...(apiConfiguration?.openAiCustomModelInfo || defaultModelInfo),
 									supportsImages: checked,
 								}
 							})}>
@@ -393,7 +392,7 @@ export const OpenAICompatible = ({
 							checked={apiConfiguration?.openAiCustomModelInfo?.supportsPromptCache ?? false}
 							onChange={handleInputChange("openAiCustomModelInfo", (checked) => {
 								return {
-									...(apiConfiguration?.openAiCustomModelInfo || openAiModelInfoSaneDefaults),
+									...(apiConfiguration?.openAiCustomModelInfo || defaultModelInfo),
 									supportsPromptCache: checked,
 								}
 							})}>
@@ -415,7 +414,7 @@ export const OpenAICompatible = ({
 					<VSCodeTextField
 						value={
 							apiConfiguration?.openAiCustomModelInfo?.inputPrice?.toString() ??
-							openAiModelInfoSaneDefaults.inputPrice?.toString() ??
+							defaultModelInfo.inputPrice?.toString() ??
 							""
 						}
 						type="text"
@@ -435,8 +434,8 @@ export const OpenAICompatible = ({
 							const parsed = parseFloat(value)
 
 							return {
-								...(apiConfiguration?.openAiCustomModelInfo ?? openAiModelInfoSaneDefaults),
-								inputPrice: isNaN(parsed) ? openAiModelInfoSaneDefaults.inputPrice : parsed,
+								...(apiConfiguration?.openAiCustomModelInfo ?? defaultModelInfo),
+								inputPrice: isNaN(parsed) ? defaultModelInfo.inputPrice : parsed,
 							}
 						})}
 						placeholder={t("settings:placeholders.numbers.inputPrice")}
@@ -459,7 +458,7 @@ export const OpenAICompatible = ({
 					<VSCodeTextField
 						value={
 							apiConfiguration?.openAiCustomModelInfo?.outputPrice?.toString() ||
-							openAiModelInfoSaneDefaults.outputPrice?.toString() ||
+							defaultModelInfo.outputPrice?.toString() ||
 							""
 						}
 						type="text"
@@ -479,8 +478,8 @@ export const OpenAICompatible = ({
 							const parsed = parseFloat(value)
 
 							return {
-								...(apiConfiguration?.openAiCustomModelInfo || openAiModelInfoSaneDefaults),
-								outputPrice: isNaN(parsed) ? openAiModelInfoSaneDefaults.outputPrice : parsed,
+								...(apiConfiguration?.openAiCustomModelInfo || defaultModelInfo),
+								outputPrice: isNaN(parsed) ? defaultModelInfo.outputPrice : parsed,
 							}
 						})}
 						placeholder={t("settings:placeholders.numbers.outputPrice")}
@@ -523,7 +522,7 @@ export const OpenAICompatible = ({
 									const parsed = parseFloat(value)
 
 									return {
-										...(apiConfiguration?.openAiCustomModelInfo ?? openAiModelInfoSaneDefaults),
+										...(apiConfiguration?.openAiCustomModelInfo ?? defaultModelInfo),
 										cacheReadsPrice: isNaN(parsed) ? 0 : parsed,
 									}
 								})}
@@ -565,7 +564,7 @@ export const OpenAICompatible = ({
 									const parsed = parseFloat(value)
 
 									return {
-										...(apiConfiguration?.openAiCustomModelInfo ?? openAiModelInfoSaneDefaults),
+										...(apiConfiguration?.openAiCustomModelInfo ?? defaultModelInfo),
 										cacheWritesPrice: isNaN(parsed) ? 0 : parsed,
 									}
 								})}
@@ -590,7 +589,7 @@ export const OpenAICompatible = ({
 
 				<Button
 					variant="secondary"
-					onClick={() => setApiConfigurationField("openAiCustomModelInfo", openAiModelInfoSaneDefaults)}>
+					onClick={() => setApiConfigurationField("openAiCustomModelInfo", defaultModelInfo)}>
 					{t("settings:providers.customModel.resetDefaults")}
 				</Button>
 			</div>

@@ -72,6 +72,9 @@ export const modelInfoSchema = z.object({
 	maxTokens: z.number().nullish(),
 	maxThinkingTokens: z.number().nullish(),
 	contextWindow: z.number(),
+	metadataSource: z.enum(["api", "builtin", "estimated"]).optional(),
+	estimatedFields: z.array(z.string()).optional(),
+	pricingUnknown: z.boolean().optional(),
 	supportsImages: z.boolean().optional(),
 	supportsPromptCache: z.boolean(),
 	// Optional default prompt cache retention policy for providers that support it.
@@ -150,6 +153,7 @@ export type ModelInfo = z.infer<typeof modelInfoSchema>
 export type ModelRecord = Record<string, ModelInfo>
 
 export type RouterProvider =
+	| "openai"
 	| "openrouter"
 	| "vercel-ai-gateway"
 	| "litellm"
@@ -173,10 +177,46 @@ export type RouterProvider =
 	| "baseten"
 	| "doubao"
 	| "mimo"
+	| "mimo-token-plan"
 
 export type RouterModels = Partial<Record<RouterProvider, ModelRecord>>
 
+export interface ModelCatalogStatus {
+	configFingerprint: string
+	source: "api" | "disk-cache" | "stale-disk-cache" | "hardcoded-fallback" | "legacy-cache"
+	fetchedAt?: number
+	stale: boolean
+	refreshError?: "empty" | "unauthorized" | "unsupported" | "unavailable" | "invalid_response"
+}
+
+export const unknownCatalogModelInfo: ModelInfo = {
+	contextWindow: 16_384,
+	maxTokens: 1024,
+	supportsPromptCache: false,
+	metadataSource: "estimated",
+	estimatedFields: ["contextWindow", "maxTokens", "supportsPromptCache"],
+	pricingUnknown: true,
+}
+
+/** List APIs often omit metadata. Omitted facts never overwrite exact curated model data. */
+export function mergeCatalogModelInfo(builtin?: ModelInfo, dynamic?: ModelInfo): ModelInfo {
+	if (!dynamic) return builtin ?? unknownCatalogModelInfo
+	const facts = Object.fromEntries(
+		Object.entries(dynamic).filter(
+			([key, value]) => value !== undefined && key !== "source" && !dynamic.estimatedFields?.includes(key),
+		),
+	)
+	return {
+		...(builtin ?? unknownCatalogModelInfo),
+		...facts,
+		metadataSource: dynamic.metadataSource ?? "api",
+		estimatedFields: builtin ? [] : dynamic.estimatedFields,
+		pricingUnknown: builtin ? builtin.inputPrice === undefined || builtin.outputPrice === undefined : true,
+	}
+}
+
 export const routerModelProviders: readonly RouterProvider[] = [
+	"openai",
 	"openrouter",
 	"vercel-ai-gateway",
 	"litellm",
@@ -200,6 +240,7 @@ export const routerModelProviders: readonly RouterProvider[] = [
 	"baseten",
 	"doubao",
 	"mimo",
+	"mimo-token-plan",
 ]
 
 export const isRouterModelProvider = (value: string): value is RouterProvider =>

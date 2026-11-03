@@ -1,3 +1,4 @@
+import { resolveModelInfo } from "./resolveModelInfo"
 import {
 	mimoTokenPlanModels,
 	mimoTokenPlanDefaultModelId,
@@ -6,7 +7,6 @@ import {
 
 import type { ApiHandlerOptions } from "../../shared/api"
 
-import type { ApiStreamUsageChunk } from "../transform/stream"
 import { getModelParams } from "../transform/model-params"
 
 import { OpenAICompatibleHandler, type OpenAICompatibleConfig } from "./openai-compatible"
@@ -15,9 +15,12 @@ import { requireApiKey } from "../interfaces/api-key-validator"
 export class MimoTokenPlanHandler extends OpenAICompatibleHandler {
 	constructor(options: ApiHandlerOptions) {
 		const modelId = options.apiModelId ?? mimoTokenPlanDefaultModelId
-		const modelInfo =
-			mimoTokenPlanModels[modelId as keyof typeof mimoTokenPlanModels] ||
-			mimoTokenPlanModels[mimoTokenPlanDefaultModelId]
+		const modelInfo = resolveModelInfo(
+			"mimo-token-plan",
+			options,
+			modelId,
+			mimoTokenPlanModels[modelId as keyof typeof mimoTokenPlanModels],
+		)
 
 		const config: OpenAICompatibleConfig = {
 			providerName: "mimo-token-plan",
@@ -34,9 +37,12 @@ export class MimoTokenPlanHandler extends OpenAICompatibleHandler {
 
 	override getModel() {
 		const id = this.options.apiModelId ?? mimoTokenPlanDefaultModelId
-		const info =
-			mimoTokenPlanModels[id as keyof typeof mimoTokenPlanModels] ||
-			mimoTokenPlanModels[mimoTokenPlanDefaultModelId]
+		const info = resolveModelInfo(
+			"mimo-token-plan",
+			this.options,
+			id,
+			mimoTokenPlanModels[id as keyof typeof mimoTokenPlanModels],
+		)
 		const params = getModelParams({
 			format: "openai",
 			modelId: id,
@@ -47,26 +53,8 @@ export class MimoTokenPlanHandler extends OpenAICompatibleHandler {
 		return { id, info, ...params }
 	}
 
-	protected override processUsageMetrics(usage: {
-		inputTokens?: number
-		outputTokens?: number
-		details?: {
-			cachedInputTokens?: number
-			reasoningTokens?: number
-		}
-		raw?: Record<string, unknown>
-	}): ApiStreamUsageChunk {
-		return {
-			type: "usage",
-			inputTokens: usage.inputTokens || 0,
-			outputTokens: usage.outputTokens || 0,
-			cacheReadTokens: usage.details?.cachedInputTokens,
-			reasoningTokens: usage.details?.reasoningTokens,
-		}
-	}
-
 	protected override getMaxOutputTokens(): number | undefined {
-		const modelInfo = this.config.modelInfo
+		const modelInfo = this.getModel().info
 		return this.options.modelMaxTokens || modelInfo.maxTokens || undefined
 	}
 }

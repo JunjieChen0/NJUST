@@ -1,3 +1,4 @@
+import { resolveModelInfo } from "./resolveModelInfo"
 import type { Anthropic } from "@anthropic-ai/sdk"
 import {
 	GoogleGenAI,
@@ -384,8 +385,8 @@ export class GeminiHandler extends BaseProvider implements SingleCompletionHandl
 
 	override getModel() {
 		const modelId = this.options.apiModelId
-		const id = modelId && modelId in geminiModels ? (modelId as GeminiModelId) : geminiDefaultModelId
-		let info: ModelInfo = geminiModels[id]
+		const id = modelId || geminiDefaultModelId
+		let info = resolveModelInfo("gemini", this.options, id, geminiModels[id as GeminiModelId])
 
 		const params = getModelParams({
 			format: "gemini",

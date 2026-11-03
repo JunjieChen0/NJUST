@@ -24,8 +24,21 @@ export function computeBackoffMs(attempt: number, options: ApiRetryOptions, retr
 	return Math.max(0, Math.round(exp + jitter))
 }
 
-export async function delayMs(ms: number): Promise<void> {
-	await new Promise((resolve) => setTimeout(resolve, ms))
+export async function delayMs(ms: number, signal?: AbortSignal): Promise<void> {
+	signal?.throwIfAborted()
+	await new Promise<void>((resolve, reject) => {
+		const finish = () => {
+			signal?.removeEventListener("abort", abort)
+			resolve()
+		}
+		const timer = setTimeout(finish, ms)
+		const abort = () => {
+			clearTimeout(timer)
+			signal?.removeEventListener("abort", abort)
+			reject(signal?.reason)
+		}
+		signal?.addEventListener("abort", abort, { once: true })
+	})
 }
 
 export type RetryAttemptInfo = {

@@ -8,6 +8,7 @@ import {
 	type ProviderName,
 	type ProviderSettings,
 	isRetiredProvider,
+	isRouterModelProvider,
 	DEFAULT_CONSECUTIVE_MISTAKE_LIMIT,
 } from "@njust-ai/types"
 import {
@@ -108,6 +109,7 @@ import {
 import { MODELS_BY_PROVIDER, PROVIDERS } from "./constants"
 import { inputEventTransform, noTransform } from "./transforms"
 import { ModelPicker } from "./ModelPicker"
+import { ModelCatalogStatusView } from "./ModelCatalogStatusView"
 import { ApiErrorMessage } from "./ApiErrorMessage"
 import { ThinkingBudget } from "./ThinkingBudget"
 import { Verbosity } from "./Verbosity"
@@ -198,7 +200,20 @@ const ApiOptions = ({
 	const isRetiredSelectedProvider =
 		typeof apiConfiguration.apiProvider === "string" && isRetiredProvider(apiConfiguration.apiProvider)
 
-	const { data: routerModels, refetch: refetchRouterModels } = useRouterModels()
+	const catalogProvider =
+		activeSelectedProvider && isRouterModelProvider(activeSelectedProvider) ? activeSelectedProvider : undefined
+	const {
+		data: routerModels,
+		refetch: refetchRouterModels,
+		catalog,
+		isFetching: isCatalogFetching,
+		isLoading: isCatalogLoading,
+		isError: isCatalogError,
+	} = useRouterModels({
+		provider: catalogProvider,
+		enabled: Boolean(catalogProvider),
+		configuration: apiConfiguration,
+	})
 
 	const { data: openRouterModelProviders } = useOpenRouterModelProviders(
 		apiConfiguration?.openRouterModelId,
@@ -212,37 +227,9 @@ const ApiOptions = ({
 		},
 	)
 
-	// Update `apiModelId` whenever `selectedModelId` changes.
-	useEffect(() => {
-		if (isRetiredSelectedProvider) {
-			return
-		}
-
-		if (selectedModelId && apiConfiguration.apiModelId !== selectedModelId) {
-			// Pass false as third parameter to indicate this is not a user action
-			// This is an internal sync, not a user-initiated change
-			setApiConfigurationField("apiModelId", selectedModelId, false)
-		}
-	}, [selectedModelId, setApiConfigurationField, apiConfiguration.apiModelId, isRetiredSelectedProvider])
-
-	// Debounced refresh model updates, only executed 250ms after the user
-	// stops typing.
 	useDebounce(
 		() => {
-			if (selectedProvider === "openai") {
-				// Use our custom headers state to build the headers object.
-				const headerObject = convertHeadersToObject(customHeaders)
-
-				vscode.postMessage({
-					type: "requestOpenAiModels",
-					values: {
-						baseUrl: apiConfiguration?.openAiBaseUrl,
-						apiKey: apiConfiguration?.openAiApiKey,
-						customHeaders: {}, // Reserved for any additional headers.
-						openAiHeaders: headerObject,
-					},
-				})
-			} else if (selectedProvider === "ollama") {
+			if (selectedProvider === "ollama") {
 				vscode.postMessage({ type: "requestOllamaModels" })
 			} else if (selectedProvider === "lmstudio") {
 				vscode.postMessage({ type: "requestLmStudioModels" })
@@ -282,6 +269,7 @@ const ApiOptions = ({
 
 	const onProviderChange = useCallback(
 		(value: ProviderName) => {
+			if (value === apiConfiguration.apiProvider) return
 			setApiConfigurationField("apiProvider", value)
 
 			// It would be much easier to have a single attribute that stores
@@ -518,6 +506,14 @@ const ApiOptions = ({
 				</div>
 			) : (
 				<>
+					{catalogProvider && catalogProvider !== "openai" && (
+						<ModelCatalogStatusView
+							catalog={catalog}
+							loading={isCatalogFetching || isCatalogLoading}
+							failed={isCatalogError}
+							onRefresh={() => void refetchRouterModels()}
+						/>
+					)}
 					{selectedProvider === "openrouter" && (
 						<OpenRouter
 							apiConfiguration={apiConfiguration}
@@ -537,7 +533,6 @@ const ApiOptions = ({
 							apiConfiguration={apiConfiguration}
 							setApiConfigurationField={setApiConfigurationField}
 							routerModels={routerModels}
-							refetchRouterModels={refetchRouterModels}
 							organizationAllowList={organizationAllowList}
 							modelValidationError={modelValidationError}
 							simplifySettings={fromWelcomeView}
@@ -549,7 +544,6 @@ const ApiOptions = ({
 							apiConfiguration={apiConfiguration}
 							setApiConfigurationField={setApiConfigurationField}
 							routerModels={routerModels}
-							refetchRouterModels={refetchRouterModels}
 							organizationAllowList={organizationAllowList}
 							modelValidationError={modelValidationError}
 							simplifySettings={fromWelcomeView}
@@ -784,7 +778,7 @@ const ApiOptions = ({
 								organizationAllowList={organizationAllowList}
 								errorMessage={modelValidationError}
 								simplifySettings={fromWelcomeView}
-								showDirectModelIdInput={activeSelectedProvider === "doubao"}
+								showDirectModelIdInput={Boolean(catalogProvider)}
 								onModelChange={(modelId) =>
 									handleModelChangeSideEffects(
 										activeSelectedProvider,

@@ -1,3 +1,4 @@
+import { resolveModelInfo } from "./resolveModelInfo"
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI from "openai"
 
@@ -48,7 +49,7 @@ export class DeepSeekHandler extends OpenAiHandler {
 
 	override getModel() {
 		const id = this.options.apiModelId ?? deepSeekDefaultModelId
-		const info = deepSeekModels[id as keyof typeof deepSeekModels] || deepSeekModels[deepSeekDefaultModelId]
+		const info = resolveModelInfo("deepseek", this.options, id, deepSeekModels[id as keyof typeof deepSeekModels])
 		const params = getModelParams({
 			format: "openai",
 			modelId: id,

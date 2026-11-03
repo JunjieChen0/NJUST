@@ -43,7 +43,7 @@ import type { ModelRecord, ExtensionMessage, Command } from "@njust-ai/types"
 
 import { webviewMessageHandler } from "../webviewMessageHandler"
 import type { ClineProvider } from "../ClineProvider"
-import { getModels } from "../../../api/providers/fetchers/modelCache"
+import { getModels, resolveProviderCatalog } from "../../../api/providers/fetchers/modelCache"
 import { getCommands } from "../../../services/command/commands"
 const { openAiCodexOAuthManager } = await import("../../../integrations/openai-codex/oauth")
 const { fetchOpenAiCodexRateLimitInfo } = await import("../../../integrations/openai-codex/rate-limits")
@@ -286,6 +286,13 @@ describe("webviewMessageHandler - requestOllamaModels", () => {
 describe("webviewMessageHandler - requestRouterModels", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.mocked(resolveProviderCatalog).mockResolvedValue({
+			provider: "deepseek",
+			configFingerprint: "fixture",
+			source: "api",
+			stale: false,
+			models: {},
+		})
 		mockClineProvider.getState = vi.fn().mockResolvedValue({
 			apiConfiguration: {
 				openRouterApiKey: "openrouter-key",
@@ -340,20 +347,22 @@ describe("webviewMessageHandler - requestRouterModels", () => {
 		})
 
 		// Verify response was sent
-		expect(mockClineProvider.postMessageToWebview).toHaveBeenCalledWith({
-			type: "routerModels",
-			routerModels: {
-				openrouter: mockModels,
-				requesty: mockModels,
-				unbound: mockModels,
-				litellm: mockModels,
-				"njust-ai": mockModels,
-				ollama: {},
-				lmstudio: {},
-				"vercel-ai-gateway": mockModels,
-			},
-			values: undefined,
-		})
+		expect(mockClineProvider.postMessageToWebview).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "routerModels",
+				routerModels: expect.objectContaining({
+					openrouter: mockModels,
+					requesty: mockModels,
+					unbound: mockModels,
+					litellm: mockModels,
+					"njust-ai": mockModels,
+					ollama: {},
+					lmstudio: {},
+					"vercel-ai-gateway": mockModels,
+				}),
+				values: undefined,
+			}),
+		)
 	})
 
 	it("handles LiteLLM models with values from message when config is missing", async () => {
@@ -425,20 +434,22 @@ describe("webviewMessageHandler - requestRouterModels", () => {
 		)
 
 		// Verify response includes empty object for LiteLLM
-		expect(mockClineProvider.postMessageToWebview).toHaveBeenCalledWith({
-			type: "routerModels",
-			routerModels: {
-				openrouter: mockModels,
-				requesty: mockModels,
-				unbound: mockModels,
-				"njust-ai": mockModels,
-				litellm: {},
-				ollama: {},
-				lmstudio: {},
-				"vercel-ai-gateway": mockModels,
-			},
-			values: undefined,
-		})
+		expect(mockClineProvider.postMessageToWebview).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "routerModels",
+				routerModels: expect.objectContaining({
+					openrouter: mockModels,
+					requesty: mockModels,
+					unbound: mockModels,
+					"njust-ai": mockModels,
+					litellm: {},
+					ollama: {},
+					lmstudio: {},
+					"vercel-ai-gateway": mockModels,
+				}),
+				values: undefined,
+			}),
+		)
 	})
 
 	it("handles individual provider failures gracefully", async () => {
@@ -480,20 +491,22 @@ describe("webviewMessageHandler - requestRouterModels", () => {
 		})
 
 		// Verify final routerModels response includes successful providers and empty objects for failed ones
-		expect(mockClineProvider.postMessageToWebview).toHaveBeenCalledWith({
-			type: "routerModels",
-			routerModels: {
-				openrouter: mockModels,
-				requesty: {},
-				unbound: mockModels,
-				"njust-ai": mockModels,
-				litellm: {},
-				ollama: {},
-				lmstudio: {},
-				"vercel-ai-gateway": mockModels,
-			},
-			values: undefined,
-		})
+		expect(mockClineProvider.postMessageToWebview).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "routerModels",
+				routerModels: expect.objectContaining({
+					openrouter: mockModels,
+					requesty: {},
+					unbound: mockModels,
+					"njust-ai": mockModels,
+					litellm: {},
+					ollama: {},
+					lmstudio: {},
+					"vercel-ai-gateway": mockModels,
+				}),
+				values: undefined,
+			}),
+		)
 	})
 
 	it("handles Error objects and string errors correctly", async () => {

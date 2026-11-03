@@ -1,4 +1,25 @@
 {
+	"modelCatalog": {
+		"imagesUnknown": "Image support is unknown.",
+		"cacheUnknown": "Prompt caching support is unknown.",
+		"loading": "Loading model catalog…",
+		"fresh": "Model catalog refreshed",
+		"cached": "Using a cached catalog",
+		"stale": "Using an older catalog; freshness is unconfirmed",
+		"builtin": "Using built-in models",
+		"failed": "Refresh failed; any previous catalog is retained",
+		"unsupported": "Automatic listing is unavailable. Enter a model ID from your provider.",
+		"refresh": "Refresh models",
+		"fetchedAt": "Last fetched: {{time}}",
+		"estimated": "Some model limits or capabilities are unknown; estimates are shown.",
+		"pricingUnknown": "Pricing is unknown; this does not mean the model is free.",
+		"errors": {
+			"empty": "The provider returned no models.",
+			"unauthorized": "The model-list request was denied. Check credentials and access permissions.",
+			"unavailable": "The model catalog is unavailable. Check the endpoint and network.",
+			"invalid_response": "The provider returned an invalid or incomplete catalog."
+		}
+	},
 	"back": "Back to tasks view",
 	"common": {
 		"save": "Save",

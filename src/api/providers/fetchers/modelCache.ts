@@ -27,10 +27,11 @@ import { getLMStudioModels } from "./lmstudio"
 import { getRooModels } from "./njust-ai"
 import { TIMING } from "../../../shared/constants"
 
-import type { DynamicModelInfo, DynamicModelRecord, ListModelsOptions, FetcherKind } from "../modelTypes"
+import type { DynamicModelInfo, DynamicModelRecord, ListModelsOptions, ModelCatalogResult } from "../modelTypes"
 import { providerFetcherMap } from "../providerFetcherMap"
 import { fallbackModels } from "../fallbackModels"
-import { fetchOpenAICompatibleModels } from "./openai-compatible"
+import { modelCatalogIdentity } from "../modelCatalogIdentity"
+import { fetchOpenAICompatibleModels, resolveOpenAIModelOptions } from "./openai-compatible"
 import { fetchAnthropicModels } from "./anthropic"
 import { fetchGeminiModels } from "./gemini"
 
@@ -46,15 +47,23 @@ const diskCacheEntrySchema = z.object({
 
 // Track in-flight refresh requests to prevent concurrent API calls for the same provider
 // This prevents race conditions where multiple calls might overwrite each other's results
-const inFlightRefresh = new Map<RouterName, Promise<ModelRecord>>()
+const inFlightRefresh = new Map<string, Promise<ModelRecord>>()
 
-async function writeModels(router: RouterName, data: ModelRecord) {
+function legacyCacheKey(options: { provider: ProviderName; apiKey?: string; baseUrl?: string }): string {
+	const connection =
+		options.provider === "njust-ai" ? { ...options, baseUrl: options.baseUrl?.replace(/\/?v1\/?$/, "") } : options
+	return options.provider === "openrouter" || options.provider === "vercel-ai-gateway"
+		? options.provider
+		: modelCatalogIdentity(options.provider, connection)
+}
+
+async function writeModels(router: RouterName, data: ModelRecord, key: string) {
 	const basePath = getModelCacheStore()?.globalStorageUri.fsPath
 	if (!basePath) {
 		logger.debug("ModelCache", `Skipping ${router} model write: cacheStore not initialized`)
 		return
 	}
-	const filename = `${router}_models.json`
+	const filename = `${key}_models.json`
 	const cacheDir = await getCacheDirectoryPath(basePath)
 	await safeWriteJson(path.join(cacheDir, filename), data)
 }
@@ -141,7 +150,7 @@ async function fetchModelsFromProvider(options: GetModelsOptions): Promise<Model
 export const getModels = async (options: GetModelsOptions): Promise<ModelRecord> => {
 	const { provider } = options
 
-	let models = getModelsFromCache(provider)
+	let models = getModelsFromCache(provider, options)
 
 	if (models) {
 		return models
@@ -154,9 +163,9 @@ export const getModels = async (options: GetModelsOptions): Promise<ModelRecord>
 		// Only cache non-empty results to prevent persisting failed API responses
 		// Empty results could indicate API failure rather than "no models exist"
 		if (modelCount > 0) {
-			memoryCache.set(provider, models)
+			memoryCache.set(legacyCacheKey(options), models)
 
-			await writeModels(provider, models).catch((err) =>
+			await writeModels(provider, models, legacyCacheKey(options)).catch((err) =>
 				logger.error("ModelCache", `Error writing ${provider} models to file cache:`, err),
 			)
 		} else {
@@ -187,7 +196,7 @@ export const refreshModels = async (options: GetModelsOptions): Promise<ModelRec
 	// Check if there's already an in-flight refresh for this provider
 	// This prevents race conditions where multiple concurrent refreshes might
 	// overwrite each other's results
-	const existingRequest = inFlightRefresh.get(provider)
+	const existingRequest = inFlightRefresh.get(legacyCacheKey(options))
 	if (existingRequest) {
 		return existingRequest
 	}
@@ -200,7 +209,7 @@ export const refreshModels = async (options: GetModelsOptions): Promise<ModelRec
 			const modelCount = Object.keys(models).length
 
 			// Get existing cached data for comparison
-			const existingCache = getModelsFromCache(provider)
+			const existingCache = getModelsFromCache(provider, options)
 			const existingCount = existingCache ? Object.keys(existingCache).length : 0
 
 			if (modelCount === 0) {
@@ -212,10 +221,10 @@ export const refreshModels = async (options: GetModelsOptions): Promise<ModelRec
 			}
 
 			// Update memory cache first
-			memoryCache.set(provider, models)
+			memoryCache.set(legacyCacheKey(options), models)
 
 			// Atomically write to disk (safeWriteJson handles atomic writes)
-			await writeModels(provider, models).catch((err) =>
+			await writeModels(provider, models, legacyCacheKey(options)).catch((err) =>
 				logger.error("ModelCache", `Error writing ${provider} models to disk:`, err),
 			)
 
@@ -223,15 +232,15 @@ export const refreshModels = async (options: GetModelsOptions): Promise<ModelRec
 		} catch (error) {
 			// Log the error for debugging, then return existing cache if available (graceful degradation)
 			logger.error("ModelCache", `Failed to refresh ${provider} models:`, error)
-			return getModelsFromCache(provider) || {}
+			return getModelsFromCache(provider, options) || {}
 		} finally {
 			// Always clean up the in-flight tracking
-			inFlightRefresh.delete(provider)
+			inFlightRefresh.delete(legacyCacheKey(options))
 		}
 	})()
 
 	// Track the in-flight request
-	inFlightRefresh.set(provider, refreshPromise)
+	inFlightRefresh.set(legacyCacheKey(options), refreshPromise)
 
 	return refreshPromise
 }
@@ -269,7 +278,6 @@ export function initializeModelCacheRefresh(): void {
  * @param refresh - If true, immediately fetch fresh data from API
  */
 export const flushModels = async (options: GetModelsOptions, refresh: boolean = false): Promise<void> => {
-	const { provider } = options
 	if (refresh) {
 		// Don't delete memory cache - let refreshModels atomically replace it
 		// This prevents a race condition where getModels() might be called
@@ -278,7 +286,7 @@ export const flushModels = async (options: GetModelsOptions, refresh: boolean = 
 		await refreshModels(options)
 	} else {
 		// Only delete memory cache when not refreshing
-		memoryCache.del(provider)
+		memoryCache.del(legacyCacheKey(options))
 	}
 }
 
@@ -290,9 +298,13 @@ export const flushModels = async (options: GetModelsOptions, refresh: boolean = 
  * @param provider - The provider to get models for.
  * @returns Models from memory cache, disk cache, or undefined if not cached.
  */
-export function getModelsFromCache(provider: ProviderName): ModelRecord | undefined {
+export function getModelsFromCache(
+	provider: ProviderName,
+	options: { apiKey?: string; baseUrl?: string } = {},
+): ModelRecord | undefined {
+	const key = legacyCacheKey({ provider, ...options })
 	// Check memory cache first (fast)
-	const memoryModels = memoryCache.get<ModelRecord>(provider)
+	const memoryModels = memoryCache.get<ModelRecord>(key)
 	if (memoryModels) {
 		return memoryModels
 	}
@@ -300,7 +312,7 @@ export function getModelsFromCache(provider: ProviderName): ModelRecord | undefi
 	// Memory cache miss - try to load from disk synchronously
 	// This is acceptable because it only happens on cold start or after cache expiry
 	try {
-		const filename = `${provider}_models.json`
+		const filename = `${key}_models.json`
 		const cacheDir = getCacheDirectoryPathSync()
 		if (!cacheDir) {
 			return undefined
@@ -326,7 +338,7 @@ export function getModelsFromCache(provider: ProviderName): ModelRecord | undefi
 			}
 
 			// Populate memory cache for future fast access
-			memoryCache.set(provider, validation.data)
+			memoryCache.set(key, validation.data)
 
 			return validation.data
 		}
@@ -355,83 +367,79 @@ function getCacheDirectoryPathSync(): string | undefined {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Dynamic model fetching (Step 1-7: core module)
-// ---------------------------------------------------------------------------
+// Dynamic catalogs are scoped to the effective endpoint and authentication identity.
+const DISK_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const dynamicMemoryCache = new NodeCache({ stdTTL: DISK_CACHE_TTL_MS / 1000, checkperiod: TIMING.MODEL_CACHE_TTL_S })
+const dynamicInFlight = new Map<string, Promise<ModelCatalogResult>>()
 
-const DISK_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
-
-const dynamicMemoryCache = new NodeCache({
-	stdTTL: TIMING.MODEL_CACHE_TTL_S,
-	checkperiod: TIMING.MODEL_CACHE_TTL_S,
-})
-
-const dynamicInFlight = new Map<ProviderName, Promise<DynamicModelRecord>>()
-
-function getDynamicDiskCachePath(provider: ProviderName): string | undefined {
-	const cacheDir = getCacheDirectoryPathSync()
-	if (!cacheDir) return undefined
-	return path.join(cacheDir, `dynamic_${provider}_models.json`)
+function resolveCatalogOptions(provider: ProviderName, options: ListModelsOptions): ListModelsOptions {
+	if (providerFetcherMap[provider] === "openai-compatible") return resolveOpenAIModelOptions(provider, options)
+	if (provider === "anthropic")
+		return {
+			...options,
+			apiKey: options.apiKey ?? process.env.ANTHROPIC_API_KEY,
+			baseUrl: options.baseUrl || "https://api.anthropic.com/v1",
+		}
+	if (provider === "gemini")
+		return {
+			...options,
+			apiKey: options.apiKey ?? process.env.GEMINI_API_KEY,
+			baseUrl: options.baseUrl || "https://generativelanguage.googleapis.com/v1beta",
+		}
+	if (provider === "minimax")
+		return {
+			...options,
+			apiKey: options.apiKey ?? process.env.MINIMAX_API_KEY,
+			baseUrl: options.baseUrl || "https://api.minimax.io/anthropic/v1",
+		}
+	return options
 }
 
-interface DiskCacheEntry {
-	timestamp: number
-	models: DynamicModelRecord
+function dynamicDiskPath(key: string): string | undefined {
+	const dir = getCacheDirectoryPathSync()
+	return dir ? path.join(dir, "catalog_" + key + ".json") : undefined
 }
 
-function readDynamicDiskCache(provider: ProviderName): DiskCacheEntry | undefined {
-	const filePath = getDynamicDiskCachePath(provider)
-	if (!filePath) return undefined
-	const exists = fsSync.existsSync(filePath)
-	if (!exists) return undefined
-
+function readCatalog(provider: ProviderName, key: string): ModelCatalogResult | undefined {
+	const memory = dynamicMemoryCache.get<ModelCatalogResult>(key)
+	if (memory) return memory
+	const file = dynamicDiskPath(key)
+	if (!file || !fsSync.existsSync(file)) return undefined
 	try {
-		const raw = fsSync.readFileSync(filePath, "utf8")
-		const parsed = JSON.parse(raw)
-		const validation = diskCacheEntrySchema.safeParse(parsed)
-		if (!validation.success) {
-			logger.error("ModelCache", `Invalid dynamic disk cache for ${provider}:`, z.treeifyError(validation.error))
-			return undefined
+		const parsed = JSON.parse(fsSync.readFileSync(file, "utf8"))
+		if (parsed.configFingerprint !== key || parsed.provider !== provider) return undefined
+		const entry = diskCacheEntrySchema.parse(parsed)
+		const stale = Date.now() - entry.timestamp >= DISK_CACHE_TTL_MS
+		const result: ModelCatalogResult = {
+			provider,
+			configFingerprint: key,
+			models: tagModels(entry.models, stale ? "stale-disk-cache" : "disk-cache"),
+			source: stale ? "stale-disk-cache" : "disk-cache",
+			fetchedAt: entry.timestamp,
+			stale,
 		}
-		const entry: DiskCacheEntry = {
-			timestamp: validation.data.timestamp,
-			models: validation.data.models as DynamicModelRecord,
-		}
-		return entry
+		dynamicMemoryCache.set(key, result)
+		return result
 	} catch (error) {
-		logger.error("ModelCache", `Error reading dynamic disk cache for ${provider}:`, error)
+		logger.debug("ModelCache", "Could not read scoped model catalog", error)
 		return undefined
 	}
 }
 
-async function writeDynamicDiskCache(provider: ProviderName, models: DynamicModelRecord): Promise<void> {
-	const cacheDir = getCacheDirectoryPathSync()
-	if (!cacheDir) return
-
-	const filePath = path.join(cacheDir, `dynamic_${provider}_models.json`)
-	const entry: DiskCacheEntry = { timestamp: Date.now(), models }
-
-	await safeWriteJson(filePath, entry).catch((err) =>
-		logger.error("ModelCache", `Error writing dynamic disk cache for ${provider}:`, err),
-	)
+function tagModels(models: ModelRecord, source: DynamicModelInfo["source"]): DynamicModelRecord {
+	return Object.fromEntries(Object.entries(models).map(([id, info]) => [id, { ...info, source }]))
 }
 
-function isCacheFresh(timestamp: number): boolean {
-	return Date.now() - timestamp < DISK_CACHE_TTL_MS
-}
-
-function tagWithSource(models: DynamicModelRecord, source: DynamicModelInfo["source"]): DynamicModelRecord {
-	const tagged: DynamicModelRecord = {}
-	for (const [id, info] of Object.entries(models)) {
-		tagged[id] = { ...info, source }
-	}
-	return tagged
+export function peekProviderCatalog(
+	provider: ProviderName,
+	options: ListModelsOptions = {},
+): ModelCatalogResult | undefined {
+	const resolved = resolveCatalogOptions(provider, options)
+	return readCatalog(provider, modelCatalogIdentity(provider, resolved))
 }
 
 async function fetchDynamicModels(provider: ProviderName, options: ListModelsOptions): Promise<DynamicModelRecord> {
-	const kind: FetcherKind | undefined = providerFetcherMap[provider]
-
-	switch (kind) {
+	switch (providerFetcherMap[provider]) {
 		case "openai-compatible":
 			return fetchOpenAICompatibleModels(provider, options)
 		case "anthropic":
@@ -439,77 +447,99 @@ async function fetchDynamicModels(provider: ProviderName, options: ListModelsOpt
 		case "gemini":
 			return fetchGeminiModels(options)
 		default:
-			throw new Error(`No dynamic fetcher for provider: ${provider} (kind: ${kind})`)
+			throw new Error("Model listing is unsupported for this provider")
 	}
+}
+
+export async function resolveProviderCatalog(
+	provider: ProviderName,
+	input: ListModelsOptions = {},
+): Promise<ModelCatalogResult> {
+	const options = resolveCatalogOptions(provider, input)
+	options.signal?.throwIfAborted()
+	const key = modelCatalogIdentity(provider, options)
+	const kind = providerFetcherMap[provider]
+	const fallback = (refreshError: ModelCatalogResult["refreshError"]): ModelCatalogResult => ({
+		provider,
+		configFingerprint: key,
+		models: fallbackModels[provider] ?? {},
+		source: "hardcoded-fallback",
+		stale: true,
+		refreshError,
+	})
+	if (!kind || kind === "fallback-only" || kind === "existing" || options.listingUnsupported)
+		return fallback("unsupported")
+	const cached = readCatalog(provider, key)
+	if (!options.forceRefresh && cached?.fetchedAt && Date.now() - cached.fetchedAt < TIMING.MODEL_CACHE_TTL_S * 1000)
+		return cached
+	// Cancellable callers own their request; cancelling one caller must not cancel another.
+	const existing = !options.signal ? dynamicInFlight.get(key) : undefined
+	if (existing) return existing
+	const pending = (async (): Promise<ModelCatalogResult> => {
+		try {
+			const models = modelRecordSchema.parse(await fetchDynamicModels(provider, options))
+			if (
+				Object.values(models).some(
+					(model) => model.contextWindow <= 0 || (model.maxTokens != null && model.maxTokens <= 0),
+				)
+			)
+				throw new SyntaxError("Invalid model limits")
+			options.signal?.throwIfAborted()
+			if (Object.keys(models).length === 0)
+				throw Object.assign(new Error("Empty model catalog"), { catalogError: "empty" })
+			const result: ModelCatalogResult = {
+				provider,
+				configFingerprint: key,
+				models: tagModels(models, "api"),
+				source: "api",
+				fetchedAt: Date.now(),
+				stale: false,
+			}
+			dynamicMemoryCache.set(key, result)
+			const file = dynamicDiskPath(key)
+			if (file)
+				await safeWriteJson(file, {
+					provider,
+					configFingerprint: key,
+					timestamp: result.fetchedAt,
+					models: result.models,
+				}).catch((error) => logger.debug("ModelCache", "Could not persist scoped model catalog", error))
+			return result
+		} catch (error) {
+			options.signal?.throwIfAborted()
+			// Do not send provider error bodies (which can echo credentials) to the UI or logs.
+			const details = error as { status?: number; catalogError?: ModelCatalogResult["refreshError"] }
+			const reason =
+				details.catalogError ??
+				(details.status === 401 || details.status === 403
+					? "unauthorized"
+					: error instanceof SyntaxError || error instanceof z.ZodError
+						? "invalid_response"
+						: "unavailable")
+			logger.debug("ModelCache", "Model catalog refresh failed: " + reason)
+			const known = readCatalog(provider, key) ?? cached
+			const result: ModelCatalogResult = known
+				? {
+						...known,
+						models: tagModels(known.models, "stale-disk-cache"),
+						source: "stale-disk-cache",
+						stale: true,
+						refreshError: reason,
+					}
+				: fallback(reason)
+			if (known) dynamicMemoryCache.set(key, result)
+			return result
+		} finally {
+			if (!options.signal) dynamicInFlight.delete(key)
+		}
+	})()
+	if (!options.signal) dynamicInFlight.set(key, pending)
+	return pending
 }
 
 export async function listProviderModels(
 	provider: ProviderName,
 	options: ListModelsOptions = {},
 ): Promise<DynamicModelRecord> {
-	const kind: FetcherKind | undefined = providerFetcherMap[provider]
-
-	if (kind === "fallback-only" || !kind) {
-		return fallbackModels[provider] ?? {}
-	}
-
-	if (kind === "existing") {
-		return {}
-	}
-
-	if (!options.forceRefresh) {
-		const mem = dynamicMemoryCache.get<DynamicModelRecord>(provider)
-		if (mem) return mem
-
-		const disk = readDynamicDiskCache(provider)
-		if (disk && isCacheFresh(disk.timestamp)) {
-			const tagged = tagWithSource(disk.models, "disk-cache")
-			dynamicMemoryCache.set(provider, tagged)
-			return tagged
-		}
-	}
-
-	const existing = dynamicInFlight.get(provider)
-	if (existing) return existing
-
-	const promise = (async (): Promise<DynamicModelRecord> => {
-		try {
-			const fetched = await fetchDynamicModels(provider, options)
-			const count = Object.keys(fetched).length
-
-			if (count === 0) {
-				const disk = readDynamicDiskCache(provider)
-				if (disk) {
-					const source = isCacheFresh(disk.timestamp) ? "disk-cache" : "stale-disk-cache"
-					const tagged = tagWithSource(disk.models, source)
-					return tagged
-				}
-				return fallbackModels[provider] ?? {}
-			}
-
-			const tagged = tagWithSource(fetched, "api")
-			dynamicMemoryCache.set(provider, tagged)
-
-			await writeDynamicDiskCache(provider, tagged).catch((e) => {
-				logger.debug("ModelCache", `Failed to write dynamic disk cache for ${provider}:`, e)
-			})
-
-			return tagged
-		} catch (error) {
-			logger.error("ModelCache", `Dynamic fetch failed for ${provider}:`, error)
-
-			const disk = readDynamicDiskCache(provider)
-			if (disk) {
-				const tagged = tagWithSource(disk.models, "stale-disk-cache")
-				return tagged
-			}
-
-			return fallbackModels[provider] ?? {}
-		} finally {
-			dynamicInFlight.delete(provider)
-		}
-	})()
-
-	dynamicInFlight.set(provider, promise)
-	return promise
+	return (await resolveProviderCatalog(provider, options)).models
 }

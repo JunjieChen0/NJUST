@@ -13,6 +13,8 @@ export { _routerModelProviders as routerModelProviders, _isRouterModelProvider a
 // ApiHandlerOptions
 // Extend ProviderSettings (minus apiProvider) with handler-specific toggles.
 export type ApiHandlerOptions = Omit<ProviderSettings, "apiProvider"> & {
+	/** Fixed model metadata prepared before prompt construction; never persisted as profile settings. */
+	modelSnapshot?: { current?: { id: string; info: ModelInfo } }
 	/** Injected by {@link createHandler} in api/index (native tool-call parsing). */
 	toolCallParser?: import("../api/interfaces/IToolCallParser").IToolCallParser
 	/**
@@ -165,6 +167,7 @@ type CommonFetchParams = {
 // If a new dynamic provider is added in packages/types, this will fail to compile
 // until a corresponding entry is added here.
 const _dynamicProviderExtras = {
+	openai: {} as { apiKey?: string; baseUrl?: string },
 	openrouter: {} as {}, // eslint-disable-line @typescript-eslint/no-empty-object-type
 	"vercel-ai-gateway": {} as {}, // eslint-disable-line @typescript-eslint/no-empty-object-type
 	litellm: {} as { apiKey: string; baseUrl: string },
@@ -188,6 +191,7 @@ const _dynamicProviderExtras = {
 	baseten: {} as { apiKey?: string; baseUrl?: string },
 	doubao: {} as { apiKey?: string; baseUrl?: string },
 	mimo: {} as { apiKey?: string; baseUrl?: string },
+	"mimo-token-plan": {} as { apiKey?: string; baseUrl?: string },
 } as const satisfies Record<RouterName, object>
 
 // Build the dynamic options union from the map, intersected with CommonFetchParams

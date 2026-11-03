@@ -56,12 +56,16 @@ export const OpenAICodex: React.FC<OpenAICodexProps> = ({
 			<OpenAICodexRateLimitDashboard isAuthenticated={openAiCodexIsAuthenticated} />
 
 			{/* Model Picker */}
+			<p role="status" className="text-sm text-vscode-descriptionForeground">
+				{t("settings:modelCatalog.unsupported")}
+			</p>
 			<ModelPicker
 				apiConfiguration={apiConfiguration}
 				setApiConfigurationField={setApiConfigurationField}
 				defaultModelId={openAiCodexDefaultModelId}
 				models={openAiCodexModels}
 				modelIdKey="apiModelId"
+				showDirectModelIdInput
 				serviceName="OpenAI - ChatGPT Plus/Pro"
 				serviceUrl="https://chatgpt.com"
 				simplifySettings={simplifySettings}

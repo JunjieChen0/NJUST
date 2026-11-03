@@ -5,6 +5,7 @@ import type { ApiStream, ApiStreamChunk } from "../transform/stream"
 import { analyzeErrorForRetry, ApiErrorCategory } from "./ApiErrorClassifier"
 import { computeBackoffMs, delayMs, DEFAULT_API_RETRY_OPTIONS, type ApiRetryOptions } from "./ApiRetryStrategy"
 import { getApiEventBus } from "./event-bus"
+import { logger } from "../../shared/logger"
 
 export type RetryWrapperOptions = Partial<ApiRetryOptions>
 
@@ -23,6 +24,14 @@ export function isRetryWrapped(handler: object): boolean {
 	return retryWrappedHandlers.has(handler)
 }
 
+async function closeIterator(iterator?: AsyncIterator<ApiStreamChunk>): Promise<void> {
+	try {
+		await iterator?.return?.()
+	} catch (error) {
+		logger.debug("ApiRetryWrapper", "Could not close API stream", error)
+	}
+}
+
 /**
  * Wraps an AsyncGenerator so that failures on the *first* `next()` call
  * (the stream open / transport phase) are retried with exponential backoff.
@@ -31,27 +40,25 @@ export function isRetryWrapped(handler: object): boolean {
  */
 async function* wrapStreamWithRetry(
 	createStream: () => ApiStream,
-	context: { provider?: string; taskId?: string },
+	context: { provider?: string; taskId?: string; signal?: AbortSignal },
 	retryConfig?: RetryWrapperOptions,
 ): ApiStream {
 	const config = { ...DEFAULT_API_RETRY_OPTIONS, ...retryConfig }
 	let lastError: unknown
 
 	for (let attempt = 0; attempt < config.maxAttempts; attempt++) {
+		context.signal?.throwIfAborted()
 		let iterator: AsyncIterator<ApiStreamChunk> | undefined
+		let first: IteratorResult<ApiStreamChunk>
 
 		// Retry loop only covers the *first* next() call (stream open phase).
 		try {
 			const stream = createStream()
 			iterator = stream[Symbol.asyncIterator]()
-			const first = await iterator.next()
-
-			if (first.done) {
-				return
-			}
-
-			yield first.value
+			first = await iterator.next()
 		} catch (error) {
+			await closeIterator(iterator)
+			context.signal?.throwIfAborted()
 			lastError = error
 			const decision = analyzeErrorForRetry(error)
 
@@ -69,12 +76,18 @@ async function* wrapStreamWithRetry(
 					provider: context.provider ?? "unknown",
 				},
 			})
-			await delayMs(delay)
+			await delayMs(delay, context.signal)
 			continue
 		}
 
-		// First chunk succeeded — proxy the rest of the stream WITHOUT retry.
-		yield* { [Symbol.asyncIterator]: () => iterator! }
+		// Consumer errors and early returns must close the stream, never retry it.
+		try {
+			if (first.done) return
+			yield first.value
+			yield* { [Symbol.asyncIterator]: () => iterator! }
+		} finally {
+			await closeIterator(iterator)
+		}
 		return
 	}
 
@@ -111,7 +124,7 @@ export function wrapApiHandler(
 				): ApiStream => {
 					return wrapStreamWithRetry(
 						() => target.createMessage(systemPrompt, messages, metadata),
-						{ provider: providerName, taskId: metadata?.taskId },
+						{ provider: providerName, taskId: metadata?.taskId, signal: metadata?.signal },
 						retryConfig,
 					)
 				}

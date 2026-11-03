@@ -578,12 +578,13 @@ describe("OpenAiHandler", () => {
 	})
 
 	describe("getModel", () => {
-		it("should return model info with sane defaults", () => {
+		it("labels undiscovered model metadata as estimated", () => {
 			const model = handler.getModel()
 			expect(model.id).toBe(mockOptions.openAiModelId)
 			expect(model.info).toBeDefined()
-			expect(model.info.contextWindow).toBe(128_000)
-			expect(model.info.supportsImages).toBe(true)
+			expect(model.info.contextWindow).toBe(16_384)
+			expect(model.info.metadataSource).toBe("estimated")
+			expect(model.info.supportsImages).toBeUndefined()
 		})
 
 		it("should handle undefined model ID", () => {

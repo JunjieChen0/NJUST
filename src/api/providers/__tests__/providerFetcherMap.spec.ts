@@ -24,7 +24,7 @@ describe("providerFetcherMap", () => {
 			qwen: "openai-compatible",
 			moonshot: "openai-compatible",
 			glm: "openai-compatible",
-			minimax: "openai-compatible",
+			minimax: "anthropic",
 			deepseek: "openai-compatible",
 			anthropic: "anthropic",
 			gemini: "gemini",

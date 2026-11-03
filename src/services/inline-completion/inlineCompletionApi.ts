@@ -6,18 +6,15 @@ import { getErrorMessage } from "../../shared/error-utils"
 let loggedMissingApiProfile = false
 
 /**
- * Prefer the active task's API handler; otherwise build from the current provider profile (same as chat).
+ * Use the active task's profile in an independent handler so inline and chat streams do not share state.
  */
 export async function resolveInlineCompletionApiHandler(
 	provider: ClineProvider,
 	log?: (message: string) => void,
 ): Promise<ApiHandler | undefined> {
 	const task = provider.getCurrentTask()
-	if (task) {
-		return task.api
-	}
 	try {
-		const { apiConfiguration } = await provider.getState()
+		const apiConfiguration = task ? task.apiConfiguration : (await provider.getState()).apiConfiguration
 		if (!apiConfiguration?.apiProvider) {
 			if (log && !loggedMissingApiProfile) {
 				loggedMissingApiProfile = true
@@ -28,7 +25,9 @@ export async function resolveInlineCompletionApiHandler(
 			return undefined
 		}
 		loggedMissingApiProfile = false
-		return buildApiHandler(apiConfiguration, undefined, { toolCallParser: defaultToolCallParser })
+		const handler = buildApiHandler(apiConfiguration, undefined, { toolCallParser: defaultToolCallParser })
+		await handler.prepareModel?.()
+		return handler
 	} catch (error) {
 		log?.(`[InlineCompletion] Could not build API handler: ${getErrorMessage(error)}`)
 		return undefined

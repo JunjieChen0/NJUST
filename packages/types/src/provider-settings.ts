@@ -482,6 +482,46 @@ export const providerSettingsSchema = z.object({
 
 export type ProviderSettings = z.infer<typeof providerSettingsSchema>
 
+/** Connection fields only: model selection changes do not invalidate the catalog. */
+export function modelCatalogConnectionSettings(settings: ProviderSettings): ProviderSettings {
+	const fields: Partial<Record<ProviderName, Array<keyof ProviderSettings>>> = {
+		anthropic: ["apiKey", "anthropicBaseUrl", "anthropicUseAuthToken"],
+		"openai-native": ["openAiNativeApiKey", "openAiNativeBaseUrl"],
+		openai: ["openAiApiKey", "openAiBaseUrl", "openAiHeaders", "openAiUseAzure", "azureApiVersion"],
+		gemini: ["geminiApiKey", "googleGeminiBaseUrl"],
+		qwen: ["qwenApiKey", "qwenBaseUrl"],
+		glm: ["glmApiKey", "glmBaseUrl"],
+		moonshot: ["moonshotApiKey", "moonshotBaseUrl"],
+		mimo: ["mimoApiKey", "mimoBaseUrl"],
+		"mimo-token-plan": ["mimoTokenPlanApiKey"],
+		deepseek: ["deepSeekApiKey", "deepSeekBaseUrl"],
+		minimax: ["minimaxApiKey", "minimaxBaseUrl"],
+		mistral: ["mistralApiKey", "mistralCodestralUrl"],
+		xai: ["xaiApiKey"],
+		fireworks: ["fireworksApiKey"],
+		sambanova: ["sambaNovaApiKey"],
+		baseten: ["basetenApiKey"],
+		doubao: ["doubaoApiKey", "doubaoBaseUrl"],
+		openrouter: ["openRouterApiKey", "openRouterBaseUrl"],
+		requesty: ["requestyApiKey", "requestyBaseUrl"],
+		unbound: ["unboundApiKey"],
+		litellm: ["litellmApiKey", "litellmBaseUrl"],
+		ollama: ["ollamaBaseUrl", "ollamaApiKey"],
+		lmstudio: ["lmStudioBaseUrl"],
+		"njust-ai": ["rooApiKey"],
+	}
+	const provider = settings.apiProvider
+	const entries =
+		provider && isProviderName(provider) ? (fields[provider] ?? []).map((key) => [key, settings[key]]) : []
+	return {
+		apiProvider: provider,
+		...Object.fromEntries(entries),
+		...(provider === "mistral"
+			? { apiModelId: settings.apiModelId?.startsWith("codestral-") ? "codestral-" : undefined }
+			: {}),
+	}
+}
+
 export const providerSettingsWithIdSchema = providerSettingsSchema.extend({ id: z.string().optional() })
 
 export const discriminatedProviderSettingsWithIdSchema = providerSettingsSchemaDiscriminated.and(

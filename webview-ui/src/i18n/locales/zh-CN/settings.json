@@ -1,4 +1,25 @@
 {
+	"modelCatalog": {
+		"imagesUnknown": "图像支持情况未知。",
+		"cacheUnknown": "提示词缓存支持情况未知。",
+		"loading": "正在获取模型目录…",
+		"fresh": "模型目录已刷新",
+		"cached": "正在使用缓存目录",
+		"stale": "正在使用旧目录，时效尚未确认",
+		"builtin": "正在使用内置模型列表",
+		"failed": "刷新失败，已有目录仍保留",
+		"unsupported": "暂不支持自动列举，请输入服务商提供的模型 ID。",
+		"refresh": "刷新模型",
+		"fetchedAt": "上次获取：{{time}}",
+		"estimated": "部分模型上限或能力未知，当前显示估算值。",
+		"pricingUnknown": "价格未知，不代表免费。",
+		"errors": {
+			"empty": "服务商返回了空模型列表。",
+			"unauthorized": "模型列表请求被拒绝，请检查凭证和访问权限。",
+			"unavailable": "模型目录暂不可用，请检查地址和网络。",
+			"invalid_response": "服务商返回的目录格式错误或分页不完整。"
+		}
+	},
 	"back": "返回任务视图",
 	"common": {
 		"save": "保存",

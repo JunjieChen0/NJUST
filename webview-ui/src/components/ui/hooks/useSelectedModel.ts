@@ -7,6 +7,8 @@ import {
 	isDynamicProvider,
 	isRetiredProvider,
 	isRouterModelProvider,
+	mergeCatalogModelInfo,
+	unknownCatalogModelInfo,
 } from "@njust-ai/types"
 import {
 	anthropicModels,
@@ -46,18 +48,6 @@ import { useOpenRouterModelProviders } from "./useOpenRouterModelProviders"
 import { useLmStudioModels } from "./useLmStudioModels"
 import { useOllamaModels } from "./useOllamaModels"
 
-/**
- * Helper to get a validated model ID for dynamic providers.
- * Returns the configured model ID if it exists in the available models, otherwise returns the default.
- */
-function getValidatedModelId(
-	configuredId: string | undefined,
-	availableModels: ModelRecord | undefined,
-	defaultModelId: string,
-): string {
-	return configuredId && availableModels?.[configuredId] ? configuredId : defaultModelId
-}
-
 type StaticModelMap = Record<string, ModelInfo>
 
 function resolveDynamicFirst<T extends StaticModelMap>(
@@ -66,23 +56,13 @@ function resolveDynamicFirst<T extends StaticModelMap>(
 	staticModels: T,
 	configuredId: string | undefined,
 	defaultModelId: string,
-	fallbackInfo?: ModelInfo,
 ): { id: string; info: ModelInfo | undefined } {
 	const dynamicModels = routerModels[routerKey]
-	const models =
-		dynamicModels && Object.keys(dynamicModels).length > 0 ? dynamicModels : staticModels
-
-	const id = getValidatedModelId(configuredId, models, defaultModelId)
+	const id = configuredId || defaultModelId
 	const dynamicInfo = dynamicModels?.[id]
 	const staticInfo = staticModels[id as keyof T]
 
-	if (dynamicInfo) {
-		return { id, info: { ...(staticInfo ?? fallbackInfo ?? openAiModelInfoSaneDefaults), ...dynamicInfo } }
-	}
-	if (staticInfo) {
-		return { id, info: staticInfo }
-	}
-	return { id, info: fallbackInfo }
+	return { id, info: mergeCatalogModelInfo(staticInfo, dynamicInfo) }
 }
 
 export const useSelectedModel = (apiConfiguration?: ProviderSettings) => {
@@ -99,6 +79,7 @@ export const useSelectedModel = (apiConfiguration?: ProviderSettings) => {
 	const routerModels = useRouterModels({
 		provider: fetchProvider,
 		enabled: shouldFetchRouterModels,
+		configuration: apiConfiguration,
 	})
 
 	const openRouterModelProviders = useOpenRouterModelProviders(openRouterModelId)
@@ -111,22 +92,8 @@ export const useSelectedModel = (apiConfiguration?: ProviderSettings) => {
 	const needLmStudio = typeof lmStudioModelId !== "undefined"
 	const needOllama = typeof ollamaModelId !== "undefined"
 
-	const hasValidRouterData =
-		needRouterModels && dynamicProvider
-			? routerModels.data &&
-				routerModels.data[dynamicProvider] !== undefined &&
-				typeof routerModels.data[dynamicProvider] === "object" &&
-				!routerModels.isLoading
-			: true
-
-	const isReady =
-		(!needLmStudio || typeof lmStudioModels.data !== "undefined") &&
-		(!needOllama || typeof ollamaModels.data !== "undefined") &&
-		hasValidRouterData &&
-		(!needOpenRouterProviders || typeof openRouterModelProviders.data !== "undefined")
-
 	const { id, info } =
-		apiConfiguration && isReady && activeProvider
+		apiConfiguration && activeProvider
 			? getSelectedModel({
 					provider: activeProvider,
 					apiConfiguration,
@@ -175,7 +142,7 @@ function getSelectedModel({
 	const defaultModelId = getProviderDefaultModelId(provider)
 	switch (provider) {
 		case "openrouter": {
-			const id = getValidatedModelId(apiConfiguration.openRouterModelId, routerModels.openrouter, defaultModelId)
+			const id = apiConfiguration.openRouterModelId || defaultModelId
 			let info = routerModels.openrouter?.[id]
 			const specificProvider = apiConfiguration.openRouterSpecificProvider
 
@@ -191,25 +158,34 @@ function getSelectedModel({
 			return { id, info }
 		}
 		case "requesty": {
-			const id = getValidatedModelId(apiConfiguration.requestyModelId, routerModels.requesty, defaultModelId)
+			const id = apiConfiguration.requestyModelId || defaultModelId
 			const routerInfo = routerModels.requesty?.[id]
 			return { id, info: routerInfo }
 		}
 		case "unbound": {
-			const id = getValidatedModelId(apiConfiguration.unboundModelId, routerModels.unbound, defaultModelId)
+			const id = apiConfiguration.unboundModelId || defaultModelId
 			const routerInfo = routerModels.unbound?.[id]
 			return { id, info: routerInfo }
 		}
 		case "litellm": {
-			const id = getValidatedModelId(apiConfiguration.litellmModelId, routerModels.litellm, defaultModelId)
+			const id = apiConfiguration.litellmModelId || defaultModelId
 			const routerInfo = routerModels.litellm?.[id]
-			return { id, info: routerInfo ?? litellmDefaultModelInfo }
+			return {
+				id,
+				info: routerInfo ?? (id === defaultModelId ? litellmDefaultModelInfo : unknownCatalogModelInfo),
+			}
 		}
 		case "xai": {
 			return resolveDynamicFirst(routerModels, "xai", xaiModels, apiConfiguration.apiModelId, defaultModelId)
 		}
 		case "baseten": {
-			return resolveDynamicFirst(routerModels, "baseten", basetenModels, apiConfiguration.apiModelId, defaultModelId)
+			return resolveDynamicFirst(
+				routerModels,
+				"baseten",
+				basetenModels,
+				apiConfiguration.apiModelId,
+				defaultModelId,
+			)
 		}
 		case "bedrock": {
 			const id = apiConfiguration.apiModelId ?? defaultModelId
@@ -224,7 +200,11 @@ function getSelectedModel({
 			}
 
 			// Apply 1M context for supported Claude 4 models when enabled
-			if ((BEDROCK_1M_CONTEXT_MODEL_IDS as readonly string[]).includes(id) && apiConfiguration.awsBedrock1MContext && baseInfo) {
+			if (
+				(BEDROCK_1M_CONTEXT_MODEL_IDS as readonly string[]).includes(id) &&
+				apiConfiguration.awsBedrock1MContext &&
+				baseInfo
+			) {
 				// Create a new ModelInfo object with updated context window
 				const info: ModelInfo = {
 					...baseInfo,
@@ -237,10 +217,14 @@ function getSelectedModel({
 		}
 		case "vertex": {
 			const id = apiConfiguration.apiModelId ?? defaultModelId
-			const baseInfo = vertexModels[id as keyof typeof vertexModels]
+			const baseInfo = mergeCatalogModelInfo(vertexModels[id as keyof typeof vertexModels])
 
 			// Apply 1M context for supported Claude 4 models when enabled
-			if ((VERTEX_1M_CONTEXT_MODEL_IDS as readonly string[]).includes(id) && apiConfiguration.vertex1MContext && baseInfo) {
+			if (
+				(VERTEX_1M_CONTEXT_MODEL_IDS as readonly string[]).includes(id) &&
+				apiConfiguration.vertex1MContext &&
+				baseInfo
+			) {
 				const modelInfo: ModelInfo = baseInfo
 				const tier = modelInfo.tiers?.[0]
 				if (tier) {
@@ -259,16 +243,40 @@ function getSelectedModel({
 			return { id, info: baseInfo }
 		}
 		case "gemini": {
-			return resolveDynamicFirst(routerModels, "gemini", geminiModels, apiConfiguration.apiModelId, defaultModelId)
+			return resolveDynamicFirst(
+				routerModels,
+				"gemini",
+				geminiModels,
+				apiConfiguration.apiModelId,
+				defaultModelId,
+			)
 		}
 		case "deepseek": {
-			return resolveDynamicFirst(routerModels, "deepseek", deepSeekModels, apiConfiguration.apiModelId, defaultModelId)
+			return resolveDynamicFirst(
+				routerModels,
+				"deepseek",
+				deepSeekModels,
+				apiConfiguration.apiModelId,
+				defaultModelId,
+			)
 		}
 		case "moonshot": {
-			return resolveDynamicFirst(routerModels, "moonshot", moonshotModels, apiConfiguration.apiModelId, defaultModelId)
+			return resolveDynamicFirst(
+				routerModels,
+				"moonshot",
+				moonshotModels,
+				apiConfiguration.apiModelId,
+				defaultModelId,
+			)
 		}
 		case "minimax": {
-			return resolveDynamicFirst(routerModels, "minimax", minimaxModels, apiConfiguration.apiModelId, defaultModelId)
+			return resolveDynamicFirst(
+				routerModels,
+				"minimax",
+				minimaxModels,
+				apiConfiguration.apiModelId,
+				defaultModelId,
+			)
 		}
 		case "zai": {
 			const isChina = apiConfiguration.zaiApiLine === "china_coding"
@@ -279,15 +287,27 @@ function getSelectedModel({
 			return { id, info }
 		}
 		case "openai-native": {
-			return resolveDynamicFirst(routerModels, "openai-native", openAiNativeModels, apiConfiguration.apiModelId, defaultModelId)
+			return resolveDynamicFirst(
+				routerModels,
+				"openai-native",
+				openAiNativeModels,
+				apiConfiguration.apiModelId,
+				defaultModelId,
+			)
 		}
 		case "mistral": {
-			return resolveDynamicFirst(routerModels, "mistral", mistralModels, apiConfiguration.apiModelId, defaultModelId)
+			return resolveDynamicFirst(
+				routerModels,
+				"mistral",
+				mistralModels,
+				apiConfiguration.apiModelId,
+				defaultModelId,
+			)
 		}
 		case "openai": {
 			const id = apiConfiguration.openAiModelId ?? ""
 			const customInfo = apiConfiguration?.openAiCustomModelInfo
-			const info = customInfo ?? openAiModelInfoSaneDefaults
+			const info = customInfo ?? mergeCatalogModelInfo(undefined, routerModels.openai?.[id])
 			return { id, info }
 		}
 		case "ollama": {
@@ -323,13 +343,25 @@ function getSelectedModel({
 			return { id, info: { ...openAiModelInfoSaneDefaults, ...info, supportsImages: false } } // VSCode LM API currently doesn't support images.
 		}
 		case "sambanova": {
-			return resolveDynamicFirst(routerModels, "sambanova", sambaNovaModels, apiConfiguration.apiModelId, defaultModelId)
+			return resolveDynamicFirst(
+				routerModels,
+				"sambanova",
+				sambaNovaModels,
+				apiConfiguration.apiModelId,
+				defaultModelId,
+			)
 		}
 		case "fireworks": {
-			return resolveDynamicFirst(routerModels, "fireworks", fireworksModels, apiConfiguration.apiModelId, defaultModelId)
+			return resolveDynamicFirst(
+				routerModels,
+				"fireworks",
+				fireworksModels,
+				apiConfiguration.apiModelId,
+				defaultModelId,
+			)
 		}
 		case "njust-ai": {
-			const id = getValidatedModelId(apiConfiguration.apiModelId, routerModels["njust-ai"], defaultModelId)
+			const id = apiConfiguration.apiModelId || defaultModelId
 			const info = routerModels["njust-ai"]?.[id]
 			return { id, info }
 		}
@@ -339,62 +371,46 @@ function getSelectedModel({
 			return { id, info }
 		}
 		case "qwen": {
-			return resolveDynamicFirst(routerModels, "qwen", qwenModels, apiConfiguration.apiModelId, defaultModelId, {
-				...openAiModelInfoSaneDefaults,
-				maxTokens: 8_192,
-				contextWindow: 131_072,
-				supportsImages: true,
-				description: "Custom Qwen model id",
-			} satisfies ModelInfo)
+			return resolveDynamicFirst(routerModels, "qwen", qwenModels, apiConfiguration.apiModelId, defaultModelId)
 		}
 		case "doubao": {
-			return resolveDynamicFirst(routerModels, "doubao", doubaoModels, apiConfiguration.apiModelId, defaultModelId, {
-				...openAiModelInfoSaneDefaults,
-				maxTokens: 32_768,
-				contextWindow: 262_144,
-				supportsImages: true,
-				description: "Custom Volcengine Ark model id (console or ep-)",
-			} satisfies ModelInfo)
+			return resolveDynamicFirst(
+				routerModels,
+				"doubao",
+				doubaoModels,
+				apiConfiguration.apiModelId,
+				defaultModelId,
+			)
 		}
 		case "glm": {
-			return resolveDynamicFirst(routerModels, "glm", glmModels, apiConfiguration.apiModelId, defaultModelId, {
-				...openAiModelInfoSaneDefaults,
-				maxTokens: 16_384,
-				contextWindow: 131_072,
-				supportsImages: true,
-				description: "Custom GLM model id",
-			} satisfies ModelInfo)
+			return resolveDynamicFirst(routerModels, "glm", glmModels, apiConfiguration.apiModelId, defaultModelId)
 		}
 		case "mimo": {
-			return resolveDynamicFirst(routerModels, "mimo", mimoModels, apiConfiguration.apiModelId, defaultModelId, {
-				...openAiModelInfoSaneDefaults,
-				maxTokens: 128_000,
-				contextWindow: 1_000_000,
-				supportsImages: false,
-				description: "Custom MiMo model id",
-			} satisfies ModelInfo)
+			return resolveDynamicFirst(routerModels, "mimo", mimoModels, apiConfiguration.apiModelId, defaultModelId)
 		}
 		case "mimo-token-plan": {
 			const id = apiConfiguration.apiModelId ?? defaultModelId
-			const info = mimoTokenPlanModels[id as keyof typeof mimoTokenPlanModels]
+			const info = mergeCatalogModelInfo(mimoTokenPlanModels[id as keyof typeof mimoTokenPlanModels])
 			return { id, info }
 		}
 		case "openai-codex": {
 			const id = apiConfiguration.apiModelId ?? defaultModelId
-			const info = openAiCodexModels[id as keyof typeof openAiCodexModels]
+			const info = mergeCatalogModelInfo(openAiCodexModels[id as keyof typeof openAiCodexModels])
 			return { id, info }
 		}
 		case "vercel-ai-gateway": {
-			const id = getValidatedModelId(
-				apiConfiguration.vercelAiGatewayModelId,
-				routerModels["vercel-ai-gateway"],
-				defaultModelId,
-			)
+			const id = apiConfiguration.vercelAiGatewayModelId || defaultModelId
 			const info = routerModels["vercel-ai-gateway"]?.[id]
 			return { id, info }
 		}
 		case "anthropic": {
-			const resolved = resolveDynamicFirst(routerModels, "anthropic", anthropicModels, apiConfiguration.apiModelId, defaultModelId)
+			const resolved = resolveDynamicFirst(
+				routerModels,
+				"anthropic",
+				anthropicModels,
+				apiConfiguration.apiModelId,
+				defaultModelId,
+			)
 			let info = resolved.info
 
 			if (

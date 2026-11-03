@@ -1,3 +1,4 @@
+import { resolveModelInfo } from "./resolveModelInfo"
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI from "openai"
 
@@ -43,12 +44,9 @@ export class XAIHandler extends BaseProvider implements SingleCompletionHandler 
 	}
 
 	override getModel() {
-		const id =
-			this.options.apiModelId && this.options.apiModelId in xaiModels
-				? (this.options.apiModelId as XAIModelId)
-				: xaiDefaultModelId
+		const id = this.options.apiModelId || xaiDefaultModelId
 
-		const info = xaiModels[id]
+		const info = resolveModelInfo("xai", this.options, id, xaiModels[id as XAIModelId])
 		const params = getModelParams({
 			format: "openai",
 			modelId: id,

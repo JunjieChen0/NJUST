@@ -1,3 +1,4 @@
+import { unknownModelInfo } from "./resolveModelInfo"
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI from "openai"
 
@@ -80,7 +81,10 @@ export class UnboundHandler extends BaseProvider implements SingleCompletionHand
 
 	override getModel() {
 		const id = this.options.unboundModelId ?? unboundDefaultModelId
-		const cachedInfo = this.models[id] ?? unboundDefaultModelInfo
+		const cachedInfo =
+			this.options.modelSnapshot?.current?.id === id
+				? this.options.modelSnapshot.current.info
+				: (this.models[id] ?? (id === unboundDefaultModelId ? unboundDefaultModelInfo : unknownModelInfo))
 		let info: ModelInfo = cachedInfo
 
 		// Apply tool preferences for models accessed through routers (OpenAI, Gemini)

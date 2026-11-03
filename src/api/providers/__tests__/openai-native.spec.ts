@@ -28,8 +28,9 @@ const mockResponsesCreate = vitest.fn()
 vitest.mock("openai", () => {
 	return {
 		__esModule: true,
-		default: vitest.fn(function () {
+		default: vitest.fn(function (options: { baseURL?: string }) {
 			return {
+				baseURL: options.baseURL ?? "https://api.openai.com/v1",
 				responses: {
 					create: mockResponsesCreate,
 				},
@@ -86,14 +87,16 @@ describe("OpenAiNativeHandler", () => {
 			).toThrow()
 		})
 
-		it("should pass undefined baseURL when openAiNativeBaseUrl is empty string", () => {
+		it("resolves the effective default endpoint when the configured base URL is empty", () => {
 			asMock<ReturnType<typeof vitest.fn>>(OpenAI).mockClear()
 			new OpenAiNativeHandler({
 				apiModelId: "gpt-4.1",
 				openAiNativeApiKey: "test-key",
 				openAiNativeBaseUrl: "",
 			})
-			expect(OpenAI).toHaveBeenCalledWith(expect.objectContaining({ baseURL: undefined }))
+			expect(OpenAI).toHaveBeenCalledWith(
+				expect.objectContaining({ baseURL: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1" }),
+			)
 		})
 
 		it("should pass custom baseURL when openAiNativeBaseUrl is a valid URL", () => {

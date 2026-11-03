@@ -1,4 +1,25 @@
 {
+	"modelCatalog": {
+		"imagesUnknown": "圖像支援情況未知。",
+		"cacheUnknown": "提示詞快取支援情況未知。",
+		"loading": "正在取得模型目錄…",
+		"fresh": "模型目錄已重新整理",
+		"cached": "正在使用快取目錄",
+		"stale": "正在使用舊目錄，時效尚未確認",
+		"builtin": "正在使用內建模型清單",
+		"failed": "重新整理失敗，已有目錄仍保留",
+		"unsupported": "暫不支援自動列舉，請輸入服務商提供的模型 ID。",
+		"refresh": "重新整理模型",
+		"fetchedAt": "上次取得：{{time}}",
+		"estimated": "部分模型上限或能力未知，目前顯示估算值。",
+		"pricingUnknown": "價格未知，不代表免費。",
+		"errors": {
+			"empty": "服務商傳回了空模型清單。",
+			"unauthorized": "模型清單請求遭拒，請檢查憑證和存取權限。",
+			"unavailable": "模型目錄暫時無法使用，請檢查位址和網路。",
+			"invalid_response": "服務商傳回的目錄格式錯誤或分頁不完整。"
+		}
+	},
 	"back": "回到工作檢視",
 	"common": {
 		"save": "儲存",

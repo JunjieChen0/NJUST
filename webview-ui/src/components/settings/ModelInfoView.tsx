@@ -34,6 +34,8 @@ export const ModelInfoView = ({
 	const fmt = (n?: number) => (typeof n === "number" ? `${formatPrice(n)}` : "—")
 
 	const baseInfoItems = [
+		modelInfo?.estimatedFields?.length ? <span>{t("settings:modelCatalog.estimated")}</span> : null,
+		modelInfo?.pricingUnknown ? <span>{t("settings:modelCatalog.pricingUnknown")}</span> : null,
 		typeof modelInfo?.contextWindow === "number" && modelInfo.contextWindow > 0 && (
 			<>
 				<span className="font-medium">{t("settings:modelInfo.contextWindow")}</span>{" "}
@@ -46,17 +48,25 @@ export const ModelInfoView = ({
 				{modelInfo.maxTokens?.toLocaleString()} tokens
 			</>
 		),
-		<ModelInfoSupportsItem
-			isSupported={modelInfo?.supportsImages ?? false}
-			supportsLabel={t("settings:modelInfo.supportsImages")}
-			doesNotSupportLabel={t("settings:modelInfo.noImages")}
-		/>,
-		<ModelInfoSupportsItem
-			isSupported={modelInfo?.supportsPromptCache ?? false}
-			supportsLabel={t("settings:modelInfo.supportsPromptCache")}
-			doesNotSupportLabel={t("settings:modelInfo.noPromptCache")}
-		/>,
-		apiProvider === "gemini" && (
+		typeof modelInfo?.supportsImages !== "boolean" ? (
+			<span>{t("settings:modelCatalog.imagesUnknown")}</span>
+		) : (
+			<ModelInfoSupportsItem
+				isSupported={modelInfo?.supportsImages ?? false}
+				supportsLabel={t("settings:modelInfo.supportsImages")}
+				doesNotSupportLabel={t("settings:modelInfo.noImages")}
+			/>
+		),
+		modelInfo?.estimatedFields?.includes("supportsPromptCache") ? (
+			<span>{t("settings:modelCatalog.cacheUnknown")}</span>
+		) : (
+			<ModelInfoSupportsItem
+				isSupported={modelInfo?.supportsPromptCache ?? false}
+				supportsLabel={t("settings:modelInfo.supportsPromptCache")}
+				doesNotSupportLabel={t("settings:modelInfo.noPromptCache")}
+			/>
+		),
+		apiProvider === "gemini" && !modelInfo?.pricingUnknown && (
 			<span className="italic">
 				{selectedModelId.includes("pro-preview")
 					? t("settings:modelInfo.gemini.billingEstimate")

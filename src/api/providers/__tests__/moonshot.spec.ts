@@ -42,7 +42,7 @@ describe("MoonshotHandler", () => {
 	beforeEach(() => {
 		mockOptions = {
 			moonshotApiKey: "test-api-key",
-			apiModelId: "moonshot-chat",
+			apiModelId: moonshotDefaultModelId,
 			moonshotBaseUrl: "https://api.moonshot.ai/v1",
 		}
 		handler = new MoonshotHandler(mockOptions)
@@ -92,7 +92,7 @@ describe("MoonshotHandler", () => {
 			expect(model.info.supportsPromptCache).toBe(true)
 		})
 
-		it("should return provided model ID with default model info if model does not exist", () => {
+		it("preserves custom model IDs and marks unknown capabilities as estimates", () => {
 			const handlerWithInvalidModel = new MoonshotHandler({
 				...mockOptions,
 				apiModelId: "invalid-model",
@@ -100,9 +100,8 @@ describe("MoonshotHandler", () => {
 			const model = handlerWithInvalidModel.getModel()
 			expect(model.id).toBe("invalid-model") // Returns provided ID
 			expect(model.info).toBeDefined()
-			// Should have the same base properties as default model
-			expect(model.info.contextWindow).toBe(handler.getModel().info.contextWindow)
-			expect(model.info.supportsPromptCache).toBe(true)
+			expect(model.info.metadataSource).toBe("estimated")
+			expect(model.info.supportsPromptCache).toBe(false)
 		})
 
 		it("should return default model if no model ID is provided", () => {

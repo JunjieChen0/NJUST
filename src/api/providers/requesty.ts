@@ -21,6 +21,7 @@ import { handleProviderError } from "./utils/error-handler"
 import { applyRouterToolPreferences } from "./utils/router-tool-preferences"
 import { requireApiKey } from "../interfaces/api-key-validator"
 import { getApiRequestTimeout } from "./utils/timeout-config"
+import { unknownModelInfo } from "./resolveModelInfo"
 
 // Requesty usage includes an extra field for Anthropic use cases.
 // Safely cast the prompt token details section to the appropriate structure.
@@ -80,13 +81,16 @@ export class RequestyHandler extends BaseProvider implements SingleCompletionHan
 	}
 
 	public async fetchModel() {
-		this.models = await getModels({ provider: "requesty", baseUrl: this.baseURL })
+		this.models = await getModels({ provider: "requesty", apiKey: this.client.apiKey, baseUrl: this.baseURL })
 		return this.getModel()
 	}
 
 	override getModel() {
 		const id = this.options.requestyModelId ?? requestyDefaultModelId
-		const cachedInfo = this.models[id] ?? requestyDefaultModelInfo
+		const cachedInfo =
+			this.options.modelSnapshot?.current?.id === id
+				? this.options.modelSnapshot.current.info
+				: (this.models[id] ?? (id === requestyDefaultModelId ? requestyDefaultModelInfo : unknownModelInfo))
 		let info: ModelInfo = cachedInfo
 
 		// Apply tool preferences for models accessed through routers (OpenAI, Gemini)

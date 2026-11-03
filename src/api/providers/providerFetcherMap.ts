@@ -8,7 +8,7 @@ export const providerFetcherMap: Record<ProviderName, FetcherKind> = {
 	qwen: "openai-compatible",
 	moonshot: "openai-compatible",
 	glm: "openai-compatible",
-	minimax: "openai-compatible",
+	minimax: "anthropic",
 	deepseek: "openai-compatible",
 
 	anthropic: "anthropic",
@@ -25,7 +25,7 @@ export const providerFetcherMap: Record<ProviderName, FetcherKind> = {
 	baseten: "openai-compatible",
 	doubao: "openai-compatible",
 	mimo: "openai-compatible",
-	"mimo-token-plan": "openai-compatible",
+	"mimo-token-plan": "fallback-only",
 	"njust-ai": "existing",
 	litellm: "existing",
 	requesty: "existing",

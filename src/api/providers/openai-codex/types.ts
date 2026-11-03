@@ -2,14 +2,13 @@ import { Anthropic } from "@anthropic-ai/sdk"
 import { z } from "zod"
 
 import { type ModelInfo, type ReasoningEffortExtended, type VerbosityLevel } from "@njust-ai/types"
-import { type OpenAiCodexModelId } from "@njust-ai/core/providers"
 
 // ---------------------------------------------------------------------------
 // Model type (explicit structural type, avoids circular dependency with base.ts)
 // ---------------------------------------------------------------------------
 
 export interface OpenAiCodexModel {
-	id: OpenAiCodexModelId
+	id: string
 	info: ModelInfo
 	format: "openai"
 	maxTokens: number | undefined

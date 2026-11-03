@@ -132,6 +132,19 @@ export class TaskExecutor {
 		}
 
 		h.setLastGlobalApiRequestTime(performance.now())
+		const requestHandler = h.api
+		const requestController = new AbortController()
+		h.currentRequestAbortController = requestController
+		const abortSignal = requestController.signal
+		try {
+			await requestHandler.prepareModel?.(abortSignal)
+			if (h.abort || h.api !== requestHandler || abortSignal.aborted) {
+				throw new TaskAbortedError(h.taskId, h.instanceId)
+			}
+		} catch (error) {
+			if (h.currentRequestAbortController === requestController) h.currentRequestAbortController = undefined
+			throw error
+		}
 
 		void h.requestBuilder.prefetchSystemPromptData()
 		const systemPromptPartsPromise = h.requestBuilder.getSystemPromptParts()
@@ -380,9 +393,6 @@ export class TaskExecutor {
 
 		const shouldIncludeTools = allTools.length > 0
 
-		h.currentRequestAbortController = new AbortController()
-		const abortSignal = h.currentRequestAbortController.signal
-
 		const metadata: ApiHandlerCreateMessageMetadata = {
 			mode: mode,
 			taskId: h.taskId,
@@ -412,7 +422,10 @@ export class TaskExecutor {
 			debugLog(`[TokenBucket] Waited ${waitMs}ms for ${providerKey}`)
 		}
 
-		const stream = h.api.createMessage(
+		if (h.abort || h.api !== requestHandler || abortSignal.aborted) {
+			throw new TaskAbortedError(h.taskId, h.instanceId)
+		}
+		const stream = requestHandler.createMessage(
 			systemPrompt,
 			cleanConversationHistory as Anthropic.Messages.MessageParam[],
 			metadata,

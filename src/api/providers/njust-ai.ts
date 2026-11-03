@@ -373,7 +373,8 @@ export class RooHandler extends BaseOpenAiCompatibleProvider<string> {
 		const modelId = this.options.apiModelId || rooDefaultModelId
 
 		// Get models from shared cache (settings are already applied by the fetcher)
-		const models = getModelsFromCache("njust-ai") || {}
+		const models =
+			getModelsFromCache("njust-ai", { apiKey: this.client.apiKey, baseUrl: this.client.baseURL }) || {}
 		const modelInfo = models[modelId]
 
 		if (modelInfo) {

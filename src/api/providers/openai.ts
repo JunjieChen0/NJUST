@@ -1,3 +1,4 @@
+import { resolveModelInfo } from "./resolveModelInfo"
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI, { AzureOpenAI } from "openai"
 import axios, { type AxiosRequestConfig } from "axios"
@@ -6,7 +7,6 @@ import { z } from "zod"
 import { type ModelInfo, type OpenAiUsageMetrics } from "@njust-ai/types"
 import {
 	azureOpenAiDefaultApiVersion,
-	openAiModelInfoSaneDefaults,
 	DEEP_SEEK_DEFAULT_TEMPERATURE,
 	OPENAI_AZURE_AI_INFERENCE_PATH,
 } from "@njust-ai/core/providers"
@@ -303,7 +303,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 
 	override getModel() {
 		const id = this.options.openAiModelId ?? ""
-		const info: ModelInfo = this.options.openAiCustomModelInfo ?? openAiModelInfoSaneDefaults
+		const info: ModelInfo = this.options.openAiCustomModelInfo ?? resolveModelInfo("openai", this.options, id)
 		const params = getModelParams({
 			format: "openai",
 			modelId: id,

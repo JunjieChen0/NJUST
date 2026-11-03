@@ -1,4 +1,5 @@
 import { Anthropic } from "@anthropic-ai/sdk"
+import { unknownModelInfo } from "./resolveModelInfo"
 import OpenAI from "openai"
 import { z } from "zod"
 
@@ -573,7 +574,10 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 
 	override getModel() {
 		const id = this.options.openRouterModelId ?? openRouterDefaultModelId
-		let info = this.models[id] ?? openRouterDefaultModelInfo
+		let info =
+			this.options.modelSnapshot?.current?.id === id
+				? this.options.modelSnapshot.current.info
+				: (this.models[id] ?? (id === openRouterDefaultModelId ? openRouterDefaultModelInfo : unknownModelInfo))
 
 		// If a specific provider is requested, use the endpoint for that provider.
 		if (this.options.openRouterSpecificProvider && this.endpoints[this.options.openRouterSpecificProvider]) {

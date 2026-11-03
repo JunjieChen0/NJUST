@@ -1,6 +1,6 @@
 import type { ProviderName } from "@njust-ai/types"
 import type { DynamicModelRecord, ListModelsOptions } from "../modelTypes"
-import { safeFetch, readBodyWithLimit, DEFAULT_MAX_BODY_BYTES, joinUrl } from "./safeFetch"
+import { safeFetch, readBodyWithLimit, DEFAULT_MAX_BODY_BYTES, DEFAULT_FETCH_TIMEOUT_MS, joinUrl } from "./safeFetch"
 import { PROVIDER_BASE_URLS, API_PATHS } from "../../../shared/provider-endpoints"
 
 interface ProviderConfig {
@@ -97,6 +97,16 @@ const configs: Partial<Record<ProviderName, ProviderConfig>> = {
 	},
 }
 
+export function resolveOpenAIModelOptions(provider: ProviderName, options: ListModelsOptions): ListModelsOptions {
+	const config = configs[provider]
+	if (!config) return options
+	return {
+		...options,
+		apiKey: options.apiKey ?? process.env[config.apiKeyEnv],
+		baseUrl: options.baseUrl || process.env[config.baseUrlEnv] || config.defaultBaseUrl,
+	}
+}
+
 export async function fetchOpenAICompatibleModels(
 	provider: ProviderName,
 	options: ListModelsOptions = {},
@@ -112,6 +122,8 @@ export async function fetchOpenAICompatibleModels(
 	}
 
 	const baseUrl = options.baseUrl || process.env[config.baseUrlEnv] || config.defaultBaseUrl
+	const deadline = AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS)
+	const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline
 
 	const res = await safeFetch(
 		joinUrl(baseUrl, config.path),
@@ -119,23 +131,28 @@ export async function fetchOpenAICompatibleModels(
 			headers: {
 				Authorization: `Bearer ${apiKey}`,
 				Accept: "application/json",
+				...options.headers,
 			},
 		},
-		{ retries: 2 },
+		{ retries: 2, signal },
 	)
 
 	if (!res.ok) {
 		const body = await readBodyWithLimit(res, 100 * 1024).catch(() => "")
-		throw new Error(`Failed to fetch models for ${provider}: ${res.status} ${body}`)
+		throw Object.assign(new Error(`Failed to fetch models for ${provider}: ${res.status} ${body}`), {
+			status: res.status,
+		})
 	}
 
 	const text = await readBodyWithLimit(res, DEFAULT_MAX_BODY_BYTES)
 	const json = JSON.parse(text)
-	const list = Array.isArray(json.data) ? json.data : Array.isArray(json.models) ? json.models : []
+	const list = Array.isArray(json.data) ? json.data : Array.isArray(json.models) ? json.models : undefined
+	if (!list) throw new SyntaxError("Invalid model list response")
 
 	const models: DynamicModelRecord = {}
 
 	for (const item of list) {
+		if (!item || typeof item !== "object") continue
 		const id: string | undefined = item.id ?? item.name
 		if (!id || typeof id !== "string") continue
 
@@ -143,7 +160,14 @@ export async function fetchOpenAICompatibleModels(
 			maxTokens: item.max_tokens ?? item.maxTokens ?? undefined,
 			contextWindow: item.context_window ?? item.contextWindow ?? 128_000,
 			supportsPromptCache: false,
-			deprecated: Boolean(item.deprecated),
+			...(typeof item.deprecated === "boolean" ? { deprecated: item.deprecated } : {}),
+			metadataSource: "api",
+			pricingUnknown: true,
+			estimatedFields: [
+				...(item.context_window || item.contextWindow ? [] : ["contextWindow"]),
+				...(item.max_tokens || item.maxTokens ? [] : ["maxTokens"]),
+				"supportsPromptCache",
+			],
 			source: "api",
 		}
 	}

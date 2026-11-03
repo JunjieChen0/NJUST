@@ -102,14 +102,13 @@ describe("fetchOpenAICompatibleModels", () => {
 		)
 	})
 
-	it("returns empty record when response has no data or models array", async () => {
+	it("rejects malformed responses instead of reporting an empty model list", async () => {
 		mockFetch.mockResolvedValueOnce({
 			ok: true,
 			json: () => Promise.resolve({}),
 		})
 
-		const result = await fetchOpenAICompatibleModels("openai", { apiKey: "k" })
-		expect(Object.keys(result)).toHaveLength(0)
+		await expect(fetchOpenAICompatibleModels("openai", { apiKey: "k" })).rejects.toThrow("Invalid model list")
 	})
 
 	it("skips items without id or name", async () => {

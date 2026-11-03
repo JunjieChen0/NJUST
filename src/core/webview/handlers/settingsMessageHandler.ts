@@ -3,6 +3,8 @@ import {
 	type GlobalState,
 	type Language,
 	type ModelRecord,
+	type ModelCatalogStatus,
+	providerSettingsSchema,
 	type SandboxDockerStatus,
 	type SandboxExtensionMessage,
 	type WebviewMessage,
@@ -16,7 +18,14 @@ import { changeLanguage, t } from "../../../i18n"
 import { Terminal } from "../../../integrations/terminal/Terminal"
 import { getOpenAiModels } from "../../../api/providers/openai"
 import { getVsCodeLmModels } from "../../../api/providers/vscode-lm"
-import { getModels, flushModels, listProviderModels } from "../../../api/providers/fetchers/modelCache"
+import {
+	getModels,
+	flushModels,
+	resolveProviderCatalog,
+	refreshModels,
+} from "../../../api/providers/fetchers/modelCache"
+import { modelConnection } from "../../../api/providers/modelConnection"
+import { modelCatalogIdentity } from "../../../api/providers/modelCatalogIdentity"
 import { GetModelsOptions } from "../../../shared/api"
 import { experimentDefault } from "../../../shared/experiments"
 import { importSettingsWithFeedback, exportSettings } from "../../config/importExport"
@@ -489,10 +498,15 @@ async function handleFlushRouterModels(_context: MessageHandlerContext, message:
 
 async function handleRequestRouterModels(context: MessageHandlerContext, message: WebviewMessage): Promise<void> {
 	const { provider } = context
-	const { apiConfiguration } = await provider.getState()
+	const { apiConfiguration: savedConfiguration } = await provider.getState()
+	const apiConfiguration = message.apiConfiguration
+		? providerSettingsSchema.parse(message.apiConfiguration)
+		: savedConfiguration
 	const requestedProvider = typeof message?.values?.provider === "string" ? message.values.provider : undefined
 	const providerFilter = requestedProvider ? toRouterName(requestedProvider) : undefined
 	const shouldRefresh = message?.values?.refresh === true
+	const requestId = typeof message.values?.requestId === "string" ? message.values.requestId : undefined
+	const routerModelCatalogs: Partial<Record<RouterName, ModelCatalogStatus>> = {}
 
 	const routerModels: Partial<Record<RouterName, ModelRecord>> = providerFilter
 		? {}
@@ -519,14 +533,21 @@ async function handleRequestRouterModels(context: MessageHandlerContext, message
 			"lmstudio",
 		]
 		if (oldProviders.includes(options.provider)) {
-			return getModels(options)
+			routerModelCatalogs[options.provider] = {
+				configFingerprint: modelCatalogIdentity(options.provider, options),
+				source: "legacy-cache",
+				stale: true,
+			}
+			return shouldRefresh ? refreshModels(options) : getModels(options)
 		}
 
-		return listProviderModels(options.provider, {
-			apiKey: options.apiKey,
-			baseUrl: options.baseUrl,
+		const catalog = await resolveProviderCatalog(options.provider, {
+			...modelConnection(options.provider, apiConfiguration),
 			forceRefresh: shouldRefresh,
 		})
+		const { models, ...status } = catalog
+		routerModelCatalogs[options.provider] = status
+		return models
 	}
 
 	const safeGetModels = async (options: GetModelsOptions): Promise<ModelRecord> => {
@@ -540,6 +561,14 @@ async function handleRequestRouterModels(context: MessageHandlerContext, message
 	}
 
 	const candidates: { key: RouterName; options: GetModelsOptions }[] = [
+		{
+			key: "openai",
+			options: {
+				provider: "openai",
+				apiKey: apiConfiguration.openAiApiKey,
+				baseUrl: apiConfiguration.openAiBaseUrl,
+			},
+		},
 		{ key: "openrouter", options: { provider: "openrouter" } },
 		{
 			key: "requesty",
@@ -553,7 +582,11 @@ async function handleRequestRouterModels(context: MessageHandlerContext, message
 		{ key: "vercel-ai-gateway", options: { provider: "vercel-ai-gateway" } },
 		{
 			key: "njust-ai",
-			options: { provider: "njust-ai", baseUrl: process.env.NJUST_AI_PROVIDER_URL ?? "", apiKey: undefined },
+			options: {
+				provider: "njust-ai",
+				baseUrl: process.env.NJUST_AI_PROVIDER_URL ?? "",
+				apiKey: apiConfiguration.rooApiKey,
+			},
 		},
 		{
 			key: "deepseek",
@@ -663,6 +696,14 @@ async function handleRequestRouterModels(context: MessageHandlerContext, message
 				baseUrl: apiConfiguration.doubaoBaseUrl,
 			},
 		},
+		{
+			key: "mimo",
+			options: { provider: "mimo", apiKey: apiConfiguration.mimoApiKey, baseUrl: apiConfiguration.mimoBaseUrl },
+		},
+		{
+			key: "mimo-token-plan",
+			options: { provider: "mimo-token-plan", apiKey: apiConfiguration.mimoTokenPlanApiKey },
+		},
 	]
 
 	const litellmApiKey =
@@ -682,10 +723,6 @@ async function handleRequestRouterModels(context: MessageHandlerContext, message
 	}
 
 	const modelFetchPromises = providerFilter ? candidates.filter(({ key }) => key === providerFilter) : candidates
-
-	if (shouldRefresh && providerFilter && modelFetchPromises.length > 0) {
-		await flushModels(modelFetchPromises[0]!.options, true)
-	}
 
 	const results = await Promise.allSettled(
 		modelFetchPromises.map(async ({ key, options }) => {
@@ -714,7 +751,11 @@ async function handleRequestRouterModels(context: MessageHandlerContext, message
 	void provider.postMessageToWebview({
 		type: "routerModels",
 		routerModels,
-		values: providerFilter ? { provider: requestedProvider } : undefined,
+		routerModelCatalogs,
+		values:
+			providerFilter || requestId
+				? { ...(providerFilter ? { provider: requestedProvider } : {}), ...(requestId ? { requestId } : {}) }
+				: undefined,
 	})
 }
 

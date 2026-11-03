@@ -14,6 +14,7 @@ import { BaseProvider } from "./base-provider"
 import { handleProviderError } from "./utils/error-handler"
 import { calculateApiCostOpenAI, resolveOpenAiUsageForCost } from "../../shared/cost"
 import { getApiRequestTimeout } from "./utils/timeout-config"
+import { unknownModelInfo } from "./resolveModelInfo"
 
 type BaseOpenAiCompatibleProviderOptions<ModelName extends string> = ApiHandlerOptions & {
 	providerName: string
@@ -284,11 +285,14 @@ export abstract class BaseOpenAiCompatibleProvider<ModelName extends string>
 	}
 
 	override getModel(): { id: string; info: ModelInfo } {
-		const id =
-			this.options.apiModelId && this.options.apiModelId in this.providerModels
-				? (this.options.apiModelId as ModelName)
-				: this.defaultProviderModelId
+		const id = this.options.apiModelId || this.defaultProviderModelId
 
-		return { id, info: this.providerModels[id]! }
+		return {
+			id,
+			info:
+				this.options.modelSnapshot?.current?.id === id
+					? this.options.modelSnapshot.current.info
+					: (this.providerModels[id as ModelName] ?? unknownModelInfo),
+		}
 	}
 }

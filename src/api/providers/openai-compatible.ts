@@ -17,6 +17,7 @@ import { ApiStream, ApiStreamUsageChunk } from "../transform/stream"
 
 import { DEFAULT_HEADERS } from "./constants"
 import { BaseProvider } from "./base-provider"
+import { getApiRequestTimeout } from "./utils/timeout-config"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../types"
 
 /**
@@ -77,7 +78,7 @@ export abstract class OpenAICompatibleHandler extends BaseProvider implements Si
 	 * Get the language model for the configured model ID.
 	 */
 	protected getLanguageModel(): LanguageModel {
-		return this.provider(this.config.modelId)
+		return this.provider(this.getModel().id)
 	}
 
 	/**
@@ -96,14 +97,17 @@ export abstract class OpenAICompatibleHandler extends BaseProvider implements Si
 			cachedInputTokens?: number
 			reasoningTokens?: number
 		}
+		inputTokenDetails?: { cacheReadTokens?: number; cacheWriteTokens?: number }
+		outputTokenDetails?: { reasoningTokens?: number }
 		raw?: Record<string, unknown>
 	}): ApiStreamUsageChunk {
 		return {
 			type: "usage",
 			inputTokens: usage.inputTokens || 0,
 			outputTokens: usage.outputTokens || 0,
-			cacheReadTokens: usage.details?.cachedInputTokens,
-			reasoningTokens: usage.details?.reasoningTokens,
+			cacheReadTokens: usage.inputTokenDetails?.cacheReadTokens ?? usage.details?.cachedInputTokens,
+			cacheWriteTokens: usage.inputTokenDetails?.cacheWriteTokens,
+			reasoningTokens: usage.outputTokenDetails?.reasoningTokens ?? usage.details?.reasoningTokens,
 		}
 	}
 
@@ -145,7 +149,7 @@ export abstract class OpenAICompatibleHandler extends BaseProvider implements Si
 	 * Get the max tokens parameter to include in the request.
 	 */
 	protected getMaxOutputTokens(): number | undefined {
-		const modelInfo = this.config.modelInfo
+		const modelInfo = this.getModel().info
 		const maxTokens = this.config.modelMaxTokens || modelInfo.maxTokens
 
 		return maxTokens ?? undefined
@@ -159,7 +163,19 @@ export abstract class OpenAICompatibleHandler extends BaseProvider implements Si
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
 	): ApiStream {
-		yield* this.guardEmptyStream(this.createMessageInner(systemPrompt, messages, metadata))
+		const controller = new AbortController()
+		const signal = metadata?.signal ? AbortSignal.any([metadata.signal, controller.signal]) : controller.signal
+		try {
+			yield* this.guardEmptyStream(
+				this.createMessageInner(systemPrompt, messages, {
+					...metadata,
+					taskId: metadata?.taskId ?? "",
+					signal,
+				}),
+			)
+		} finally {
+			controller.abort()
+		}
 	}
 
 	protected async *createMessageInner(
@@ -167,6 +183,7 @@ export abstract class OpenAICompatibleHandler extends BaseProvider implements Si
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
 	): ApiStream {
+		metadata?.signal?.throwIfAborted()
 		const model = this.getModel()
 		const languageModel = this.getLanguageModel()
 
@@ -180,6 +197,9 @@ export abstract class OpenAICompatibleHandler extends BaseProvider implements Si
 		// Build the request options
 		const requestOptions: Parameters<typeof streamText>[0] = {
 			model: languageModel,
+			abortSignal: metadata?.signal,
+			maxRetries: 0,
+			timeout: getApiRequestTimeout(),
 			system: systemPrompt,
 			messages: aiSdkMessages,
 			temperature: model.temperature ?? this.config.temperature ?? 0,
@@ -193,6 +213,8 @@ export abstract class OpenAICompatibleHandler extends BaseProvider implements Si
 
 		// Process the full stream to get all events
 		for await (const part of result.fullStream) {
+			metadata?.signal?.throwIfAborted()
+			if (part.type === "error") throw part.error
 			// Use the processAiSdkStreamPart utility to convert stream parts
 			for (const chunk of processAiSdkStreamPart(part)) {
 				yield chunk
@@ -201,6 +223,7 @@ export abstract class OpenAICompatibleHandler extends BaseProvider implements Si
 
 		// Yield usage metrics at the end
 		const usage = await result.usage
+		metadata?.signal?.throwIfAborted()
 		if (usage) {
 			yield this.processUsageMetrics(usage)
 		}
@@ -214,6 +237,8 @@ export abstract class OpenAICompatibleHandler extends BaseProvider implements Si
 
 		const { text } = await generateText({
 			model: languageModel,
+			maxRetries: 0,
+			timeout: getApiRequestTimeout(),
 			prompt,
 			maxOutputTokens: this.getMaxOutputTokens(),
 			temperature: this.config.temperature ?? 0,

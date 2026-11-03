@@ -94,6 +94,10 @@ class FallbackApiHandler implements ApiHandler {
 		return this.activeHandler.getModel()
 	}
 
+	async prepareModel(signal?: AbortSignal): Promise<void> {
+		await this.activeHandler.prepareModel?.(signal)
+	}
+
 	countTokens(content: Array<Anthropic.Messages.ContentBlockParam>): Promise<number> {
 		return this.activeHandler.countTokens(content)
 	}

@@ -33,6 +33,7 @@ import { formatConversation } from "./formatConversation"
 import { processEvent, type CodexEventHandlerContext } from "./processEvent"
 import { getApiRequestTimeout } from "../utils/timeout-config"
 import { buildCodexHeaders, executeNonStreamingRequest } from "./completePrompt"
+import { unknownModelInfo } from "../resolveModelInfo"
 
 /**
  * OpenAI Codex base URL for API requests.
@@ -217,7 +218,7 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 		const requestBody = this.buildRequestBody(model, formattedInput, systemPrompt, reasoningEffort, metadata)
 
 		// Make the request
-		yield* this.executeRequest(requestBody, model, accessToken, metadata?.taskId)
+		yield* this.executeRequest(requestBody, model, accessToken, metadata?.taskId, metadata?.signal)
 	}
 
 	// -------------------------------------------------------------------------
@@ -276,10 +277,22 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 		model: OpenAiCodexModel,
 		accessToken: string,
 		taskId?: string,
+		signal?: AbortSignal,
 	): ApiStream {
 		this.abortController = new AbortController()
+		const controller = this.abortController
+		const timeoutMs = getApiRequestTimeout()
+		const timeout = timeoutMs
+			? setTimeout(() => controller.abort(new Error("Codex API request timed out")), timeoutMs)
+			: undefined
+		timeout?.unref?.()
+		const abort = () => controller.abort(signal?.reason)
+		signal?.addEventListener("abort", abort, { once: true })
+		let delivered = false
 
 		try {
+			if (signal?.aborted) abort()
+			controller.signal.throwIfAborted()
 			try {
 				const codexHeaders = await buildCodexHeaders(accessToken, taskId || this.sessionId)
 
@@ -287,6 +300,7 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 					this.client ??
 					new OpenAI({
 						apiKey: accessToken,
+						maxRetries: 0,
 						baseURL: CODEX_API_BASE_URL,
 						defaultHeaders: codexHeaders,
 						timeout: getApiRequestTimeout(),
@@ -306,23 +320,30 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 				const ctx = this.eventHandlerContext
 
 				for await (const event of stream) {
-					if (this.abortController.signal.aborted) {
-						break
-					}
+					controller.signal.throwIfAborted()
 
 					for await (const outChunk of processEvent(event, model, ctx)) {
+						delivered = true
 						if (outChunk.type === "text") {
 							this.sawTextOutputInCurrentResponse = true
 						}
 						yield outChunk
 					}
 				}
+				controller.signal.throwIfAborted()
 			} catch (_sdkErr) {
+				controller.signal.throwIfAborted()
+				if (delivered) throw _sdkErr
+				const status = (_sdkErr as { status?: number })?.status
+				if (status && status < 500) throw _sdkErr
 				// Fallback to manual SSE via fetch (Codex backend)
 				yield* this.makeCodexRequest(requestBody, model, accessToken, taskId)
 			}
 		} finally {
-			this.abortController = undefined
+			clearTimeout(timeout)
+			signal?.removeEventListener("abort", abort)
+			controller.abort()
+			if (this.abortController === controller) this.abortController = undefined
 		}
 	}
 
@@ -401,7 +422,7 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 					errorMessage += ` - ${errorDetails}`
 				}
 
-				throw new Error(errorMessage)
+				throw Object.assign(new Error(errorMessage), { status: response.status, headers: response.headers })
 			}
 
 			if (!response.body) {
@@ -414,7 +435,15 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 				if (error.message.includes("Codex API")) {
 					throw error
 				}
-				throw new Error(t("common:errors.openAiCodex.connectionFailed", { message: error.message }))
+				throw Object.assign(
+					new Error(t("common:errors.openAiCodex.connectionFailed", { message: error.message }), {
+						cause: error,
+					}),
+					{
+						status: (error as { status?: number }).status,
+						headers: (error as { headers?: Headers }).headers,
+					},
+				)
 			}
 			throw new Error(t("common:errors.openAiCodex.unexpectedConnectionError"))
 		}
@@ -721,9 +750,9 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 	override getModel() {
 		const modelId = this.options.apiModelId
 
-		const id = modelId && modelId in openAiCodexModels ? (modelId as OpenAiCodexModelId) : openAiCodexDefaultModelId
+		const id = modelId || openAiCodexDefaultModelId
 
-		const info: ModelInfo = openAiCodexModels[id]
+		const info: ModelInfo = openAiCodexModels[id as OpenAiCodexModelId] ?? unknownModelInfo
 
 		const params = getModelParams({
 			format: "openai",

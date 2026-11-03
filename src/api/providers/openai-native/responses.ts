@@ -8,6 +8,8 @@ import { TelemetryService } from "@njust-ai/telemetry"
 
 import { sanitizeOpenAiCallId } from "../../../utils/tool-id"
 import { getErrorMessage } from "../../../shared/error-utils"
+import { modelConnection } from "../modelConnection"
+import { getApiRequestTimeout } from "../utils/timeout-config"
 
 import { ApiStream } from "../../transform/stream"
 import type { ApiHandlerCreateMessageMetadata } from "../../types"
@@ -122,6 +124,15 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 			messages?: Anthropic.Messages.MessageParam[],
 		): ApiStream {
 			this.abortController = new AbortController()
+			const controller = this.abortController
+			const timeoutMs = getApiRequestTimeout()
+			const timeout = timeoutMs
+				? setTimeout(() => controller.abort(new Error("Responses API request timed out")), timeoutMs)
+				: undefined
+			timeout?.unref?.()
+			const abort = () => controller.abort(metadata?.signal?.reason)
+			metadata?.signal?.addEventListener("abort", abort, { once: true })
+			let delivered = false
 			const taskId = metadata?.taskId
 			const userAgent = `Njust-AI/${Package.version} (${os.platform()} ${os.release()}; ${os.arch()}) node/${process.version.slice(1)}`
 			const requestHeaders: Record<string, string> = {
@@ -131,6 +142,8 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 			}
 
 			try {
+				if (metadata?.signal?.aborted) abort()
+				controller.signal.throwIfAborted()
 				const stream = await (this.client as ResponsesClientLike).responses.create(requestBody, {
 					signal: this.abortController.signal,
 					headers: requestHeaders,
@@ -143,18 +156,21 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 				}
 
 				for await (const event of stream) {
-					if (this.abortController.signal.aborted) {
-						break
-					}
+					controller.signal.throwIfAborted()
 					for await (const outChunk of dispatchEvent(event, model, this as unknown as EventHandlerContext)) {
+						delivered = true
 						yield outChunk
 					}
 				}
+				controller.signal.throwIfAborted()
 			} catch (sdkErr: unknown) {
+				controller.signal.throwIfAborted()
+				if (delivered) throw sdkErr
 				const err = sdkErr as { code?: unknown; status?: unknown; name?: unknown }
 				const errMessage = getErrorMessage(sdkErr)
 				const errCode = typeof err.code === "string" ? err.code : undefined
 				const errStatus = typeof err.status === "number" ? err.status : undefined
+				if (errStatus && errStatus < 500) throw sdkErr
 				const isConnectionError =
 					errCode === "ECONNREFUSED" ||
 					errCode === "ECONNRESET" ||
@@ -174,7 +190,10 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 					throw sdkErr
 				}
 			} finally {
-				this.abortController = undefined
+				clearTimeout(timeout)
+				metadata?.signal?.removeEventListener("abort", abort)
+				controller.abort()
+				if (this.abortController === controller) this.abortController = undefined
 			}
 		}
 
@@ -271,10 +290,7 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 			_messages?: Anthropic.Messages.MessageParam[],
 		): ApiStream {
 			const apiKey = requireApiKey(this.options.openAiNativeApiKey, "OpenAI Native")
-			const baseUrl = this.options.openAiNativeBaseUrl || "https://api.openai.com"
-			const url = `${baseUrl}/v1/responses`
-
-			this.abortController = new AbortController()
+			const url = this.responsesUrl
 			const taskId = metadata?.taskId
 			const userAgent = `Njust-AI/${Package.version} (${os.platform()} ${os.release()}; ${os.arch()}) node/${process.version.slice(1)}`
 
@@ -282,6 +298,7 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 				const response = await fetch(url, {
 					method: "POST",
 					headers: {
+						...modelConnection("openai-native", this.options).headers,
 						"Content-Type": "application/json",
 						Authorization: `Bearer ${apiKey}`,
 						originator: "Njust-AI",
@@ -289,7 +306,7 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 						"User-Agent": userAgent,
 					},
 					body: JSON.stringify(requestBody),
-					signal: this.abortController.signal,
+					signal: this.abortController?.signal,
 				})
 
 				if (!response.ok) {
@@ -340,7 +357,10 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 						errorMessage += ` - ${errorDetails}`
 					}
 
-					throw new ApiProviderError(errorMessage)
+					throw Object.assign(new ApiProviderError(errorMessage), {
+						status: response.status,
+						headers: response.headers,
+					})
 				}
 
 				if (!response.body) {
@@ -370,8 +390,6 @@ export function ResponsesApiMixin<T extends abstract new (...args: any[]) => any
 					throw new ApiProviderError(`Failed to connect to Responses API: ${error.message}`)
 				}
 				throw new ApiProviderError(`Unexpected error connecting to Responses API`)
-			} finally {
-				this.abortController = undefined
 			}
 		}
 	}

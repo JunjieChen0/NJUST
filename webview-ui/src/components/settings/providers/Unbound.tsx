@@ -4,9 +4,7 @@ import { VSCodeTextField } from "@vscode/webview-ui-toolkit/react"
 import { type ProviderSettings, type OrganizationAllowList, type RouterModels } from "@njust-ai/types"
 import { unboundDefaultModelId } from "@njust-ai/core/providers"
 
-import { vscode } from "@src/utils/vscode"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
-import { Button } from "@src/components/ui"
 
 import { inputEventTransform } from "../transforms"
 import { ModelPicker } from "../ModelPicker"
@@ -15,7 +13,6 @@ type UnboundProps = {
 	apiConfiguration: ProviderSettings
 	setApiConfigurationField: (field: keyof ProviderSettings, value: ProviderSettings[keyof ProviderSettings]) => void
 	routerModels?: RouterModels
-	refetchRouterModels: () => void
 	organizationAllowList: OrganizationAllowList
 	modelValidationError?: string
 	simplifySettings?: boolean
@@ -70,16 +67,6 @@ export const Unbound = ({
 				}}>
 				{t("settings:providers.getUnboundApiKey")}
 			</a>
-			<Button
-				variant="outline"
-				onClick={() => {
-					vscode.postMessage({ type: "requestRouterModels", values: { provider: "unbound", refresh: true } })
-				}}>
-				<div className="flex items-center gap-2">
-					<span className="codicon codicon-refresh" />
-					{t("settings:providers.refreshModels.label")}
-				</div>
-			</Button>
 			<ModelPicker
 				apiConfiguration={apiConfiguration}
 				setApiConfigurationField={setApiConfigurationField}

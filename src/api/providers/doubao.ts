@@ -1,3 +1,4 @@
+import { resolveModelInfo } from "./resolveModelInfo"
 import { Anthropic } from "@anthropic-ai/sdk"
 import OpenAI from "openai"
 
@@ -8,7 +9,6 @@ import {
 	doubaoModels,
 	doubaoDefaultModelId,
 	doubaoSeedCodeCodingPlanModelId,
-	openAiModelInfoSaneDefaults,
 	resolveDoubaoInferenceModelId,
 } from "@njust-ai/core/providers"
 
@@ -22,14 +22,6 @@ import { OpenAiHandler } from "./openai"
 import { handleProviderError } from "./utils/error-handler"
 import type { ApiHandlerCreateMessageMetadata } from "../types"
 import { requireApiKey } from "../interfaces/api-key-validator"
-
-const doubaoCustomModelInfo: ModelInfo = {
-	...openAiModelInfoSaneDefaults,
-	maxTokens: 32_768,
-	contextWindow: 262_144,
-	supportsImages: true,
-	supportsPromptCache: false,
-}
 
 function trimTrailingSlash(url: string): string {
 	return url.replace(/\/+$/, "")
@@ -67,7 +59,7 @@ export class DoubaoHandler extends OpenAiHandler {
 
 	override getModel() {
 		const id = this.options.apiModelId ?? doubaoDefaultModelId
-		const info = doubaoModels[id as keyof typeof doubaoModels] ?? doubaoCustomModelInfo
+		const info = resolveModelInfo("doubao", this.options, id, doubaoModels[id as keyof typeof doubaoModels])
 		const params = getModelParams({
 			format: "openai",
 			modelId: id,

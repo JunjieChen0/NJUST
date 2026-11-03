@@ -16,6 +16,9 @@
  */
 
 import { logger } from "../../../shared/logger"
+import { delayMs } from "../../retry/ApiRetryStrategy"
+
+const responseDeadlines = new WeakMap<Response, { signal: AbortSignal; dispose: () => void }>()
 
 /** Default request timeout for model-list fetches (ms). */
 export const DEFAULT_FETCH_TIMEOUT_MS = 10_000
@@ -34,50 +37,79 @@ export const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024
  * responses or non-streaming Response stubs).
  */
 export async function readBodyWithLimit(resp: Response, maxBytes: number): Promise<string> {
-	if (!resp.body) {
-		// No streaming body available — fall back to the Response text/json helpers.
-		// Real fetch Responses always expose text(); some test stubs / polyfills
-		// only expose json(), so stringify that as a last resort.
-		if (typeof resp.text === "function") {
-			return resp.text()
+	const deadline = responseDeadlines.get(resp)
+	const bounded = async <T>(operation: () => Promise<T>): Promise<T> => {
+		const signal = deadline?.signal
+		signal?.throwIfAborted()
+		let abort: (() => void) | undefined
+		try {
+			return await Promise.race([
+				operation(),
+				new Promise<never>((_, reject) => {
+					abort = () => reject(signal?.reason)
+					signal?.addEventListener("abort", abort, { once: true })
+				}),
+			])
+		} finally {
+			if (abort) signal?.removeEventListener("abort", abort)
 		}
-		if (typeof resp.json === "function") {
-			return JSON.stringify(await resp.json())
-		}
-		return ""
 	}
-
-	const reader = resp.body.getReader()
-	const chunks: Uint8Array[] = []
-	let totalBytes = 0
-
 	try {
-		while (true) {
-			const { done, value } = await reader.read()
-			if (done) break
-
-			totalBytes += value.byteLength
-			if (totalBytes > maxBytes) {
-				// Cancel the stream to stop receiving further chunks
-				await reader.cancel().catch((err) => logger.debug("SafeFetch", "cancel reader on size limit", err))
-				throw new Error(`Response body exceeds size limit (${(maxBytes / 1024 / 1024).toFixed(1)} MB)`)
+		if (!resp.body) {
+			// No streaming body available — fall back to the Response text/json helpers.
+			// Real fetch Responses always expose text(); some test stubs / polyfills
+			// only expose json(), so stringify that as a last resort.
+			if (typeof resp.text === "function") {
+				const text = await bounded(() => resp.text())
+				if (Buffer.byteLength(text) > maxBytes) throw new Error("Response body exceeds size limit")
+				return text
 			}
-
-			chunks.push(value)
+			if (typeof resp.json === "function") {
+				const text = JSON.stringify(await bounded(() => resp.json()))
+				if (Buffer.byteLength(text) > maxBytes) throw new Error("Response body exceeds size limit")
+				return text
+			}
+			return ""
 		}
-	} finally {
-		// Best-effort release the reader lock
-		reader.releaseLock?.()
-	}
 
-	// Concatenate chunks and decode
-	const combined = new Uint8Array(totalBytes)
-	let offset = 0
-	for (const chunk of chunks) {
-		combined.set(chunk, offset)
-		offset += chunk.byteLength
+		const reader = resp.body.getReader()
+		const chunks: Uint8Array[] = []
+		let totalBytes = 0
+
+		try {
+			while (true) {
+				const { done, value } = await bounded(() => reader.read())
+				if (done) break
+
+				totalBytes += value.byteLength
+				if (totalBytes > maxBytes) {
+					// Cancel the stream to stop receiving further chunks
+					await reader.cancel().catch((err) => logger.debug("SafeFetch", "cancel reader on size limit", err))
+					throw new Error(`Response body exceeds size limit (${(maxBytes / 1024 / 1024).toFixed(1)} MB)`)
+				}
+
+				chunks.push(value)
+			}
+		} catch (error) {
+			void reader.cancel(error).catch((err) => logger.debug("SafeFetch", "cancel failed body read", err))
+			throw error
+		} finally {
+			// Best-effort release the reader lock
+			reader.releaseLock?.()
+		}
+
+		// Concatenate chunks and decode
+		const combined = new Uint8Array(totalBytes)
+		let offset = 0
+		for (const chunk of chunks) {
+			combined.set(chunk, offset)
+			offset += chunk.byteLength
+		}
+		return new TextDecoder().decode(combined)
+	} finally {
+		deadline?.dispose()
+		responseDeadlines.delete(resp)
 	}
-	return new TextDecoder().decode(combined)
 }
 
 /**
@@ -113,11 +145,6 @@ export interface SafeFetchOptions {
 	 * non-2xx HTTP responses (the caller decides how to handle those).
 	 */
 	retries?: number
-}
-
-/** Small async sleep helper. */
-function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
@@ -190,7 +217,17 @@ export async function safeFetch(
 		}
 
 		const timeoutController = new AbortController()
-		const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs)
+		const timeoutId = setTimeout(() => {
+			timeoutController.abort(new Error(`Request timed out after ${timeoutMs}ms`))
+			dispose()
+		}, timeoutMs)
+		timeoutId.unref?.()
+		let returned = false
+		const dispose = () => {
+			clearTimeout(timeoutId)
+			if (externalAbortListener && options.signal)
+				options.signal.removeEventListener("abort", externalAbortListener)
+		}
 
 		// Chain the caller-provided signal if present. Track the listener so it
 		// can be removed at the end of this attempt — otherwise retries would
@@ -216,14 +253,15 @@ export async function safeFetch(
 				// CDN/HTML error page into memory). Cancel the stream when
 				// available; otherwise best-effort drain.
 				if (response.body && typeof response.body.cancel === "function") {
-					await response.body.cancel().catch((err) => logger.debug("SafeFetch", "cancel body on retry", err))
-				} else {
-					await response.text().catch((err) => logger.debug("SafeFetch", "drain body on retry", err))
+					void response.body.cancel().catch((err) => logger.debug("SafeFetch", "cancel body on retry", err))
 				}
 				lastError = new Error(`Transient HTTP ${response.status}`)
-				await sleep(1000 * Math.pow(2, attempt) + Math.random() * 500)
+				dispose()
+				await delayMs(1000 * Math.pow(2, attempt) + Math.random() * 500, options.signal)
 				continue
 			}
+			responseDeadlines.set(response, { signal: timeoutController.signal, dispose })
+			returned = true
 			return response
 		} catch (error) {
 			// Distinguish a caller-initiated abort (do NOT retry, surface
@@ -239,17 +277,13 @@ export async function safeFetch(
 			}
 			// Retry only transient network/timeout errors; otherwise rethrow.
 			if (attempt < maxRetries && isRetryableFetchError(lastError)) {
-				await sleep(1000 * Math.pow(2, attempt) + Math.random() * 500)
+				dispose()
+				await delayMs(1000 * Math.pow(2, attempt) + Math.random() * 500, options.signal)
 				continue
 			}
 			throw lastError
 		} finally {
-			clearTimeout(timeoutId)
-			// Remove the per-attempt external-signal listener so retries
-			// don't accumulate listeners on the caller's long-lived signal.
-			if (externalAbortListener && options.signal) {
-				options.signal.removeEventListener("abort", externalAbortListener)
-			}
+			if (!returned) dispose()
 		}
 	}
 	throw lastError ?? new Error("safeFetch exhausted retries")
