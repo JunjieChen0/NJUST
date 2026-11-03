@@ -58,7 +58,7 @@ describe("CangjieVerificationRunner", () => {
 		ctx = {
 			taskId: "task-1",
 			taskDir,
-			projectRoot: "/ws/app",
+			projectRoot: path.join(taskDir, "project"),
 			signal: new AbortController().signal,
 			phase: "delivery",
 			approve: async () => ({ approved: true }),
@@ -142,7 +142,7 @@ describe("CangjieVerificationRunner", () => {
 		expect(exec).toHaveBeenCalledWith(
 			"/sdk/tools/bin/cjpm",
 			["build"],
-			expect.objectContaining({ cwd: "/ws/app", env: { PATH: "/sdk/bin" }, timeoutMs: 60_000 }),
+			expect.objectContaining({ cwd: ctx.projectRoot, env: { PATH: "/sdk/bin" }, timeoutMs: 60_000 }),
 		)
 		expect(run).toMatchObject({
 			kind: "build",
@@ -150,7 +150,7 @@ describe("CangjieVerificationRunner", () => {
 			status: "passed",
 			exitCode: 0,
 			executable: "/sdk/tools/bin/cjpm",
-			cwd: "/ws/app",
+			cwd: ctx.projectRoot,
 			inputFingerprint: "fp-1",
 			inputFingerprintAfter: "fp-1",
 			sdk: { home: "/sdk", version: "1.0.5" },
@@ -259,8 +259,15 @@ describe("CangjieVerificationRunner", () => {
 		expect((await loadSnapshot(taskDir, "fp-after"))?.files).toEqual({ "cjpm.lock": "after" })
 	})
 
-	it("runs tests with an xml report outside the project and records the counts", async () => {
-		const exec = vi.fn<CangjieCheckDeps["exec"]>().mockResolvedValue(processResult({ output: PASSING_TEST_OUTPUT }))
+	it("reads sandbox-mounted test reports and archives them in the task directory", async () => {
+		const exec = vi.fn<CangjieCheckDeps["exec"]>(async (_file, args, options) => {
+			const reportDir = path.resolve(options.cwd, args[args.indexOf("--report-path") + 1])
+			await fs.writeFile(
+				path.join(reportDir, "tests.xml"),
+				'<testsuite tests="3" failures="0" errors="0" skipped="0"/>',
+			)
+			return processResult({ output: PASSING_TEST_OUTPUT })
+		})
 
 		const run = await runCangjieCheck("test", ctx, deps(exec))
 
@@ -268,7 +275,8 @@ describe("CangjieVerificationRunner", () => {
 		expect(args.slice(0, 1)).toEqual(["test"])
 		expect(args).toEqual(expect.arrayContaining(["--report-format", "xml", "--no-progress", "--no-color"]))
 		const reportDir = args[args.indexOf("--report-path") + 1]
-		expect(reportDir.startsWith(taskDir)).toBe(true)
+		expect(reportDir).toContain("target/.njust-verification/")
+		expect(await fs.readFile(path.join(taskDir, run.reportRef!, "tests.xml"), "utf8")).toContain('tests="3"')
 		expect(run).toMatchObject({
 			kind: "test",
 			status: "passed",
@@ -296,6 +304,16 @@ describe("CangjieVerificationRunner", () => {
 		expect(exec).toHaveBeenCalledTimes(1)
 		expect(result.build.status).toBe("failed")
 		expect(result.test).toBeUndefined()
+	})
+
+	it("records a sandbox policy denial as blocked without a successful exit", async () => {
+		const run = await runCangjieCheck(
+			"build",
+			ctx,
+			deps(async () => processResult({ exitCode: null, sandboxDenied: "Docker backend unavailable" })),
+		)
+		expect(run).toMatchObject({ status: "blocked", abortReason: "sandbox_denied" })
+		expect(run.exitCode).toBeUndefined()
 	})
 
 	it("runs build then tests when the build passes", async () => {

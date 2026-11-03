@@ -117,7 +117,14 @@ function evaluateCheck(
 
 export function hasEnvironmentChanged(run: VerificationRun, current?: VerificationEnvironment): boolean {
 	return environmentsDiffer(
-		{ sdkHome: run.sdk?.home, sdkVersion: run.sdk?.version, cjpmPath: run.executable },
+		{
+			sdkHome: run.sdk?.home,
+			sdkVersion: run.sdk?.version,
+			cjpmPath: run.executable,
+			backend: run.sdk?.backend ?? "guarded-host",
+			image: run.sdk?.image,
+			imageDigest: run.sdk?.imageDigest,
+		},
 		current,
 	)
 }
@@ -131,6 +138,11 @@ export function environmentsDiffer(previous?: VerificationEnvironment, current?:
 	const differentPath = (before: string | undefined, next: string | undefined) =>
 		before !== undefined && next !== undefined && normalize(before) !== normalize(next)
 	return (
+		(previous.backend !== undefined && current.backend !== undefined && previous.backend !== current.backend) ||
+		(previous.image !== undefined && current.image !== undefined && previous.image !== current.image) ||
+		(previous.imageDigest !== undefined &&
+			current.imageDigest !== undefined &&
+			previous.imageDigest !== current.imageDigest) ||
 		differentPath(previous.sdkHome, current.sdkHome) ||
 		differentPath(previous.cjpmPath, current.cjpmPath) ||
 		(previous.sdkVersion !== undefined &&

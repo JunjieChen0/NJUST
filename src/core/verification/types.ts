@@ -36,6 +36,7 @@ export const verificationAbortReasonSchema = z.enum([
 	"untrusted_workspace",
 	/** The installed cjpm rejected the verification flags (older SDK). */
 	"unsupported_options",
+	"sandbox_denied",
 ])
 
 export const testScopeSchema = z.object({
@@ -52,6 +53,9 @@ export const testScopeSchema = z.object({
 export const sdkInfoSchema = z.object({
 	home: z.string().optional(),
 	version: z.string().optional(),
+	backend: z.enum(["guarded-host", "docker"]).optional(),
+	image: z.string().optional(),
+	imageDigest: z.string().optional(),
 })
 
 export const verificationRunSchema = z.object({
@@ -71,6 +75,7 @@ export const verificationRunSchema = z.object({
 	abortReason: verificationAbortReasonSchema.optional(),
 	abortDetail: z.string().optional(),
 	logRef: z.string().optional(),
+	reportRef: z.string().optional(),
 	testScope: testScopeSchema.optional(),
 	sdk: sdkInfoSchema.optional(),
 	/** Project input fingerprint captured before the run started. */
@@ -111,6 +116,9 @@ export const verificationEnvironmentSchema = z.object({
 	sdkHome: z.string().optional(),
 	sdkVersion: z.string().optional(),
 	cjpmPath: z.string().optional(),
+	backend: z.enum(["guarded-host", "docker"]).optional(),
+	image: z.string().optional(),
+	imageDigest: z.string().optional(),
 })
 export const invalidationSchema = z.object({
 	at: z.number(),

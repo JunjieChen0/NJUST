@@ -1475,15 +1475,13 @@ export class DockerSandboxRunner implements CommandRunner {
 	}
 
 	/**
-	 * Get the Docker image digest for a local image.
+	 * Get the immutable image ID, matching the container's .Image execution metadata.
 	 */
 	async getImageDigest(image: string): Promise<string | undefined> {
 		try {
-			const { stdout } = await execFileAsync(
-				"docker",
-				["inspect", "--format", "{{index .RepoDigests 0}}", image],
-				{ timeout: 10_000 },
-			)
+			const { stdout } = await execFileAsync("docker", ["image", "inspect", "--format", "{{.Id}}", image], {
+				timeout: 10_000,
+			})
 			return stdout.trim() || undefined
 		} catch (error) {
 			logger.debug("DockerSandboxRunner", "Failed to inspect image digest", { image, error })

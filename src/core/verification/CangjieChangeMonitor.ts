@@ -176,7 +176,14 @@ function latestBinding(record: TaskVerificationRecord, includeInvalidations = tr
 		...record.runs.map((run) => ({
 			at: run.endedAt ?? run.startedAt,
 			fingerprint: run.inputFingerprint,
-			environment: { sdkHome: run.sdk?.home, sdkVersion: run.sdk?.version, cjpmPath: run.executable },
+			environment: {
+				sdkHome: run.sdk?.home,
+				sdkVersion: run.sdk?.version,
+				cjpmPath: run.executable,
+				backend: run.sdk?.backend ?? "guarded-host",
+				image: run.sdk?.image,
+				imageDigest: run.sdk?.imageDigest,
+			},
 		})),
 		...record.claims.map((claim) => ({
 			at: claim.claimedAt,

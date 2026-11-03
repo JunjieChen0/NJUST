@@ -6,7 +6,7 @@ import * as fs from "fs/promises"
 import * as os from "os"
 import * as path from "path"
 
-import { createDefaultCangjieCheckDeps, runCangjieVerification } from "../CangjieVerificationRunner"
+import { createDefaultCangjieCheckDeps, runCangjieVerification, runCangjieCheck } from "../CangjieVerificationRunner"
 import { evaluateVerification } from "../verdict"
 import { loadVerificationRecord } from "../VerificationStore"
 import { loadSnapshot } from "../snapshotStore"
@@ -135,7 +135,7 @@ describe.skipIf(!enabled)("Cangjie verification with a real SDK", () => {
 			},
 		)
 		try {
-			const outcome = await session.verifyForCompletion(async () => true)
+			const outcome = await session.verifyForCompletion(async () => ({ approved: true }))
 			expect(outcome.action).toBe("allow")
 			if (outcome.action === "allow") expect(outcome.facts).toContain("Verdict: verified")
 			const sourcePath = path.join(projectRoot, "src/calc.cj")
@@ -161,5 +161,49 @@ describe.skipIf(!enabled)("Cangjie verification with a real SDK", () => {
 
 		expect(result.build.status).toBe("cancelled")
 		expect(result.test).toBeUndefined()
+	}, 240_000)
+
+	it("records a real compilation failure and skips tests", async () => {
+		await fs.writeFile(path.join(projectRoot, "src", "calc.cj"), CALC("this is invalid syntax"), "utf8")
+		try {
+			const { result, verdict } = await verify()
+			expect(result.build.status).toBe("failed")
+			expect(result.test).toBeUndefined()
+			expect(verdict.overall).toBe("failed")
+		} finally {
+			await fs.writeFile(path.join(projectRoot, "src", "calc.cj"), CALC("a + b"), "utf8")
+		}
+	}, 240_000)
+
+	it("records zero tests without certifying success", async () => {
+		await fs.writeFile(path.join(projectRoot, "src", "calc_test.cj"), "package demo\n", "utf8")
+		try {
+			const { result, verdict } = await verify()
+			expect(result.test?.testScope?.executed).toBe(0)
+			expect(verdict.test.state).toBe("zero_tests")
+			expect(verdict.overall).toBe("incomplete")
+		} finally {
+			await fs.writeFile(path.join(projectRoot, "src", "calc_test.cj"), CALC_TEST, "utf8")
+		}
+	}, 240_000)
+
+	it("records missing SDK resolution as blocked without running a process", async () => {
+		const deps = createDefaultCangjieCheckDeps()
+		deps.resolveCjpm = () => undefined
+		deps.sdkInfo = async () => ({ backend: "guarded-host" })
+		const run = await runCangjieCheck(
+			"build",
+			{
+				taskId: "missing-sdk",
+				taskDir: path.join(base, "missing-sdk-task"),
+				projectRoot,
+				signal: new AbortController().signal,
+				phase: "delivery",
+				approve: async () => ({ approved: true }),
+			},
+			deps,
+		)
+		expect(run).toMatchObject({ status: "blocked", abortReason: "spawn_failed" })
+		expect(run.exitCode).toBeUndefined()
 	}, 240_000)
 })

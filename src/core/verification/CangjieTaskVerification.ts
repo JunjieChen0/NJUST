@@ -455,7 +455,8 @@ export function createCangjieTaskVerification(task: {
 				vscode.workspace.onDidChangeConfiguration((event) => {
 					if (
 						event.affectsConfiguration("njust-ai.cangjieTools") ||
-						event.affectsConfiguration("njust-ai.cangjieLsp")
+						event.affectsConfiguration("njust-ai.cangjieLsp") ||
+						event.affectsConfiguration("njust-ai.sandbox")
 					)
 						onChange()
 				}),

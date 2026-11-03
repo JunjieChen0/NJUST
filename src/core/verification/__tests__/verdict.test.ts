@@ -36,6 +36,21 @@ function record(parts: Partial<TaskVerificationRecord> = {}): TaskVerificationRe
 }
 
 describe("evaluateVerification", () => {
+	it("expires verification after switching Docker images or execution backends", () => {
+		const evidence = record({
+			runs: [run({ kind: "build", sdk: { backend: "docker", image: "sdk:v1", imageDigest: "sha256:old" } })],
+		})
+		for (const environment of [
+			{ backend: "docker" as const, image: "sdk:v2" },
+			{ backend: "guarded-host" as const },
+			{ backend: "docker" as const, imageDigest: "sha256:new" },
+		]) {
+			expect(evaluateVerification(evidence, FP, environment).build).toMatchObject({
+				state: "stale",
+				staleReason: "environment_changed",
+			})
+		}
+	})
 	it("never verifies partial input coverage even with passing commands", () => {
 		const evidence = record({ runs: [run({ kind: "build" }), passingTest()] })
 		const result = evaluateVerification(evidence, FP, undefined, {

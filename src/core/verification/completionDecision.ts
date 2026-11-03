@@ -66,7 +66,7 @@ function describeGap(check: CheckState): string {
 	if (check.state === "not_run") return "not run"
 	const detail =
 		check.run.abortReason === "project_busy"
-			? "Another cjpm process is still running in this project"
+			? (check.run.abortDetail ?? "Another cjpm process is still running in this project")
 			: (check.run.abortDetail ?? check.run.abortReason)
 	switch (check.state) {
 		case "stale":

@@ -312,10 +312,15 @@ describe("DockerSandboxRunner", () => {
 			expect(pullArgs[0]).toBe("pull")
 		})
 
-		it("should support image digest inspection", () => {
-			const inspectArgs = ["inspect", "--format", "{{index .RepoDigests 0}}", "njust-ai/sandbox:latest"]
-			expect(inspectArgs).toContain("inspect")
-			expect(inspectArgs).toContain("{{index .RepoDigests 0}}")
+		it("uses the same immutable image ID as execution metadata, including locally built images", async () => {
+			mockExecFileAsync.mockResolvedValueOnce({ stdout: "sha256:local-image\n", stderr: "" })
+			const runner = new DockerSandboxRunner(() => settings)
+			await expect(runner.getImageDigest("njust-ai/sandbox:latest")).resolves.toBe("sha256:local-image")
+			expect(mockExecFileAsync).toHaveBeenCalledWith(
+				"docker",
+				["image", "inspect", "--format", "{{.Id}}", "njust-ai/sandbox:latest"],
+				{ timeout: 10_000 },
+			)
 		})
 
 		it("should use generous timeout for image pull", () => {
