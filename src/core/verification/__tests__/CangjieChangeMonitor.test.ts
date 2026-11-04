@@ -304,6 +304,25 @@ describe("CangjieChangeMonitor", () => {
 		expect(listener).toHaveBeenCalledTimes(2)
 	})
 
+	it("notifies when cjpm disappears and when the same path recovers", async () => {
+		const listener = vi.fn()
+		monitor.onDidChange(listener)
+		const runs = (await read())!.runs
+		for (let cycle = 0; cycle < 2; cycle++) {
+			environment = { sdkVersion: "1" }
+			expect((await monitor.recheck("environment_change"))?.verdict.overall).toBe("incomplete")
+			expect(listener).toHaveBeenCalledTimes(cycle * 2 + 1)
+			environment = { sdkVersion: "1", cjpmPath: "cjpm" }
+			expect((await monitor.recheck("environment_change"))?.verdict.overall).toBe("verified")
+			expect(listener).toHaveBeenCalledTimes(cycle * 2 + 2)
+			expect(listener.mock.lastCall?.[0].verdict.overall).toBe("verified")
+			await monitor.recheck("environment_change")
+			expect(listener).toHaveBeenCalledTimes(cycle * 2 + 2)
+		}
+		expect((await read())!.runs).toEqual(runs)
+		expect((await read())!.invalidations).toHaveLength(4)
+	})
+
 	it("does not crash or overwrite corrupt records during resume", async () => {
 		await fs.writeFile(path.join(taskDir, "verification.json"), "{broken")
 		await expect(monitor.recheck("task_resume")).resolves.toBeUndefined()

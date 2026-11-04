@@ -2,10 +2,13 @@ import dns from "node:dns/promises"
 import type { LookupAddress, LookupAllOptions } from "node:dns"
 import tls from "node:tls"
 import https from "node:https"
+import http from "node:http"
+import net from "node:net"
+import type { Duplex } from "node:stream"
 import { execFileSync } from "node:child_process"
 import { createPrivateKey } from "node:crypto"
 import { afterEach, describe, expect, it, vi, type MockInstance } from "vitest"
-import { guardedFetch } from "../networkGuard.js"
+import { guardedFetch, setGuardedFetchProxy } from "../networkGuard.js"
 
 // Spy on the overload used by the guard, which always requests all addresses.
 const mockLookup = () =>
@@ -13,6 +16,7 @@ const mockLookup = () =>
 
 describe("guardedFetch DNS pinning", () => {
 	afterEach(() => {
+		setGuardedFetchProxy(undefined)
 		vi.restoreAllMocks()
 		vi.unstubAllGlobals()
 	})
@@ -51,7 +55,8 @@ describe("guardedFetch DNS pinning", () => {
 		expect(lookup).toHaveBeenCalledTimes(2)
 	})
 
-	it("rejects DNS rebinding to a private address before making a request", async () => {
+	it.each([false, true])("rejects DNS rebinding before a request (proxy=%s)", async (proxy) => {
+		if (proxy) setGuardedFetchProxy({ serverUrl: "http://127.0.0.1:8888", tlsInsecure: false })
 		const lookup = mockLookup()
 		lookup.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }])
 		lookup.mockResolvedValueOnce([{ address: "127.0.0.1", family: 4 }])
@@ -96,6 +101,27 @@ describe("guardedFetch DNS pinning", () => {
 		})
 		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
 		const address = server.address() as { port: number }
+		const tunnels: string[] = []
+		const sockets = new Set<Duplex>()
+		const proxy = http.createServer()
+		proxy.on("connect", (req, socket, head) => {
+			tunnels.push(req.url ?? "")
+			expect(req.headers.host).toBe(req.url)
+			expect(req.headers["proxy-authorization"]).toBe(
+				`Basic ${Buffer.from("test-user:test-password").toString("base64")}`,
+			)
+			const upstream = net.connect(address.port, "127.0.0.1", () => {
+				socket.write("HTTP/1.1 200 Connection Established\r\n\r\n")
+				if (head.length) upstream.write(head)
+				socket.pipe(upstream).pipe(socket)
+			})
+			sockets.add(socket)
+			sockets.add(upstream)
+			socket.on("error", () => upstream.destroy())
+			upstream.on("error", () => socket.destroy())
+		})
+		await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve))
+		const proxyPort = (proxy.address() as { port: number }).port
 		mockLookup().mockResolvedValue([{ address: "93.184.216.34", family: 4 }])
 		const connect = tls.connect.bind(tls)
 		// Route only this test's socket to the loopback server while preserving TLS verification.
@@ -112,7 +138,37 @@ describe("guardedFetch DNS pinning", () => {
 			})
 			controller.abort()
 			await expect(streaming.text()).rejects.toMatchObject({ name: "AbortError" })
+
+			setGuardedFetchProxy({
+				serverUrl: `http://test-user:test-password@127.0.0.1:${proxyPort}`,
+				tlsInsecure: false,
+			})
+			const proxied = await guardedFetch(`https://example.com:${address.port}/api`)
+			expect(await proxied.text()).toBe("verified TLS")
+			expect(tunnels).toEqual([`93.184.216.34:${address.port}`])
+			expect(hosts.at(-1)).toBe(`example.com:${address.port}`)
+			const defaultPort = await guardedFetch("https://example.com/api")
+			expect(await defaultPort.text()).toBe("verified TLS")
+			expect(tunnels.at(-1)).toBe("93.184.216.34:443")
+			expect(hosts.at(-1)).toBe("example.com")
+			await expect(guardedFetch(`https://wrong.example.com:${address.port}/api`)).rejects.toThrow("fetch failed")
+			const abortProxy = new AbortController()
+			const proxyStream = await guardedFetch(`https://example.com:${address.port}/stream`, {
+				signal: abortProxy.signal,
+			})
+			abortProxy.abort()
+			await expect(proxyStream.text()).rejects.toMatchObject({ name: "AbortError" })
+			for (const host of ["93.184.216.34", "[2606:4700:4700::1111]"]) {
+				await expect(guardedFetch(`https://${host}/api`)).rejects.toThrow("fetch failed")
+				expect(tunnels.at(-1)).toBe(`${host}:443`)
+			}
+			setGuardedFetchProxy(undefined)
+			const direct = await guardedFetch(`https://example.com:${address.port}/api`)
+			expect(await direct.text()).toBe("verified TLS")
+			expect(tunnels).toHaveLength(6)
 		} finally {
+			for (const socket of sockets) socket.destroy()
+			await new Promise<void>((resolve, reject) => proxy.close((error) => (error ? reject(error) : resolve())))
 			server.closeAllConnections()
 			await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
 		}

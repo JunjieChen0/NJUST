@@ -83,24 +83,7 @@ export class ConfigTool extends BaseTool<"config"> {
 
 				case "list": {
 					task.consecutiveMistakeCount = 0
-					// config object contains the resolved settings; extract own keys.
-					const allKeys: Record<string, unknown> = {}
-					// The VS Code API doesn't expose a simple "list all keys" method.
-					// Inspect the configuration section to get defined keys.
-					const inspect = config.inspect("")
-					if (inspect) {
-						const merge = (src: Record<string, unknown> | undefined) => {
-							if (src) {
-								for (const [k, v] of Object.entries(src)) {
-									allKeys[k] = v
-								}
-							}
-						}
-						merge(inspect.globalValue as Record<string, unknown> | undefined)
-						merge(inspect.workspaceValue as Record<string, unknown> | undefined)
-						merge(inspect.workspaceFolderValue as Record<string, unknown> | undefined)
-						merge(inspect.defaultValue as Record<string, unknown> | undefined)
-					}
+					const allKeys = vscode.workspace.getConfiguration().get<Record<string, unknown>>(Package.name, {})
 					pushToolResult(JSON.stringify(allKeys, null, 2))
 					return
 				}

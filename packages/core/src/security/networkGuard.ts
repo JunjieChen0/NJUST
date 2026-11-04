@@ -1,6 +1,6 @@
 import dns from "node:dns/promises"
 import net from "node:net"
-import { Agent } from "undici"
+import { Agent, Pool, ProxyAgent, type Dispatcher } from "undici"
 import { logger } from "../shared/logger.js"
 
 const BLOCKED_HOSTNAMES = new Set(["localhost", "localhost."])
@@ -10,6 +10,13 @@ const MAX_REDIRECTS = 5
 
 /** Maximum request body size (10 MB) to prevent abuse. */
 const MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024
+
+let debugProxy: { serverUrl: string; tlsInsecure: boolean } | undefined
+
+/** Set only by the extension's development-mode proxy lifecycle. */
+export function setGuardedFetchProxy(config: typeof debugProxy): void {
+	debugProxy = config
+}
 
 /** Sensitive headers to strip on cross-origin redirects. */
 const SENSITIVE_HEADERS = new Set(["authorization", "cookie", "set-cookie", "proxy-authorization", "x-api-key"])
@@ -241,11 +248,15 @@ function stripSensitiveHeadersForCrossOrigin(headers: Headers, fromOrigin: strin
  * Perform a single fetch with IP pinning against a validated URL.
  */
 async function pinnedFetch(parsed: URL, init?: RequestInit): Promise<Response> {
-	if (net.isIP(parsed.hostname) !== 0) {
+	const hostname = parsed.hostname.replace(/^\[|\]$/g, "")
+	const family = net.isIP(hostname)
+	if (family !== 0 && !debugProxy) {
 		return fetch(parsed.toString(), { ...init, redirect: "manual" })
 	}
 
-	const resolved = await dns.lookup(parsed.hostname, { all: true, verbatim: true })
+	const resolved = family
+		? [{ address: hostname, family }]
+		: await dns.lookup(hostname, { all: true, verbatim: true })
 	if (!resolved.length) {
 		throw new Error(`Could not resolve host: ${parsed.hostname}`)
 	}
@@ -253,18 +264,35 @@ async function pinnedFetch(parsed: URL, init?: RequestInit): Promise<Response> {
 		assertPublicIp(entry.address)
 	}
 
-	const dispatcher = new Agent({
-		connect: {
-			lookup: (_hostname, options, callback) => {
-				if (options.all) callback(null, resolved)
-				else callback(null, resolved[0]!.address, resolved[0]!.family)
-			},
-		},
-	})
+	const target = resolved[0]!
+	const authority = `${target.family === 6 ? `[${target.address}]` : target.address}:${parsed.port || (parsed.protocol === "https:" ? 443 : 80)}`
+	const dispatcher = debugProxy
+		? new ProxyAgent({
+				uri: debugProxy.serverUrl,
+				requestTls: { rejectUnauthorized: !debugProxy.tlsInsecure },
+				proxyTls: { rejectUnauthorized: !debugProxy.tlsInsecure },
+				// Pin the proxy's CONNECT destination; keep the request origin for Host and TLS.
+				clientFactory: (origin, options) =>
+					new Pool(origin, options).compose(
+						(dispatch) => (options, handler) =>
+							dispatch(
+								{ ...options, path: authority, headers: { ...options.headers, host: authority } },
+								handler,
+							),
+					),
+			})
+		: new Agent({
+				connect: {
+					lookup: (_hostname, options, callback) => {
+						if (options.all) callback(null, resolved)
+						else callback(null, target.address, target.family)
+					},
+				},
+			})
 	try {
 		// Keep the original origin for Host, TLS SNI and certificate verification.
 		return await fetch(parsed.toString(), { ...init, redirect: "manual", dispatcher } as RequestInit & {
-			dispatcher: Agent
+			dispatcher: Dispatcher
 		})
 	} finally {
 		// Drain active response bodies before closing; awaiting here would block streaming callers.

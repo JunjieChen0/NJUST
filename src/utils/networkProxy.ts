@@ -17,6 +17,7 @@ import { logger } from "../shared/logger"
 import { getErrorMessage } from "../shared/error-utils"
 import { TelemetryService } from "@njust-ai/telemetry"
 import { TelemetryEventName } from "@njust-ai/types"
+import { setGuardedFetchProxy } from "@njust-ai/core/security"
 
 /**
  * Proxy configuration state
@@ -59,6 +60,7 @@ function redactProxyUrl(proxyUrl: string | undefined): string {
 }
 
 function restoreGlobalFetchPatch(): void {
+	setGuardedFetchProxy(undefined)
 	if (!fetchPatched) {
 		return
 	}
@@ -241,6 +243,7 @@ async function configureUndiciProxy(config: ProxyConfig): Promise<void> {
 	if (!config.enabled || !config.serverUrl) {
 		return
 	}
+	setGuardedFetchProxy({ serverUrl: config.serverUrl, tlsInsecure: config.tlsInsecure })
 
 	if (undiciProxyInitialized) {
 		log(`undici global dispatcher already configured; restart VS Code to change proxy safely`)

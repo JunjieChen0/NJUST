@@ -254,6 +254,23 @@ suite("Cangjie verification in Extension Host", function () {
 		assert.notStrictEqual(delivery(id)?.verification?.overall, "verified")
 	})
 
+	test("restoring cjpm automatically refreshes the delivered card", async () => {
+		const id = await start()
+		assert.strictEqual((await finish(id)).overall, "verified")
+		const config = vscode.workspace.getConfiguration("njust-ai")
+		const original = config.get<string>("cangjieTools.cjpmPath")!
+		const runs = (await record(id)).runs
+		try {
+			await config.update("cangjieTools.cjpmPath", `${original}.missing`, vscode.ConfigurationTarget.Workspace)
+			await waitFor(() => delivery(id)?.verification?.overall === "incomplete", { timeout: 30_000 })
+			await config.update("cangjieTools.cjpmPath", original, vscode.ConfigurationTarget.Workspace)
+			await waitFor(() => delivery(id)?.verification?.overall === "verified", { timeout: 30_000 })
+			assert.deepStrictEqual((await record(id)).runs, runs)
+		} finally {
+			await config.update("cangjieTools.cjpmPath", original, vscode.ConfigurationTarget.Workspace)
+		}
+	})
+
 	test("cancelling an active verification preserves cancelled facts and existing source", async () => {
 		await fs.writeFile(path.join(fixtureDir, "control.json"), JSON.stringify({ delayMs: 30_000 }))
 		const id = await start()

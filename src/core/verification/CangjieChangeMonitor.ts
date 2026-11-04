@@ -123,6 +123,7 @@ export class CangjieChangeMonitor {
 		const codeChanged = reference?.fingerprint !== undefined && reference.fingerprint !== snapshot.fingerprint
 		const environmentChanged =
 			environmentsDiffer(reference?.environment, environment) ||
+			environmentsDiffer(environment, reference?.environment) ||
 			[verdict.build, verdict.test].some(
 				(check) => check.state === "stale" && check.staleReason === "environment_changed",
 			)
