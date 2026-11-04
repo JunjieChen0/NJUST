@@ -268,7 +268,7 @@ export function generatePackageJson({
 	overrideJson: Record<string, unknown>
 	substitution: [string, string]
 }) {
-	const { viewsContainers, views, commands, menus, submenus, keybindings, configuration } =
+	const { viewsContainers, views, commands, menus, submenus, keybindings, configuration, ...otherContributions } =
 		contributesSchema.parse(contributes)
 	const [from, to] = substitution
 
@@ -277,6 +277,7 @@ export function generatePackageJson({
 		...packageJson,
 		...overrideJson,
 		contributes: {
+			...otherContributions,
 			viewsContainers: transformArrayRecord<ViewsContainer>(viewsContainers, from, to, ["id"]),
 			views: transformArrayRecord<Views>(views, from, to, ["id"]),
 			commands: transformArray(commands, from, to, "command"),

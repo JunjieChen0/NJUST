@@ -42,6 +42,13 @@ jobs:
           EOF
       - name: Build VSIX
         run: pnpm vsix:nightly # Produces bin/njust-ai-nightly-0.0.[count].vsix
+      - name: Compile Nightly smoke tests
+        run: pnpm --filter @njust-ai/vscode-e2e exec tsc -p tsconfig.build.json
+      - name: Verify packaged Nightly activation and settings command
+        timeout-minutes: 5
+        run: xvfb-run -a node apps/vscode-e2e/out/apps/vscode-e2e/src/runNightlySmoke.js bin/njust-ai-nightly-*.vsix
+        env:
+          VSCODE_VERSION: "1.144.0"
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

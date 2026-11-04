@@ -100,7 +100,7 @@ const configurationSchema = z.object({
 
 export type Configuration = z.infer<typeof configurationSchema>
 
-export const contributesSchema = z.object({
+export const contributesSchema = z.looseObject({
 	viewsContainers: viewsContainerSchema,
 	views: viewsSchema,
 	commands: commandsSchema,
