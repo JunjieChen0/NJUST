@@ -165,16 +165,15 @@ export async function handleMidStreamFailure(options: {
 	if (task.abandoned) {
 		return "handled"
 	}
-	if (!task.abort && (error instanceof TaskModelPreparationError || error instanceof TaskAbortedError)) throw error
-
-	const cancelReason = task.abort ? "user_cancelled" : "streaming_failed"
-	await abortStream(cancelReason, streamingFailedMessage)
+	const cancelReason = task.abort || error instanceof TaskAbortedError ? "user_cancelled" : "streaming_failed"
+	await abortStream(cancelReason, cancelReason === "user_cancelled" ? undefined : streamingFailedMessage)
 
 	if (task.abort) {
 		task.abortReason = cancelReason
 		await task.abortTask()
 		return "break"
 	}
+	if (error instanceof TaskModelPreparationError || error instanceof TaskAbortedError) throw error
 
 	logger.error(
 		"TaskExecutor",

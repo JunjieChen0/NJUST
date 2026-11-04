@@ -15,6 +15,18 @@ const baseState = (patch: Record<string, unknown> = {}) => ({
 })
 
 describe("checkAutoApproval - main entry", () => {
+	it.each(["code", "debug", "cangjie", "orchestrator"])(
+		"requires a user decision for API failure recovery even with Force Bypass in %s mode",
+		async (mode) => {
+			expect(
+				await checkAutoApproval({
+					state: baseState({ alwaysAllowAll: true, mode }),
+					ask: "api_req_failed",
+					text: "Model preparation failed: HTTP 401",
+				}),
+			).toEqual({ decision: "ask" })
+		},
+	)
 	describe("state validation", () => {
 		it("returns ask when autoApprovalEnabled is false", async () => {
 			const result = await checkAutoApproval({

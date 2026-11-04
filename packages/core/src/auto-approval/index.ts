@@ -78,6 +78,9 @@ export async function checkAutoApproval({
 	text?: string
 	isProtected?: boolean
 }): Promise<CheckAutoApprovalResult> {
+	// Recovery confirmations must not reset retry budgets through automatic approval.
+	if (ask === "api_req_failed") return { decision: "ask" }
+
 	if (isNonBlockingAsk(ask)) {
 		return { decision: "approve" }
 	}

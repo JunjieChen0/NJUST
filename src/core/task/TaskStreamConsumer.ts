@@ -147,6 +147,8 @@ export async function consumeApiStream(config: ConsumeStreamConfig): Promise<Str
 
 		updateApiReqMsg(cancelReason, streamingFailedMessage)
 		await t.saveClineMessages()
+		const apiReqMessage = t.clineMessages[lastApiReqIndex]
+		if (apiReqMessage) await t.updateClineMessage(apiReqMessage)
 
 		t.didFinishAbortingStream = true
 	}

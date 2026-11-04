@@ -132,7 +132,7 @@ describe("task model preparation", () => {
 			}),
 		).rejects.toBe(failure)
 		expect(stack).toEqual([])
-		expect(abortStream).not.toHaveBeenCalled()
+		expect(abortStream).toHaveBeenCalledWith("streaming_failed", undefined)
 	})
 	it("cancels preparation promptly even when a legacy fetch has not settled", async () => {
 		let finish!: () => void
