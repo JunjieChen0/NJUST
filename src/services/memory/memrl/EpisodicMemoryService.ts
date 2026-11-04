@@ -107,12 +107,7 @@ export class EpisodicMemoryService {
 	private enqueueWrite(operation: () => Promise<void>): Promise<void> {
 		const absolutePath = path.resolve(this.primaryPath)
 		const key = process.platform === "win32" ? absolutePath.toLowerCase() : absolutePath
-		const result = (fileWrites.get(key) ?? Promise.resolve()).then(async () => {
-			// Reload under the same lock as the write, including for previously loaded instances.
-			this.loaded = false
-			await this.load()
-			await operation()
-		})
+		const result = (fileWrites.get(key) ?? Promise.resolve()).then(operation)
 		const settled = result.catch((error) => logger.debug("MemRL", "Episodic write failed", error))
 		fileWrites.set(key, settled)
 		void settled.then(() => {
@@ -132,6 +127,8 @@ export class EpisodicMemoryService {
 	}
 
 	private async writeEntry(intent: string, stmSummary: string, outcome: MemrlOutcome): Promise<void> {
+		// Reload inside the file queue so another instance's entries are preserved.
+		this.loaded = false
 		await this.load()
 
 		const embedding = await this.embedder.embed(intent)
@@ -173,11 +170,24 @@ export class EpisodicMemoryService {
 	/** Accepting history never embeds again or changes the original verification reward. */
 	updateAcceptance(taskId: string, acceptance: MemrlVerification["acceptance"]): Promise<void> {
 		return this.enqueueWrite(async () => {
-			const entry = this.store.entries.find((item) => item.taskId === taskId)
+			// Acceptance is metadata-only; do not migrate historical embedding vectors.
+			let stored: EpisodicStore
+			try {
+				stored = JSON.parse(await fs.readFile(this.primaryPath, "utf8")) as EpisodicStore
+			} catch (error) {
+				logger.debug("MemRL", "No readable episode to update acceptance", error)
+				return
+			}
+			const entry = stored.entries.find((item) => item.taskId === taskId)
 			if (!entry?.verification) return
 			entry.verification.acceptance = acceptance
 			entry.updatedAt = Date.now()
-			await this.persist()
+			await safeWriteJson(this.primaryPath, stored)
+			const loaded = this.store.entries.find((item) => item.id === entry.id)
+			if (loaded?.verification) {
+				loaded.verification.acceptance = acceptance
+				loaded.updatedAt = entry.updatedAt
+			}
 		})
 	}
 
@@ -187,6 +197,8 @@ export class EpisodicMemoryService {
 	 */
 	async updateQ(entryId: string, reward: number): Promise<void> {
 		return this.enqueueWrite(async () => {
+			this.loaded = false
+			await this.load()
 			const entry = this.store.entries.find((e) => e.id === entryId)
 			if (!entry) return
 

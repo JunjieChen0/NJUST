@@ -37,6 +37,38 @@ function makeEmbedder(vecFn: (text: string) => number[]): MemoryEmbeddingAdapter
 }
 
 describe("EpisodicMemoryService", () => {
+	it.each([undefined, "previous-embedding-model"])(
+		"preserves history data when accepting an episode with fingerprint %s",
+		async (embedFingerprint) => {
+			await service.write("original intent", "original summary", {
+				taskId: "history",
+				overall: "verified",
+				acceptance: "pending",
+			})
+			const file = vi.mocked(safeWriteJson).mock.calls.at(-1)![0]
+			const stored = JSON.parse(await fs.readFile(file, "utf8"))
+			const historical = JSON.parse(JSON.stringify({ ...stored, totalWrites: 5, embedFingerprint }))
+			await fs.writeFile(file, JSON.stringify(historical), "utf8")
+			const adapter = makeEmbedder(() => makeVec(0.6))
+			const embed = vi.spyOn(adapter, "embed")
+			const restored = new EpisodicMemoryService(tmpDir, adapter)
+			await restored.updateAcceptance("history", "accepted")
+			const after = JSON.parse(await fs.readFile(file, "utf8"))
+			expect(after).toEqual({
+				...historical,
+				entries: [
+					{
+						...historical.entries[0],
+						verification: { overall: "verified", acceptance: "accepted" },
+						updatedAt: expect.any(Number),
+					},
+				],
+			})
+			expect(embed).not.toHaveBeenCalled()
+			expect(await restored.retrieve("original intent")).toEqual([])
+			expect(embed).not.toHaveBeenCalled()
+		},
+	)
 	it("does not leave other instances blocked after a failed write", async () => {
 		vi.mocked(safeWriteJson).mockRejectedValueOnce(new Error("disk unavailable"))
 		await expect(
