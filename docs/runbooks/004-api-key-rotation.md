@@ -1,113 +1,31 @@
 # Runbook 004: Provider API 密钥轮换
 
-## 症状
+## 确认失败发生在哪一步
 
-- API 请求返回 `401 Unauthorized` 或 `403 Forbidden`
-- 扩展显示 "Invalid API key" 或 "Authentication failed"
-- 切换到新 Provider 后任务无法继续执行
-- 密钥泄露后需要紧急更换
+记录当前 Provider Profile、Base URL、模型 ID、出错阶段和 HTTP 状态。模型目录刷新与正式推理使用不同请求，列表返回成功不能单独证明推理凭据有效，列表失败也不能单独证明模型不可用。
 
-## 诊断步骤
+密钥只在本地设置界面检查，不写入问题报告、命令行参数、截图或仓库。不要上传原始认证请求头。
 
-### 1. 确认密钥状态
+## 存储边界
 
-在设置界面检查当前 Provider 配置：
+VS Code 扩展的 Provider Profile 由 `src/core/config/ProviderSettingsManager.ts` 通过 `ExtensionContext.secrets` 管理。不要在扩展安装目录中查找或手工编辑旧文档假设的 `globalStorage/secrets.enc`。
 
-- API Key 字段是否有值
-- 密钥是否已过期（检查 Provider 管理后台）
-- Base URL 是否正确
+CLI 等垫片环境使用 `packages/vscode-shim/src/storage/SecretStorage.ts`，与真实 VS Code 的 SecretStorage 分开排查。配置导出也可能包含敏感字段，分享前必须检查并脱敏。
 
-### 2. 验证 SecretStorage 同步
+## 正常轮换
 
-```bash
-# 检查加密存储文件
-ls -la ~/.vscode/extensions/njust-ai.cline-*/globalStorage/secrets.enc
-# Linux 确认权限为 600
-stat -c '%a' secrets.enc
-```
+1. 在当前服务商或自建网关的管理界面生成新密钥。
+2. 打开扩展设置，选中实际使用的 Profile，检查 Provider、Base URL、自定义认证头和模型 ID。
+3. 输入新密钥并点击保存。设置界面的本地编辑缓冲在保存前不会作为正式配置使用。
+4. 如需模型发现，手动刷新目录并记录结果；再发送一条最小推理请求验证当前 Profile。
+5. 确认新密钥工作后，在服务商管理界面撤销旧密钥。旧 Profile 的清理由用户明确确认后进行。
 
-### 3. 测试密钥有效性
+自建 OpenAI Compatible 服务可能使用自定义认证头。目录请求和推理请求均需核对实际配置，不要同时保留互相冲突的认证值。
 
-使用 curl 直接测试 API 密钥：
+## 泄露后的处理
 
-```bash
-# OpenAI
-curl -H "Authorization: Bearer $API_KEY" https://api.openai.com/v1/models
+立即在服务商侧撤销泄露密钥，再生成替代密钥。检查访问记录、费用及仓库历史；删除本地文本本身不会撤销远端凭据，也不会清除历史副本。
 
-# Anthropic
-curl -H "x-api-key: $API_KEY" -H "anthropic-version: 2023-06-01" \
-  https://api.anthropic.com/v1/messages
+## 验收
 
-# OpenRouter
-curl -H "Authorization: Bearer $API_KEY" https://openrouter.ai/api/v1/models
-```
-
-### 4. 检查 Provider Profile
-
-确认当前激活的 Provider Profile 包含正确的密钥：
-
-在设置界面 → Provider Profiles → 检查当前激活的配置
-
-## 解决方案
-
-### 正常密钥轮换
-
-1. **在 Provider 管理后台生成新密钥**
-
-2. **在扩展中更新密钥：**
-
-    - 打开设置 → 选择对应 Provider
-    - 粘贴新的 API Key
-    - 点击保存
-
-3. **验证新密钥生效：**
-
-    - 发送一条测试消息
-    - 确认 API 调用成功
-
-4. **撤销旧密钥：**
-    - 回到 Provider 管理后台
-    - 删除或禁用旧密钥
-    - 确认扩展不再使用旧密钥
-
-### 通过 Provider Profile 管理多密钥
-
-1. 创建新的 Provider Profile：
-    ```
-    设置 → Profiles → Create New Profile
-    ```
-2. 在新 Profile 中配置新密钥
-3. 激活新 Profile：
-    ```
-    Profiles → Activate "New Profile Name"
-    ```
-4. 删除旧 Profile
-
-### 紧急密钥撤销
-
-如果密钥泄露：
-
-1. **立即在 Provider 后台撤销密钥** — 这是最紧急的步骤
-2. 生成新密钥
-3. 在扩展中更新密钥
-4. 检查访问日志确认无未授权访问
-5. 如果密钥存储在 SecretStorage 中，清除并重新存储
-
-### 批量密钥更新
-
-对于使用 OpenRouter 等聚合平台的场景：
-
-1. 使用 OAuth 回调自动获取新密钥：
-    ```
-    设置 → OpenRouter → Login with OpenRouter
-    ```
-2. 浏览器完成 OAuth 流程
-3. 密钥自动更新到当前 Profile
-
-## 预防措施
-
-- 定期轮换 API 密钥（建议每 90 天）
-- 使用 Provider Profile 隔离不同环境的密钥
-- 启用 SecretStorage 加密存储（非明文）
-- 监控 API 使用量异常（密钥泄露指标）
-- 在 CI/CD 中使用环境变量而非硬编码密钥
+记录所用 Profile、服务端地址（按需脱敏）、模型 ID、目录刷新与推理各自的结果。认证失败不应依靠无限自动重试恢复；修正配置后再明确重试。模型准备、错误分类和重试入口分别见 `src/api/registry/ProviderRegistry.ts`、`src/core/task/TaskRetryHandler.ts`。

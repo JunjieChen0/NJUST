@@ -6,7 +6,7 @@ We actively patch only the most recent minor release of Njust-AI Code. Older ve
 
 ## Reporting a Vulnerability
 
-**Preferred method**: Use [GitHub Security Advisory](https://github.com/njust-ai/njust-ai-code/security/advisories/new) (Private Vulnerability Reporting) for encrypted, tracked disclosure.
+**Preferred method**: Use this repository's [GitHub Security Advisory](https://github.com/JunjieChen0/NJUST/security/advisories/new) (Private Vulnerability Reporting) for encrypted, tracked disclosure.
 
 Alternatively, email security@njust-ai.dev with:
 

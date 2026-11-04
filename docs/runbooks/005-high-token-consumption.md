@@ -1,110 +1,32 @@
 # Runbook 005: 高 Token 消耗诊断
 
-## 症状
+## 收集任务证据
 
-- API 账单出现异常高额费用
-- 单个任务消耗超过预期的 Token 量
-- 上下文窗口频繁达到限制（`prompt_too_long` 错误）
-- Token 使用量仪表板显示异常增长趋势
+先从任务历史和请求卡片查看输入、输出、缓存读写及费用，再核对使用的模型和计价信息。服务商缺少用量或价格时，应记录为未知或估算，不把缺失值当作零费用。
 
-## 诊断步骤
+保存任务 ID、模型、重复请求的时间范围及脱敏日志。`api_req_started` 消息和任务 API 历史有助于定位是哪一轮增长；不要把全部项目文件或凭据附在报告中。
 
-### 1. 定位高消耗任务
+## 常见原因
 
-使用 TaskHistoryService 查询任务级别的 Token 消耗：
+| 现象                   | 检查方向                                                 |
+| ---------------------- | -------------------------------------------------------- |
+| 相同文件反复读取       | 工具参数是否过宽、上下文是否重复附加                     |
+| 相同工具或错误反复出现 | 工具结果、错误分类、重试预算及是否确实取得进展           |
+| 单次输出很长           | 文件范围、搜索结果数量、命令输出和附件                   |
+| 上下文不断增大         | 自动压缩是否启用、压缩失败原因和上下文占用               |
+| 模型目录持续失败       | 区分目录准备与实际推理，检查认证、连接身份缓存和失败退避 |
 
-```typescript
-// 按成本排序任务
-const tasks = await taskHistory.getAllTasks()
-const sorted = tasks.sort((a, b) => (b.totalCost || 0) - (a.totalCost || 0))
-// 查看前 10 个最贵的任务
-```
+相关入口为 `src/core/task/TaskExecutor.ts`、`TaskRetryHandler.ts`、`src/core/condense/` 和 `src/api/providers/fetchers/modelCache.ts`。旧示例中的 `QueryProfiler.getReport(taskId)` 不是任务 Token 报告接口。
 
-### 2. 分析任务消息长度
+## 设置与操作
 
-检查 `apiConversationHistory` 中的消息大小：
+- 在扩展设置中配置 `autoCondenseContext` 和 `autoCondenseContextPercent`，保存后核对是否生效；状态 schema 见 `packages/types/src/global-settings.ts`。
+- 通过任务界面手动压缩上下文，保存压缩失败的实际原因。不要假设所有模型都有专用压缩端点。
+- 收窄 `read_file` / 搜索范围，排除生成目录；代码索引可用于先定位再读取。
+- 检查 `.rooignore` 与 `maxWorkspaceFiles`，后者限制工作区文件列表，不是单任务 Token 上限。
+- 当前 schema 没有旧示例中的 `maxTokensPerTask` 配置。不要依靠写入未注册字段来限制费用，也不要把错误次数阈值解释为费用上限。
+- 请求持续失败或消耗异常时，取消任务并确认没有继续发起请求，再修复配置或明确重试。
 
-```typescript
-const task = await getTaskWithId(taskId)
-const messages = task.apiConversationHistory
-const totalTokens = messages.reduce((sum, msg) => {
-	return sum + estimateTokenCount(msg.content)
-}, 0)
-```
+## 验收
 
-### 3. 检查上下文压缩状态
-
-确认 `condenseContext` 是否被正确触发：
-
-- 查看任务日志中的 `context_condensed` 事件
-- 检查 `compactFailureCount` — 连续压缩失败次数
-- 确认 `autoCondenseContext` 设置已启用
-
-### 4. 审查工具调用模式
-
-高 Token 消耗的常见原因：
-
-| 模式         | 影响                       | 检测方法                   |
-| ------------ | -------------------------- | -------------------------- |
-| 重复文件读取 | 大量文件内容反复加入上下文 | `read_file` 调用频率       |
-| 工具调用循环 | 相同工具反复调用无进展     | `consecutiveMistakeCount`  |
-| 长工具输出   | 单次工具返回大量数据       | 工具结果 Token 数          |
-| 上下文未压缩 | 对话历史无限增长           | `condenseContext` 调用频率 |
-
-### 5. 使用 QueryProfiler
-
-如果已启用 `QueryProfiler`：
-
-```typescript
-const profiler = new QueryProfiler()
-const report = profiler.getReport(taskId)
-// 查看每轮 API 调用的 input/output token 分布
-// 识别 token 增长最快的轮次
-```
-
-## 解决方案
-
-### 上下文压缩失败
-
-1. 检查 `compactFailureCount` 值
-2. 如果 ≥3（circuit breaker 阈值），检查 API 是否支持压缩端点
-3. 手动触发压缩：
-    ```
-    任务界面 → Condense Context 按钮
-    ```
-4. 如果持续失败，考虑创建新任务继续工作
-
-### 工具调用循环
-
-1. 检查 `consecutiveMistakeCount` — 如果达到限制（默认 12），任务会自动终止
-2. 审查 Agent 的系统提示词，确保工具使用说明清晰
-3. 检查工具定义是否有歧义导致 Agent 误用
-
-### 减少文件读取开销
-
-1. 配置 `.rooignore` 排除不需要读取的大型文件/目录
-2. 使用 `maxWorkspaceFiles` 限制工作空间文件列表
-3. 对于大型代码库，使用 code index 而非全文件读取
-
-### 配置 Token 预算
-
-```json
-{
-	"maxTokensPerTask": 100000,
-	"autoCondenseContext": true,
-	"autoCondenseContextPercent": 70
-}
-```
-
-- `maxTokensPerTask` — 单任务 Token 上限
-- `autoCondenseContext` — 启用自动上下文压缩
-- `autoCondenseContextPercent` — 上下文使用率达到此百分比时触发压缩
-
-## 预防措施
-
-- 启用 `autoCondenseContext` 并设置合理的压缩阈值
-- 配置 `maxTokensPerTask` 预算限制
-- 监控 `token_usage` 遥测事件，设置异常告警
-- 定期审查 TaskMetrics 中的 Token 消耗趋势
-- 为大型任务使用子任务分解（`startSubtask`），隔离 Token 预算
-- 配置 `.rooignore` 排除大型二进制文件和生成文件
+在相同模型、任务起点和配置下复测，比较请求数、实际用量、缓存命中和费用，说明估算及未知项。降低费用不能以漏执行所需构建或测试为代价，任务仍需给出验证证据。

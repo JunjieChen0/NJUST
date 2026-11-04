@@ -33,8 +33,8 @@ The key principle is that the tests define the contract - if all tests pass, the
 The evals system consists of several key components:
 
 - **Exercises Repository**: [`NJUST_AI-Evals`](https://github.com/NJUST-AI/NJUST_AI-Evals) - Contains all exercise definitions
-- **Web Interface**: [`apps/web-evals`](../apps/web-evals) - Management interface for creating and monitoring evaluation runs
-- **Evals Package**: [`packages/evals`](../packages/evals) - Contains both controller logic for orchestrating evaluation runs and runner container code for executing individual tasks
+- **Web Interface**: [`apps/web-evals`](../../apps/web-evals) - Management interface for creating and monitoring evaluation runs
+- **Evals Package**: [`packages/evals`](.) - Contains both controller logic for orchestrating evaluation runs and runner container code for executing individual tasks
 - **Docker Configuration**: Container definitions for the `controller` and `runner` as well as a Docker Compose file that provisions Postgres and Redis instances required for eval runs.
 
 ### Current Language Support
@@ -250,7 +250,7 @@ Adding a new programming language requires changes to both the evals repository 
 
 ### Step 1: Update Language Configuration
 
-1. **Add language to supported list** in [`packages/evals/src/exercises/index.ts`](../packages/evals/src/exercises/index.ts):
+1. **Add language to supported list** in [`packages/evals/src/exercises/index.ts`](src/exercises/index.ts):
 
 ```typescript
 export const exerciseLanguages = [
@@ -285,7 +285,7 @@ Replace `{test-command}` with the appropriate testing command for your language.
 
 ### Step 3: Update Docker Configuration
 
-Modify [`packages/evals/Dockerfile.runner`](../packages/evals/Dockerfile.runner) to install the new language runtime:
+Modify [`packages/evals/Dockerfile.runner`](Dockerfile.runner) to install the new language runtime:
 
 ```dockerfile
 # Install your new language runtime
@@ -298,7 +298,7 @@ RUN curl -sSL https://install-your-language.sh | sh -s -- --version ${YOUR_LANGU
 
 ### Step 4: Update Test Runner Integration
 
-If your language requires special test execution, update [`packages/evals/src/cli/runUnitTest.ts`](../packages/evals/src/cli/runUnitTest.ts) to handle the new language's testing framework.
+If your language requires special test execution, update [`packages/evals/src/cli/runUnitTest.ts`](src/cli/runUnitTest.ts) to handle the new language's testing framework.
 
 ### Step 5: Create Initial Exercises
 

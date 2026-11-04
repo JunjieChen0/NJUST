@@ -32,10 +32,18 @@ AGENTS.local.md
 # Local ripgrep binary copied from VSCode install (dev-only workaround)
 .rg/
 
-# Docs - ignore all except examples, adr, baseline, runbooks, compose
+# Docs - track maintained guides; keep generated API output ignored
 docs/*
+!docs/README.md
+!docs/development/
+!docs/development/**
+!docs/architecture/
+!docs/architecture/**
+!docs/integrations/
+!docs/integrations/**
+!docs/notes/
+!docs/notes/**
 !docs/sandbox.md
-!docs/docker-sandbox-plan.md
 !docs/examples/
 !docs/examples/**
 !docs/adr/
@@ -75,6 +83,7 @@ webview-ui/vite-out.txt
 # IntelliJ and Qodo plugin folders
 .idea/
 .qodo/
+.qoder/repowiki/
 .vercel
 .njust-ai/mcp.json
 

@@ -1,12 +1,7 @@
 <div align="center">
 <sub>
 
-[English](../../CONTRIBUTING.md) • [Català](../ca/CONTRIBUTING.md) • [Deutsch](../de/CONTRIBUTING.md) • [Español](../es/CONTRIBUTING.md) • [Français](../fr/CONTRIBUTING.md) • [हिंदी](../hi/CONTRIBUTING.md) • [Bahasa Indonesia](../id/CONTRIBUTING.md) • [Italiano](../it/CONTRIBUTING.md) • [日本語](../ja/CONTRIBUTING.md)
-
-</sub>
-<sub>
-
-[한국어](../ko/CONTRIBUTING.md) • [Nederlands](../nl/CONTRIBUTING.md) • [Polski](../pl/CONTRIBUTING.md) • [Português (BR)](../pt-BR/CONTRIBUTING.md) • [Русский](../ru/CONTRIBUTING.md) • [Türkçe](../tr/CONTRIBUTING.md) • [Tiếng Việt](../vi/CONTRIBUTING.md) • <b>简体中文</b> • [繁體中文](../zh-TW/CONTRIBUTING.md)
+[English](../../.github/CONTRIBUTING.md) • <b>简体中文</b> • [繁體中文](../zh-TW/CONTRIBUTING.md)
 
 </sub>
 </div>
@@ -54,8 +49,8 @@ NJUST_AI 是一个由社区驱动的项目，我们非常重视每一份贡献�
 
 ### 3. 加入 NJUST_AI 社区
 
-- **主要方式：** 加入我们的 [Discord](https://discord.gg/njust-ai) 并私信 **Hannes Rudolph (`hrudolph`)**。
-- **替代方式：** 经验丰富的贡献者可以通过 [GitHub 项目](https://github.com/orgs/NjustAiInc/projects/1) 直接参与。
+- 在本仓库的 [GitHub Issues](https://github.com/JunjieChen0/NJUST/issues) 中讨论问题和修改范围。
+- 本地开发与排障请参考[文档导航](../../docs/README.md)。
 
 ## 寻找和规划您的贡献
 
@@ -69,26 +64,26 @@ NJUST_AI 是一个由社区驱动的项目，我们非常重视每一份贡献�
 
 所有贡献都始于使用我们精简模板的 GitHub 问题。
 
-- **检查现有问题**：在 [GitHub 问题](https://github.com/NJUST-AI/NJUST_AI/issues) 中搜索。
+- **检查现有问题**：在 [GitHub 问题](https://github.com/JunjieChen0/NJUST/issues) 中搜索。
 - **使用以下模板创建问题**：
     - **增强功能：** “增强请求”模板（侧重于用户利益的简单语言）。
     - **错误：** “错误报告”模板（最少的复现步骤 + 预期与实际 + 版本）。
-- **想参与其中吗？** 在问题上评论“领取”，并在[Discord](https://discord.gg/njust-ai)上私信 **Hannes Rudolph (`hrudolph`)** 以获得分配。分配将在帖子中确认。
+- **想参与其中吗？** 在问题中说明计划和范围，并向本仓库维护者申请分配。
 - **PR 必须链接到问题。** 未链接的 PR 可能会被关闭。
 
 ### 决定做什么
 
-- 查看 [GitHub 项目](https://github.com/orgs/NjustAiInc/projects/1) 中的“问题 [未分配]”问题。
-- 如需文档，请访问 [NJUST_AI 文档](https://github.com/NJUST-AI/NJUST_AI-Docs)。
+- 查看本仓库的 [GitHub Issues](https://github.com/JunjieChen0/NJUST/issues)，与维护者确认范围。
+- 如需文档，请参考[文档导航](../../docs/README.md)。
 
 ### 报告错误
 
 - 首先检查现有的报告。
-- 使用 [“错误报告”模板](https://github.com/NJUST-AI/NJUST_AI/issues/new/choose) 创建一个新错误，并提供：
+- 使用 [“错误报告”模板](https://github.com/JunjieChen0/NJUST/issues/new/choose) 创建一个新错误，并提供：
     - 清晰、编号的复现步骤
     - 预期与实际结果
     - NJUST_AI 版本（必需）；如果相关，还需提供 API 提供商/模型
-- **安全问题**：通过 [安全公告](https://github.com/NJUST-AI/NJUST_AI/security/advisories/new) 私下报告。
+- **安全问题**：通过 [安全公告](https://github.com/JunjieChen0/NJUST/security/advisories/new) 私下报告。
 
 ## 开发和提交流程
 
@@ -113,7 +108,7 @@ pnpm install
 - 每个功能或修复一个集中的 PR。
 - 遵循 ESLint 和 TypeScript 的最佳实践。
 - 编写清晰、描述性的提交，并引用问题（例如，`修复 #123`）。
-- 提供全面的测试（`npm test`）。
+- 提供全面的测试（`pnpm test`）。
 - 在提交前变基到最新的 `main` 分支。
 
 ### 提交拉取请求
@@ -126,14 +121,14 @@ pnpm install
 
 ### 拉取请求政策
 
-- 必须引用一个已分配的 GitHub 问题。要获得分配：在问题上评论“领取”，并在[Discord](https://discord.gg/njust-ai)上私信 **Hannes Rudolph (`hrudolph`)**。分配将在帖子中确认。
+- 必须引用相关 GitHub 问题，并说明已讨论的修改范围。
 - 未链接的 PR 可能会被关闭。
 - PR 必须通过 CI 测试，与路线图保持一致，并有清晰的文档。
 
 ### 审查流程
 
-- **每日分类：** 维护人员进行快速检查。
-- **每周深入审查：** 全面评估。
+- 维护者核对范围、实现、验证证据和实际风险。
+- 在 PR 中区分通过、失败、跳过和尚未执行的检查。
 - **根据反馈及时迭代**。
 
 ## 法律

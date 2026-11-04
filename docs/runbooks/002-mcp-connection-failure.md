@@ -1,106 +1,46 @@
 # Runbook 002: MCP 服务器连接故障排查
 
-## 症状
+## 先确认配置来源
 
-- MCP 工具列表为空或显示 "No servers connected"
-- Webview 显示 "MCP server connection failed" 错误
-- 特定 MCP 工具调用返回超时或连接重置错误
-- 输出面板中出现 "MCP transport error" 或 "stdio process exited"
+通过扩展的 MCP 页面检查功能开关、服务器状态和配置文件。全局配置文件由扩展设置目录提供；项目配置为 `.njust_ai/mcp.json`。项目服务器需要工作区信任，未经信任不会自动启动。
 
-## 诊断步骤
-
-### 1. 确认 MCP 功能已启用
-
-检查 `settings.json` 中的 MCP 配置：
+`mcpEnabled` 是扩展状态开关；服务器配置文件使用 `mcpServers` 顶层对象。不要把下面的服务器文件结构当作 VS Code `settings.json` 中的一组裸设置。
 
 ```json
 {
-  "mcpEnabled": true,
-  "mcpServers": { ... }
+	"mcpServers": {
+		"local-tools": {
+			"type": "stdio",
+			"command": "node",
+			"args": ["/absolute/path/to/server.mjs"],
+			"timeout": 60
+		}
+	}
 }
 ```
 
-### 2. 检查传输协议
+路径仅为占位示例，需要替换为已安装服务器的真实路径。
 
-根据服务器配置确定传输类型：
+## 传输协议
 
-| 协议            | 配置键                                 | 常见场景     |
-| --------------- | -------------------------------------- | ------------ |
-| stdio           | `command` + `args`                     | 本地进程     |
-| SSE             | `url` (Server-Sent Events)             | 远程服务     |
-| Streamable HTTP | `url` + `transport: "streamable-http"` | 新式远程服务 |
+| 协议            | 配置                                                   | 检查重点                                |
+| --------------- | ------------------------------------------------------ | --------------------------------------- |
+| stdio           | `type: "stdio"`、`command`、`args`，可选 `cwd` / `env` | 可执行文件、工作目录、依赖、进程 stderr |
+| SSE             | `type: "sse"`、`url`，可选 `headers`                   | 服务端路由、认证、连接保持              |
+| Streamable HTTP | `type: "streamable-http"`、`url`，可选 `headers`       | MCP 握手、认证、协议版本                |
 
-### 3. stdio 传输排查
+远程 URL 配置必须显式指定 `type`；不是 `transport`。校验来源为 `src/services/mcp/McpHubConfigSchema.ts`。不要混用 `command` 和 `url` 字段。
 
-```bash
-# 直接测试 stdio 进程
-<command> <args>
-# 检查进程是否正常启动并等待 JSON-RPC 输入
+## 排查步骤
 
-# 检查路径是否正确
-which <command>
-# Windows 上确认 .cmd/.bat 后缀
-```
+1. 从 MCP 页面确认服务器已启用，项目配置已获信任，选择重连并保存错误信息。
+2. stdio：在相同工作目录检查命令是否能启动，确认参数及环境变量。`ENOENT` 常表示路径或依赖缺失，进程立即退出时查看 stderr。
+3. 远程连接：检查 URL、代理、防火墙和凭据。普通 HTTP 请求成功只证明路由可达，仍需完成 MCP 握手、工具发现及一次工具调用。
+4. 查看扩展输出和 `Log (Extension Host)`，按 `McpHub`、服务器名称及原始错误定位；不要依赖旧文档中的固定输出通道名称。
+5. 超时需区分连接失败与工具执行过慢，再检查服务器的 `timeout`。不要只提高超时来掩盖鉴权或地址错误。
 
-常见 stdio 错误：
+认证信息只在本机配置，分享日志前移除 Token 和敏感请求头。
 
-- `ENOENT` — 命令路径不正确或命令未安装
-- `EACCES` — 命令无执行权限
-- 进程启动后立即退出 — 检查 stderr 输出
+## 验收
 
-### 4. SSE/HTTP 传输排查
-
-```bash
-# 测试连接
-curl -v <url>
-# 检查认证头
-curl -H "Authorization: Bearer <token>" <url>
-```
-
-常见 HTTP 错误：
-
-- `401/403` — 认证失败，检查 API key 或 OAuth token
-- `408/504` — 超时，检查网络和服务器状态
-- `CORS` 错误 — 确认服务器允许来自扩展的连接
-
-### 5. 查看 MCP Hub 日志
-
-在 VS Code 输出面板选择 "Njust-AI MCP" 通道，查看：
-
-- 服务器注册和连接状态变更
-- 工具发现和 schema 加载结果
-- 错误和重连尝试记录
-
-## 解决方案
-
-### stdio 进程无法启动
-
-1. 确认命令已安装且在 PATH 中
-2. 使用绝对路径替代相对路径
-3. 在 `args` 中添加必要的启动参数
-4. 检查 `env` 配置是否包含必要的环境变量
-
-### 认证失败
-
-1. 更新 API key 或 OAuth token
-2. 检查 token 是否过期
-3. 确认 token 有正确的权限范围
-
-### 超时
-
-1. 增加 `timeout` 配置值
-2. 检查网络连接和防火墙规则
-3. 确认远程服务器正常运行
-
-### 工具 Schema 不兼容
-
-1. 更新 MCP 服务器到最新版本
-2. 检查工具参数 schema 是否符合 MCP 规范
-3. 禁用不兼容的工具并联系服务器维护者
-
-## 预防措施
-
-- 配置 MCP 服务器健康检查端点（HTTP 传输）
-- 设置合理的连接超时和自动重连策略
-- 在 CI 中运行 MCP 服务器可用性检查
-- 监控 MCP 连接成功率和延迟遥测
+重连成功后核对工具列表，再调用一个只读工具。记录协议类型、配置来源、服务器版本及结果。Cloud Agent 的 MCP 适配器与这里的 MCP 服务器管理入口不同，相关边界见 [AGENTS.md](../../AGENTS.md#cloud-agent-mcp-协议)。

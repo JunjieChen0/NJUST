@@ -176,32 +176,32 @@ Tokens are valid for 90 days. The CLI will prompt you to re-authenticate when yo
 
 ## Options
 
-| Option                                  | Description                                                                             | Default                                  |
-| --------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `[prompt]`                              | Your prompt (positional argument, optional)                                             | None                                     |
-| `--prompt-file <path>`                  | Read prompt from a file instead of command line argument                                | None                                     |
-| `--create-with-session-id <session-id>` | Create a new task using the provided session ID (UUID)                                  | None                                     |
-| `-w, --workspace <path>`                | Workspace path to operate in                                                            | Current directory                        |
-| `-p, --print`                           | Print response and exit (non-interactive mode)                                          | `false`                                  |
-| `--stdin-prompt-stream`                 | Read NDJSON control commands from stdin (requires `--print`)                            | `false`                                  |
-| `-e, --extension <path>`                | Path to the extension bundle directory                                                  | Auto-detected                            |
-| `-d, --debug`                           | Enable debug output (includes detailed debug information, prompts, paths, etc)          | `false`                                  |
-| `-a, --require-approval`                | Require manual approval before actions execute                                          | `false`                                  |
-| `-k, --api-key <key>`                   | API key for the LLM provider                                                            | From env var                             |
-| `--provider <provider>`                 | API provider (njust-ai, anthropic, openai, openrouter, etc.)                                 | `openrouter` (or `njust-ai` if authenticated) |
-| `-m, --model <model>`                   | Model to use                                                                            | `anthropic/claude-opus-4.6`              |
-| `--mode <mode>`                         | Mode to start in (code, architect, ask, debug, etc.)                                    | `code`                                   |
-| `--terminal-shell <path>`               | Absolute shell path for inline terminal command execution                               | Auto-detected shell                      |
-| `-r, --reasoning-effort <effort>`       | Reasoning effort level (unspecified, disabled, none, minimal, low, medium, high, xhigh) | `medium`                                 |
-| `--consecutive-mistake-limit <n>`       | Consecutive error/repetition limit before guidance prompt (`0` disables the limit)      | `10`                                     |
-| `--ephemeral`                           | Run without persisting state (uses temporary storage)                                   | `false`                                  |
-| `--oneshot`                             | Exit upon task completion                                                               | `false`                                  |
-| `--output-format <format>`              | Output format with `--print`: `text`, `json`, or `stream-json`                          | `text`                                   |
+| Option                                  | Description                                                                             | Default                                       |
+| --------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `[prompt]`                              | Your prompt (positional argument, optional)                                             | None                                          |
+| `--prompt-file <path>`                  | Read prompt from a file instead of command line argument                                | None                                          |
+| `--create-with-session-id <session-id>` | Create a new task using the provided session ID (UUID)                                  | None                                          |
+| `-w, --workspace <path>`                | Workspace path to operate in                                                            | Current directory                             |
+| `-p, --print`                           | Print response and exit (non-interactive mode)                                          | `false`                                       |
+| `--stdin-prompt-stream`                 | Read NDJSON control commands from stdin (requires `--print`)                            | `false`                                       |
+| `-e, --extension <path>`                | Path to the extension bundle directory                                                  | Auto-detected                                 |
+| `-d, --debug`                           | Enable debug output (includes detailed debug information, prompts, paths, etc)          | `false`                                       |
+| `-a, --require-approval`                | Require manual approval before actions execute                                          | `false`                                       |
+| `-k, --api-key <key>`                   | API key for the LLM provider                                                            | From env var                                  |
+| `--provider <provider>`                 | API provider (njust-ai, anthropic, openai, openrouter, etc.)                            | `openrouter` (or `njust-ai` if authenticated) |
+| `-m, --model <model>`                   | Model to use                                                                            | `anthropic/claude-opus-4.6`                   |
+| `--mode <mode>`                         | Mode to start in (code, architect, ask, debug, etc.)                                    | `code`                                        |
+| `--terminal-shell <path>`               | Absolute shell path for inline terminal command execution                               | Auto-detected shell                           |
+| `-r, --reasoning-effort <effort>`       | Reasoning effort level (unspecified, disabled, none, minimal, low, medium, high, xhigh) | `medium`                                      |
+| `--consecutive-mistake-limit <n>`       | Consecutive error/repetition limit before guidance prompt (`0` disables the limit)      | `10`                                          |
+| `--ephemeral`                           | Run without persisting state (uses temporary storage)                                   | `false`                                       |
+| `--oneshot`                             | Exit upon task completion                                                               | `false`                                       |
+| `--output-format <format>`              | Output format with `--print`: `text`, `json`, or `stream-json`                          | `text`                                        |
 
 ## Auth Commands
 
-| Command           | Description                        |
-| ----------------- | ---------------------------------- |
+| Command                | Description                        |
+| ---------------------- | ---------------------------------- |
 | `njust-ai auth login`  | Authenticate with NJUST_AI Cloud   |
 | `njust-ai auth logout` | Clear stored authentication token  |
 | `njust-ai auth status` | Show current authentication status |
@@ -212,7 +212,7 @@ The CLI will look for API keys in environment variables if not provided via `--a
 
 | Provider          | Environment Variable        |
 | ----------------- | --------------------------- |
-| njust-ai               | `NJUST_AI_API_KEY`               |
+| njust-ai          | `NJUST_AI_API_KEY`          |
 | anthropic         | `ANTHROPIC_API_KEY`         |
 | openai-native     | `OPENAI_API_KEY`            |
 | openrouter        | `OPENROUTER_API_KEY`        |
@@ -221,8 +221,8 @@ The CLI will look for API keys in environment variables if not provided via `--a
 
 **Authentication Environment Variables:**
 
-| Variable          | Description                                                          |
-| ----------------- | -------------------------------------------------------------------- |
+| Variable               | Description                     |
+| ---------------------- | ------------------------------- |
 | `NJUST_AI_WEB_APP_URL` | Override the NJUST_AI Cloud URL |
 
 ## Architecture

@@ -13,15 +13,15 @@ All modifications made by the NJUST_AI team are also licensed under the Apache L
 
 ## Key Third-Party Dependencies
 
-| Package | License | Usage |
-|---------|---------|-------|
-| zod | MIT | Runtime type validation (published with `@njust-ai/types`) |
-| typescript | Apache-2.0 | TypeScript compiler |
-| esbuild | MIT | JavaScript bundler |
-| eslint | MIT | Linting |
-| vitest | MIT | Testing framework |
-| turbo | MPL-2.0 | Monorepo build orchestration |
-| prettier | MIT | Code formatting |
+| Package    | License    | Usage                                                      |
+| ---------- | ---------- | ---------------------------------------------------------- |
+| zod        | MIT        | Runtime type validation (published with `@njust-ai/types`) |
+| typescript | Apache-2.0 | TypeScript compiler                                        |
+| esbuild    | MIT        | JavaScript bundler                                         |
+| eslint     | MIT        | Linting                                                    |
+| vitest     | MIT        | Testing framework                                          |
+| turbo      | MPL-2.0    | Monorepo build orchestration                               |
+| prettier   | MIT        | Code formatting                                            |
 
 ## Full Software Bill of Materials (SBOM)
 

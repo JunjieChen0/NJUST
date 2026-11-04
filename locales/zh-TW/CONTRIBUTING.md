@@ -1,12 +1,7 @@
 <div align="center">
 <sub>
 
-[English](../../CONTRIBUTING.md) • [Català](../ca/CONTRIBUTING.md) • [Deutsch](../de/CONTRIBUTING.md) • [Español](../es/CONTRIBUTING.md) • [Français](../fr/CONTRIBUTING.md) • [हिंदी](../hi/CONTRIBUTING.md) • [Bahasa Indonesia](../id/CONTRIBUTING.md) • [Italiano](../it/CONTRIBUTING.md) • [日本語](../ja/CONTRIBUTING.md)
-
-</sub>
-<sub>
-
-[한국어](../ko/CONTRIBUTING.md) • [Nederlands](../nl/CONTRIBUTING.md) • [Polski](../pl/CONTRIBUTING.md) • [Português (BR)](../pt-BR/CONTRIBUTING.md) • [Русский](../ru/CONTRIBUTING.md) • [Türkçe](../tr/CONTRIBUTING.md) • [Tiếng Việt](../vi/CONTRIBUTING.md) • [简体中文](../zh-CN/CONTRIBUTING.md) • <b>繁體中文</b>
+[English](../../.github/CONTRIBUTING.md) • [简体中文](../zh-CN/CONTRIBUTING.md) • <b>繁體中文</b>
 
 </sub>
 </div>
@@ -20,7 +15,7 @@ NJUST_AI 是一個由社群驅動的專案，我們非常重視每一份貢獻�
 - [在您貢獻之前](#在您貢獻之前)
 - [尋找和規劃您的貢獻](#尋找和規劃您的貢獻)
 - [開發和提交流程](#開發和提交流程)
-- [法律](#法律)
+- [法律資訊](#法律資訊)
 
 ## 在您貢獻之前
 
@@ -54,8 +49,8 @@ NJUST_AI 是一個由社群驅動的專案，我們非常重視每一份貢獻�
 
 ### 3. 加入 NJUST_AI 社群
 
-- **主要方式：** 加入我們的 [Discord](https://discord.gg/njust-ai) 並私訊 **Hannes Rudolph (`hrudolph`)**。
-- **替代方式：** 經驗豐富的貢獻者可以透過 [GitHub Project](https://github.com/orgs/NjustAiInc/projects/1) 直接參與。
+- 在本儲存庫的 [GitHub Issues](https://github.com/JunjieChen0/NJUST/issues) 討論問題與修改範圍。
+- 本機開發與排障請參閱[文件導覽](../../docs/README.md)。
 
 ## 尋找和規劃您的貢獻
 
@@ -69,26 +64,26 @@ NJUST_AI 是一個由社群驅動的專案，我們非常重視每一份貢獻�
 
 所有貢獻都始於使用我們精簡範本的 GitHub Issue。
 
-- **檢查現有 Issue**：在 [GitHub Issues](https://github.com/NJUST-AI/NJUST_AI/issues) 中搜尋。
+- **檢查現有 Issue**：在 [GitHub Issues](https://github.com/JunjieChen0/NJUST/issues) 中搜尋。
 - **使用以下範本建立 Issue**：
     - **增強功能：** 「Enhancement Request」範本（著重於使用者利益的淺顯描述）。
     - **錯誤** 「Bug Report」範本（最少的重現步驟 + 預期與實際結果 + 版本）。
-- **想參與其中嗎？** 在 Issue 上留言「Claiming」，並在 [Discord](https://discord.gg/njust-ai) 上私訊 **Hannes Rudolph (`hrudolph`)** 以獲得分配。分配結果將在討論串中確認。
+- **想參與其中嗎？** 在 Issue 說明計畫與範圍，並向本儲存庫維護者申請指派。
 - **PR 必須連結到 Issue。** 未連結的 PR 可能會被關閉。
 
 ### 決定做什麼
 
-- 查看 [GitHub 專案](https://github.com/orgs/NjustAiInc/projects/1) 中的「Issue [Unassigned]」。
-- 如需文件，請造訪 [NJUST_AI Docs](https://github.com/NJUST-AI/NJUST_AI-Docs)。
+- 查看本儲存庫的 [GitHub Issues](https://github.com/JunjieChen0/NJUST/issues)，與維護者確認範圍。
+- 如需文件，請參閱[文件導覽](../../docs/README.md)。
 
 ### 回報錯誤
 
 - 首先檢查現有的報告。
-- 使用 [「Bug Report」範本](https://github.com/NJUST-AI/NJUST_AI/issues/new/choose) 建立一個新的錯誤回報，並提供：
+- 使用 [「Bug Report」範本](https://github.com/JunjieChen0/NJUST/issues/new/choose) 建立一個新的錯誤回報，並提供：
     - 清晰、編號的重現步驟
     - 預期與實際結果
     - NJUST_AI 版本（必填）；如果相關，還需提供 API 供應商/模型
-- **安全問題**：透過 [安全公告 (Security Advisories)](https://github.com/NJUST-AI/NJUST_AI/security/advisories/new) 私下回報。
+- **安全問題**：透過 [安全公告 (Security Advisories)](https://github.com/JunjieChen0/NJUST/security/advisories/new) 私下回報。
 
 ## 開發和提交流程
 
@@ -97,7 +92,7 @@ NJUST_AI 是一個由社群驅動的專案，我們非常重視每一份貢獻�
 1. **Fork 與 Clone：**
 
 ```
-git clone https://github.com/YOUR_USERNAME/NJUST_AI.git
+git clone https://github.com/YOUR_USERNAME/NJUST.git
 ```
 
 2. **安裝相依套件：**
@@ -113,7 +108,7 @@ pnpm install
 - 每個功能或修復使用一個單一目的的 PR。
 - 遵循 ESLint 和 TypeScript 的最佳實務。
 - 撰寫清晰、描述性的 Commit 訊息，並引用 Issue（例如，`Fixes #123`）。
-- 提供全面的測試（`npm test`）。
+- 提供全面的測試（`pnpm test`）。
 - 在提交前 Rebase 到最新的 `main` 分支。
 
 ### 提交 Pull Request
@@ -126,14 +121,14 @@ pnpm install
 
 ### Pull Request 政策
 
-- 必須引用一個已指派的 GitHub Issue。如要被指派：請在 Issue 上留言「Claiming」，並在 [Discord](https://discord.gg/njust-ai) 上私訊 **Hannes Rudolph (`hrudolph`)**。指派結果將可在討論串中確認。
+- 必須引用相關 GitHub Issue，並說明已討論的修改範圍。
 - 未連結 Issue 的 PR 可能會被關閉。
 - PR 必須通過 CI 測試，與路線圖保持一致，並有清晰的文件。
 
 ### 審查流程
 
-- **每日 Triage：** 維護者進行快速檢查。
-- **每週深入審查：** 全面評估。
+- 維護者核對範圍、實作、驗證證據與實際風險。
+- 在 PR 區分通過、失敗、略過與尚未執行的檢查。
 - **根據回饋及時迭代**。
 
 ## 法律資訊

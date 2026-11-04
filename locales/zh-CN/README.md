@@ -1,6 +1,6 @@
 # NJUST_AI
 
-> 基于 [NJUST_AI](https://github.com/NJUST-AI/NJUST_AI) 定制的 **仓颉语言 AI 开发助手** VS Code 扩展，面向 NJUST 内部使用。
+> [NJUST_AI](https://github.com/JunjieChen0/NJUST) 是面向仓颉开发的 AI 编程助手 VS Code 扩展，由 NJUST_AI 团队维护。
 
 > **Attribution**: 本项目基于 [Roo Code](https://github.com/RooVetGit/Roo-Code)（Apache-2.0 许可证）进行二次开发，由 NJUST_AI 团队维护与扩展。
 
@@ -14,6 +14,8 @@ NJUST_AI 是一个运行在 VS Code / Cursor 中的 AI 编程助手扩展。它�
 
 本项目基于上游定制：**移除了**与账号、组织、市集浏览相关的上游云服务与 Marketplace 流程；**保留并扩展**了本地/自建服务对接能力。
 
+当前开发与排障入口见[文档导航](../../docs/README.md)，实现概览见[根 README](../../README.md)。
+
 ---
 
 ## 核心能力
@@ -24,6 +26,7 @@ NJUST_AI 是一个运行在 VS Code / Cursor 中的 AI 编程助手扩展。它�
 - **MCP 工具生态**：管理多服务器（stdio / SSE / Streamable HTTP），内置 HTTP MCP Tools Server
 - **语义代码索引**：Tree-sitter 35+ 语言 AST 分块 + 嵌入向量化 + Qdrant 向量存储
 - **MemRL 记忆系统**：四层跨任务记忆架构，让 Agent 累积仓颉编程经验
+- **可核对的交付**：模型完成声明、系统构建、实际测试和用户验收分开记录；代码或 SDK 变化后旧结果标为过期。未知或缺少验证的经验不会记为已验证成功。
 - **Skills 系统**：从工作区与全局目录发现 SKILL.md，支持模式路由与按需加载
 - **检查点与回滚**：影子副本快照，支持 diff 对比与一键回滚
 - **40+ 模型提供商**：Anthropic、OpenAI、Gemini、DeepSeek、Ollama、Qwen 等
@@ -32,15 +35,15 @@ NJUST_AI 是一个运行在 VS Code / Cursor 中的 AI 编程助手扩展。它�
 
 ## 内置模式
 
-| 模式 | 说明 |
-|------|------|
-| **Cloud Agent** | 远程推理 + 本地工具执行，通过 CloudAgentOrchestrator 驱动 |
-| **Architect** | 技术规划与任务拆解，含 Spec-Driven Workflow |
-| **Code** | 编码实现，含算法/数据结构专项指导 |
-| **Ask** | 技术问答与代码分析，只读 + MCP 工具集 |
-| **Debug** | 系统化诊断：提出可能原因 → 缩小范围 → 验证 → 修复 |
-| **Cangjie Dev** | 仓颉全栈开发，含 cjpm/cjc 工作流与语料检索 |
-| **Orchestrator** | 复杂任务拆解为子任务，跨模式协调执行 |
+| 模式             | 说明                                                      |
+| ---------------- | --------------------------------------------------------- |
+| **Cloud Agent**  | 远程推理 + 本地工具执行，通过 CloudAgentOrchestrator 驱动 |
+| **Architect**    | 技术规划与任务拆解，含 Spec-Driven Workflow               |
+| **Code**         | 编码实现，含算法/数据结构专项指导                         |
+| **Ask**          | 技术问答与代码分析，只读 + MCP 工具集                     |
+| **Debug**        | 系统化诊断：提出可能原因 → 缩小范围 → 验证 → 修复         |
+| **Cangjie Dev**  | 仓颉全栈开发，含 cjpm/cjc 工作流与语料检索                |
+| **Orchestrator** | 复杂任务拆解为子任务，跨模式协调执行                      |
 
 支持通过 `njust-ai.customModes` 设置或项目根目录 `.roomodes` 文件自定义模式。
 
@@ -64,17 +67,17 @@ NJUST_AI 是一个运行在 VS Code / Cursor 中的 AI 编程助手扩展。它�
 
 ## 与上游的主要差异
 
-| 模块 | 状态 | 说明 |
-|------|------|------|
-| 上游账号/组织/市集云 | 已移除 | 登录、组织管理、市集安装等外部闭环 |
-| Marketplace | 已移除 | 远程市集浏览与安装；MCP 改由界面本地管理 |
-| Telemetry | 已简化 | 保留类型结构，弱化远程上报逻辑 |
-| Cloud Agent | 保留并增强 | 连接自建/内网服务，支持延期协议与 compile 反馈闭环 |
-| 仓颉语言工具链 | 定制增强 | 语法/LSP/cjpm/cjfmt/cjlint/测试/调试/经验修复 |
-| MCP 子系统 | 保留并增强 | 三种传输协议 + 内置 HTTP Tools Server |
-| Modes 系统 | 保留并扩展 | 7 个内置模式，支持自定义覆盖 |
-| 代码索引 | 保留并增强 | 多工作区单例，tree-sitter + Qdrant 向量存储 |
-| MemRL 记忆系统 | 全新增加 | 四层跨任务记忆，向量检索 + Q 值更新 |
+| 模块                 | 状态       | 说明                                               |
+| -------------------- | ---------- | -------------------------------------------------- |
+| 上游账号/组织/市集云 | 已移除     | 登录、组织管理、市集安装等外部闭环                 |
+| Marketplace          | 已移除     | 远程市集浏览与安装；MCP 改由界面本地管理           |
+| Telemetry            | 已简化     | 保留类型结构，弱化远程上报逻辑                     |
+| Cloud Agent          | 保留并增强 | 连接自建/内网服务，支持延期协议与 compile 反馈闭环 |
+| 仓颉语言工具链       | 定制增强   | 语法/LSP/cjpm/cjfmt/cjlint/测试/调试/经验修复      |
+| MCP 子系统           | 保留并增强 | 三种传输协议 + 内置 HTTP Tools Server              |
+| Modes 系统           | 保留并扩展 | 7 个内置模式，支持自定义覆盖                       |
+| 代码索引             | 保留并增强 | 多工作区单例，tree-sitter + Qdrant 向量存储        |
+| MemRL 记忆系统       | 全新增加   | 四层跨任务记忆，向量检索 + Q 值更新                |
 
 ---
 
@@ -82,16 +85,16 @@ NJUST_AI 是一个运行在 VS Code / Cursor 中的 AI 编程助手扩展。它�
 
 ### 环境要求
 
-- Node.js 20.19.2+
-- pnpm 10.8.1+
+- Node.js `>=20.19.2 <25`（CI 默认 `20.19.2`）
+- pnpm `10.8.1`，以根 `package.json` 的 `packageManager` 为准
 
 ### 安装与运行
 
 1. 克隆仓库：
 
 ```sh
-git clone <repo-url>
-cd NJUST_AI
+git clone https://github.com/JunjieChen0/NJUST.git
+cd NJUST
 ```
 
 2. 安装依赖：
@@ -108,6 +111,8 @@ pnpm install
 
 ```sh
 pnpm vsix
+# Nightly 变体
+pnpm vsix:nightly
 ```
 
 生成的 `.vsix` 文件位于 `bin/` 目录下，可通过以下命令安装：
@@ -116,11 +121,13 @@ pnpm vsix
 code --install-extension bin/njust-ai-<version>.vsix
 ```
 
-或使用自动化安装脚本：
+安装已有包可直接使用上面的命令；以下脚本会重新安装依赖、清理构建目录并重新打包：
 
 ```sh
 pnpm install:vsix
 ```
+
+测试命令、覆盖率和真实 VSIX 冒烟见[测试指南](../../docs/development/testing.md)。存档被禁用时见[存档排障](../../docs/runbooks/007-checkpoints-disabled.md)，不要直接删除任务或嵌套仓库。
 
 ---
 

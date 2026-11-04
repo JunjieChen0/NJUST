@@ -2,7 +2,7 @@
 
 ## Rule
 
-All test files MUST use the `.test.ts` (or `.test.tsx` for React components) suffix. The `.spec.ts` suffix is deprecated.
+All new test files MUST use the `.test.ts` (or `.test.tsx` for React components) suffix. Existing `.spec.ts` / `.spec.tsx` files remain supported.
 
 ## Rationale
 
@@ -16,22 +16,22 @@ Existing `.spec.ts` files are grandfathered in. New test files MUST follow this 
 
 ## Enforcement
 
-All Vitest config files (`vitest.config.ts`) should include both patterns in their `include` to remain compatible during migration:
+Vitest's default discovery supports both suffixes. Configurations that override `include` must retain the existing tests, for example:
 
 ```typescript
-include: ["**/*.test.ts", "**/*.test.tsx"]
+include: ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
 ```
 
-CI will enforce this convention via lint check for new files.
+Review new filenames against this convention. The current Code QA workflow does not have a separate filename-enforcement job; do not treat the convention itself as an automated check.
 
 ## Examples
 
 ### Correct
 
-- `src/core/tools/__tests__/BaseTool.test.ts`
-- `webview-ui/src/components/ChatView.test.tsx`
+- `src/core/task/__tests__/Task.verificationSummary.test.ts`
+- `webview-ui/src/components/chat/rows/__tests__/VerificationCard.test.tsx`
 
 ### Incorrect (deprecated)
 
 - `src/core/tools/__tests__/BaseTool.spec.ts`
-- `webview-ui/src/components/ChatView.spec.tsx`
+- `ExampleComponent.spec.tsx` (a new file with the deprecated suffix)

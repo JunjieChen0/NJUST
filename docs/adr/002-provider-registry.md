@@ -15,33 +15,39 @@ Accepted
 引入 `ProviderRegistry`（`Map<name, Factory>`），支持自注册和 fail-fast 查询：
 
 ```typescript
-// 注册
-ProviderRegistry.register("openrouter", {
-	create: (config) => new OpenRouterHandler(config),
-	defaultModel: openRouterDefaultModelId,
-})
+import { ProviderRegistry } from "../../src/api/registry/ProviderRegistry"
+import { OpenRouterHandler } from "../../src/api/providers/openrouter"
 
-// 查询
-const handler = ProviderRegistry.create(providerName, config) // fail-fast if not found
+// 示例使用独立实例；生产代码使用统一注册的 providerRegistry。
+const registry = new ProviderRegistry()
+
+// 工厂注册集中在 src/api/providers/register-all.ts。
+registry.register("openrouter", (options) => new OpenRouterHandler(options))
+
+// configuration 由调用方提供，此处应选择 openrouter。
+const handler = registry.createHandler(configuration)
+const registeredIds = registry.getRegisteredIds()
 ```
 
 设计要点：
 
-- 每个 Provider 模块在文件末尾自注册（side-effect import）
+- `src/api/index.ts` 导入 `src/api/providers/register-all.ts`，由统一入口注册内置 Provider；不是每个 Provider 文件末尾自注册。
 - 查询未注册的 Provider 时抛出明确错误（fail-fast）
-- Registry 提供 `list()` 方法供 UI 和测试使用
+- Registry 提供 `getRegisteredIds()`、`has()`、`get()` 和 `size()`。
+- 重复注册默认抛错；有意覆盖时显式传入 `{ override: true }`。
+- 模型目录缓存和元数据解析由 `modelCache.ts` / `resolveModelInfo.ts` 负责，Registry 的 `prepareModel` 接入请求前准备。
 
 ## Consequences
 
 **正向：**
 
-- 新增 Provider 只需修改 1 处文件（Provider 自身的注册语句）
+- 新增 Provider 有统一工厂注册入口；模型、配置、界面及发现策略仍需按功能补齐，不能承诺只改一个文件。
 - 编译时通过 TypeScript 类型检查工厂签名一致性
-- Provider 模块可按需加载（tree-shaking 友好）
+- 工厂调用与注册分离，便于在测试中注入独立实例。
 - 测试可以单独注册 mock Provider 而不影响全局 switch
 
 **负向：**
 
-- 注册顺序可能影响 override 行为（后注册覆盖先注册）
-- 需要确保所有 Provider 模块被导入以触发注册
+- 需要显式管理重复注册和有意覆盖。
+- 需要确保统一注册入口在创建 handler 前被导入。
 - 调试时需要查看 Registry 状态而非阅读 switch 代码

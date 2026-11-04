@@ -1,163 +1,59 @@
-<p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=JunjieChen-YuyaoJiang.njust-ai"><img src="https://img.shields.io/badge/VS_Code_Marketplace-007ACC?style=flat&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace"></a>
-  <a href="https://x.com/NjustAi"><img src="https://img.shields.io/badge/NjustAi-000000?style=flat&logo=x&logoColor=white" alt="X"></a>
-  <a href="https://youtube.com/@NjustAiyt?feature=shared"><img src="https://img.shields.io/badge/YouTube-FF0000?style=flat&logo=youtube&logoColor=white" alt="YouTube"></a>
-  <a href="https://discord.gg/njust-ai"><img src="https://img.shields.io/badge/Join%20Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord"></a>
-  <a href="https://www.reddit.com/r/NJUST_AI/"><img src="https://img.shields.io/badge/Join%20r%2FNJUST_AI-FF4500?style=flat&logo=reddit&logoColor=white" alt="Join r/NJUST_AI"></a>
-</p>
-<p align="center">
-  <em>快速取得協助 → <a href="https://discord.gg/njust-ai">加入 Discord</a> • 偏好非同步溝通？→ <a href="https://www.reddit.com/r/NJUST_AI/">加入 r/NJUST_AI</a></em>
-</p>
-
 # NJUST_AI
 
-> 您的 AI 驅動開發團隊，就在您的編輯器中
+> [NJUST_AI](https://github.com/JunjieChen0/NJUST) 是面向倉頡開發的 AI 程式設計助手 VS Code 擴充功能，由 NJUST_AI 團隊維護。
 
-## v3.51.0 新功能
+> **Attribution**：本專案以 [Roo Code](https://github.com/RooVetGit/Roo-Code)（Apache-2.0）為基礎，由 NJUST_AI 團隊修改與擴充。
 
-- 已新增對 OpenAI GPT-5.4 和 GPT-5.3 Chat Latest 的支援，讓你可以在 NJUST_AI 中使用 OpenAI 最新的聊天模型。
-- 現在可以將 skills 公開為 slash 指令，並支援 fallback execution，讓可重用工作流程觸發得更快。
+## 專案概覽
 
-<details>
-  <summary>🌐 支援語言</summary>
+擴充功能透過 Webview 與 Extension Host 提供對話、程式碼閱讀與修改、工具審批、命令執行及語意搜尋。倉頡工具鏈包含語法、LSP、`cjpm`、格式化、靜態檢查、測試與除錯整合。
 
-- [English](../../README.md)
-- [Català](../ca/README.md)
-- [Deutsch](../de/README.md)
-- [Español](../es/README.md)
-- [Français](../fr/README.md)
-- [हिंदी](../hi/README.md)
-- [Bahasa Indonesia](../id/README.md)
-- [Italiano](../it/README.md)
-- [日本語](../ja/README.md)
-- [한국어](../ko/README.md)
-- [Nederlands](../nl/README.md)
-- [Polski](../pl/README.md)
-- [Português (BR)](../pt-BR/README.md)
-- [Русский](../ru/README.md)
-- [Türkçe](../tr/README.md)
-- [Tiếng Việt](../vi/README.md)
-- [简体中文](../zh-CN/README.md)
-- [繁體中文](../zh-TW/README.md)
-- ...
-      </details>
+目前的開發與排障入口見[文件導覽](../../docs/README.md)，實作概覽見[根 README](../../README.md)。舊評審與覆蓋率快照只代表記錄時的狀態。
 
----
+## 主要能力
 
-## NJUST_AI 能為您做什麼？
+- **模式**：Cloud Agent、Architect、Code、Ask、Debug、Cangjie Dev 與 Orchestrator，可透過自訂模式調整。
+- **倉頡開發**：識別工程與 SDK、讀取上下文、依審批修改程式碼，再進行系統建置與相關測試；只檢查任務不會進入寫入修復流程。
+- **可核對的交付**：模型宣告完成、建置結果、實際測試和使用者驗收分開記錄。程式碼或 SDK 變更後，舊驗證結果會標為過期。
+- **模型接入**：支援多個服務商與 OpenAI Compatible 端點，依連線設定取得或快取模型目錄；目錄不可用不等於模型不存在。
+- **Cloud Agent / MCP**：連接自建遠端推理與工具服務；REST 延期協定與 MCP 模式的執行邊界見 [AGENTS.md](../../AGENTS.md)。
+- **記憶與 Skills**：保留任務驗證事實，按任務更新經驗；未知狀態或沒有驗證欄位的舊經驗不參與檢索及提煉。語言參考透過 Skills 按需載入。
+- **存檔與差異**：以影子 Git 保存檢查點。`.vscode-test/` 測試快取不進入快照；其他真實巢狀 Git 儲存庫仍會觸發保護。
 
-- 從自然語言描述生成程式碼
-- 使用模式進行調整：程式碼、架構師、詢問、偵錯和自訂模式
-- 重構和偵錯現有程式碼
-- 編寫和更新文件
-- 回答關於您程式碼庫的問題
-- 自動化重複性任務
-- 使用 MCP 伺服器
+## 本機開發
 
-## 模式
-
-NJUST_AI 會配合您的工作方式，而非要您配合它：
-
-- 程式碼模式：日常開發、編輯和檔案操作
-- 架構師模式：規劃系統、規格和遷移
-- 詢問模式：快速回答、解釋和文件
-- 偵錯模式：追蹤問題、新增日誌、鎖定根本原因
-- 自訂模式：為您的團隊或工作流程建置專門的模式
-
-更多資訊：[使用模式](https://docs.njust-ai.local/basic-usage/using-modes) • [自訂模式](https://docs.njust-ai.local/advanced-usage/custom-modes)
-
-## 教學和功能影片
-
-<div align="center">
-
-|                                                                                                                                                                     |                                                                                                                                                                  |                                                                                                                                                                    |
-| :-----------------------------------------------------------------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------------: |
-| <a href="https://www.youtube.com/watch?v=Mcq3r1EPZ-4"><img src="https://img.youtube.com/vi/Mcq3r1EPZ-4/maxresdefault.jpg" width="100%"></a><br><b>安裝 NJUST_AI</b> | <a href="https://www.youtube.com/watch?v=ZBML8h5cCgo"><img src="https://img.youtube.com/vi/ZBML8h5cCgo/maxresdefault.jpg" width="100%"></a><br><b>設定設定檔</b> | <a href="https://www.youtube.com/watch?v=r1bpod1VWhg"><img src="https://img.youtube.com/vi/r1bpod1VWhg/maxresdefault.jpg" width="100%"></a><br><b>程式碼庫索引</b> |
-|   <a href="https://www.youtube.com/watch?v=iiAv1eKOaxk"><img src="https://img.youtube.com/vi/iiAv1eKOaxk/maxresdefault.jpg" width="100%"></a><br><b>自訂模式</b>    |   <a href="https://www.youtube.com/watch?v=Ho30nyY332E"><img src="https://img.youtube.com/vi/Ho30nyY332E/maxresdefault.jpg" width="100%"></a><br><b>檢查點</b>   |  <a href="https://www.youtube.com/watch?v=HmnNSasv7T8"><img src="https://img.youtube.com/vi/HmnNSasv7T8/maxresdefault.jpg" width="100%"></a><br><b>上下文管理</b>  |
-
-</div>
-<p align="center">
-<a href="https://docs.njust-ai.local/tutorial-videos">更多快速教學和功能影片...</a>
-</p>
-
-## 資源
-
-- **[文件](https://docs.njust-ai.local):** 安裝、設定和掌握 NJUST_AI 的官方指南。
-- **[YouTube 頻道](https://youtube.com/@NjustAiyt?feature=shared):** 觀看教學和功能實際操作。
-- **[Discord 伺服器](https://discord.gg/njust-ai):** 加入社群以獲得即時協助和討論。
-- **[Reddit 社群](https://www.reddit.com/r/NJUST_AI):** 分享您的經驗，看看其他人正在建立什麼。
-- **[GitHub Issues](https://github.com/NJUST-AI/NJUST_AI/issues):** 回報問題並追蹤開發進度。
-- **[功能請求](https://github.com/NJUST-AI/NJUST_AI/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop):** 有想法嗎？與開發人員分享。
-
----
-
-## 本機設定與開發
-
-1. **複製**儲存庫：
+- Node.js `>=20.19.2 <25`，CI 預設 `20.19.2`。
+- pnpm `10.8.1`，以根 `package.json` 的 `packageManager` 為準。
 
 ```sh
-git clone https://github.com/NJUST-AI/NJUST_AI.git
-```
-
-2. **安裝相依套件**:
-
-```sh
+git clone https://github.com/JunjieChen0/NJUST.git
+cd NJUST
 pnpm install
 ```
 
-3. **執行擴充功能**:
+用 VS Code 開啟儲存庫，按 `F5` 啟動擴充功能開發視窗。
 
-有幾種方法可以執行 NJUST_AI 擴充功能：
-
-### 開發模式（F5）
-
-若要進行開發，請使用 VSCode 的內建偵錯功能：
-
-在 VSCode 中按 `F5`（或前往 **執行** → **開始偵錯**）。這將在執行 NJUST_AI 擴充功能的新 VSCode 視窗中開啟。
-
-- 對 webview 的變更將立即顯示。
-- 對核心擴充功能的變更也將自動熱重載。
-
-### 自動化 VSIX 安裝
-
-要將擴充功能建置為 VSIX 套件並直接安裝到 VSCode 中：
+## 建置與安裝
 
 ```sh
-pnpm install:vsix [-y] [--editor=<command>]
+pnpm vsix
+# Nightly 變體，擴充功能 ID 與命令前綴不同
+pnpm vsix:nightly
 ```
 
-此命令將：
+產物位於 `bin/`；將占位版本替換為實際檔名後安裝：
 
-- 詢問要使用的編輯器命令（code/cursor/code-insiders） - 預設為“code”
-- 解除安裝任何現有版本的擴充功能。
-- 建置最新的 VSIX 套件。
-- 安裝新建置的 VSIX。
-- 提示您重新啟動 VS Code 以使變更生效。
+```sh
+code --install-extension bin/njust-ai-<version>.vsix
+```
 
-選項：
+`pnpm install:vsix` 會重新安裝相依套件、清理建置目錄、重新打包並執行安裝腳本。只想安裝既有套件時，使用上面的安裝命令。
 
-- `-y`: 跳過所有確認提示並使用預設值
-- `--editor=<command>`: 指定編輯器命令（例如 `--editor=cursor` 或 `--editor=code-insiders`）
+安裝後執行 `Developer: Reload Window`。測試命令、覆蓋率、E2E 與真實 VSIX 冒煙見[測試指南](../../docs/development/testing.md)。存檔被停用時，先查看[存檔排障](../../docs/runbooks/007-checkpoints-disabled.md)，不要直接刪除任務、檢查點或巢狀儲存庫。
 
-### 手動 VSIX 安裝
+## 回報問題與貢獻
 
-如果您希望手動安裝 VSIX 套件：
-
-1.  首先，建置 VSIX 套件：
-    ```sh
-    pnpm vsix
-    ```
-2.  將在 `bin/` 目錄中產生一個 `.vsix` 檔案（例如 `bin/njust-ai-<version>.vsix`）。
-3.  使用 VSCode CLI 手動安裝：
-    ```sh
-    code --install-extension bin/njust-ai-<version>.vsix
-    ```
-
----
-
-我們使用 [changesets](https://github.com/changesets/changesets) 進行版本控制和發布。有關發行說明，請查看我們的 `CHANGELOG.md`。
-
----
+請在本儲存庫的 [GitHub Issues](https://github.com/JunjieChen0/NJUST/issues) 提供版本、重現步驟、預期結果與已脫敏的日誌。開發流程見[貢獻指南](CONTRIBUTING.md)。
 
 ## 免責聲明
 
@@ -165,16 +61,6 @@ pnpm install:vsix [-y] [--editor=<command>]
 
 ---
 
-## 貢獻
-
-我們歡迎社群貢獻！請從閱讀我們的 [CONTRIBUTING.md](CONTRIBUTING.md) 開始。
-
----
-
 ## 授權
 
 [Apache 2.0 © 2025 NJUST_AI, Inc.](../../LICENSE)
-
----
-
-**享受 NJUST_AI！** 無論您是想嚴格控管它，還是讓它自主運作，我們都迫不及待地想看看您會打造些什麼。如果您有問題或功能想法，請造訪我們的 [Reddit 社群](https://www.reddit.com/r/NJUST_AI/)或 [Discord](https://discord.gg/njust-ai)。祝您開發愉快！
