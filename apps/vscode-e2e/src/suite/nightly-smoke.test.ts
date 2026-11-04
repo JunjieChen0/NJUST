@@ -10,6 +10,7 @@ export async function run(): Promise<void> {
 	assert.ok(extension, "Installed Nightly extension must be discovered")
 	assert.strictEqual(path.resolve(extension.extensionPath), path.resolve(process.env.NIGHTLY_SMOKE_EXTENSION_PATH!))
 	const manifest = extension.packageJSON as {
+		icon: string
 		contributes: {
 			debuggers?: { type: string }[]
 			languages?: { configuration?: string }[]
@@ -17,6 +18,8 @@ export async function run(): Promise<void> {
 			snippets?: { path: string }[]
 		}
 	}
+	assert.strictEqual(manifest.icon, "assets/icons/icon.png", "Nightly must display the NJUST crest")
+	await vscode.workspace.fs.stat(vscode.Uri.joinPath(extension.extensionUri, manifest.icon))
 	assert.ok(manifest.contributes.debuggers?.some((debuggerType) => debuggerType.type === "cangjie"))
 	const resources = [
 		...(manifest.contributes.languages ?? []).flatMap((language) => language.configuration ?? []),

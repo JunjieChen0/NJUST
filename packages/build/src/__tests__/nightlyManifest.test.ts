@@ -13,6 +13,10 @@ const generated = generatePackageJson({
 })
 
 describe("Nightly manifest from the real extension", () => {
+	it("uses the same NJUST crest as the standard extension", () => {
+		expect(generated.icon).toBe(source.icon)
+	})
+
 	it("retains every contribution point", () => {
 		expect(Object.keys(generated.contributes).sort()).toEqual(Object.keys(source.contributes).sort())
 	})
