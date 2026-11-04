@@ -496,15 +496,10 @@ export class AskDispatcher {
 		this.outputManager.output(`  Error: ${text || "Unknown error"}`)
 		this.outputManager.markDisplayed(ts, text || "", false)
 
-		if (this.exitOnError) {
-			console.error(`[CLI] API request failed: ${text || "Unknown error"}`)
-			process.exit(1)
-		}
-
-		if (this.nonInteractive) {
-			this.outputManager.output("\n[retrying api request]")
-			// Auto-retry in non-interactive mode
-			return { handled: true }
+		if (this.exitOnError || this.nonInteractive) {
+			this.outputManager.output("\n[API retry requires interactive approval; stopping]")
+			this.sendApprovalResponse(false)
+			return { handled: true, response: "noButtonClicked" }
 		}
 
 		try {

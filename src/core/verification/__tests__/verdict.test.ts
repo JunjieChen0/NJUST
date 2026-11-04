@@ -36,6 +36,22 @@ function record(parts: Partial<TaskVerificationRecord> = {}): TaskVerificationRe
 }
 
 describe("evaluateVerification", () => {
+	it.each(["cjpmPath", "sdkHome", "sdkVersion"] as const)(
+		"expires known environment metadata that disappears: %s",
+		(missing) => {
+			const environment = { cjpmPath: "cjpm", sdkHome: "/sdk", sdkVersion: "1" }
+			const evidence = record({
+				runs: [
+					run({ kind: "build", sdk: { home: "/sdk", version: "1" } }),
+					passingTest({ sdk: { home: "/sdk", version: "1" } }),
+				],
+			})
+			const result = evaluateVerification(evidence, FP, { ...environment, [missing]: undefined })
+			expect(result.overall).toBe("incomplete")
+			expect(result.build).toMatchObject({ state: "stale", staleReason: "environment_changed" })
+			expect(result.test).toMatchObject({ state: "stale", staleReason: "environment_changed" })
+		},
+	)
 	it("expires verification after switching Docker images or execution backends", () => {
 		const evidence = record({
 			runs: [run({ kind: "build", sdk: { backend: "docker", image: "sdk:v1", imageDigest: "sha256:old" } })],
@@ -73,6 +89,7 @@ describe("evaluateVerification", () => {
 
 	it("does not infer SDK changes when old metadata is missing", () => {
 		const result = evaluateVerification(record({ runs: [run({ kind: "build" })] }), FP, {
+			cjpmPath: "cjpm",
 			sdkHome: "/sdk",
 			sdkVersion: "2",
 		})

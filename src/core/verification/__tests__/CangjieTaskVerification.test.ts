@@ -118,6 +118,34 @@ describe("CangjieTaskVerification", () => {
 		expect(record?.claims[0]?.inputFingerprint).toBe("fp-1")
 	})
 
+	it("does not reuse a verified delivery after its configured cjpm disappears", async () => {
+		const dependencies = deps()
+		let available = true
+		dependencies.checkDeps.resolveCjpm = () => (available ? "cjpm" : undefined)
+		dependencies.checkDeps.environment = async () => ({
+			sdkVersion: "1.0.5",
+			cjpmPath: available ? "cjpm" : undefined,
+		})
+		exec.mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok(TESTS_PASSED))
+		const session = new CangjieTaskVerification(
+			{ taskId: "task-1", cwd: projectRoot, policy: makePolicy() },
+			dependencies,
+		)
+		try {
+			await session.verifyForCompletion(approveAll)
+			expect((await session.currentSummary())?.overall).toBe("verified")
+			available = false
+			exec.mockClear()
+			const outcome = await session.verifyForCompletion(approveAll)
+			expect(outcome.action).toBe("allow")
+			expect((await session.currentSummary())?.overall).toBe("incomplete")
+			expect(exec).not.toHaveBeenCalled()
+			expect((await loadVerificationRecord(taskDir, "task-1"))?.runs.at(-1)?.status).toBe("blocked")
+		} finally {
+			session.dispose()
+		}
+	})
+
 	it.each(["passed", "failed", "denied", "cancelled"] as const)(
 		"runs a changed dependency's test suite and retains its %s outcome",
 		async (state) => {

@@ -43,6 +43,7 @@ export class CangjieChangeMonitor {
 	private pending: Promise<unknown> = Promise.resolve()
 	private started = false
 	private disposed = false
+	private inputsUnavailable = false
 
 	constructor(
 		private readonly task: { taskId: string; writtenPaths(): string[] },
@@ -104,9 +105,17 @@ export class CangjieChangeMonitor {
 		const record = await loadVerificationRecord(taskDir, this.task.taskId)
 		if (!record || (record.runs.length === 0 && record.claims.length === 0)) return undefined
 		const resolution = await this.deps.resolveRoot()
-		if (resolution.kind !== "resolved") return undefined
-		const snapshot = await this.deps.snapshot(resolution.root)
-		if (!snapshot) return undefined
+		const snapshot = resolution.kind === "resolved" ? await this.deps.snapshot(resolution.root) : undefined
+		if (!snapshot || resolution.kind !== "resolved") {
+			const verdict = evaluateVerification(record, undefined)
+			verdict.gaps = [resolution.kind === "blocked" ? resolution.reason : "Project snapshot is unavailable"]
+			const info: VerificationChange = { verdict, changes: [], codeChanged: false, cause }
+			if (!this.inputsUnavailable && !this.disposed) this.events.emit("change", info)
+			this.inputsUnavailable = true
+			return info
+		}
+		const wasUnavailable = this.inputsUnavailable
+		this.inputsUnavailable = false
 		const environment = await this.deps.environment()
 		const verdict = evaluateVerification(record, snapshot.fingerprint, environment, snapshot)
 		const reference = latestBinding(record)
@@ -136,7 +145,10 @@ export class CangjieChangeMonitor {
 			codeChanged: delivery?.fingerprint !== undefined && delivery.fingerprint !== snapshot.fingerprint,
 			cause: codeChanged ? cause : environmentChanged ? "environment_change" : cause,
 		}
-		if (!codeChanged && !environmentChanged) return info
+		if (!codeChanged && !environmentChanged) {
+			if (wasUnavailable && !this.disposed) this.events.emit("change", info)
+			return info
+		}
 		const inv: VerificationInvalidation = {
 			at: this.deps.now(),
 			cause: info.cause,

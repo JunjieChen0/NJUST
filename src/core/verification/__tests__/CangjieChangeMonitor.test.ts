@@ -99,6 +99,26 @@ describe("CangjieChangeMonitor", () => {
 		expect(listener).not.toHaveBeenCalled()
 	})
 
+	it.each(["manifest", "snapshot"])(
+		"notifies when the %s becomes unavailable and when it recovers",
+		async (missing) => {
+			const listener = vi.fn()
+			monitor.onDidChange(listener)
+			if (missing === "manifest")
+				deps.resolveRoot = async () => ({ kind: "blocked", reason: "No cjpm.toml", candidates: [] })
+			else vi.mocked(deps.snapshot).mockResolvedValueOnce(undefined)
+			const before = (await read())!.runs
+			const unavailable = await monitor.recheck("file_change")
+			expect(unavailable?.verdict.overall).toBe("incomplete")
+			expect(listener).toHaveBeenCalledOnce()
+			expect((await read())!.runs).toEqual(before)
+			deps.resolveRoot = async () => ({ kind: "resolved", root: taskDir })
+			const restored = await monitor.recheck("file_change")
+			expect(restored?.verdict.overall).toBe("verified")
+			expect(listener).toHaveBeenCalledTimes(2)
+		},
+	)
+
 	it("does not hash projects with no checks or deliveries", async () => {
 		await updateVerificationRecord(taskDir, "task-1", () => createEmptyVerificationRecord("task-1"))
 		await expect(monitor.recheck("file_change")).resolves.toBeUndefined()

@@ -515,6 +515,68 @@ describe("ExtensionHost", () => {
 	})
 
 	describe("runTask", () => {
+		it.each([false, true])(
+			"rejects API failure confirmation in non-interactive output (disabled=%s)",
+			async (disableOutput) => {
+				const host = createTestHost({ nonInteractive: true, exitOnError: false, disableOutput })
+				host.markWebviewReady()
+				const client = getPrivate<ExtensionClient>(host, "client")
+				const send = vi.spyOn(host, "sendToExtension")
+				const task = host.runTask("test prompt")
+				const assertion = expect(task).rejects.toThrow("Unauthorized")
+				client.handleMessage({
+					type: "state",
+					state: {
+						clineMessages: [
+							{ ts: 1, type: "ask", ask: "api_req_failed", text: "Unauthorized", partial: false },
+						],
+					},
+				} as ExtensionMessage)
+				await assertion
+				expect(send).toHaveBeenCalledWith({ type: "askResponse", askResponse: "noButtonClicked" })
+			},
+		)
+
+		it("rejects terminal request errors but keeps recoverable error messages running", async () => {
+			const host = createTestHost({ nonInteractive: true, exitOnError: false })
+			host.markWebviewReady()
+			const client = getPrivate<ExtensionClient>(host, "client")
+			const task = host.runTask("test prompt")
+			const assertion = expect(task).rejects.toThrow("budget exhausted")
+			client.getEmitter().emit("message", {
+				id: "recoverable",
+				ts: 1,
+				type: "say",
+				say: "error",
+				text: "MODEL_NO_ASSISTANT_MESSAGES",
+			})
+			client.getEmitter().emit("messageUpdated", {
+				id: "terminal",
+				ts: 2,
+				type: "say",
+				say: "error",
+				text: "Task ended unexpectedly: budget exhausted",
+				partial: false,
+			})
+			await assertion
+		})
+
+		it("exits immediately on a partial retry countdown when exitOnError is enabled", async () => {
+			const host = createTestHost({ nonInteractive: true, exitOnError: true })
+			host.markWebviewReady()
+			const client = getPrivate<ExtensionClient>(host, "client")
+			const task = host.runTask("test prompt")
+			const assertion = expect(task).rejects.toThrow("503")
+			client.getEmitter().emit("message", {
+				id: "retry",
+				ts: 1,
+				type: "say",
+				say: "api_req_retry_delayed",
+				text: "503\n<retry_timer>120</retry_timer>",
+				partial: true,
+			})
+			await assertion
+		})
 		it("should send newTask message when called", async () => {
 			const host = createTestHost()
 			host.markWebviewReady()

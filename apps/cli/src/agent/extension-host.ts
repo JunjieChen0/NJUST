@@ -491,25 +491,34 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 				this.client.off("taskCompleted", completeHandler)
 				this.client.off("error", errorHandler)
 
-				if (messageHandler) {
-					this.client.off("message", messageHandler)
-				}
+				this.client.off("message", messageHandler)
+				this.client.off("messageUpdated", messageHandler)
 			}
 
-			// When exitOnError is enabled, listen for api_req_retry_delayed messages
-			// (sent by Task.ts during auto-approval retry backoff) and exit immediately.
-			let messageHandler: ((msg: ClineMessage) => void) | null = null
-
-			if (this.options.exitOnError) {
-				messageHandler = (msg: ClineMessage) => {
-					if (msg.type === "say" && msg.say === "api_req_retry_delayed") {
-						cleanup()
-						reject(new Error(msg.text?.split("\n")[0] || "API request failed"))
-					}
+			const messageHandler = (msg: ClineMessage) => {
+				if (
+					msg.partial &&
+					!(this.options.exitOnError && msg.type === "say" && msg.say === "api_req_retry_delayed")
+				)
+					return
+				const manualRetry =
+					msg.type === "ask" &&
+					msg.ask === "api_req_failed" &&
+					(this.options.nonInteractive || this.options.exitOnError)
+				const terminalError =
+					msg.type === "say" && msg.say === "error" && msg.text?.startsWith("Task ended unexpectedly:")
+				const exitOnRetry =
+					this.options.exitOnError && msg.type === "say" && msg.say === "api_req_retry_delayed"
+				if (manualRetry || terminalError || exitOnRetry) {
+					// Structured output disables AskDispatcher; still release the backend ask.
+					if (manualRetry && this.options.disableOutput)
+						this.sendToExtension({ type: "askResponse", askResponse: "noButtonClicked" })
+					cleanup()
+					reject(new Error(msg.text?.split("\n")[0] || "API request failed"))
 				}
-
-				this.client.on("message", messageHandler)
 			}
+			this.client.on("message", messageHandler)
+			this.client.on("messageUpdated", messageHandler)
 
 			this.client.once("taskCompleted", completeHandler)
 			this.client.once("error", errorHandler)

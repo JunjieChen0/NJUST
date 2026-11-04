@@ -22,7 +22,7 @@ import { getLastGlobalApiRequestTime } from "./globalApiTiming"
 import { PersistentRetryManager } from "./PersistentRetry"
 import { logger } from "../../shared/logger"
 import { TIMING, LIMITS } from "../../shared/constants"
-import { TaskAbortedError } from "./TaskErrors"
+import { TaskAbortedError, TaskRetryExhaustedError } from "./TaskErrors"
 import { TelemetryService } from "@njust-ai/telemetry"
 
 const MAX_EXPONENTIAL_BACKOFF_SECONDS = TIMING.MAX_EXPONENTIAL_BACKOFF_MS / 1000
@@ -156,6 +156,7 @@ export class TaskStreamProcessor {
 					`Persistent retry denied for '${errorCategory}' on task ${this.task.taskId}: ${retryCheck.reason}` +
 						(retryCheck.shouldFallback ? " → suggesting model fallback" : ""),
 				)
+				throw new TaskRetryExhaustedError(this.task.taskId, this.persistentRetry.getStats().totalRetries)
 			}
 
 			const state = await this.task.providerRef.deref()?.getState()
@@ -256,6 +257,7 @@ export class TaskStreamProcessor {
 				)
 			}
 		} catch (err) {
+			if (err instanceof TaskRetryExhaustedError) throw err
 			if (this.task.abort) {
 				return
 			}

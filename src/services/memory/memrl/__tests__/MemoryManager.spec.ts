@@ -12,7 +12,10 @@ import type { ApiHandler } from "../../../../api"
 import { asMock } from "../../../../__tests__/helpers/asMock"
 
 vi.mock("../../../../utils/safeWriteJson", () => ({
-	safeWriteJson: vi.fn().mockResolvedValue(undefined),
+	safeWriteJson: vi.fn(async (file: string, data: unknown) => {
+		await fs.mkdir(path.dirname(file), { recursive: true })
+		await fs.writeFile(file, JSON.stringify(data), "utf8")
+	}),
 }))
 
 function makeEmbedder(): IEmbedder {

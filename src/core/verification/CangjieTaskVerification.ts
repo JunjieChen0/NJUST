@@ -211,7 +211,12 @@ export class CangjieTaskVerification {
 				{
 					taskDir,
 					changes: changed?.changes,
-					note: resolution.kind === "blocked" ? resolution.reason : verdict.latestClaim?.summary,
+					note:
+						resolution.kind === "blocked"
+							? resolution.reason
+							: !snapshot
+								? "Project snapshot is unavailable"
+								: verdict.latestClaim?.summary,
 				},
 				snapshot?.fingerprint,
 			)

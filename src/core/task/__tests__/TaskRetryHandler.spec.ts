@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vitest"
 import type { ApiStreamChunk } from "../../../api/transform/stream"
 import { handleAttemptApiRequestError, handleMidStreamFailure, handleEmptyAssistantResponse } from "../TaskRetryHandler"
 import { TaskState } from "../TaskStateMachine"
-import { TaskAbortedError, TaskRetryExhaustedError } from "../TaskErrors"
+import { TaskAbortedError, TaskApiRequestError, TaskRetryExhaustedError } from "../TaskErrors"
 
 vi.mock("../../../shared/logger", () => ({
-	logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
+	logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }))
 
 vi.mock("../../../shared/error-utils", () => ({
@@ -200,6 +200,47 @@ async function collectGenerator(gen: AsyncGenerator<ApiStreamChunk>): Promise<Ap
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 describe("handleAttemptApiRequestError", () => {
+	it("does not retry after the persistent wait budget rejects", async () => {
+		const host = createMockHost()
+		host.persistentRetryHandler.isEligible.mockReturnValue(true)
+		host.persistentRetryHandler.waitForRetry.mockRejectedValue(new Error("budget exhausted"))
+		const retryApiRequest = createMockRetryApiRequest()
+		await expect(
+			collectGenerator(
+				handleAttemptApiRequestError({
+					host,
+					error: Object.assign(new Error("rate limit"), { status: 429 }),
+					retryAttempt: 5,
+					autoApprovalEnabled: true,
+					unattendedRetryEnabled: true,
+					unattendedMaxRetryAttempts: 5,
+					retryApiRequest,
+				}),
+			),
+		).rejects.toThrow(TaskApiRequestError)
+		expect(retryApiRequest).not.toHaveBeenCalled()
+	})
+	it.each([401, 403])("requires a human decision for first-chunk HTTP %s even with auto approval", async (status) => {
+		const host = createMockHost()
+		host.ask.mockResolvedValue({ response: "noButtonClicked" })
+		const retryApiRequest = createMockRetryApiRequest()
+		await expect(
+			collectGenerator(
+				handleAttemptApiRequestError({
+					host,
+					error: Object.assign(new Error("Unauthorized"), { status }),
+					retryAttempt: 0,
+					autoApprovalEnabled: true,
+					unattendedRetryEnabled: false,
+					unattendedMaxRetryAttempts: 5,
+					retryApiRequest,
+				}),
+			),
+		).rejects.toThrow(TaskApiRequestError)
+		expect(host.ask).toHaveBeenCalledWith("api_req_failed", expect.any(String))
+		expect(retryApiRequest).not.toHaveBeenCalled()
+		expect(host.streamProcessor.backoffAndAnnounce).not.toHaveBeenCalled()
+	})
 	it("yields retry action when errorRecovery returns retry", async () => {
 		const chunk: ApiStreamChunk = { type: "text", text: "response" }
 		const retryApiRequest = createMockRetryApiRequest([chunk])
@@ -397,6 +438,27 @@ describe("handleAttemptApiRequestError", () => {
 })
 
 describe("handleMidStreamFailure", () => {
+	it.each([new TaskApiRequestError("manual retry declined", undefined), new TaskRetryExhaustedError("task", 3)])(
+		"finalizes the request without requeueing terminal error %s",
+		async (error) => {
+			const task = createMockHost({ autoApprovalEnabled: true })
+			const abortStream = vi.fn().mockResolvedValue(undefined)
+			const stack: [] = []
+			await expect(
+				handleMidStreamFailure({
+					task,
+					error,
+					currentRetryAttempt: 3,
+					currentUserContent: [],
+					stack,
+					abortStream,
+				}),
+			).rejects.toThrow(error)
+			expect(abortStream).toHaveBeenCalledOnce()
+			expect(stack).toEqual([])
+			expect(task.backoffAndAnnounce).not.toHaveBeenCalled()
+		},
+	)
 	const defaultError = new Error("stream crashed")
 	const defaultContent = [{ type: "text" as const, text: "hello" }]
 	const defaultStack = [{ userContent: defaultContent, includeFileDetails: true }]

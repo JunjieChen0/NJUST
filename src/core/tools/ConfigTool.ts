@@ -3,6 +3,7 @@ import { z } from "zod"
 import { Task } from "../task/Task"
 
 import { wrapAsError } from "../../shared/error-utils"
+import { Package } from "../../shared/package"
 import { BaseTool, ToolCallbacks } from "./BaseTool"
 
 interface ConfigParams {
@@ -12,12 +13,12 @@ interface ConfigParams {
 }
 
 /**
- * ConfigTool – read / write VS Code workspace configuration under "Njust-AI".
+ * ConfigTool – read / write VS Code workspace configuration under Package.name.
  *
  * Actions:
  *   - get  : return the value of a single key
  *   - set  : update a key to a new value
- *   - list : return all keys under "Njust-AI"
+ *   - list : return all keys under Package.name
  */
 export class ConfigTool extends BaseTool<"config"> {
 	readonly name = "config" as const
@@ -70,7 +71,7 @@ export class ConfigTool extends BaseTool<"config"> {
 
 			// Dynamically import vscode to avoid hard dependency at module level
 			const vscode = await import("vscode")
-			const config = vscode.workspace.getConfiguration("Njust-AI")
+			const config = vscode.workspace.getConfiguration(Package.name)
 
 			switch (action) {
 				case "get": {

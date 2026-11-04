@@ -53,10 +53,12 @@ export interface EpisodicStore {
 	embedFingerprint?: string
 }
 
+// Instances can outlive a task while an embedding/write is pending.
+const fileWrites = new Map<string, Promise<void>>()
+
 export class EpisodicMemoryService {
 	private store: EpisodicStore = { entries: [], totalWrites: 0 }
 	private loaded = false
-	private writes: Promise<void> = Promise.resolve()
 
 	constructor(
 		private readonly workspaceDir: string,
@@ -102,6 +104,23 @@ export class EpisodicMemoryService {
 		await safeWriteJson(this.primaryPath, this.store)
 	}
 
+	private enqueueWrite(operation: () => Promise<void>): Promise<void> {
+		const absolutePath = path.resolve(this.primaryPath)
+		const key = process.platform === "win32" ? absolutePath.toLowerCase() : absolutePath
+		const result = (fileWrites.get(key) ?? Promise.resolve()).then(async () => {
+			// Reload under the same lock as the write, including for previously loaded instances.
+			this.loaded = false
+			await this.load()
+			await operation()
+		})
+		const settled = result.catch((error) => logger.debug("MemRL", "Episodic write failed", error))
+		fileWrites.set(key, settled)
+		void settled.then(() => {
+			if (fileWrites.get(key) === settled) fileWrites.delete(key)
+		})
+		return result
+	}
+
 	// ── Write ──────────────────────────────────────────────────────────────────
 
 	/**
@@ -109,10 +128,7 @@ export class EpisodicMemoryService {
 	 * Triggers LTM distillation callback every LTM_DISTILL_INTERVAL writes.
 	 */
 	write(intent: string, stmSummary: string, outcome: MemrlOutcome): Promise<void> {
-		this.writes = this.writes
-			.catch((error) => logger.debug("MemRL", "Previous episodic write failed", error))
-			.then(() => this.writeEntry(intent, stmSummary, outcome))
-		return this.writes
+		return this.enqueueWrite(() => this.writeEntry(intent, stmSummary, outcome))
 	}
 
 	private async writeEntry(intent: string, stmSummary: string, outcome: MemrlOutcome): Promise<void> {
@@ -156,28 +172,13 @@ export class EpisodicMemoryService {
 
 	/** Accepting history never embeds again or changes the original verification reward. */
 	updateAcceptance(taskId: string, acceptance: MemrlVerification["acceptance"]): Promise<void> {
-		this.writes = this.writes
-			.catch((error) => logger.debug("MemRL", "Previous episodic write failed", error))
-			.then(async () => {
-				let stored: EpisodicStore
-				try {
-					stored = JSON.parse(await fs.readFile(this.primaryPath, "utf8")) as EpisodicStore
-				} catch (error) {
-					logger.debug("MemRL", "No readable episode to update acceptance", error)
-					return
-				}
-				const entry = stored.entries.find((item) => item.taskId === taskId)
-				if (!entry?.verification) return
-				entry.verification.acceptance = acceptance
-				entry.updatedAt = Date.now()
-				await safeWriteJson(this.primaryPath, stored)
-				const loaded = this.store.entries.find((item) => item.id === entry.id)
-				if (loaded?.verification) {
-					loaded.verification.acceptance = acceptance
-					loaded.updatedAt = entry.updatedAt
-				}
-			})
-		return this.writes
+		return this.enqueueWrite(async () => {
+			const entry = this.store.entries.find((item) => item.taskId === taskId)
+			if (!entry?.verification) return
+			entry.verification.acceptance = acceptance
+			entry.updatedAt = Date.now()
+			await this.persist()
+		})
 	}
 
 	/**
@@ -185,16 +186,16 @@ export class EpisodicMemoryService {
 	 *   Q_new = Q_old + α·(r - Q_old)
 	 */
 	async updateQ(entryId: string, reward: number): Promise<void> {
-		await this.load()
+		return this.enqueueWrite(async () => {
+			const entry = this.store.entries.find((e) => e.id === entryId)
+			if (!entry) return
 
-		const entry = this.store.entries.find((e) => e.id === entryId)
-		if (!entry) return
+			entry.qValue = entry.qValue + ALPHA * (reward - entry.qValue)
+			entry.updateCount++
+			entry.updatedAt = Date.now()
 
-		entry.qValue = entry.qValue + ALPHA * (reward - entry.qValue)
-		entry.updateCount++
-		entry.updatedAt = Date.now()
-
-		await this.persist()
+			await this.persist()
+		})
 	}
 
 	// ── Two-Phase Retrieval ────────────────────────────────────────────────────

@@ -57,7 +57,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 		isStreamClosed = true
 
 		try {
-			await redis.unsubscribe(channelName)
+			await redis.unsubscribe(channelName, onMessage)
 			console.log(`[stream#${requestId}] unsubscribed from ${channelName}`)
 		} catch (error) {
 			console.error(`[stream#${requestId}] error unsubscribing:`, error)

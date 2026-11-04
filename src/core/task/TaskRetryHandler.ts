@@ -5,7 +5,7 @@ import type { TaskExecutorHost } from "./interfaces/ITaskExecutorHost"
 import { TaskState } from "./TaskStateMachine"
 import { getErrorMessage } from "../../shared/error-utils"
 import { logger } from "../../shared/logger"
-import { TaskAbortedError, TaskModelPreparationError, TaskRetryExhaustedError } from "./TaskErrors"
+import { TaskAbortedError, TaskApiRequestError, TaskModelPreparationError, TaskRetryExhaustedError } from "./TaskErrors"
 import { analyzeErrorForRetry, redactErrorForTelemetry } from "../../api/retry/ApiErrorClassifier"
 import { computeBackoffMs, DEFAULT_API_RETRY_OPTIONS, delayMs } from "../../api/retry/ApiRetryStrategy"
 
@@ -91,7 +91,7 @@ export async function* handleAttemptApiRequestError(options: {
 		return
 	}
 
-	if (autoApprovalEnabled) {
+	if (autoApprovalEnabled && analyzeErrorForRetry(error).shouldRetry) {
 		host.stateMachine.force(TaskState.RECOVERING_MAX_TOKENS)
 		if (unattendedRetryEnabled && retryAttempt >= unattendedMaxRetryAttempts) {
 			const { classifyApiError } = await import("../errors/apiErrorClassifier")
@@ -108,9 +108,12 @@ export async function* handleAttemptApiRequestError(options: {
 						void host.say("api_req_retry_delayed", message, undefined, true)
 					})
 				} catch (persistentErr) {
+					logger.debug("TaskRetryHandler", "Persistent retry stopped", redactErrorForTelemetry(persistentErr))
+					if (host.abort || host.abandoned) throw new TaskAbortedError(host.taskId, host.instanceId)
 					const stats = persistentRetryHandler.getStats()
-					throw new Error(
+					throw new TaskApiRequestError(
 						`[Task#${host.taskId}] Persistent retry ended after ${stats.totalRetries} attempts: ${getErrorMessage(persistentErr)}`,
+						persistentErr,
 					)
 				}
 
@@ -136,12 +139,16 @@ export async function* handleAttemptApiRequestError(options: {
 	}
 
 	host.stateMachine.force(TaskState.ERROR)
-	const { response } = await host.ask("api_req_failed", getErrorMessage(error))
-
-	if (response !== "yesButtonClicked") {
-		throw new Error("API request failed")
+	try {
+		const { response } = await host.ask("api_req_failed", getErrorMessage(error))
+		if (response !== "yesButtonClicked") throw new TaskApiRequestError("API request failed", error)
+	} catch (recoveryError) {
+		logger.debug("TaskRetryHandler", "API recovery ended", redactErrorForTelemetry(recoveryError))
+		if (host.abort || host.abandoned) throw new TaskAbortedError(host.taskId, host.instanceId)
+		if (recoveryError instanceof TaskApiRequestError) throw recoveryError
+		throw new TaskApiRequestError("API request failed", recoveryError)
 	}
-
+	if (host.abort || host.abandoned) throw new TaskAbortedError(host.taskId, host.instanceId)
 	await host.say("api_req_retried")
 	yield* retryApiRequest()
 }
@@ -173,7 +180,19 @@ export async function handleMidStreamFailure(options: {
 		await task.abortTask()
 		return "break"
 	}
-	if (error instanceof TaskModelPreparationError || error instanceof TaskAbortedError) throw error
+	if (
+		error instanceof TaskModelPreparationError ||
+		error instanceof TaskApiRequestError ||
+		error instanceof TaskRetryExhaustedError ||
+		error instanceof TaskAbortedError
+	)
+		throw error
+	if (!analyzeErrorForRetry(error).shouldRetry) {
+		const { response } = await task.ask("api_req_failed", getErrorMessage(error))
+		if (response !== "yesButtonClicked") throw new TaskApiRequestError("API request failed", error)
+		if (task.abort || task.abandoned) throw new TaskAbortedError(task.taskId, task.instanceId)
+		await task.say("api_req_retried")
+	}
 
 	logger.error(
 		"TaskExecutor",
@@ -181,7 +200,7 @@ export async function handleMidStreamFailure(options: {
 	)
 
 	const stateForBackoff = await task.hostRef.deref()?.getState()
-	if (stateForBackoff?.autoApprovalEnabled) {
+	if (stateForBackoff?.autoApprovalEnabled && analyzeErrorForRetry(error).shouldRetry) {
 		await task.backoffAndAnnounce(currentRetryAttempt, error)
 		if (task.abort) {
 			logger.info(

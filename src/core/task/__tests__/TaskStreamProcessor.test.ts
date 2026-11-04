@@ -214,6 +214,18 @@ describe("TaskStreamProcessor", () => {
 	})
 
 	describe("inferErrorCategory (via backoffAndAnnounce)", () => {
+		it("stops before recording or waiting when the retry budget is exhausted", async () => {
+			vi.spyOn(processor.persistentRetry, "canRetry").mockReturnValue({
+				allowed: false,
+				reason: "Budget exhausted",
+				shouldFallback: false,
+				suggestedDelayMs: 0,
+			})
+			const record = vi.spyOn(processor.persistentRetry, "recordRetry")
+			await expect(processor.backoffAndAnnounce(40, new Error("temporary failure"))).rejects.toThrow()
+			expect(record).not.toHaveBeenCalled()
+			expect(mockTask.say).not.toHaveBeenCalled()
+		})
 		it("silently exits failed backoff work when the task was aborted", async () => {
 			mockTask.abort = true
 			mockTask.say = vi.fn().mockRejectedValue(new Error("Request cancelled by user"))

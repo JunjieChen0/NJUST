@@ -32,3 +32,11 @@ export class TaskModelPreparationError extends NamedError {
 		this.cause = cause
 	}
 }
+
+/** A request ended without permission to enqueue another attempt. */
+export class TaskApiRequestError extends NamedError {
+	constructor(message: string, cause: unknown) {
+		super(message)
+		this.cause = cause
+	}
+}

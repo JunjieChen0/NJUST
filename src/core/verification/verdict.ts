@@ -150,7 +150,7 @@ export function environmentsDiffer(previous?: VerificationEnvironment, current?:
 		return process.platform === "win32" ? normalized.toLowerCase() : normalized
 	}
 	const differentPath = (before: string | undefined, next: string | undefined) =>
-		before !== undefined && next !== undefined && normalize(before) !== normalize(next)
+		before !== undefined && (next === undefined || normalize(before) !== normalize(next))
 	return (
 		(previous.backend !== undefined && current.backend !== undefined && previous.backend !== current.backend) ||
 		(previous.image !== undefined && current.image !== undefined && previous.image !== current.image) ||
@@ -159,9 +159,7 @@ export function environmentsDiffer(previous?: VerificationEnvironment, current?:
 			previous.imageDigest !== current.imageDigest) ||
 		differentPath(previous.sdkHome, current.sdkHome) ||
 		differentPath(previous.cjpmPath, current.cjpmPath) ||
-		(previous.sdkVersion !== undefined &&
-			current.sdkVersion !== undefined &&
-			previous.sdkVersion !== current.sdkVersion)
+		(previous.sdkVersion !== undefined && previous.sdkVersion !== current.sdkVersion)
 	)
 }
 

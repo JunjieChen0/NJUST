@@ -1,5 +1,7 @@
 import dns from "node:dns/promises"
 import net from "node:net"
+import { Agent } from "undici"
+import { logger } from "../shared/logger.js"
 
 const BLOCKED_HOSTNAMES = new Set(["localhost", "localhost."])
 
@@ -251,16 +253,23 @@ async function pinnedFetch(parsed: URL, init?: RequestInit): Promise<Response> {
 		assertPublicIp(entry.address)
 	}
 
-	const pinnedIp = resolved[0]!.address
-	const ipUrl = new URL(parsed.toString())
-	ipUrl.hostname = net.isIP(pinnedIp) === 6 ? `[${pinnedIp}]` : pinnedIp
-
-	const headers = new Headers(init?.headers)
-	if (!headers.has("Host")) {
-		headers.set("Host", parsed.hostname)
+	const dispatcher = new Agent({
+		connect: {
+			lookup: (_hostname, options, callback) => {
+				if (options.all) callback(null, resolved)
+				else callback(null, resolved[0]!.address, resolved[0]!.family)
+			},
+		},
+	})
+	try {
+		// Keep the original origin for Host, TLS SNI and certificate verification.
+		return await fetch(parsed.toString(), { ...init, redirect: "manual", dispatcher } as RequestInit & {
+			dispatcher: Agent
+		})
+	} finally {
+		// Drain active response bodies before closing; awaiting here would block streaming callers.
+		void dispatcher.close().catch((error) => logger.debug("networkGuard", "Cannot close pinned dispatcher", error))
 	}
-
-	return fetch(ipUrl.toString(), { ...init, headers, redirect: "manual" })
 }
 
 /**

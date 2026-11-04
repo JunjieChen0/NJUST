@@ -37,6 +37,53 @@ function makeEmbedder(vecFn: (text: string) => number[]): MemoryEmbeddingAdapter
 }
 
 describe("EpisodicMemoryService", () => {
+	it("does not leave other instances blocked after a failed write", async () => {
+		vi.mocked(safeWriteJson).mockRejectedValueOnce(new Error("disk unavailable"))
+		await expect(
+			service.write("failed write", "summary", { taskId: "failed", overall: "failed", acceptance: "pending" }),
+		).rejects.toThrow("disk unavailable")
+		const next = new EpisodicMemoryService(
+			tmpDir,
+			makeEmbedder(() => makeVec(0.6)),
+		)
+		await next.write("next write", "summary", { taskId: "next", overall: "verified", acceptance: "pending" })
+		expect((await next.retrieve("next write")).map((entry) => entry.taskId)).toEqual(["next"])
+	})
+	it.each([0, 1])("preserves both instances when instance %s has a delayed embedding", async (slow) => {
+		let release!: () => void
+		const gate = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const delayed = vi.fn(async () => {
+			await gate
+			return makeVec(0.6)
+		})
+		const adapters = [makeEmbedder(() => makeVec(0.6)), makeEmbedder(() => makeVec(0.6))]
+		vi.spyOn(adapters[slow], "embed").mockImplementation(delayed)
+		const services = adapters.map((adapter) => new EpisodicMemoryService(tmpDir, adapter))
+		await Promise.all(services.map((instance) => instance.load()))
+		const writes = services.map((instance, index) =>
+			instance.write(`intent-${index}`, "summary", {
+				taskId: `task-${index}`,
+				overall: "verified",
+				acceptance: "pending",
+			}),
+		)
+		await vi.waitFor(() => expect(delayed).toHaveBeenCalled())
+		release()
+		await Promise.all(writes)
+		const file = vi.mocked(safeWriteJson).mock.calls.at(-1)![0]
+		const stored = JSON.parse(await fs.readFile(file, "utf8"))
+		expect(stored.entries.map((entry: { taskId: string }) => entry.taskId).sort()).toEqual(["task-0", "task-1"])
+		expect(stored.totalWrites).toBe(2)
+		await services[0].updateAcceptance("task-1", "accepted")
+		await services[1].write("new task", "summary", { taskId: "task-2", overall: "failed", acceptance: "pending" })
+		const after = JSON.parse(await fs.readFile(file, "utf8"))
+		expect(after.entries).toHaveLength(3)
+		expect(
+			after.entries.find((entry: { taskId: string }) => entry.taskId === "task-1").verification.acceptance,
+		).toBe("accepted")
+	})
 	it("updates only acceptance after reopening history without embedding again", async () => {
 		await service.write("original intent", "original summary", {
 			taskId: "history",
