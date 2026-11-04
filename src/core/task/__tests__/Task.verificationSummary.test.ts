@@ -62,7 +62,7 @@ describe("terminal verification summaries", () => {
 			},
 			addToClineMessages: vi.fn().mockReturnValue(persisted),
 		}
-		const publish = () => Task.prototype.publishVerificationSummary.call(host as unknown as Task, "cancelled")
+		const publish = () => Task.prototype.publishVerificationSummary.call(host, "cancelled")
 		const first = publish()
 		await vi.waitFor(() => expect(host.addToClineMessages).toHaveBeenCalledOnce())
 		let secondFinished = false
@@ -92,7 +92,7 @@ describe("terminal verification summaries", () => {
 			},
 			addToClineMessages: vi.fn(),
 		}
-		const publish = () => Task.prototype.publishVerificationSummary.call(host as unknown as Task, "cancelled")
+		const publish = () => Task.prototype.publishVerificationSummary.call(host, "cancelled")
 		const first = publish()
 		const second = publish()
 		try {
@@ -112,7 +112,7 @@ describe("terminal verification summaries", () => {
 			},
 			addToClineMessages: vi.fn(),
 		}
-		const publish = () => Task.prototype.publishVerificationSummary.call(host as unknown as Task, "cancelled")
+		const publish = () => Task.prototype.publishVerificationSummary.call(host, "cancelled")
 		await publish()
 		expect(host.addToClineMessages).not.toHaveBeenCalled()
 		await publish()
