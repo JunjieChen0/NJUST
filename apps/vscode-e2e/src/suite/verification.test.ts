@@ -22,6 +22,7 @@ type CurrentTask = {
 		images?: string[],
 	): void
 	persistMemrlEpisode(): Promise<void>
+	waitForTaskLoopIdle(): Promise<void>
 }
 type TestProvider = {
 	context: vscode.ExtensionContext
@@ -272,8 +273,11 @@ suite("Cangjie verification in Extension Host", function () {
 	test("history acceptance initializes cold memory and preserves intent, vector, summary and Q", async () => {
 		const id = await start()
 		await finish(id)
-		await provider.getCurrentTask()!.persistMemrlEpisode()
+		const completedTask = provider.getCurrentTask()!
 		await api.clearCurrentTask()
+		// The loop's finally block can enqueue memory writes after the completion event.
+		await completedTask.waitForTaskLoopIdle()
+		await completedTask.persistMemrlEpisode()
 		const memoryPath = path.join(root, ".njust_ai/memories/episodic.json")
 		const entry = {
 			id: "original",
