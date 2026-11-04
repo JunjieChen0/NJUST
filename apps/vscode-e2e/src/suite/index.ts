@@ -179,6 +179,7 @@ export async function run() {
 	if (process.env.MOCK_API_URL && !process.env.TEST_FILE) {
 		const mockSupportedTests = new Set([
 			"extension.test.js",
+			"configuration.test.js",
 			"verification.test.js",
 			"subtasks.test.js",
 			"tools/apply-diff.test.js",
