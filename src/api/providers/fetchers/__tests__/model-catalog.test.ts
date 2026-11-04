@@ -12,6 +12,103 @@ afterEach(() => {
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } })
 
 describe("model catalog identity and freshness", () => {
+	it.each(["apiKey", "baseUrl", "headers"] as const)(
+		"does not share failure backoff across different %s",
+		async (field) => {
+			const request = vi.fn(async () => new Response("denied", { status: 401 }))
+			vi.stubGlobal("fetch", request)
+			const first = {
+				apiKey: `scope-${field}`,
+				baseUrl: "https://backoff-scope.invalid/v1",
+				headers: { "x-tenant": "first" },
+			}
+			await resolveProviderCatalog("openai", first)
+			const next =
+				field === "apiKey"
+					? { ...first, apiKey: "next" }
+					: field === "baseUrl"
+						? { ...first, baseUrl: "https://next.invalid/v1" }
+						: { ...first, headers: { "x-tenant": "next" } }
+			await resolveProviderCatalog("openai", next)
+			expect(request).toHaveBeenCalledTimes(2)
+		},
+	)
+	it("clears failure backoff on a successful manual refresh", async () => {
+		const request = vi.fn(async () => new Response("denied", { status: 401 }))
+		vi.stubGlobal("fetch", request)
+		const options = { apiKey: "recovery", baseUrl: "https://recovery.invalid/v1" }
+		await resolveProviderCatalog("openai", options)
+		request.mockResolvedValue(json({ data: [{ id: "recovered" }] }))
+		await resolveProviderCatalog("openai", { ...options, forceRefresh: true })
+		const cached = await resolveProviderCatalog("openai", options)
+		expect(cached).toMatchObject({ source: "api", stale: false })
+		expect(cached.models.recovered).toBeDefined()
+		expect(request).toHaveBeenCalledTimes(2)
+	})
+	it("retries a failed refresh after backoff while retaining the original receipt time", async () => {
+		vi.useFakeTimers()
+		const request = vi.fn(async () => json({ data: [{ id: "receipt" }] }))
+		vi.stubGlobal("fetch", request)
+		const options = { apiKey: "receipt", baseUrl: "https://receipt.invalid/v1" }
+		const first = await resolveProviderCatalog("openai", options)
+		request.mockResolvedValue(new Response("denied", { status: 403 }))
+		const failed = await resolveProviderCatalog("openai", { ...options, forceRefresh: true })
+		expect(failed.fetchedAt).toBe(first.fetchedAt)
+		await vi.advanceTimersByTimeAsync(30_001)
+		request.mockResolvedValue(json({ data: [{ id: "fresh-receipt" }] }))
+		const recovered = await resolveProviderCatalog("openai", options)
+		expect(request).toHaveBeenCalledTimes(3)
+		expect(recovered.models["fresh-receipt"]).toBeDefined()
+		expect(recovered.fetchedAt).toBeGreaterThan(first.fetchedAt!)
+	})
+	it("does not put caller cancellation into failure backoff", async () => {
+		const request = vi.fn(async () => new Response(new ReadableStream()))
+		vi.stubGlobal("fetch", request)
+		const options = { apiKey: "cancelling", baseUrl: "https://cancelling.invalid/v1" }
+		const controller = new AbortController()
+		const cancelled = resolveProviderCatalog("openai", { ...options, signal: controller.signal })
+		const rejected = expect(cancelled).rejects.toMatchObject({ name: "AbortError" })
+		await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1))
+		controller.abort()
+		await rejected
+		request.mockResolvedValue(json({ data: [{ id: "after-cancel" }] }))
+		const result = await resolveProviderCatalog("openai", options)
+		expect(result.models["after-cancel"]).toBeDefined()
+		expect(request).toHaveBeenCalledTimes(2)
+	})
+	it("backs off after an initial body timeout rather than adding another ten-second wait", async () => {
+		vi.useFakeTimers()
+		const request = vi.fn(async () => new Response(new ReadableStream()))
+		vi.stubGlobal("fetch", request)
+		const options = { apiKey: "cooldown", baseUrl: "https://cooldown.invalid/v1" }
+		const first = resolveProviderCatalog("openai", options)
+		await vi.advanceTimersByTimeAsync(10_000)
+		expect(await first).toMatchObject({ refreshError: "unavailable", stale: true })
+		const started = Date.now()
+		let elapsed = -1
+		const second = resolveProviderCatalog("openai", options).then((result) => {
+			elapsed = Date.now() - started
+			return result
+		})
+		await vi.advanceTimersByTimeAsync(10_000)
+		expect((await second).fetchedAt).toBeUndefined()
+		expect(elapsed).toBe(0)
+		expect(request).toHaveBeenCalledTimes(1)
+	})
+	it("lets force refresh bypass failure backoff and retries normally after backoff expires", async () => {
+		vi.useFakeTimers()
+		const request = vi.fn(async () => new Response("denied", { status: 401 }))
+		vi.stubGlobal("fetch", request)
+		const options = { apiKey: "backoff", baseUrl: "https://backoff.invalid/v1" }
+		await resolveProviderCatalog("openai", options)
+		await resolveProviderCatalog("openai", options)
+		expect(request).toHaveBeenCalledTimes(1)
+		await resolveProviderCatalog("openai", { ...options, forceRefresh: true })
+		expect(request).toHaveBeenCalledTimes(2)
+		await vi.advanceTimersByTimeAsync(30_001)
+		await resolveProviderCatalog("openai", options)
+		expect(request).toHaveBeenCalledTimes(3)
+	})
 	it("keeps a newer successful receipt when an older concurrent request fails", async () => {
 		let release!: (response: Response) => void
 		const firstResponse = new Promise<Response>((resolve) => {

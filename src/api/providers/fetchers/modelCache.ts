@@ -109,7 +109,7 @@ async function fetchModelsFromProvider(options: GetModelsOptions): Promise<Model
 			break
 		case "litellm":
 			// Type safety ensures apiKey and baseUrl are always provided for LiteLLM.
-			models = await getLiteLLMModels(options.apiKey, options.baseUrl)
+			models = await getLiteLLMModels(options.apiKey, options.baseUrl, options.signal)
 			break
 		case "ollama":
 			models = await getOllamaModels(options.baseUrl, options.apiKey)
@@ -148,6 +148,7 @@ async function fetchModelsFromProvider(options: GetModelsOptions): Promise<Model
  * @returns The models from the cache or the fetched models.
  */
 export const getModels = async (options: GetModelsOptions): Promise<ModelRecord> => {
+	options.signal?.throwIfAborted()
 	const { provider } = options
 
 	let models = getModelsFromCache(provider, options)
@@ -158,6 +159,7 @@ export const getModels = async (options: GetModelsOptions): Promise<ModelRecord>
 
 	try {
 		models = await fetchModelsFromProvider(options)
+		options.signal?.throwIfAborted()
 		const modelCount = Object.keys(models).length
 
 		// Only cache non-empty results to prevent persisting failed API responses
@@ -371,6 +373,7 @@ function getCacheDirectoryPathSync(): string | undefined {
 const DISK_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const dynamicMemoryCache = new NodeCache({ stdTTL: DISK_CACHE_TTL_MS / 1000, checkperiod: TIMING.MODEL_CACHE_TTL_S })
 const dynamicInFlight = new Map<string, Promise<ModelCatalogResult>>()
+const failedCatalogs = new NodeCache({ stdTTL: 30, checkperiod: TIMING.MODEL_CACHE_TTL_S })
 
 function resolveCatalogOptions(provider: ProviderName, options: ListModelsOptions): ListModelsOptions {
 	if (providerFetcherMap[provider] === "openai-compatible") return resolveOpenAIModelOptions(provider, options)
@@ -470,7 +473,15 @@ export async function resolveProviderCatalog(
 	if (!kind || kind === "fallback-only" || kind === "existing" || options.listingUnsupported)
 		return fallback("unsupported")
 	const cached = readCatalog(provider, key)
-	if (!options.forceRefresh && cached?.fetchedAt && Date.now() - cached.fetchedAt < TIMING.MODEL_CACHE_TTL_S * 1000)
+	const failed = failedCatalogs.get<ModelCatalogResult>(key)
+	if (!options.forceRefresh && failed) return failed
+	if (
+		!options.forceRefresh &&
+		!cached?.refreshError &&
+		!cached?.stale &&
+		cached?.fetchedAt &&
+		Date.now() - cached.fetchedAt < TIMING.MODEL_CACHE_TTL_S * 1000
+	)
 		return cached
 	// Cancellable callers own their request; cancelling one caller must not cancel another.
 	const existing = !options.signal ? dynamicInFlight.get(key) : undefined
@@ -496,6 +507,7 @@ export async function resolveProviderCatalog(
 				stale: false,
 			}
 			dynamicMemoryCache.set(key, result)
+			failedCatalogs.del(key)
 			const file = dynamicDiskPath(key)
 			if (file)
 				await safeWriteJson(file, {
@@ -528,6 +540,7 @@ export async function resolveProviderCatalog(
 					}
 				: fallback(reason)
 			if (known) dynamicMemoryCache.set(key, result)
+			failedCatalogs.set(key, result)
 			return result
 		} finally {
 			if (!options.signal) dynamicInFlight.delete(key)

@@ -41,9 +41,10 @@ describe("fetchOpenAICompatibleModels", () => {
 		expect(mockFetch).toHaveBeenCalledWith(
 			"https://api.openai.com/v1/models",
 			expect.objectContaining({
-				headers: expect.objectContaining({ Authorization: "Bearer test-key" }),
+				headers: expect.any(Headers),
 			}),
 		)
+		expect(new Headers(mockFetch.mock.calls[0]?.[1]?.headers).get("authorization")).toBe("Bearer test-key")
 		expect(result["gpt-4o"]).toBeDefined()
 		expect(result["gpt-4o"].source).toBe("api")
 		expect(result["gpt-4o"].contextWindow).toBe(128000)
@@ -63,6 +64,18 @@ describe("fetchOpenAICompatibleModels", () => {
 
 		expect(mockFetch).toHaveBeenCalledWith("https://custom.host/api/models", expect.anything())
 	})
+	it.each(["authorization", "Authorization", "aUtHoRiZaTiOn"])(
+		"overrides default authentication case-insensitively with %s",
+		async (name) => {
+			let authorization: string | null = null
+			mockFetch.mockImplementation(async (_url: string, init: RequestInit) => {
+				authorization = new Headers(init.headers).get("authorization")
+				return new Response(JSON.stringify({ data: [{ id: "fixture-model" }] }))
+			})
+			await fetchOpenAICompatibleModels("openai", { apiKey: "fixture", headers: { [name]: "Bearer custom" } })
+			expect(authorization).toBe("Bearer custom")
+		},
+	)
 
 	it("handles deepseek special baseUrl (no /v1)", async () => {
 		const models = { data: [{ id: "deepseek-chat" }] }

@@ -124,18 +124,10 @@ export async function fetchOpenAICompatibleModels(
 	const baseUrl = options.baseUrl || process.env[config.baseUrlEnv] || config.defaultBaseUrl
 	const deadline = AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS)
 	const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline
+	const headers = new Headers({ Authorization: `Bearer ${apiKey}`, Accept: "application/json" })
+	for (const [name, value] of Object.entries(options.headers ?? {})) headers.set(name, value)
 
-	const res = await safeFetch(
-		joinUrl(baseUrl, config.path),
-		{
-			headers: {
-				Authorization: `Bearer ${apiKey}`,
-				Accept: "application/json",
-				...options.headers,
-			},
-		},
-		{ retries: 2, signal },
-	)
+	const res = await safeFetch(joinUrl(baseUrl, config.path), { headers }, { retries: 2, signal })
 
 	if (!res.ok) {
 		const body = await readBodyWithLimit(res, 100 * 1024).catch(() => "")

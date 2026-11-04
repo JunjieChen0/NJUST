@@ -25,3 +25,10 @@ export class TaskAutoApprovalError extends NamedError {
 		super(message)
 	}
 }
+
+export class TaskModelPreparationError extends NamedError {
+	constructor(message: string, cause: unknown) {
+		super(message)
+		this.cause = cause
+	}
+}

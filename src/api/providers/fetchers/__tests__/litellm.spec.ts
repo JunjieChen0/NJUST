@@ -17,6 +17,27 @@ describe("getLiteLLMModels", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 	})
+	it("preserves an HTTP authentication status for retry classification", async () => {
+		mockedAxios.isAxiosError.mockReturnValue(true)
+		mockedAxios.get.mockRejectedValueOnce({
+			message: "Unauthorized",
+			response: { status: 401, statusText: "Unauthorized" },
+		})
+		await expect(getLiteLLMModels("fixture", "https://fixture.invalid")).rejects.toMatchObject({ status: 401 })
+	})
+	it("preserves an invalid-URL code for configuration error classification", async () => {
+		mockedAxios.isAxiosError.mockReturnValue(false)
+		await expect(getLiteLLMModels("fixture", ":invalid")).rejects.toMatchObject({ code: "ERR_INVALID_URL" })
+	})
+	it("forwards cancellation to the catalog HTTP request", async () => {
+		mockedAxios.get.mockResolvedValueOnce({ data: { data: [] } })
+		const controller = new AbortController()
+		await getLiteLLMModels("fixture", "https://fixture.invalid", controller.signal)
+		expect(mockedAxios.get).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({ signal: controller.signal }),
+		)
+	})
 
 	it("handles base URLs with trailing slashes correctly", async () => {
 		const mockResponse = {

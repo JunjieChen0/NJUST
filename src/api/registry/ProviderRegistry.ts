@@ -143,7 +143,7 @@ export class ProviderRegistry {
 			handler.prepareModel = async (signal) => {
 				signal?.throwIfAborted()
 				options.modelSnapshot!.current = undefined
-				await fetchModel()
+				await fetchModel(signal)
 				signal?.throwIfAborted()
 				const model = handler.getModel()
 				options.modelSnapshot!.current = { id: model.id, info: model.info }

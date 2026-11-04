@@ -161,6 +161,7 @@ export const getModelMaxOutputTokens = ({
 type CommonFetchParams = {
 	apiKey?: string
 	baseUrl?: string
+	signal?: AbortSignal
 }
 
 // Exhaustive, value-level map for all dynamic providers.

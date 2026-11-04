@@ -136,14 +136,45 @@ export class TaskExecutor {
 		const requestController = new AbortController()
 		h.currentRequestAbortController = requestController
 		const abortSignal = requestController.signal
+		let onPreparationAbort: (() => void) | undefined
 		try {
-			await requestHandler.prepareModel?.(abortSignal)
+			const aborted = new Promise<never>((_, reject) => {
+				onPreparationAbort = () => reject(new TaskAbortedError(h.taskId, h.instanceId))
+				abortSignal.addEventListener("abort", onPreparationAbort, { once: true })
+			})
+			await Promise.race([
+				Promise.resolve().then(() => {
+					abortSignal.throwIfAborted()
+					return requestHandler.prepareModel?.(abortSignal)
+				}),
+				aborted,
+			])
 			if (h.abort || h.api !== requestHandler || abortSignal.aborted) {
 				throw new TaskAbortedError(h.taskId, h.instanceId)
 			}
 		} catch (error) {
-			if (h.currentRequestAbortController === requestController) h.currentRequestAbortController = undefined
-			throw error
+			logger.debug("TaskExecutor", "Model preparation did not complete")
+			try {
+				if (h.abort || h.abandoned || abortSignal.aborted || h.api !== requestHandler)
+					throw new TaskAbortedError(h.taskId, h.instanceId)
+				yield* handleAttemptApiRequestError({
+					host: h,
+					error,
+					retryAttempt,
+					autoApprovalEnabled,
+					unattendedRetryEnabled,
+					unattendedMaxRetryAttempts,
+					phase: "model_preparation",
+					signal: abortSignal,
+					retryApiRequest: (nextAttempt, nextOptions) => this.attemptApiRequest(nextAttempt, nextOptions),
+				})
+			} finally {
+				requestController.abort()
+				if (h.currentRequestAbortController === requestController) h.currentRequestAbortController = undefined
+			}
+			return
+		} finally {
+			if (onPreparationAbort) abortSignal.removeEventListener("abort", onPreparationAbort)
 		}
 
 		void h.requestBuilder.prefetchSystemPromptData()

@@ -84,7 +84,7 @@ describe("getModels with new GetModelsOptions", () => {
 			baseUrl: "http://localhost:4000",
 		})
 
-		expect(mockGetLiteLLMModels).toHaveBeenCalledWith("test-api-key", "http://localhost:4000")
+		expect(mockGetLiteLLMModels).toHaveBeenCalledWith("test-api-key", "http://localhost:4000", undefined)
 		expect(result).toEqual(mockModels)
 	})
 

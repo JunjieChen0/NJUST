@@ -5,7 +5,9 @@ import type { TaskExecutorHost } from "./interfaces/ITaskExecutorHost"
 import { TaskState } from "./TaskStateMachine"
 import { getErrorMessage } from "../../shared/error-utils"
 import { logger } from "../../shared/logger"
-import { TaskAbortedError, TaskRetryExhaustedError } from "./TaskErrors"
+import { TaskAbortedError, TaskModelPreparationError, TaskRetryExhaustedError } from "./TaskErrors"
+import { analyzeErrorForRetry, redactErrorForTelemetry } from "../../api/retry/ApiErrorClassifier"
+import { computeBackoffMs, DEFAULT_API_RETRY_OPTIONS, delayMs } from "../../api/retry/ApiRetryStrategy"
 
 interface RetryApiRequest {
 	(retryAttempt?: number, options?: { skipProviderRateLimit?: boolean }): ApiStream
@@ -19,6 +21,8 @@ export async function* handleAttemptApiRequestError(options: {
 	unattendedRetryEnabled: boolean
 	unattendedMaxRetryAttempts: number
 	retryApiRequest: RetryApiRequest
+	phase?: "model_preparation"
+	signal?: AbortSignal
 }): ApiStream {
 	const {
 		host,
@@ -31,11 +35,50 @@ export async function* handleAttemptApiRequestError(options: {
 	} = options
 
 	host.isWaitingForFirstChunk = false
-	host.currentRequestAbortController = undefined
+	if (options.phase !== "model_preparation") host.currentRequestAbortController = undefined
 
 	if (host.abort) {
 		host.stateMachine.force(TaskState.ERROR)
 		throw new TaskAbortedError(host.taskId, host.instanceId)
+	}
+	if (options.phase === "model_preparation") {
+		const decision = analyzeErrorForRetry(error)
+		const maxRetries = unattendedRetryEnabled ? Math.max(0, Math.min(2, unattendedMaxRetryAttempts)) : 2
+		const message = `Model preparation failed: ${redactErrorForTelemetry(error)}`
+		let nextAttempt: number
+		try {
+			if (options.signal?.aborted || host.abandoned) throw new TaskAbortedError(host.taskId, host.instanceId)
+			if (autoApprovalEnabled && decision.shouldRetry && retryAttempt < maxRetries) {
+				const waitMs = computeBackoffMs(retryAttempt, DEFAULT_API_RETRY_OPTIONS, decision.retryAfterSeconds)
+				await host.say(
+					"api_req_retry_delayed",
+					`${message}\n<retry_timer>${Math.ceil(waitMs / 1000)}</retry_timer>`,
+					undefined,
+					true,
+				)
+				await delayMs(waitMs, options.signal)
+				await host.say("api_req_retry_delayed", message, undefined, false)
+				nextAttempt = retryAttempt + 1
+			} else {
+				host.stateMachine.force(TaskState.ERROR)
+				if (host.currentRequestAbortController?.signal === options.signal)
+					host.currentRequestAbortController = undefined
+				const { response } = await host.ask("api_req_failed", message)
+				if (response !== "yesButtonClicked") throw new TaskModelPreparationError(message, error)
+				await host.say("api_req_retried")
+				nextAttempt = 0
+			}
+			if (host.abort || host.abandoned || options.signal?.aborted)
+				throw new TaskAbortedError(host.taskId, host.instanceId)
+		} catch (recoveryError) {
+			logger.debug("TaskRetryHandler", "Model preparation recovery ended", redactErrorForTelemetry(recoveryError))
+			if (host.abort || host.abandoned || options.signal?.aborted || recoveryError instanceof TaskAbortedError)
+				throw new TaskAbortedError(host.taskId, host.instanceId)
+			if (recoveryError instanceof TaskModelPreparationError) throw recoveryError
+			throw new TaskModelPreparationError(message, recoveryError)
+		}
+		yield* retryApiRequest(nextAttempt)
+		return
 	}
 
 	const persistentRetryHandler =
@@ -122,6 +165,7 @@ export async function handleMidStreamFailure(options: {
 	if (task.abandoned) {
 		return "handled"
 	}
+	if (!task.abort && (error instanceof TaskModelPreparationError || error instanceof TaskAbortedError)) throw error
 
 	const cancelReason = task.abort ? "user_cancelled" : "streaming_failed"
 	await abortStream(cancelReason, streamingFailedMessage)

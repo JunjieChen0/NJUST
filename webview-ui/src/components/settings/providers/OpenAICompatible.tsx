@@ -50,7 +50,7 @@ export const OpenAICompatible = ({
 		configuration: apiConfiguration,
 	})
 	const openAiModels = data?.openai ?? null
-	const { info: selectedModelInfo } = useSelectedModel(apiConfiguration)
+	const { info: selectedModelInfo } = useSelectedModel({ ...apiConfiguration, openAiCustomModelInfo: undefined })
 	const defaultModelInfo = selectedModelInfo ?? unknownCatalogModelInfo
 
 	const [customHeaders, setCustomHeaders] = useState<[string, string][]>(() => {
@@ -596,7 +596,7 @@ export const OpenAICompatible = ({
 
 				<Button
 					variant="secondary"
-					onClick={() => setApiConfigurationField("openAiCustomModelInfo", defaultModelInfo)}>
+					onClick={() => setApiConfigurationField("openAiCustomModelInfo", undefined)}>
 					{t("settings:providers.customModel.resetDefaults")}
 				</Button>
 			</div>

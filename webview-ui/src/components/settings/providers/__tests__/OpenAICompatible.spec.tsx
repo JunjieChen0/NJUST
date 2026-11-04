@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act, cleanup } from "@/utils/test-utils"
 import { webcrypto } from "node:crypto"
 import { OpenAICompatible } from "../OpenAICompatible"
 import { ProviderSettings } from "@njust-ai/types"
+import * as selectedModelHook from "@src/components/ui/hooks/useSelectedModel"
 
 // Mock the vscrui Checkbox component
 vi.mock("vscrui", () => ({
@@ -85,6 +86,48 @@ vi.mock("../../ThinkingBudget", () => ({
 vi.mock("react-use", () => ({
 	useEvent: vi.fn(),
 }))
+
+describe("OpenAI-compatible model reset", () => {
+	afterEach(() => vi.restoreAllMocks())
+	it("clears overrides and restores catalog limits while keeping the selected connection and ID", () => {
+		const catalog = { contextWindow: 128000, maxTokens: 8192, supportsPromptCache: false }
+		vi.spyOn(selectedModelHook, "useSelectedModel").mockImplementation((configuration) => ({
+			provider: "openai",
+			id: configuration?.openAiModelId ?? "fixture",
+			info: configuration?.openAiCustomModelInfo ?? catalog,
+			isLoading: false,
+			isError: false,
+		}))
+		const setField = vi.fn()
+		const initial: ProviderSettings = {
+			apiProvider: "openai",
+			openAiModelId: "chosen-model",
+			openAiBaseUrl: "https://fixture.invalid/v1",
+			openAiApiKey: "fixture",
+			openAiCustomModelInfo: { ...catalog, maxTokens: 6000 },
+		}
+		function Harness() {
+			const [configuration, setConfiguration] = React.useState(initial)
+			return (
+				<OpenAICompatible
+					apiConfiguration={configuration}
+					organizationAllowList={{ allowAll: true, providers: {} }}
+					setApiConfigurationField={(field, value) => {
+						setField(field, value)
+						setConfiguration((previous) => ({ ...previous, [field]: value }))
+					}}
+				/>
+			)
+		}
+		render(<Harness />)
+		expect(screen.getByDisplayValue("6000")).toBeInTheDocument()
+		fireEvent.click(screen.getByText("settings:providers.customModel.resetDefaults"))
+		expect(setField).toHaveBeenCalledWith("openAiCustomModelInfo", undefined)
+		expect(screen.getByDisplayValue("8192")).toBeInTheDocument()
+		expect(screen.getByDisplayValue("https://fixture.invalid/v1")).toBeInTheDocument()
+		expect(screen.getByDisplayValue("fixture")).toBeInTheDocument()
+	})
+})
 
 describe("OpenAICompatible Component - includeMaxTokens checkbox", () => {
 	const mockSetApiConfigurationField = vi.fn()

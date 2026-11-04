@@ -46,7 +46,7 @@ type LiteLlmModelEntry = z.infer<typeof liteLlmModelEntrySchema>
  * @returns A promise that resolves to a record of model IDs to model info
  * @throws Will throw an error if the request fails or the response is not as expected.
  */
-export async function getLiteLLMModels(apiKey: string, baseUrl: string): Promise<ModelRecord> {
+export async function getLiteLLMModels(apiKey: string, baseUrl: string, signal?: AbortSignal): Promise<ModelRecord> {
 	try {
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
@@ -65,6 +65,7 @@ export async function getLiteLLMModels(apiKey: string, baseUrl: string): Promise
 		// Added timeout and size cap to prevent indefinite hanging / OOM
 		const response = await axios.get(url, {
 			headers,
+			...(signal ? { signal } : {}),
 			timeout: 5000,
 			maxContentLength: 5 * 1024 * 1024,
 			maxBodyLength: 5 * 1024 * 1024,
@@ -115,16 +116,26 @@ export async function getLiteLLMModels(apiKey: string, baseUrl: string): Promise
 	} catch (error: unknown) {
 		const errorMessage = getErrorMessage(error)
 		logger.error("LiteLLM", "Error fetching LiteLLM models:", errorMessage)
+		signal?.throwIfAborted()
 		if (axios.isAxiosError(error) && error.response) {
-			throw new Error(
-				`Failed to fetch LiteLLM models: ${error.response.status} ${error.response.statusText}. Check base URL and API key.`,
+			throw Object.assign(
+				new Error(
+					`Failed to fetch LiteLLM models: ${error.response.status} ${error.response.statusText}. Check base URL and API key.`,
+				),
+				{ status: error.response.status, code: error.code },
 			)
 		} else if (axios.isAxiosError(error) && error.request) {
-			throw new Error(
-				"Failed to fetch LiteLLM models: No response from server. Check LiteLLM server status and base URL.",
+			throw Object.assign(
+				new Error(
+					"Failed to fetch LiteLLM models: No response from server. Check LiteLLM server status and base URL.",
+				),
+				{ code: error.code },
 			)
 		} else {
-			throw new Error(`Failed to fetch LiteLLM models: ${errorMessage || "An unknown error occurred."}`)
+			throw Object.assign(
+				new Error(`Failed to fetch LiteLLM models: ${errorMessage || "An unknown error occurred."}`),
+				{ code: error instanceof Error && "code" in error ? error.code : undefined },
+			)
 		}
 	}
 }

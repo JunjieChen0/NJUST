@@ -58,6 +58,7 @@ export function getRetryAfterSecondsFromError(error: unknown): number | undefine
 }
 
 type RetryErrorLike = {
+	code?: unknown
 	status?: unknown
 	statusCode?: unknown
 	response?: { status?: unknown; headers?: Headers }
@@ -150,6 +151,8 @@ export function analyzeErrorForRetry(error: unknown): ApiRetryDecision {
 	}
 
 	const category = categoryForApiErrorKind(classifyApiError(error))
+	if (asRetryErrorLike(error).code === "ERR_INVALID_URL")
+		return { shouldRetry: false, category: ApiErrorCategory.ClientError }
 	if (status === undefined) {
 		if (category === ApiErrorCategory.Unknown) {
 			return { shouldRetry: true, category: ApiErrorCategory.RetryableNetwork }
