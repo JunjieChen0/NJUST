@@ -22,6 +22,8 @@ async function main() {
 
 		// Create a temporary workspace folder for tests
 		testWorkspace = await fs.mkdtemp(path.join(os.tmpdir(), "njust-ai-test-workspace-"))
+		const testProfile = await fs.mkdtemp(path.join(os.tmpdir(), "njust-ai-test-profile-"))
+		console.info(`Test profile (retained for logs): ${testProfile}`)
 
 		// Get test filter from command line arguments or environment variable
 		// Usage examples:
@@ -45,7 +47,11 @@ async function main() {
 		await runTests({
 			extensionDevelopmentPath,
 			extensionTestsPath,
-			launchArgs: [testWorkspace],
+			launchArgs: [
+				testWorkspace,
+				`--user-data-dir=${path.join(testProfile, "user-data")}`,
+				`--extensions-dir=${path.join(testProfile, "extensions")}`,
+			],
 			extensionTestsEnv,
 			// VSCODE_EXECUTABLE_PATH lets a local run reuse an installed VS Code build
 			// instead of downloading one; CI keeps using downloadable version pins.

@@ -243,7 +243,17 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 	private async getNestedGitRepository(): Promise<string | null> {
 		try {
 			// Find all .git/HEAD files that are not at the root level.
-			const args = ["--files", "--hidden", "--follow", "--no-ignore", "-g", "**/.git/HEAD", this.workspaceDir]
+			const args = [
+				"--files",
+				"--hidden",
+				"--follow",
+				"--no-ignore",
+				"-g",
+				"**/.git/HEAD",
+				"-g",
+				"!**/.vscode-test/**",
+				this.workspaceDir,
+			]
 
 			const gitPaths = await executeRipgrep({ args, workspacePath: this.workspaceDir })
 

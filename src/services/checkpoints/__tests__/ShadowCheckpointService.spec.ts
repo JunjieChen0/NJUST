@@ -11,6 +11,7 @@ import { simpleGit, SimpleGit } from "simple-git"
 
 import { fileExistsAtPath } from "../../../utils/fs"
 import * as fileSearch from "../../../services/search/file-search"
+import * as ripgrep from "../../../services/ripgrep"
 
 import { RepoPerTaskCheckpointService } from "../RepoPerTaskCheckpointService"
 
@@ -441,6 +442,52 @@ describe.each([[RepoPerTaskCheckpointService, "RepoPerTaskCheckpointService"]])(
 		})
 
 		describe(`${klass.name}#hasNestedGitRepositories`, () => {
+			it("ignores test-profile repositories and excludes their contents from checkpoints", async (context) => {
+				const rgPath = await ripgrep.getBinPath("")
+				if (!rgPath) return context.skip()
+				vitest.spyOn(ripgrep, "getBinPath").mockResolvedValue(rgPath)
+				const head = path.join(
+					currentWorkspaceDir,
+					"apps/vscode-e2e/.vscode-test/user-data/User/globalStorage/test/tasks/old/checkpoints/.git/HEAD",
+				)
+				await fs.mkdir(path.dirname(head), { recursive: true })
+				await fs.writeFile(head, "ref: refs/heads/main\n")
+				const profileFile = path.join(path.dirname(head), "../profile-data.txt")
+				await fs.writeFile(profileFile, "test-profile data")
+				const isolated = klass.create({
+					taskId: "sandbox-check",
+					shadowDir: currentShadowDir,
+					workspaceDir: currentWorkspaceDir,
+					log: () => {},
+				})
+				await isolated.initShadowGit()
+				expect(isolated.isInitialized).toBe(true)
+				expect(await fs.readFile(path.join(isolated.checkpointsDir, ".git/info/exclude"), "utf8")).toContain(
+					".vscode-test/",
+				)
+				const tracked = await createGit(isolated.checkpointsDir).env(withoutGitEnv()).raw(["ls-files"])
+				expect(tracked).toContain("test.txt")
+				expect(tracked).not.toContain(".vscode-test")
+				expect(await fs.readFile(profileFile, "utf8")).toBe("test-profile data")
+			})
+
+			it("still rejects genuine nested repositories even when gitignored", async (context) => {
+				const rgPath = await ripgrep.getBinPath("")
+				if (!rgPath) return context.skip()
+				vitest.spyOn(ripgrep, "getBinPath").mockResolvedValue(rgPath)
+				const nested = path.join(currentWorkspaceDir, "vendor/real-project")
+				await fs.mkdir(nested, { recursive: true })
+				await createGit(nested).env(withoutGitEnv()).init()
+				await fs.writeFile(path.join(currentWorkspaceDir, ".gitignore"), "vendor/\n")
+				const isolated = klass.create({
+					taskId: "real-nested-check",
+					shadowDir: currentShadowDir,
+					workspaceDir: currentWorkspaceDir,
+					log: () => {},
+				})
+				await expect(isolated.initShadowGit()).rejects.toThrow("nested git repository")
+			})
+
 			it("throws error when nested git repositories are detected during initialization", async () => {
 				// Create a new temporary workspace and service for this test.
 				const shadowDir = path.join(tmpDir, `${prefix}-nested-git-${Date.now()}`)

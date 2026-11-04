@@ -19,6 +19,7 @@ const getBuildArtifactPatterns = () => [
 	".terragrunt-cache/",
 	".vs/",
 	".vscode/",
+	".vscode-test/",
 	"Pods/",
 	"__pycache__/",
 	"bin/",

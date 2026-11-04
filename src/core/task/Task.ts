@@ -191,6 +191,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	private memrlSummary = ""
 	private verificationMessageUpdate: Promise<void> = Promise.resolve()
 	private verificationTerminal?: "cancelled" | "error"
+	private verificationSummaryWrite?: Promise<void>
 
 	private readonly modeHandler: TaskModeHandler
 
@@ -1096,21 +1097,27 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	public async publishVerificationSummary(terminal: "cancelled" | "error"): Promise<void> {
+		if (this.verificationSummaryWrite) return this.verificationSummaryWrite
 		if (this.verificationTerminal || this.abandoned || this.taskCompleted) return
-		try {
-			await this.cangjieVerification.cancelAndWait()
-			const verification = await this.cangjieVerification.currentSummary()
-			if (!verification || this.verificationTerminal || this.abandoned || this.taskCompleted) return
-			this.verificationTerminal = terminal
-			await this.addToClineMessages({
-				ts: Date.now(),
-				type: "say",
-				say: "verification_summary",
-				verification: { ...verification, terminal },
-			})
-		} catch (error) {
-			logger.debug("Task", "Cannot publish terminal verification summary", error)
-		}
+		this.verificationSummaryWrite = (async () => {
+			try {
+				await this.cangjieVerification.cancelAndWait()
+				const verification = await this.cangjieVerification.currentSummary()
+				if (!verification || this.verificationTerminal || this.abandoned || this.taskCompleted) return
+				this.verificationTerminal = terminal
+				await this.addToClineMessages({
+					ts: Date.now(),
+					type: "say",
+					say: "verification_summary",
+					verification: { ...verification, terminal },
+				})
+			} catch (error) {
+				logger.debug("Task", "Cannot publish terminal verification summary", error)
+			}
+		})().finally(() => {
+			this.verificationSummaryWrite = undefined
+		})
+		await this.verificationSummaryWrite
 	}
 
 	/**

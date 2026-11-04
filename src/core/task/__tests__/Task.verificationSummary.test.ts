@@ -49,4 +49,73 @@ describe("terminal verification summaries", () => {
 		await Task.prototype.publishVerificationSummary.call(host, "cancelled")
 		expect(host.addToClineMessages).not.toHaveBeenCalled()
 	})
+
+	it("makes a concurrent cancellation wait until the first summary is persisted", async () => {
+		let release!: () => void
+		const persisted = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const host = {
+			cangjieVerification: {
+				cancelAndWait: vi.fn(),
+				currentSummary: vi.fn().mockResolvedValue({ overall: "incomplete" }),
+			},
+			addToClineMessages: vi.fn().mockReturnValue(persisted),
+		}
+		const publish = () => Task.prototype.publishVerificationSummary.call(host as unknown as Task, "cancelled")
+		const first = publish()
+		await vi.waitFor(() => expect(host.addToClineMessages).toHaveBeenCalledOnce())
+		let secondFinished = false
+		const second = publish().then(() => {
+			secondFinished = true
+		})
+		try {
+			await Promise.resolve()
+			await Promise.resolve()
+			expect(secondFinished).toBe(false)
+			expect(host.addToClineMessages).toHaveBeenCalledOnce()
+		} finally {
+			release()
+			await Promise.all([first, second])
+		}
+	})
+
+	it("shares verification settlement between concurrent terminal summaries", async () => {
+		let release!: () => void
+		const settled = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const host = {
+			cangjieVerification: {
+				cancelAndWait: vi.fn().mockReturnValue(settled),
+				currentSummary: vi.fn().mockResolvedValue({ overall: "incomplete" }),
+			},
+			addToClineMessages: vi.fn(),
+		}
+		const publish = () => Task.prototype.publishVerificationSummary.call(host as unknown as Task, "cancelled")
+		const first = publish()
+		const second = publish()
+		try {
+			expect(host.cangjieVerification.cancelAndWait).toHaveBeenCalledOnce()
+		} finally {
+			release()
+			await Promise.all([first, second])
+		}
+		expect(host.addToClineMessages).toHaveBeenCalledOnce()
+	})
+
+	it("can publish later when an earlier check had no verification records", async () => {
+		const host = {
+			cangjieVerification: {
+				cancelAndWait: vi.fn(),
+				currentSummary: vi.fn().mockResolvedValueOnce(undefined).mockResolvedValue({ overall: "incomplete" }),
+			},
+			addToClineMessages: vi.fn(),
+		}
+		const publish = () => Task.prototype.publishVerificationSummary.call(host as unknown as Task, "cancelled")
+		await publish()
+		expect(host.addToClineMessages).not.toHaveBeenCalled()
+		await publish()
+		expect(host.addToClineMessages).toHaveBeenCalledOnce()
+	})
 })
