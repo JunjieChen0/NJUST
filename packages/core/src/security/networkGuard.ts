@@ -380,5 +380,5 @@ export async function guardedFetch(url: string, init?: RequestInit): Promise<Res
 		currentUrl = parsed.toString()
 	}
 
-	throw new Error(`Too many redirects (max ${MAX_REDIRECTS}): ${currentUrl}`)
+	throw new Error(`Too many redirects (max ${MAX_REDIRECTS}): ${parsed.origin}`)
 }

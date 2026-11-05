@@ -216,6 +216,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	readonly globalStoragePath: string
 	abort: boolean = false
+	readonly toolAbortController = new AbortController()
 
 	// ── Foreground→Background switching ──
 	/** Resolved when the user requests this task be moved to background */

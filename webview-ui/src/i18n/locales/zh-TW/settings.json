@@ -1187,9 +1187,9 @@
 		},
 		"apiKeyHint": {
 			"tavily": "在 https://tavily.com 取得免費 API 金鑰",
-			"bing": "從 Azure Portal → Bing Search v7 資源取得金鑰",
-			"google": "格式：API_KEY|SEARCH_ENGINE_ID（從 Google Cloud Console + 可程式化搜尋引擎取得）",
-			"baidu": "從百度 AI Cloud（百度智能雲）取得存取權杖",
+			"bing": "微軟已於 2025-08-11 停用 Bing Search API。可選擇 SerpAPI 的 Bing 引擎並設定 SerpAPI 金鑰，或選擇其他服務商。",
+			"google": "格式：API_KEY|搜尋引擎ID。Google Custom Search 已不接受新客戶，現有客戶需在 2027-01-01 前遷移。",
+			"baidu": "請在千帆控制台取得百度 AI 搜尋 API Key；不再使用舊版 Access Token。",
 			"serpapi": "在 https://serpapi.com 取得 API 金鑰（支援 Google、Bing、Baidu 等）"
 		},
 		"noKeyRequired": "此搜尋引擎完全免費，不需要 API 金鑰。只需啟用網路搜尋即可開始使用！"

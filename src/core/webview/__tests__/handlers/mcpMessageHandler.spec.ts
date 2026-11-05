@@ -1,6 +1,11 @@
 import { vi, describe, it, expect, beforeEach } from "vitest"
 import type { WebviewMessage } from "@njust-ai/types"
 
+const { searchMock } = vi.hoisted(() => ({ searchMock: vi.fn() }))
+vi.mock("../../../../services/web-search/WebSearchProvider", () => ({
+	createSearchProvider: () => ({ search: searchMock }),
+}))
+
 vi.mock("vscode", () => ({
 	window: { showErrorMessage: vi.fn(), showInformationMessage: vi.fn() },
 	workspace: {
@@ -51,6 +56,33 @@ describe("mcpMessageHandler", () => {
 			const handler = vi.fn()
 			router.register(type, handler)
 		}
+	})
+
+	it("does not report a zero-result connection probe as verified", async () => {
+		searchMock.mockResolvedValueOnce([])
+		await router.route(context, { type: "testWebSearch" })
+		expect(context.provider.postMessageToWebview).toHaveBeenCalledWith({
+			type: "webSearchStatus",
+			text: expect.stringContaining('"status":"error"'),
+		})
+	})
+
+	it("reports a successful probe only when source results are available", async () => {
+		searchMock.mockResolvedValueOnce([{ title: "Cangjie", url: "https://example.com/docs", snippet: "Docs" }])
+		await router.route(context, { type: "testWebSearch" })
+		expect(context.provider.postMessageToWebview).toHaveBeenCalledWith({
+			type: "webSearchStatus",
+			text: expect.stringContaining('"status":"ok"'),
+		})
+	})
+
+	it("keeps anti-bot failures visible in the connection probe", async () => {
+		searchMock.mockRejectedValueOnce(new Error("Verification / anti-bot page"))
+		await router.route(context, { type: "testWebSearch" })
+		expect(context.provider.postMessageToWebview).toHaveBeenCalledWith({
+			type: "webSearchStatus",
+			text: expect.stringContaining("anti-bot"),
+		})
 	})
 
 	it("allowedCommands saves to global state", async () => {

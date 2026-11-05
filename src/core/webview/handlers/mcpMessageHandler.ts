@@ -183,7 +183,10 @@ async function handleTestWebSearch(context: MessageHandlerContext, _message: Web
 		const serpApiEngine = state?.serpApiEngine ?? "bing"
 		const { createSearchProvider } = await import("../../../services/web-search/WebSearchProvider")
 		const searchProvider = createSearchProvider(providerName, apiKey, serpApiEngine)
-		await searchProvider.search("test", 1)
+		const results = await searchProvider.search("Cangjie programming language", 1)
+		if (!results.some((result) => result.url)) {
+			throw new Error("Search returned no source results; the connection could not be verified.")
+		}
 		await provider.postMessageToWebview({
 			type: "webSearchStatus",
 			text: JSON.stringify({ status: "ok", provider: providerName }),

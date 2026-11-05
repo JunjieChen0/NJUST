@@ -250,6 +250,14 @@ describe("TaskLifecycleHandler", () => {
 		expect(host.dispose).toHaveBeenCalled()
 	})
 
+	it("cancels network tools before awaiting cancellation persistence", async () => {
+		const controller = new AbortController()
+		const host = createHost({ toolAbortController: controller })
+		const pending = new TaskLifecycleHandler(host).abortTask()
+		expect(controller.signal.aborted).toBe(true)
+		await pending
+	})
+
 	it("publishes cancellation verification facts after cancelling checks and before disposal", async () => {
 		const host = createHost({
 			cangjieVerification: { cancel: vi.fn() },

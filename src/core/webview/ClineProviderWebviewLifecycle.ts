@@ -117,8 +117,6 @@ export class ClineProviderWebviewLifecycle {
 		Terminal.setTerminalZdotdir(terminalZdotdir)
 		setTtsEnabled(ttsEnabled ?? false)
 		setTtsSpeed(ttsSpeed ?? 1)
-
-		await this.host.contextProxy.setValue("enableWebSearch", false)
 	}
 
 	private async configureWebviewContent(webviewView: vscode.WebviewView | vscode.WebviewPanel): Promise<void> {

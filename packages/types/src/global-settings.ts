@@ -321,6 +321,7 @@ export const SECRET_STATE_KEYS = [
 // Global secrets that are part of GlobalSettings (not ProviderSettings)
 export const GLOBAL_SECRET_KEYS = [
 	"openRouterImageApiKey", // For image generation
+	"webSearchApiKey",
 ] as const
 
 // Type for the actual secret storage keys

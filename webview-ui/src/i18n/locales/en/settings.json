@@ -1187,9 +1187,9 @@
 		},
 		"apiKeyHint": {
 			"tavily": "Get a free API key at https://tavily.com",
-			"bing": "Get a key from Azure Portal → Bing Search v7 resource",
-			"google": "Format: API_KEY|SEARCH_ENGINE_ID (from Google Cloud Console + Programmable Search Engine)",
-			"baidu": "Get an access token from Baidu AI Cloud (百度智能云)",
+			"bing": "Microsoft retired Bing Search API on 2025-08-11. Select SerpAPI with the Bing engine and a SerpAPI key, or choose another provider.",
+			"google": "Format: API_KEY|SEARCH_ENGINE_ID. Google Custom Search is closed to new customers; existing customers must migrate before 2027-01-01.",
+			"baidu": "Use a Baidu AI Search API Key from the Qianfan console; legacy Access Tokens are not supported.",
 			"serpapi": "Get an API key at https://serpapi.com (supports Google, Bing, Baidu, etc.)"
 		},
 		"noKeyRequired": "This search engine is completely free and does not require an API key. Just enable web search and start using it!"

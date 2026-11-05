@@ -56,6 +56,24 @@ describe("webFetchTool", () => {
 		expect(webFetchTool.searchHint).toContain("web fetch")
 	})
 
+	it("cancels an active request without following its redirect", async () => {
+		const controller = new AbortController()
+		axiosGetMock.mockImplementationOnce(async (_url, options) => {
+			controller.abort()
+			expect(options.signal.aborted).toBe(true)
+			return { status: 302, headers: { location: "/next" }, data: "redirect" }
+		})
+		const callbacks = createCallbacks()
+		await webFetchTool.execute(
+			{ url: "https://example.com" },
+			{ toolAbortController: controller } as any,
+			callbacks as any,
+		)
+		expect(axiosGetMock).toHaveBeenCalledTimes(1)
+		expect(assertSafeOutboundUrlMock).toHaveBeenCalledTimes(1)
+		expect(callbacks.pushToolResult).toHaveBeenCalledWith(expect.stringContaining("cancelled"), { isError: true })
+	})
+
 	it("accepts stable http and https partial urls only", () => {
 		expect(webFetchTool.isPartialArgsStable({ url: "https://example.com" })).toBe(true)
 		expect(webFetchTool.isPartialArgsStable({ url: "http://example.com" })).toBe(true)
@@ -246,6 +264,11 @@ describe("webFetchTool > manual redirect loop", () => {
 
 		// 5 redirects followed by 1 final request that detects redirectCount limit
 		expect(axiosGetMock).toHaveBeenCalledTimes(6)
+		expect(callbacks.pushToolResult).not.toHaveBeenCalled()
+		expect(callbacks.handleError).toHaveBeenCalledWith(
+			"web fetch",
+			expect.objectContaining({ message: expect.stringContaining("Too many redirects") }),
+		)
 	})
 
 	it("no redirect returns normally", async () => {
@@ -258,13 +281,16 @@ describe("webFetchTool > manual redirect loop", () => {
 		expect(assertSafeOutboundUrlMock).toHaveBeenCalledTimes(1)
 	})
 
-	it("missing location header breaks loop", async () => {
+	it("reports a redirect without a location header as an error", async () => {
 		axiosGetMock.mockResolvedValueOnce({ status: 302, headers: {}, data: "no-location" })
 		const callbacks = createCallbacks()
 
 		await webFetchTool.execute({ url: "https://example.com" }, {} as any, callbacks as any)
 
-		// No Location header → break → pushes the 302 response as result
-		expect(callbacks.pushToolResult).toHaveBeenCalledWith("no-location")
+		expect(callbacks.pushToolResult).not.toHaveBeenCalled()
+		expect(callbacks.handleError).toHaveBeenCalledWith(
+			"web fetch",
+			expect.objectContaining({ message: expect.stringContaining("Location header") }),
+		)
 	})
 })

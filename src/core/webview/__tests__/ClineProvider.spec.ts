@@ -576,6 +576,12 @@ describe("ClineProvider", () => {
 		expect(mockWebviewView.webview.html).toContain("<!DOCTYPE html>")
 	})
 
+	it("preserves saved web search settings when opening the webview", async () => {
+		await provider.contextProxy.setValue("enableWebSearch", true)
+		await provider.resolveWebviewView(mockWebviewView)
+		expect(provider.contextProxy.getValue("enableWebSearch")).toBe(true)
+	})
+
 	it("resolveWebviewView sets up webview correctly in development mode even if local server is not running", async () => {
 		provider = new ClineProvider(
 			{ ...mockContext, extensionMode: vscode.ExtensionMode.Development },

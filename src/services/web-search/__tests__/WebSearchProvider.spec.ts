@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { DuckDuckGoSearchProvider, BaiduFreeSearchProvider, SogouFreeSearchProvider } from "../WebSearchProvider"
+import { guardedFetch } from "../../../core/security/networkGuard"
 import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("../../../core/security/networkGuard", () => ({
@@ -7,14 +8,12 @@ vi.mock("../../../core/security/networkGuard", () => ({
 }))
 
 describe("WebSearchProvider ReDoS hardening", () => {
-	const originalFetch = globalThis.fetch
-
 	beforeEach(() => {
 		vi.restoreAllMocks()
 	})
 
 	afterEach(() => {
-		globalThis.fetch = originalFetch
+		vi.clearAllMocks()
 	})
 
 	describe("HTML truncation (T015)", () => {
@@ -28,7 +27,7 @@ describe("WebSearchProvider ReDoS hardening", () => {
 				'<td class="result-snippet">Hidden snippet</td>'
 			const html = beforeMarker + padding + afterMarker
 
-			globalThis.fetch = vi.fn().mockResolvedValue({
+			vi.mocked(guardedFetch).mockResolvedValue({
 				ok: true,
 				status: 200,
 				text: () => Promise.resolve(html),
@@ -50,7 +49,7 @@ describe("WebSearchProvider ReDoS hardening", () => {
 			const padding = "<div>" + "x".repeat(500_001) + "</div>"
 			const html = beforeMarker + padding + afterMarker
 
-			globalThis.fetch = vi.fn().mockResolvedValue({
+			vi.mocked(guardedFetch).mockResolvedValue({
 				ok: true,
 				status: 200,
 				text: () => Promise.resolve(html),
@@ -67,9 +66,9 @@ describe("WebSearchProvider ReDoS hardening", () => {
 		it("Sogou truncates HTML to 500KB before parsing", async () => {
 			const afterMarker = '<h3><a href="https://example.com/hidden">Hidden After 500KB</a></h3>'
 			const padding = "<div>" + "x".repeat(500_001) + "</div>"
-			const html = padding + afterMarker
+			const html = '<h3><a href="https://example.com/visible">Visible Result</a></h3>' + padding + afterMarker
 
-			globalThis.fetch = vi.fn().mockResolvedValue(
+			vi.mocked(guardedFetch).mockResolvedValue(
 				asMock<Response>({
 					ok: true,
 					status: 200,
@@ -102,7 +101,7 @@ describe("WebSearchProvider ReDoS hardening", () => {
 			}
 			const html = links.join("") + snippets.join("")
 
-			globalThis.fetch = vi.fn().mockResolvedValue({
+			vi.mocked(guardedFetch).mockResolvedValue({
 				ok: true,
 				status: 200,
 				text: () => Promise.resolve(html),

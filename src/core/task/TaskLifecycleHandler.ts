@@ -51,6 +51,7 @@ export interface TaskLifecycleHost {
 	readonly diffViewProvider: ITaskDiffViewProvider
 
 	abort: boolean
+	readonly toolAbortController?: AbortController
 	abandoned: boolean
 	taskCompleted: boolean
 	abortReason?: string
@@ -445,6 +446,7 @@ export class TaskLifecycleHandler {
 		}
 
 		t.abort = true
+		t.toolAbortController?.abort()
 		// Kill running cjpm build/test first; the runner persists the partial facts as cancelled.
 		t.cangjieVerification?.cancel()
 		// Leaving a task or viewing its history is not a new cancellation outcome.
@@ -530,6 +532,7 @@ export class TaskLifecycleHandler {
 			return
 		}
 		t.isDisposed = true
+		t.toolAbortController?.abort()
 
 		logger.info("TaskLifecycleHandler", `Disposing task ${t.taskId}.${t.instanceId}`)
 		if (t.queuedMessageTimer) {

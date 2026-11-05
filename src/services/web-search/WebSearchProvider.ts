@@ -1,3 +1,6 @@
+import { setTimeout as delay } from "node:timers/promises"
+import { logger } from "@njust-ai/core/shared"
+
 import { guardedFetch } from "../../core/security/networkGuard"
 import { getErrorMessage } from "../../shared/error-utils"
 import { t } from "../../i18n"
@@ -19,16 +22,26 @@ export interface WebSearchResult {
 }
 
 export interface WebSearchProvider {
-	search(query: string, count: number): Promise<WebSearchResult[]>
+	search(query: string, count: number, signal?: AbortSignal): Promise<WebSearchResult[]>
 }
 
-function makeAbortController(timeoutMs = 15_000) {
+function makeAbortController(signal?: AbortSignal, timeoutMs = 15_000) {
 	const controller = new AbortController()
+	const onAbort = () => controller.abort(signal?.reason)
+	signal?.addEventListener("abort", onAbort, { once: true })
+	if (signal?.aborted) onAbort()
 	const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-	return { controller, clear: () => clearTimeout(timeoutId) }
+	return {
+		controller,
+		clear: () => {
+			clearTimeout(timeoutId)
+			signal?.removeEventListener("abort", onAbort)
+		},
+	}
 }
 
 async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
+	init?.signal?.throwIfAborted()
 	return guardedFetch(url, init)
 }
 
@@ -141,16 +154,15 @@ const SOGOU_SNIPPET_PATTERNS: RegExp[] = [
 export class TavilySearchProvider implements WebSearchProvider {
 	constructor(private apiKey: string) {}
 
-	async search(query: string, count: number): Promise<WebSearchResult[]> {
+	async search(query: string, count: number, signal?: AbortSignal): Promise<WebSearchResult[]> {
 		const truncatedQuery = query.length > 400 ? query.slice(0, 400) : query
-		const { controller, clear } = makeAbortController()
+		const { controller, clear } = makeAbortController(signal)
 
 		try {
 			const response = await safeFetch("https://api.tavily.com/search", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
 				body: JSON.stringify({
-					api_key: this.apiKey,
 					query: truncatedQuery,
 					max_results: Math.min(count, 10),
 					search_depth: "advanced",
@@ -172,8 +184,8 @@ export class TavilySearchProvider implements WebSearchProvider {
 				results?: Array<{ title?: string; url?: string; content?: string }>
 			}
 
-			if (!data.results || !Array.isArray(data.results)) {
-				return []
+			if (!Array.isArray(data.results)) {
+				throw new Error("Tavily search returned an invalid response: results is missing.")
 			}
 
 			const results: WebSearchResult[] = data.results.map((r) => ({
@@ -188,6 +200,7 @@ export class TavilySearchProvider implements WebSearchProvider {
 
 			return results
 		} catch (error) {
+			signal?.throwIfAborted()
 			if (error instanceof Error && error.name === "AbortError") {
 				throw new Error("Tavily search timed out after 15 seconds.")
 			}
@@ -199,51 +212,16 @@ export class TavilySearchProvider implements WebSearchProvider {
 }
 
 export class BingSearchProvider implements WebSearchProvider {
-	constructor(private apiKey: string) {}
+	constructor(_apiKey: string) {}
 
-	async search(query: string, count: number): Promise<WebSearchResult[]> {
-		const { controller, clear } = makeAbortController()
-
-		try {
-			const params = new URLSearchParams({
-				q: query,
-				count: String(Math.min(count, 10)),
-				mkt: "zh-CN",
-				responseFilter: "Webpages",
-			})
-
-			const response = await safeFetch(`https://api.bing.microsoft.com/v7.0/search?${params}`, {
-				headers: { "Ocp-Apim-Subscription-Key": this.apiKey },
-				signal: controller.signal,
-			})
-
-			if (!response.ok) {
-				if (response.status === 401) {
-					throw new Error("Bing API key is invalid. Please check your key in Azure Portal.")
-				}
-				if (response.status === 429) {
-					throw new Error("Bing rate limited. Please wait and try again.")
-				}
-				throw new Error(`Bing search failed: ${response.status} ${response.statusText}`)
-			}
-
-			const data = (await response.json()) as {
-				webPages?: { value?: Array<{ name?: string; url?: string; snippet?: string }> }
-			}
-
-			return (data.webPages?.value ?? []).map((r) => ({
-				title: r.name || "Untitled",
-				url: r.url || "",
-				snippet: r.snippet || "",
-			}))
-		} catch (error) {
-			if (error instanceof Error && error.name === "AbortError") {
-				throw new Error("Bing search timed out after 15 seconds.")
-			}
-			throw error
-		} finally {
-			clear()
-		}
+	search(_query: string, _count: number, signal?: AbortSignal): Promise<WebSearchResult[]> {
+		if (signal?.aborted) return Promise.reject(signal.reason)
+		return Promise.reject(
+			new Error(
+				"Microsoft retired the Bing Search API on 2025-08-11. Select SerpAPI with the Bing engine " +
+					"and a SerpAPI key, or choose Baidu Free, Tavily, or Baidu API in Settings > Web Search.",
+			),
+		)
 	}
 }
 
@@ -257,7 +235,7 @@ export class GoogleSearchProvider implements WebSearchProvider {
 		this.cx = parts[1] ?? ""
 	}
 
-	async search(query: string, count: number): Promise<WebSearchResult[]> {
+	async search(query: string, count: number, signal?: AbortSignal): Promise<WebSearchResult[]> {
 		if (!this.cx) {
 			throw new Error(
 				"Google search requires API Key and Search Engine ID separated by '|'. " +
@@ -265,7 +243,7 @@ export class GoogleSearchProvider implements WebSearchProvider {
 			)
 		}
 
-		const { controller, clear } = makeAbortController()
+		const { controller, clear } = makeAbortController(signal)
 
 		try {
 			const params = new URLSearchParams({
@@ -275,7 +253,7 @@ export class GoogleSearchProvider implements WebSearchProvider {
 				num: String(Math.min(count, 10)),
 			})
 
-			const response = await fetch(`https://www.googleapis.com/customsearch/v1?${params}`, {
+			const response = await safeFetch(`https://www.googleapis.com/customsearch/v1?${params}`, {
 				signal: controller.signal,
 			})
 
@@ -296,6 +274,7 @@ export class GoogleSearchProvider implements WebSearchProvider {
 				snippet: r.snippet || "",
 			}))
 		} catch (error) {
+			signal?.throwIfAborted()
 			if (error instanceof Error && error.name === "AbortError") {
 				throw new Error("Google search timed out after 15 seconds.")
 			}
@@ -309,41 +288,49 @@ export class GoogleSearchProvider implements WebSearchProvider {
 export class BaiduSearchProvider implements WebSearchProvider {
 	constructor(private apiKey: string) {}
 
-	async search(query: string, count: number): Promise<WebSearchResult[]> {
-		const { controller, clear } = makeAbortController()
+	async search(query: string, count: number, signal?: AbortSignal): Promise<WebSearchResult[]> {
+		const { controller, clear } = makeAbortController(signal)
 
 		try {
-			const params = new URLSearchParams({
-				query: query,
-				page_num: "1",
-				page_size: String(Math.min(count, 10)),
-			})
-
-			const response = await fetch(`https://aip.baidubce.com/rest/2.0/search/v1/resource/web?${params}`, {
+			const response = await safeFetch("https://qianfan.baidubce.com/v2/ai_search/web_search", {
+				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 					Authorization: `Bearer ${this.apiKey}`,
 				},
+				body: JSON.stringify({
+					messages: [{ role: "user", content: query }],
+					search_source: "baidu_search_v2",
+					resource_type_filter: [{ type: "web", top_k: Math.min(count, 10) }],
+				}),
 				signal: controller.signal,
 			})
 
 			if (!response.ok) {
-				if (response.status === 401) {
-					throw new Error("Baidu API token is invalid or expired.")
-				}
-				throw new Error(`Baidu search failed: ${response.status} ${response.statusText}`)
+				throw new Error(
+					`Baidu search failed: ${response.status} ${response.statusText}. Check your Baidu AI Search API key and quota.`,
+				)
 			}
 
 			const data = (await response.json()) as {
-				results?: Array<{ title?: string; url?: string; content?: string }>
+				code?: string
+				message?: string
+				references?: Array<{ title?: string; url?: string; content?: string; snippet?: string }>
+			}
+			if (data.code && data.code !== "0") {
+				throw new Error(`Baidu search failed (${data.code}): ${data.message ?? "Unknown API error"}`)
+			}
+			if (!Array.isArray(data.references)) {
+				throw new Error("Baidu search returned an invalid response: references is missing.")
 			}
 
-			return (data.results ?? []).map((r) => ({
-				title: (r.title || "Untitled").replace(/<[^>]*>/g, ""),
+			return data.references.slice(0, count).map((r) => ({
+				title: stripHtmlTags(r.title || "Untitled"),
 				url: r.url || "",
-				snippet: (r.content || "").replace(/<[^>]*>/g, ""),
+				snippet: stripHtmlTags(r.snippet || r.content || ""),
 			}))
 		} catch (error) {
+			signal?.throwIfAborted()
 			if (error instanceof Error && error.name === "AbortError") {
 				throw new Error("Baidu search timed out after 15 seconds.")
 			}
@@ -357,16 +344,17 @@ export class BaiduSearchProvider implements WebSearchProvider {
 export class BaiduFreeSearchProvider implements WebSearchProvider {
 	private sogouFallback?: SogouFreeSearchProvider
 
-	async search(query: string, count: number): Promise<WebSearchResult[]> {
+	async search(query: string, count: number, signal?: AbortSignal): Promise<WebSearchResult[]> {
 		let baiduError: string | undefined
 
 		try {
-			const results = await this.fetchBaidu(query, count)
+			const results = await this.fetchBaidu(query, count, signal)
 			if (results.length > 0) {
 				return results
 			}
 			baiduError = "Baidu returned no parseable results (anti-bot or layout change)."
 		} catch (error) {
+			signal?.throwIfAborted()
 			if (error instanceof Error && error.name === "AbortError") {
 				baiduError = "Baidu search timed out."
 			} else {
@@ -376,26 +364,27 @@ export class BaiduFreeSearchProvider implements WebSearchProvider {
 
 		try {
 			this.sogouFallback ??= new SogouFreeSearchProvider()
-			const results = await this.sogouFallback.search(query, count)
+			const results = await this.sogouFallback.search(query, count, signal)
 			if (results.length > 0) {
 				return results
 			}
 			throw new Error("Sogou fallback returned no results")
 		} catch (fallbackErr) {
+			signal?.throwIfAborted()
 			const fb = formatFetchFailureMessage(fallbackErr)
 			throw new Error(
 				`Baidu search failed: ${baiduError}. ` +
 					`Sogou fallback also failed: ${fb}. ` +
-					"Check network/proxy, or set web search provider to Tavily/Bing/Google in settings.",
+					"Check network/proxy, or set web search provider to Tavily/Baidu API/SerpAPI in settings.",
 			)
 		}
 	}
 
-	private async fetchBaidu(query: string, count: number): Promise<WebSearchResult[]> {
-		const { controller, clear } = makeAbortController(15_000)
+	private async fetchBaidu(query: string, count: number, signal?: AbortSignal): Promise<WebSearchResult[]> {
+		const { controller, clear } = makeAbortController(signal)
 		try {
 			const params = new URLSearchParams({ wd: query, rn: String(Math.min(count, 10)), ie: "utf-8" })
-			const response = await fetch(`https://www.baidu.com/s?${params}`, {
+			const response = await safeFetch(`https://www.baidu.com/s?${params}`, {
 				headers: {
 					"User-Agent":
 						"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -412,8 +401,11 @@ export class BaiduFreeSearchProvider implements WebSearchProvider {
 				throw new Error(`Baidu returned ${response.status}`)
 			}
 
-			const html = (await response.text()).slice(0, 500_000)
-			return this.parseBaiduResults(html, count)
+			const page = await response.text()
+			// Current Baidu pages can put hundreds of KB of scripts before the result container.
+			// Keep the bounded parsing window, but start it at the actual search results.
+			const resultsStart = Math.max(0, page.search(/\bid=["']content_left["']/i))
+			return this.parseBaiduResults(page.slice(resultsStart, resultsStart + 500_000), count)
 		} finally {
 			clear()
 		}
@@ -467,13 +459,13 @@ export class SogouFreeSearchProvider implements WebSearchProvider {
 	private static readonly UA =
 		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-	async search(query: string, count: number): Promise<WebSearchResult[]> {
-		const { controller, clear } = makeAbortController(22_000)
+	async search(query: string, count: number, signal?: AbortSignal): Promise<WebSearchResult[]> {
+		const { controller, clear } = makeAbortController(signal, 22_000)
 
 		try {
 			let cookieHeader = ""
 			try {
-				const warm = await fetch("https://www.sogou.com/", {
+				const warm = await safeFetch("https://www.sogou.com/", {
 					headers: {
 						"User-Agent": SogouFreeSearchProvider.UA,
 						Accept: "text/html,application/xhtml+xml",
@@ -484,12 +476,15 @@ export class SogouFreeSearchProvider implements WebSearchProvider {
 					signal: controller.signal,
 				})
 				cookieHeader = collectCookieHeaderFromResponse(warm)
-			} catch {
-				// intentionally ignored: warm-up is best-effort
+				await warm.body?.cancel()
+			} catch (error) {
+				signal?.throwIfAborted()
+				logger.debug("WebSearchProvider", "Sogou warm-up failed; trying the search endpoint", error)
 			}
+			controller.signal.throwIfAborted()
 
 			const params = new URLSearchParams({ query, ie: "utf8" })
-			const response = await fetch(`https://www.sogou.com/web?${params}`, {
+			const response = await safeFetch(`https://www.sogou.com/web?${params}`, {
 				headers: {
 					"User-Agent": SogouFreeSearchProvider.UA,
 					Accept: "text/html,application/xhtml+xml",
@@ -521,9 +516,13 @@ export class SogouFreeSearchProvider implements WebSearchProvider {
 					"Sogou returned a verification / anti-bot page (no organic results). Try again later or use Tavily/Baidu API in settings.",
 				)
 			}
+			if (!/没有找到|未找到|无相关|no results/i.test(html)) {
+				throw new Error("Sogou returned an unrecognized search page; results could not be verified.")
+			}
 
 			return []
 		} catch (error) {
+			signal?.throwIfAborted()
 			if (error instanceof Error && error.name === "AbortError") {
 				throw new Error("Sogou search timed out.")
 			}
@@ -565,11 +564,11 @@ export class SogouFreeSearchProvider implements WebSearchProvider {
 }
 
 export class DuckDuckGoSearchProvider implements WebSearchProvider {
-	async search(query: string, count: number): Promise<WebSearchResult[]> {
-		const { controller, clear } = makeAbortController(15_000)
+	async search(query: string, count: number, signal?: AbortSignal): Promise<WebSearchResult[]> {
+		const { controller, clear } = makeAbortController(signal)
 
 		try {
-			const response = await fetch("https://lite.duckduckgo.com/lite/", {
+			const response = await safeFetch("https://lite.duckduckgo.com/lite/", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/x-www-form-urlencoded",
@@ -586,6 +585,9 @@ export class DuckDuckGoSearchProvider implements WebSearchProvider {
 			}
 
 			const html = (await response.text()).slice(0, 500_000)
+			if (response.status === 202 || /anomaly\.js|anomaly-modal|challenge-form/i.test(html)) {
+				throw new Error("DuckDuckGo returned a verification / anti-bot page. Try another search provider.")
+			}
 			const results: WebSearchResult[] = []
 			const linkRegex = /<a[^>]+rel="nofollow"[^>]+href="([^"]+)"[^>]*class="result-link"[^>]*>([\s\S]*?)<\/a>/gi
 			const snippetRegex = /<td[^>]*class="result-snippet"[^>]*>([\s\S]*?)<\/td>/gi
@@ -606,8 +608,12 @@ export class DuckDuckGoSearchProvider implements WebSearchProvider {
 					results.push({ title: link.title, url: link.url, snippet: snippets[i] ?? "" })
 				}
 			}
+			if (!results.length && !/no-results|no results found/i.test(html)) {
+				throw new Error("DuckDuckGo returned an unrecognized search page; results could not be verified.")
+			}
 			return results
 		} catch (error) {
+			signal?.throwIfAborted()
 			if (error instanceof Error && error.name === "AbortError") {
 				throw new Error("DuckDuckGo search timed out.")
 			}
@@ -629,8 +635,8 @@ export class SerpApiSearchProvider implements WebSearchProvider {
 		private engine: SerpApiEngine = "bing",
 	) {}
 
-	async search(query: string, count: number): Promise<WebSearchResult[]> {
-		const { controller, clear } = makeAbortController()
+	async search(query: string, count: number, signal?: AbortSignal): Promise<WebSearchResult[]> {
+		const { controller, clear } = makeAbortController(signal)
 
 		try {
 			const params = new URLSearchParams({
@@ -643,11 +649,11 @@ export class SerpApiSearchProvider implements WebSearchProvider {
 			let lastError: Error | undefined
 			for (let attempt = 0; attempt <= SerpApiSearchProvider.MAX_RETRIES; attempt++) {
 				if (attempt > 0) {
-					const delay = SerpApiSearchProvider.BASE_DELAY_MS * Math.pow(2, attempt - 1)
-					await new Promise((resolve) => setTimeout(resolve, delay))
+					const delayMs = SerpApiSearchProvider.BASE_DELAY_MS * Math.pow(2, attempt - 1)
+					await delay(delayMs, undefined, { signal: controller.signal })
 				}
 
-				const response = await fetch(`https://serpapi.com/search.json?${params}`, {
+				const response = await safeFetch(`https://serpapi.com/search.json?${params}`, {
 					signal: controller.signal,
 				})
 
@@ -669,8 +675,13 @@ export class SerpApiSearchProvider implements WebSearchProvider {
 				}
 
 				const data = (await response.json()) as {
+					error?: string
+					search_metadata?: { status?: string }
 					answer_box?: { snippet?: string; title?: string; link?: string }
 					organic_results?: Array<{ title?: string; link?: string; snippet?: string }>
+				}
+				if (data.error && data.search_metadata?.status !== "Success") {
+					throw new Error(`SerpAPI search failed: ${data.error}`)
 				}
 
 				const results: WebSearchResult[] = (data.organic_results ?? []).map((r) => ({
@@ -692,6 +703,7 @@ export class SerpApiSearchProvider implements WebSearchProvider {
 
 			throw lastError ?? new Error("SerpAPI search failed after retries.")
 		} catch (error) {
+			signal?.throwIfAborted()
 			if (error instanceof Error && error.name === "AbortError") {
 				throw new Error("SerpAPI search timed out after 15 seconds.")
 			}
@@ -745,9 +757,13 @@ export function getSearchProviderInfo(): Record<
 		},
 		duckduckgo: { label: "DuckDuckGo (Free)", keyHint: "No key; may not work in China", noKey: true },
 		tavily: { label: "Tavily", keyHint: "https://tavily.com" },
-		bing: { label: "Bing", keyHint: "Azure Portal → Bing Search API" },
+		bing: {
+			label: "Bing (retired)",
+			keyHint:
+				"Bing Search API was retired on 2025-08-11. Select SerpAPI with the Bing engine and a SerpAPI key, or another search provider.",
+		},
 		google: { label: "Google", keyHint: "API_KEY|CX_ID (Google Custom Search)" },
-		baidu: { label: "Baidu API", keyHint: "Baidu AI Cloud Access Token" },
+		baidu: { label: "Baidu API", keyHint: "Baidu AI Search API Key (qianfan.baidubce.com)" },
 		serpapi: { label: "SerpAPI", keyHint: "https://serpapi.com" },
 	}
 }

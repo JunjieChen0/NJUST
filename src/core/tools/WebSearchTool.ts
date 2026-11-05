@@ -32,19 +32,34 @@ class WebSearchToolImpl extends BaseTool<"web_search"> {
 	async execute(
 		params: { search_query: string; count?: number | null },
 		task: Task,
-		{ askApproval, handleError, pushToolResult, reportProgress }: ToolCallbacks,
+		{ askApproval, handleError, pushToolResult, reportProgress, abortSignal }: ToolCallbacks,
 	): Promise<void> {
+		const taskSignal = task.toolAbortController?.signal
+		const signal =
+			taskSignal && abortSignal ? AbortSignal.any([taskSignal, abortSignal]) : (taskSignal ?? abortSignal)
 		try {
+			signal?.throwIfAborted()
+			if (task.abort) return
 			const query = params.search_query
 			const count = params.count ?? 5
 			await reportProgress?.({ icon: "search", text: "Validating web search request" })
 
 			const provider = task.providerRef.deref()
 			const state = await provider?.getState()
+			if (!state?.enableWebSearch) {
+				pushToolResult("Web search is disabled. Enable it in Settings > Web Search before searching.", {
+					isError: true,
+				})
+				return
+			}
 			const apiKey = state?.webSearchApiKey
 			const providerName = (state?.webSearchProvider ?? "baidu-free") as WebSearchProviderName
 
 			const providerInfo = getSearchProviderInfo()[providerName]
+			if (providerName === "bing") {
+				pushToolResult(providerInfo.keyHint, { isError: true })
+				return
+			}
 			if (!providerInfo.noKey && (!apiKey || apiKey.trim().length === 0)) {
 				pushToolResult(
 					`Web search API key is not configured. ` +
@@ -63,15 +78,27 @@ class WebSearchToolImpl extends BaseTool<"web_search"> {
 				pushToolResult("Web search was not approved by the user.")
 				return
 			}
+			signal?.throwIfAborted()
+			if (task.abort) return
+			if (!(await provider?.getState())?.enableWebSearch) {
+				pushToolResult("Web search was disabled while awaiting approval.", { isError: true })
+				return
+			}
 
 			const serpApiEngine = (state?.serpApiEngine ?? "bing") as SerpApiEngine
 			const searchProvider = createSearchProvider(providerName, apiKey ?? "", serpApiEngine)
 			await reportProgress?.({ icon: "search", text: "Executing web search" })
-			const results = await searchProvider.search(query, count)
+			const results = await searchProvider.search(query, count, signal)
+			signal?.throwIfAborted()
+			if (task.abort) return
 			const formatted = formatSearchResults(results)
 
 			pushToolResult(formatted)
 		} catch (error) {
+			if (signal?.aborted || task.abort) {
+				pushToolResult("Web search was cancelled.", { isError: true })
+				return
+			}
 			await handleError("web search", error instanceof Error ? error : new Error(String(error)))
 		} finally {
 			this.resetPartialState()

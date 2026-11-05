@@ -55,6 +55,26 @@ describe("guardedFetch DNS pinning", () => {
 		expect(lookup).toHaveBeenCalledTimes(2)
 	})
 
+	it("does not expose API keys or search text in redirect-limit errors", async () => {
+		mockLookup().mockResolvedValue([{ address: "93.184.216.34", family: 4 }])
+		const transport = vi.fn(
+			async () =>
+				new Response("redirect", {
+					status: 302,
+					headers: { Location: "/search?api_key=dummy-key&q=private-search-text" },
+				}),
+		)
+		vi.stubGlobal("fetch", transport)
+		const failure = await guardedFetch("https://example.com/search?api_key=dummy-key&q=private-search-text").catch(
+			(error: unknown) => error,
+		)
+		expect(failure).toBeInstanceOf(Error)
+		expect((failure as Error).message).toContain("Too many redirects")
+		expect((failure as Error).stack).not.toContain("dummy-key")
+		expect((failure as Error).stack).not.toContain("private-search-text")
+		expect(transport).toHaveBeenCalledTimes(6)
+	})
+
 	it.each([false, true])("rejects DNS rebinding before a request (proxy=%s)", async (proxy) => {
 		if (proxy) setGuardedFetchProxy({ serverUrl: "http://127.0.0.1:8888", tlsInsecure: false })
 		const lookup = mockLookup()

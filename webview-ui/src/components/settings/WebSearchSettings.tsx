@@ -12,7 +12,7 @@ const PROVIDERS = [
 	{ value: "sogou-free", label: "搜狗免费 (国内可用)", noKey: true },
 	{ value: "duckduckgo", label: "DuckDuckGo (Free, 需翻墙)", noKey: true },
 	{ value: "tavily", label: "Tavily" },
-	{ value: "bing", label: "Bing (Microsoft)" },
+	{ value: "bing", label: "Bing (retired 2025-08-11)" },
 	{ value: "google", label: "Google (Custom Search)" },
 	{ value: "baidu", label: "Baidu API / 百度API" },
 	{ value: "serpapi", label: "SerpAPI" },
@@ -34,7 +34,9 @@ type WebSearchSettingsProps = HTMLAttributes<HTMLDivElement> & {
 	webSearchProvider?: string
 	serpApiEngine?: string
 	webSearchApiKey?: string
-	setCachedStateField: SetCachedStateField<"enableWebSearch" | "webSearchProvider" | "serpApiEngine" | "webSearchApiKey">
+	setCachedStateField: SetCachedStateField<
+		"enableWebSearch" | "webSearchProvider" | "serpApiEngine" | "webSearchApiKey"
+	>
 }
 
 export const WebSearchSettings = ({
@@ -48,7 +50,7 @@ export const WebSearchSettings = ({
 	const { t } = useAppTranslation()
 	const currentProvider = webSearchProvider || "baidu-free"
 	const currentSerpEngine = serpApiEngine || "bing"
-	const needsApiKey = !NO_KEY_PROVIDERS.has(currentProvider)
+	const needsApiKey = currentProvider !== "bing" && !NO_KEY_PROVIDERS.has(currentProvider)
 
 	return (
 		<div {...props}>
@@ -86,11 +88,16 @@ export const WebSearchSettings = ({
 									setCachedStateField("webSearchApiKey", "")
 								}}>
 								{PROVIDERS.map((p) => (
-									<VSCodeOption key={p.value} value={p.value}>
+									<VSCodeOption key={p.value} value={p.value} disabled={p.value === "bing"}>
 										{p.label}
 									</VSCodeOption>
 								))}
 							</VSCodeDropdown>
+							{(currentProvider === "bing" || currentProvider === "google") && (
+								<div role="status" className="text-vscode-descriptionForeground text-sm mt-1">
+									{t(`settings:webSearch.apiKeyHint.${currentProvider}`)}
+								</div>
+							)}
 							<div className="text-vscode-descriptionForeground text-sm mt-1">
 								{t("settings:webSearch.provider.description")}
 							</div>
@@ -146,7 +153,7 @@ export const WebSearchSettings = ({
 							</SearchableSetting>
 						)}
 
-						{!needsApiKey && (
+						{NO_KEY_PROVIDERS.has(currentProvider) && (
 							<div className="mt-4 text-vscode-descriptionForeground text-sm">
 								{t("settings:webSearch.noKeyRequired")}
 							</div>

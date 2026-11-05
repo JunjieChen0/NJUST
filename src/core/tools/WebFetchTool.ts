@@ -63,10 +63,15 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 
 	async execute(
 		params: { url: string; format?: "text" | "html" | "json" | "markdown"; maxLength?: number },
-		_task: Task,
-		{ askApproval, handleError, pushToolResult, reportProgress }: ToolCallbacks,
+		task: Task,
+		{ askApproval, handleError, pushToolResult, reportProgress, abortSignal }: ToolCallbacks,
 	): Promise<void> {
+		const taskSignal = task.toolAbortController?.signal
+		const signal =
+			taskSignal && abortSignal ? AbortSignal.any([taskSignal, abortSignal]) : (taskSignal ?? abortSignal)
 		try {
+			signal?.throwIfAborted()
+			if (task.abort) return
 			const { url, format = "text", maxLength = DEFAULT_MAX_LENGTH } = params
 
 			let parsedUrl: URL
@@ -100,6 +105,8 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 				pushToolResult("Web fetch was not approved by the user.")
 				return
 			}
+			signal?.throwIfAborted()
+			if (task.abort) return
 
 			await reportProgress?.({ icon: "globe", text: `Fetching ${url}` })
 
@@ -112,6 +119,7 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 			let response
 
 			while (true) {
+				signal?.throwIfAborted()
 				// If IP pinning is active, replace the hostname in the URL
 				// with the pinned IP and set the Host header.
 				const requestUrl = currentUrl
@@ -127,6 +135,7 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 				}
 
 				response = await axios.get(currentUrl, {
+					signal,
 					timeout: MAX_TIMEOUT_MS,
 					maxRedirects: 0,
 					maxContentLength: MAX_BODY_BYTES,
@@ -135,11 +144,16 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 					headers: requestHeaders,
 					validateStatus: (status) => status < 400,
 				})
+				signal?.throwIfAborted()
+				if (task.abort) return
 
 				// Check for 3xx redirect
-				if (response.status >= 300 && response.status < 400 && redirectCount < MAX_REDIRECTS) {
+				if (response.status >= 300 && response.status < 400) {
+					if (redirectCount >= MAX_REDIRECTS) {
+						throw new Error(`Too many redirects (max ${MAX_REDIRECTS})`)
+					}
 					const location = response.headers?.location as string | undefined
-					if (!location) break
+					if (!location) throw new Error("Redirect response is missing a Location header")
 
 					// Resolve relative URL using the original URL, then SSRF-guard
 					const redirectUrl = new URL(location, requestUrl).href
@@ -166,6 +180,8 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 				}
 				break
 			}
+			signal?.throwIfAborted()
+			if (task.abort) return
 
 			let result: string
 
@@ -212,6 +228,10 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 
 			pushToolResult(result)
 		} catch (error) {
+			if (signal?.aborted || task.abort) {
+				pushToolResult(formatResponse.toolError("Web fetch was cancelled."), { isError: true })
+				return
+			}
 			if (axios.isAxiosError(error)) {
 				const status = error.response?.status
 				const statusText = error.response?.statusText || error.message

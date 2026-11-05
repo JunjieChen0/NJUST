@@ -21,6 +21,7 @@ import {
 import { TelemetryService } from "@njust-ai/telemetry"
 
 import { logger } from "../../utils/logging"
+import { logger as systemLogger } from "../../shared/logger"
 import { supportPrompt } from "../../shared/support-prompt"
 import { TIMING } from "../../shared/constants"
 import { getErrorMessage } from "../../shared/error-utils"
@@ -85,6 +86,7 @@ export class ContextProxy {
 		]
 
 		await Promise.all(promises)
+		await this.migrateWebSearchApiKey()
 
 		// Migration: Check for old nested image generation settings and migrate them
 		await this.migrateImageGenerationSettings()
@@ -111,6 +113,26 @@ export class ContextProxy {
 		}, TIMING.SECRET_REFRESH_INTERVAL_MS)
 
 		this._isInitialized = true
+	}
+
+	private async migrateWebSearchApiKey(): Promise<void> {
+		try {
+			const legacyKey = this.originalContext.globalState.get<string>("webSearchApiKey")
+			if (legacyKey === undefined) return
+			const storedKey = await this.originalContext.secrets.get("webSearchApiKey")
+			if (storedKey !== undefined) this.secretCache.webSearchApiKey = storedKey
+			if (legacyKey && storedKey === undefined) {
+				await this.originalContext.secrets.store("webSearchApiKey", legacyKey)
+				this.secretCache.webSearchApiKey = legacyKey
+			}
+			await this.originalContext.globalState.update("webSearchApiKey", undefined)
+		} catch (error) {
+			systemLogger.warn(
+				"ContextProxy",
+				"Cannot migrate the web search key to secret storage; will retry on restart",
+				error,
+			)
+		}
 	}
 
 	/**
