@@ -29,7 +29,7 @@ import { AskIgnoredError } from "./AskIgnoredError"
 import { TaskAbortedError } from "./TaskErrors"
 import { checkAutoApproval } from "../auto-approval"
 
-/** Maximum time (ms) the task will wait for a user response to ask(). */
+/** Maximum wait for asks other than completion feedback. */
 const ASK_RESPONSE_TIMEOUT_MS = 120_000
 
 export class TaskAskSayHandler {
@@ -199,7 +199,11 @@ export class TaskAskSayHandler {
 					}
 					return false
 				},
-				{ interval: 100, timeout: ASK_RESPONSE_TIMEOUT_MS },
+				{
+					interval: 100,
+					// Completion is idle while the user reviews it; a timeout must not restart inference.
+					timeout: type === "completion_result" ? Number.POSITIVE_INFINITY : ASK_RESPONSE_TIMEOUT_MS,
+				},
 			)
 
 			// If the task was aborted while we were waiting for a user response,

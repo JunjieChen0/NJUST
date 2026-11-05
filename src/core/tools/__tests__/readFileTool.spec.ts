@@ -21,6 +21,8 @@ import { formatResponse } from "../../prompts/responses"
 import { validateImageForProcessing, processImageFile, isSupportedImageFormat } from "../helpers/imageHelpers"
 import { extractTextFromFile, getSupportedBinaryFormats } from "../../../integrations/misc/extract-text"
 import { readWithIndentation, readWithSlice } from "../../../integrations/misc/indentation-reader"
+import { fileReadCache } from "../helpers/FileReadCache"
+import * as bundledCorpus from "../../../utils/bundledCangjieCorpus"
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -198,6 +200,72 @@ describe("ReadFileTool", () => {
 			totalLines: 1,
 			wasTruncated: false,
 			includedRanges: [[1, 1]],
+		})
+	})
+
+	describe("corpus evidence", () => {
+		beforeEach(() => fileReadCache.clear())
+
+		it.each(["ask", "cangjie"])("records successful workspace corpus reads in %s mode", async (taskMode) => {
+			const noteCorpusReadPath = vi.fn()
+			const task = Object.assign(createMockTask(), { taskMode, cangjieRuntimePolicy: { noteCorpusReadPath } })
+			await readFileTool.execute(
+				{ path: "CangjieCorpus-1.0.0/extra/Option.md" },
+				task as any,
+				createMockCallbacks(),
+			)
+			expect(task.ask).toHaveBeenCalled()
+			expect(noteCorpusReadPath).toHaveBeenCalledWith(
+				expect.stringMatching(/CangjieCorpus-1\.0\.0[/\\]extra[/\\]Option\.md$/),
+			)
+		})
+
+		it("records successful corpus reads through the legacy format", async () => {
+			const noteCorpusReadPath = vi.fn()
+			const task = Object.assign(createMockTask(), { cangjieRuntimePolicy: { noteCorpusReadPath } })
+			mockedFsReadFile.mockResolvedValueOnce("Option source")
+			await readFileTool.execute(
+				{ _legacyFormat: true, files: [{ path: "CangjieCorpus-1.0.0/extra/Option.md" }] },
+				task as any,
+				createMockCallbacks(),
+			)
+			expect(noteCorpusReadPath).toHaveBeenCalledWith(
+				expect.stringMatching(/CangjieCorpus-1\.0\.0[/\\]extra[/\\]Option\.md$/),
+			)
+		})
+
+		it("does not record a bundled corpus read that fails after approval", async () => {
+			const bundled = vi.spyOn(bundledCorpus, "isPathUnderBundledCangjieCorpus").mockReturnValue(true)
+			try {
+				const noteCorpusReadPath = vi.fn()
+				const task = Object.assign(createMockTask(), {
+					taskMode: "cangjie",
+					cangjieRuntimePolicy: { noteCorpusReadPath },
+				})
+				mockedFsReadFile.mockRejectedValueOnce(new Error("EACCES"))
+				await readFileTool.execute(
+					{ path: "CangjieCorpus-1.0.0/extra/Option.md" },
+					task as any,
+					createMockCallbacks(),
+				)
+				expect(task.didToolFailInCurrentTurn).toBe(true)
+				expect(noteCorpusReadPath).not.toHaveBeenCalled()
+			} finally {
+				bundled.mockRestore()
+			}
+		})
+
+		it("does not record denied corpus reads or ordinary source files", async () => {
+			const noteCorpusReadPath = vi.fn()
+			const task = Object.assign(createMockTask(), { cangjieRuntimePolicy: { noteCorpusReadPath } })
+			task.ask.mockResolvedValueOnce({ response: "noButtonClicked", text: undefined, images: undefined })
+			await readFileTool.execute(
+				{ path: "CangjieCorpus-1.0.0/extra/Option.md" },
+				task as any,
+				createMockCallbacks(),
+			)
+			await readFileTool.execute({ path: "src/Option.ts" }, task as any, createMockCallbacks())
+			expect(noteCorpusReadPath).not.toHaveBeenCalled()
 		})
 	})
 

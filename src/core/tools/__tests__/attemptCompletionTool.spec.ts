@@ -147,6 +147,28 @@ describe("attemptCompletionTool", () => {
 	})
 
 	describe("todo list validation", () => {
+		it.each([false, true])("scopes Ask completion gates to a Cangjie project (project=%s)", async (hasProject) => {
+			mockTask.taskMode = "ask"
+			mockTask.cangjieRuntimePolicy!.hasCjpmProject = vi.fn().mockResolvedValue(hasProject)
+			mockTask.cangjieRuntimePolicy!.getMissingCompletionEvidence = vi.fn().mockReturnValue(["std.core"])
+			const result = "Codebase read: Cangjie verification uses cjpm; corpus examples mention HashMap and Option."
+			await attemptCompletionTool.execute({ result }, mockTask as Task, {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
+				askFinishSubTaskApproval: mockAskFinishSubTaskApproval,
+				toolDescription: mockToolDescription,
+			})
+			if (hasProject) {
+				expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("std.core"))
+				expect(mockTask.ask).not.toHaveBeenCalled()
+			} else {
+				expect(mockTask.cangjieRuntimePolicy!.getMissingCompletionEvidence).not.toHaveBeenCalled()
+				expect(mockTask.ask).toHaveBeenCalledWith("completion_result", "", false)
+				expect(mockTask.consecutiveMistakeCount).toBe(0)
+			}
+		})
+
 		it("auto-completes a top-level Cangjie task after its completion gates pass", async () => {
 			mockTask.taskMode = "cangjie"
 			mockTask.parentTaskId = undefined

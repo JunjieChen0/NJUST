@@ -107,9 +107,10 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 			return
 		}
 
+		// A repository overview in Ask mode can mention these APIs without being a Cangjie task.
 		const shouldApplyCangjieCompletionGates =
 			task.taskMode === "cangjie" ||
-			CANGJIE_COMPLETION_SURFACE_RE.test(result) ||
+			(task.taskMode !== "ask" && CANGJIE_COMPLETION_SURFACE_RE.test(result)) ||
 			(await task.cangjieRuntimePolicy.hasCjpmProject())
 
 		if (shouldApplyCangjieCompletionGates) {

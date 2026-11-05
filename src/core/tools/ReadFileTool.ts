@@ -323,6 +323,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 					const result = this.processTextFile(fileContent, entry)
 
 					await task.fileContextTracker.trackFileContext(relPath, "read_tool" as RecordSource)
+					this.recordCorpusRead(task, fullPath)
 
 					updateFileResult(relPath, {
 						nativeContent: `File: ${relPath}\n${result}`,
@@ -563,9 +564,6 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 		for (const fr of filesToApprove) {
 			const fullPath = path.resolve(task.cwd, fr.path)
 			if (isPathUnderBundledCangjieCorpus(fullPath, extensionPath)) {
-				if (task.taskMode === "cangjie") {
-					task.cangjieRuntimePolicy.noteCorpusReadPath(fullPath)
-				}
 				updateFileResult(fr.path, { status: "approved" })
 			} else {
 				remaining.push(fr)
@@ -734,6 +732,12 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 
 		// Always show the line limit, even when using the default
 		return `(up to ${limit} lines)`
+	}
+
+	private recordCorpusRead(task: Task, fullPath: string): void {
+		if (/[/\\]CangjieCorpus-1\.0\.0[/\\]/i.test(fullPath)) {
+			task.cangjieRuntimePolicy.noteCorpusReadPath(fullPath)
+		}
 	}
 
 	/**
@@ -986,6 +990,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 
 				// Track file in context
 				await task.fileContextTracker.trackFileContext(relPath, "read_tool")
+				this.recordCorpusRead(task, fullPath)
 			} catch (error) {
 				const errorMsg = getErrorMessage(error)
 				results.push(`File: ${relPath}\nError: ${errorMsg}`)

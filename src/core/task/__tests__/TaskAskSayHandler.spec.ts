@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const { pWaitForMock, checkAutoApprovalMock } = vi.hoisted(() => ({
 	pWaitForMock: vi.fn(),
@@ -75,6 +75,70 @@ describe("TaskAskSayHandler", () => {
 		const handler = new TaskAskSayHandler(createHost({ abort: true }))
 
 		await expect(handler.ask("followup", "Q?")).rejects.toThrow("aborted")
+	})
+
+	describe("completion feedback waiting", () => {
+		beforeEach(async () => {
+			const { default: pWaitFor } = await vi.importActual<typeof import("p-wait-for")>("p-wait-for")
+			pWaitForMock.mockImplementation(pWaitFor)
+			vi.useFakeTimers()
+		})
+
+		afterEach(() => vi.useRealTimers())
+
+		it.each(["yesButtonClicked", "messageResponse"] as const)(
+			"waits beyond two minutes and then accepts %s without retrying",
+			async (response) => {
+				const host = createHost()
+				const handler = new TaskAskSayHandler(host)
+				const settled = vi.fn()
+				const pending = handler.ask("completion_result", "", false)
+				void pending.then(settled, settled)
+				try {
+					await vi.advanceTimersByTimeAsync(180_000)
+					expect(settled).not.toHaveBeenCalled()
+					expect(host.clineMessages).toHaveLength(1)
+					handler.handleWebviewAskResponse(response, "feedback")
+					await vi.advanceTimersByTimeAsync(100)
+					expect(await pending).toMatchObject({ response, text: "feedback" })
+				} finally {
+					host.abort = true
+					await vi.advanceTimersByTimeAsync(100)
+					await pending.catch(() => undefined)
+				}
+			},
+		)
+
+		it.each(["abort", "abandoned"])("stops waiting when the task is %s", async (flag) => {
+			const host = createHost()
+			const handler = new TaskAskSayHandler(host)
+			const pending = handler.ask("completion_result", "", false)
+			const result = pending.catch((error: Error) => error)
+			await vi.advanceTimersByTimeAsync(180_000)
+			host[flag] = true
+			await vi.advanceTimersByTimeAsync(100)
+			expect(await result).toMatchObject({ name: "TaskAbortedError" })
+		})
+
+		it("stops a superseded completion ask after a long wait", async () => {
+			const host = createHost()
+			const pending = new TaskAskSayHandler(host).ask("completion_result", "", false)
+			const result = pending.catch((error: Error) => error)
+			await vi.advanceTimersByTimeAsync(180_000)
+			host.lastMessageTs += 1
+			await vi.advanceTimersByTimeAsync(100)
+			expect(await result).toMatchObject({
+				name: "AskIgnoredError",
+				message: expect.stringContaining("superseded"),
+			})
+		})
+
+		it("keeps the timeout for API retry confirmation", async () => {
+			const pending = new TaskAskSayHandler(createHost()).ask("api_req_failed", "retry?", false)
+			const result = pending.catch((error: Error) => error)
+			await vi.advanceTimersByTimeAsync(121_000)
+			expect(await result).toMatchObject({ name: "TimeoutError" })
+		})
 	})
 
 	it("adds a new partial ask and ignores it", async () => {
