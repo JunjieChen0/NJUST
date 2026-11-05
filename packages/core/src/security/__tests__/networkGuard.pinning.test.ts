@@ -86,6 +86,7 @@ describe("guardedFetch DNS pinning", () => {
 		expect(fetch).not.toHaveBeenCalled()
 	})
 
+	// Certificate generation and multiple real TLS/proxy round trips need a bounded CI integration budget.
 	it("validates a trusted DNS-only certificate over a real local TLS connection", async () => {
 		// Generate credentials in memory; no key or certificate is written to disk.
 		const pem = execFileSync(
@@ -192,5 +193,5 @@ describe("guardedFetch DNS pinning", () => {
 			server.closeAllConnections()
 			await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
 		}
-	})
+	}, 30_000)
 })
