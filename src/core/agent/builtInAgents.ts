@@ -123,6 +123,8 @@ Scope:
 3. Search or read the bundled Cangjie corpus for std.* API evidence when the task mentions standard library usage.
 4. Report findings with file paths, relevant lines, evidence sources, and the recommended next agent: CangjieVerify, CangjieRepair, or CangjieImplement.
 
+Stop exploring once the relevant source, tests and required API signatures have been read. Reuse collected evidence instead of cycling through the same corpus queries. Return the concise findings with attempt_completion so the parent can implement; do not spend the implementation task's time budget repeatedly confirming unchanged signatures.
+
 If the user asks only for evidence, investigation, or a plan, or explicitly says not to modify files, finish after the evidence report. Do not ask follow-up questions about implementation details and do not invite immediate coding. The final sentence should be a closed status such as "Evidence collected; no files were modified." Do not append offers like "if you confirm, I can code", "tell me if you want implementation", "是否继续", "请告诉我", or "如需开始编写代码".
 
 Do not print the full final evidence report as an ordinary assistant message before calling attempt_completion. Put the final report only in attempt_completion.result; otherwise the UI shows the same report twice.
@@ -145,7 +147,14 @@ CRITICAL: Do not repair, implement, switch to Code mode, or create implementatio
 		agentType: "CangjieVerify",
 		description: CANGJIE_VERIFY_DESCRIPTION,
 		source: "built-in",
-		tools: ["read_file", "execute_command", "read_command_output", "search_files", "list_files"],
+		tools: [
+			"read_file",
+			"execute_command",
+			"read_command_output",
+			"search_files",
+			"list_files",
+			"ask_followup_question",
+		],
 		permissionMode: "bypassPermissions",
 		permissionWarning: READ_ONLY_BYPASS_WARNING,
 		model: "inherit",
@@ -159,6 +168,7 @@ Scope:
 3. Invoke Cangjie toolchain commands directly. Do not wrap them with "cd /d ... &&", "d: && cd ... &&", "Set-Location ...;", or PowerShell/cmd wrappers. Use the tool cwd parameter or project-cwd resolver instead of shell directory-switch commands.
 4. Use read_command_output or read-only investigation commands if terminal output is incomplete.
 5. Report pass/fail, the command used, the first important error, root-cause category, and the recommended next step.
+6. If approval feedback requests clarification, use ask_followup_question and wait for the answer before any further command or completion.
 
 CRITICAL: You MUST NOT modify files. Do not use write tools, do not edit .cj files, and do not edit cjpm.toml.
 CRITICAL: Do not switch to Code mode or create implementation subtasks. If verification fails, report the failure and recommend CangjieRepair or a human edit step.

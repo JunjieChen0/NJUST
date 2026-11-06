@@ -4,6 +4,13 @@ import type { CangjieTaskCase } from "./suite.js"
 
 /** Mutations are part of the versioned starting point, before the Agent sees the project. */
 export async function prepareCase(task: CangjieTaskCase, root: string, variant?: string): Promise<void> {
+	if (task.initialFiles) {
+		for (const [file, content] of Object.entries(task.initialFiles)) {
+			await fs.mkdir(path.dirname(path.join(root, file)), { recursive: true })
+			await fs.writeFile(path.join(root, file), content)
+		}
+		return
+	}
 	const bounded = path.join(root, "src/bounded.cj")
 	if (task.startingPoint === "compile-error")
 		await fs.writeFile(bounded, 'package calculator\npublic func bounded(value: Int64): Int64 { "broken" }\n')
@@ -39,6 +46,13 @@ import std.unittest.testmacro.*
 
 /** Additional tests are injected only into a separate final-project copy. */
 export async function addOracle(task: CangjieTaskCase, root: string): Promise<void> {
+	if (task.oracleFiles) {
+		for (const [file, content] of Object.entries(task.oracleFiles)) {
+			await fs.mkdir(path.dirname(path.join(root, file)), { recursive: true })
+			await fs.writeFile(path.join(root, file), content)
+		}
+		return
+	}
 	const packageName = task.project === "minimal" ? "calculator" : "orders"
 	let assertions: string[]
 	if (task.project === "minimal") {

@@ -92,10 +92,7 @@ const COMPLETION_EVIDENCE_PATTERNS: ReadonlyArray<[RegExp, string]> = [
 	[/\b(?:DateTime|TimeZone|MonoTime|nowUTC)\b/i, "std.time"],
 	[/\b(?:executeWithOutput|execute\(|launch\(|SubProcess|waitOutput)\b/i, "std.process"],
 	[/\b(?:HashMap|HashSet|ArrayList|TreeMap)\b/i, "std.collection"],
-	[
-		/\b(?:Option<|\?V\b|\?T\b|Some\(|case\s+Some|case\s+None|\bNone\b|getOrThrow|getOrDefault|isSome|isNone)\b/i,
-		"std.core",
-	],
+	[/\b(?:Option<|\?V\b|\?T\b|Some\(|case\s+Some|getOrThrow|getOrDefault|isSome|isNone)\b/i, "std.core"],
 ]
 const CANGJIE_CONTEXT_INJECTION_REPORT_RE =
 	/\bCangjie context injection (?:audit|list)\b|Cangjie\s+\u4e0a\u4e0b\u6587\u6ce8\u5165(?:\u5ba1\u8ba1|\u6e05\u5355)|\u4e0a\u4e0b\u6587\u6ce8\u5165(?:\u5ba1\u8ba1|\u6e05\u5355)|Cangjie\s+涓婁笅鏂囨敞鍏/i
@@ -716,6 +713,18 @@ export class CangjieRuntimePolicy {
 			) {
 				missing.add(moduleName)
 			}
+		}
+		// Plain English "None available" is not an Option API claim. Keep evidence checks
+		// for actual None literals in code snippets and explicit return/assignment expressions.
+		const noneInCode = [...resultText.matchAll(/```[^\r\n]*\r?\n([\s\S]*?)```|`([^`\r\n]+)`/g)].some((match) =>
+			/\bNone\b/.test(match[1] ?? match[2] ?? ""),
+		)
+		if (
+			(noneInCode || /\b(?:[Uu]se|return|case)\s+None\b|(?:=|=>)\s*None\b/.test(resultText)) &&
+			!this.hasEvidenceForStdModule("std.core") &&
+			!hasInlineStdModuleEvidence(resultText, "std.core")
+		) {
+			missing.add("std.core")
 		}
 		return [...missing]
 	}

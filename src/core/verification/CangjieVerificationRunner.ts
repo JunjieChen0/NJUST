@@ -150,6 +150,7 @@ export async function runCangjieCheck(
 		runId,
 		taskId: ctx.taskId,
 		kind,
+		source: "system_verification",
 		phase: ctx.phase,
 		executable: executable ?? "cjpm",
 		args: argsFor(kind, path.relative(ctx.projectRoot, reportDir).split(path.sep).join("/")),
@@ -373,9 +374,20 @@ export function createDefaultCangjieCheckDeps(): CangjieCheckDeps {
 		exec: createSandboxProcessExecutor(),
 		resolveCjpm,
 		unavailableReason: () => {
-			const configured = vscode.workspace.getConfiguration(Package.name).get<string>("cangjieTools.cjpmPath")
+			const config = vscode.workspace.getConfiguration(Package.name)
+			const configured = config.get<string>("cangjieTools.cjpmPath")
+			const setting = config.inspect?.("cangjieTools.cjpmPath")
+			const scope =
+				setting?.workspaceFolderValue !== undefined
+					? "workspace folder"
+					: setting?.workspaceValue !== undefined
+						? "workspace"
+						: setting?.globalValue !== undefined
+							? "user"
+							: "effective setting"
 			return configured
-				? `Configured cjpm executable is missing: ${configured}. Correct njust-ai.cangjieTools.cjpmPath or install the SDK.`
+				? `Invalid explicit cjpm path: ${configured}. Source: njust-ai.cangjieTools.cjpmPath (${scope}); the configured executable is missing. ` +
+						"System verification is blocked and does not fall back to PATH. An SDK on PATH may still work independently. Correct or clear this setting, then retry verification."
 				: "Cangjie SDK is unavailable. Configure CANGJIE_HOME or njust-ai.cangjieTools.cjpmPath, then retry verification."
 		},
 		buildEnv: buildVerificationSdkEnv,

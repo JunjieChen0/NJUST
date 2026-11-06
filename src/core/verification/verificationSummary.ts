@@ -38,6 +38,8 @@ export function buildVerificationSummary(
 	for (const value of [verdict.build, verdict.test, ...(verdict.relatedTests ?? [])]) {
 		if (value.state === "not_run" || value.state === "stale") continue
 		const run = value.run
+		if (run.source === "model_command")
+			notes.push(`${run.kind}: model-requested command from task ${run.taskId}; not system verification`)
 		const detail = run.abortDetail ?? run.abortReason?.replaceAll("_", " ")
 		if (detail) notes.push(`${run.kind}: ${detail}`)
 		if (run.inputFingerprint && run.inputFingerprintAfter && run.inputFingerprint !== run.inputFingerprintAfter)

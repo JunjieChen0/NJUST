@@ -36,6 +36,7 @@ export interface EnvironmentDetailsHost {
 	clineMessages: ClineMessage[]
 	api: Pick<ApiHandler, "getModel">
 	todoList?: TodoItem[]
+	cangjieVerification?: { configurationIssue(): string | undefined }
 }
 
 export async function getEnvironmentDetails(cline: EnvironmentDetailsHost, includeFileDetails: boolean = false) {
@@ -243,6 +244,10 @@ export async function getEnvironmentDetails(cline: EnvironmentDetailsHost, inclu
 	details += `- **Slug:** ${currentMode}\n`
 	details += `- **Name:** ${modeDetails.name}\n`
 	details += `- **Model:** ${modelId}\n`
+	if (currentMode === "cangjie") {
+		const issue = cline.cangjieVerification?.configurationIssue()
+		if (issue) details += `\n# Cangjie system verification\n${issue}\n`
+	}
 
 	details += `\n\n# Host System\n${formatHostExecuteCommandHints()}\n`
 

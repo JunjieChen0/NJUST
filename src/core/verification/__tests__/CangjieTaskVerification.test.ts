@@ -118,6 +118,91 @@ describe("CangjieTaskVerification", () => {
 		expect(record?.claims[0]?.inputFingerprint).toBe("fp-1")
 	})
 
+	it("preserves a child model build failure on the root without changing project files", async () => {
+		const source = path.join(projectRoot, "src/main.cj")
+		await fs.writeFile(source, "existing user changes", "utf8")
+		const session = create(makePolicy())
+		const finished = await session.observeCommand("cjpm build", projectRoot, "verify-child")
+		expect(finished).toBeDefined()
+		await finished!("compiler: invalid return type", 1)
+		const record = await loadVerificationRecord(taskDir, "task-1")
+		expect(record?.runs).toEqual([
+			expect.objectContaining({
+				source: "model_command",
+				taskId: "verify-child",
+				command: "cjpm build",
+				executable: "cjpm",
+				args: ["build"],
+				cwd: projectRoot,
+				status: "failed",
+				exitCode: 1,
+				inputFingerprint: "fp-1",
+				inputFingerprintAfter: "fp-1",
+			}),
+		])
+		expect(await fs.readFile(path.join(taskDir, record!.runs[0]!.logRef!), "utf8")).toContain("invalid return type")
+		expect(await fs.readFile(source, "utf8")).toBe("existing user changes")
+		const summary = await session.currentSummary()
+		expect(summary).toMatchObject({ overall: "failed", build: { state: "failed", exitCode: 1 } })
+		expect(summary?.note).toContain("model-requested command from task verify-child")
+	})
+
+	it("never verifies a delivery from successful model build and filtered test commands", async () => {
+		const session = create(makePolicy())
+		for (const command of ["cjpm build", "cjpm test --filter=BoundedTest.*"]) {
+			const finished = await session.observeCommand(command, projectRoot, "verify-child")
+			await finished!("command succeeded", 0)
+		}
+		expect(await session.currentSummary()).toMatchObject({
+			overall: "incomplete",
+			build: { state: "inconclusive" },
+			test: { state: "inconclusive" },
+		})
+	})
+
+	it("redacts credentials from observed command metadata and logs", async () => {
+		const secret = "sk-" + "x".repeat(32)
+		const session = create(makePolicy())
+		const finished = await session.observeCommand(`cjpm build --api-key=${secret}`, projectRoot, "child")
+		await finished!(`compiler output: ${secret}`, 1)
+		const record = await loadVerificationRecord(taskDir, "task-1")
+		expect(record?.runs[0]?.command).toContain("[REDACTED]")
+		expect(record?.runs[0]?.args.join(" ")).toContain("[REDACTED]")
+		expect(JSON.stringify(record)).not.toContain(secret)
+		expect(await fs.readFile(path.join(taskDir, record!.runs[0]!.logRef!), "utf8")).not.toContain(secret)
+	})
+
+	it("does not infer build evidence from chained shell commands", async () => {
+		expect(
+			await create(makePolicy()).observeCommand("cjpm build && echo other", projectRoot, "child"),
+		).toBeUndefined()
+		expect(await loadVerificationRecord(taskDir, "task-1")).toBeUndefined()
+	})
+
+	it("retains a blocked configuration record and verifies after the tool is restored", async () => {
+		const dependencies = deps()
+		let available = false
+		dependencies.checkDeps.resolveCjpm = () => (available ? "cjpm" : undefined)
+		dependencies.checkDeps.unavailableReason = () => "Invalid explicit cjpm path: missing-sdk/cjpm (workspace)"
+		const session = new CangjieTaskVerification(
+			{ taskId: "task-1", cwd: projectRoot, policy: makePolicy() },
+			dependencies,
+		)
+		await session.prepareForTask()
+		expect(session.configurationIssue()).toContain("missing-sdk/cjpm")
+		await session.verifyForCompletion(approveAll)
+		expect(exec).not.toHaveBeenCalled()
+		expect((await session.currentSummary())?.note).toContain("missing-sdk/cjpm")
+		available = true
+		exec.mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok(TESTS_PASSED))
+		const outcome = await session.verifyForCompletion(approveAll)
+		expect(session.configurationIssue()).toBeUndefined()
+		expect(outcome.action === "allow" && outcome.summary.overall).toBe("verified")
+		expect((await loadVerificationRecord(taskDir, "task-1"))?.runs.some((run) => run.status === "blocked")).toBe(
+			true,
+		)
+	})
+
 	it("does not reuse a verified delivery after its configured cjpm disappears", async () => {
 		const dependencies = deps()
 		let available = true

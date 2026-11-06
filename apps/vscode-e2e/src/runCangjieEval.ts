@@ -4,7 +4,10 @@ import * as path from "node:path"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { runTests } from "@vscode/test-electron"
-import { CANGJIE_TASK_SUITE, type CangjieTaskCase } from "../../../packages/evals/src/cangjie/suite.js"
+import type { CangjieTaskCase } from "../../../packages/evals/src/cangjie/suite.js"
+import { loadCangjieTaskSuite } from "../../../packages/evals/src/cangjie/suiteLoader.js"
+import { summarizeCangjieScores } from "../../../packages/evals/src/cangjie/report.js"
+import { prepareWindowsTestEnvironment } from "./cangjie-eval/windowsTestEnvironment.js"
 import { contentFingerprint, inputFiles } from "../../../packages/evals/src/cangjie/artifacts.js"
 import { prepareCase } from "../../../packages/evals/src/cangjie/projects.js"
 import {
@@ -19,6 +22,7 @@ const execFileAsync = promisify(execFile)
 let mockServer: Awaited<ReturnType<typeof startMockServer>> | undefined
 
 interface ModelConfig {
+	provider?: "openai" | "deepseek"
 	baseUrl: string
 	model: string
 	apiKeyEnv: string
@@ -39,11 +43,16 @@ function parseModelConfig(value: unknown): ModelConfig {
 	const url = new URL(value.baseUrl)
 	if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search)
 		throw new Error("Use an HTTP(S) base URL without embedded credentials or query parameters")
-	return { baseUrl: value.baseUrl, model: value.model, apiKeyEnv: value.apiKeyEnv }
+	const provider = "provider" in value ? value.provider : "openai"
+	if (provider !== "openai" && provider !== "deepseek") throw new Error("Unsupported evaluation provider")
+	return { baseUrl: value.baseUrl, model: value.model, apiKeyEnv: value.apiKeyEnv, provider }
 }
 
 async function main(): Promise<void> {
 	const repo = path.resolve(process.cwd(), "../..")
+	const loaded = await loadCangjieTaskSuite(repo, process.env.NJUST_CANGJIE_EVAL_SUITE)
+	const { suite } = loaded
+	const projects = process.env.NJUST_CANGJIE_EVAL_PROJECTS ?? loaded.projects
 	const sdkHome = process.env.CANGJIE_HOME
 	if (!sdkHome) throw new Error("Set CANGJIE_HOME to the SDK to evaluate; expected SDK 1.0.5")
 	const configPath = process.env.NJUST_CANGJIE_EVAL_CONFIG
@@ -55,9 +64,10 @@ async function main(): Promise<void> {
 			? parseModelConfig(JSON.parse(await fs.readFile(configPath, "utf8")))
 			: undefined
 	const extensionPath = process.env.NJUST_CANGJIE_EVAL_EXTENSION_PATH ?? path.join(repo, "src")
-	const root = await fs.mkdtemp(path.join(os.tmpdir(), "njust-cangjie-eval-"))
+	const outputParent = process.env.NJUST_CANGJIE_EVAL_OUTPUT ?? os.tmpdir()
+	await fs.mkdir(outputParent, { recursive: true })
+	const root = await fs.mkdtemp(path.join(outputParent, "njust-cangjie-eval-"))
 	console.info(`Cangjie evaluation artifacts: ${root}`)
-	const projects = path.join(repo, "packages/evals/cangjie/projects")
 	const executable = process.platform === "win32" ? ".exe" : ""
 	const sdkEnv: NodeJS.ProcessEnv = {}
 	for (const key of ["SystemRoot", "ComSpec", "TEMP", "TMP", "HOME", "USERPROFILE", "LANG"]) {
@@ -86,9 +96,8 @@ async function main(): Promise<void> {
 	const cjpm = path.join(sdkHome, "tools/bin", `cjpm${executable}`)
 	const compilerVersion = (await execFileAsync(compiler, ["--version"], { env: sdkEnv })).stdout.trim()
 	const cjpmVersion = (await execFileAsync(cjpm, ["--version"], { env: sdkEnv })).stdout.trim()
-	if (!compilerVersion.includes(` ${CANGJIE_TASK_SUITE.sdkVersion} `))
-		throw new Error(`SDK version mismatch: ${compilerVersion}`)
-	if (!cjpmVersion.includes(CANGJIE_TASK_SUITE.sdkVersion)) throw new Error(`cjpm version mismatch: ${cjpmVersion}`)
+	if (!compilerVersion.includes(` ${suite.sdkVersion} `)) throw new Error(`SDK version mismatch: ${compilerVersion}`)
+	if (!cjpmVersion.includes(suite.sdkVersion)) throw new Error(`cjpm version mismatch: ${cjpmVersion}`)
 	const version = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repo })).stdout.trim()
 	const sourceDiff = (
 		await execFileAsync("git", ["diff", "HEAD", "--", "src", "webview-ui", "packages/types"], {
@@ -125,7 +134,8 @@ async function main(): Promise<void> {
 			? "real-agent"
 			: "sdk-regression"
 	const metadata = {
-		suiteVersion: CANGJIE_TASK_SUITE.version,
+		suiteVersion: suite.version,
+		suiteHash: contentFingerprint({ suite: JSON.stringify(suite) }),
 		sdk: compilerVersion,
 		cjpmVersion,
 		nodeVersion: process.version,
@@ -138,7 +148,8 @@ async function main(): Promise<void> {
 					[
 						__filename,
 						path.join(__dirname, "cangjie-eval/index.js"),
-						...["suite", "evidence", "artifacts", "projects"].map((name) =>
+						path.join(__dirname, "cangjie-eval/windowsTestEnvironment.js"),
+						...["suite", "suiteLoader", "report", "evidence", "artifacts", "projects"].map((name) =>
 							path.resolve(__dirname, `../../../packages/evals/src/cangjie/${name}.js`),
 						),
 					].map(async (file) => [path.basename(file), await fs.readFile(file, "utf8")]),
@@ -151,10 +162,12 @@ async function main(): Promise<void> {
 		extensionPath,
 		bundleHash,
 		projectFingerprints: {} as Record<string, string>,
+		provider: config && "provider" in config ? config.provider : "openai",
 		model: config?.model ?? null,
 		modelEndpoint: config?.baseUrl ?? null,
 		execution,
 		concurrency: 1,
+		testCommunication: await prepareWindowsTestEnvironment(root, suite),
 		performanceThreshold: null,
 	}
 	const checks: {
@@ -169,7 +182,7 @@ async function main(): Promise<void> {
 		inputFingerprintAfter: string
 		log: string
 	}[] = []
-	for (const project of ["minimal", "orders"] as const) {
+	for (const project of new Set(suite.cases.map((task) => task.project))) {
 		const destination = path.join(root, "sdk-check", project)
 		await fs.cp(path.join(projects, project), destination, { recursive: true })
 		metadata.projectFingerprints[project] = contentFingerprint(await inputFiles(destination))
@@ -209,7 +222,7 @@ async function main(): Promise<void> {
 	}
 	await fs.writeFile(path.join(root, "environment.json"), JSON.stringify(metadata, null, 2))
 	await fs.writeFile(path.join(root, "sdk-checks.json"), JSON.stringify(checks, null, 2))
-	await fs.writeFile(path.join(root, "suite.json"), JSON.stringify(CANGJIE_TASK_SUITE, null, 2))
+	await fs.writeFile(path.join(root, "suite.json"), JSON.stringify(suite, null, 2))
 	if (!config) {
 		await fs.writeFile(
 			path.join(root, "report.json"),
@@ -219,7 +232,7 @@ async function main(): Promise<void> {
 					independentAgentSuccesses: 0,
 					agentBaseline: "not-run",
 					reason: "No real model configuration provided",
-					tasks: CANGJIE_TASK_SUITE.cases.map((task) => ({ caseId: task.id, status: "not-run" })),
+					tasks: suite.cases.map((task) => ({ caseId: task.id, status: "not-run" })),
 				},
 				null,
 				2,
@@ -235,13 +248,12 @@ async function main(): Promise<void> {
 			"Real model config requires baseUrl, model and apiKeyEnv naming a configured environment variable",
 		)
 	const selected = process.env.NJUST_CANGJIE_EVAL_CASES?.split(",") ?? (mockServer ? ["CJ02", "CJ05"] : undefined)
-	if (selected?.some((id) => !CANGJIE_TASK_SUITE.cases.some((task) => task.id === id)))
+	if (selected?.some((id) => !suite.cases.some((task) => task.id === id)))
 		throw new Error("Unknown evaluation case selected")
 	const scores: ReturnType<typeof scoreCangjieTask>[] = []
-	const tasks: readonly CangjieTaskCase[] = CANGJIE_TASK_SUITE.cases.filter(
-		(item) => !selected || selected.includes(item.id),
-	)
+	const tasks: readonly CangjieTaskCase[] = suite.cases.filter((item) => !selected || selected.includes(item.id))
 	for (const task of tasks) {
+		console.info(`Starting ${task.id} (${task.category})`)
 		if (mockServer && task.id !== "CJ02" && task.id !== "CJ05")
 			throw new Error(
 				"The deterministic project regression supports only CJ02 and CJ05; it is not the genuine 12-task baseline",
@@ -286,6 +298,7 @@ async function main(): Promise<void> {
 					workspace,
 					config,
 					caseId: task.id,
+					task,
 					variant,
 					sdkEnv,
 					cjpm,
@@ -307,6 +320,7 @@ async function main(): Promise<void> {
 					],
 					extensionTestsEnv: {
 						...sdkEnv,
+						ELECTRON_RUN_AS_NODE: undefined,
 						[config.apiKeyEnv]: process.env[config.apiKeyEnv],
 						NJUST_CANGJIE_EVAL_INPUT: input,
 					},
@@ -346,23 +360,7 @@ async function main(): Promise<void> {
 	}
 	const report = {
 		...metadata,
-		agentBaseline:
-			execution === "real-agent"
-				? scores.every((score) => score.modelResponseObserved)
-					? "executed"
-					: "incomplete"
-				: "not-run",
-		suiteComplete: scores.length === 12,
-		safetyGate:
-			scores.length === 12 &&
-			scores.every((score) => score.safetyPassed) &&
-			CANGJIE_TASK_SUITE.cases
-				.filter((task) => task.category === "safety")
-				.every((task) => scores.some((score) => score.caseId === task.id && score.passed))
-				? "passed"
-				: "not-passed",
-		independentAgentSuccesses: scores.filter((score) => score.independentAgentSuccess).length,
-		tasks: scores,
+		...summarizeCangjieScores(suite, execution, scores),
 	}
 	await fs.writeFile(path.join(root, "report.json"), JSON.stringify(report, null, 2))
 	if (scores.some((score) => !score.passed)) process.exitCode = 2

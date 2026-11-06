@@ -1,6 +1,6 @@
 # 仓颉任务闭环验收
 
-这套验收串行运行两个项目上的 12 项任务。当前任务清单为 `1.0.0-draft.3`，SDK
+这套验收串行运行两个项目上的 12 项任务。当前任务清单为 `1.0.0-draft.7`，SDK
 固定为 **Cangjie 1.0.5**。任务定义在 `../src/cangjie/suite.ts`，每个任务包含
 工程起点、完整需求、允许修改的文件和必须有证据支持的通过条件。
 
@@ -31,7 +31,7 @@ pnpm --filter @njust-ai/vscode-e2e exec node out/apps/vscode-e2e/src/runCangjieE
 模型通道可用后，先对保存的旧版扩展运行基线：设置
 `NJUST_CANGJIE_EVAL_EXTENSION_PATH` 指向含 `baseline-metadata.json`、扩展清单与
 `dist/extension.js` 的冻结目录。运行记录同时保存实际 bundle 的 SHA-256，避免把
-新代码上的结果误当成旧基线。候选版本运行时取消该变量。
+新代码上的结果误当成旧基线。候选版本也可将该变量指向另一个冻结目录；取消该变量则使用当前源码目录。
 `NJUST_CANGJIE_EVAL_CASES=CJ02,CJ05` 可选取子集；子集报告不会标为全套完成。
 
 产品流程回归另用固定模型响应和真实 SDK：
@@ -64,6 +64,50 @@ pnpm --filter @njust-ai/vscode-e2e exec node out/apps/vscode-e2e/src/runCangjieE
 工程识别只将成员及源码依赖作为 `cjpm` 工程。`ffi.c` 库目录不要求包含 `cjpm.toml`，
 但其文件仍纳入代码状态指纹，包括工程目录外的原生库；不可读或超出内容扫描限制时保留覆盖缺口。
 
-首轮真实模型基线完成前，性能阈值保持空值。`两轮各 10/12` 只是讨论目标，
-不能作为已经达到的能力。首轮后再确定任务难度、正式阈值和后续两轮的版本。
+当前耗时阈值仍保持空值。首轮真实模型对照及复核结果见 [ACCEPTANCE](ACCEPTANCE.md)。
+后续两轮的成功率门槛已由用户固定，详见下方“本次修复后的对照约定”；达到门槛须以冻结版本的实际报告为准。
 更换需求、工程起点或行为判定时必须修改任务集版本，不能把不同版本混合比较。
+
+## 独立任务集和版本对照
+
+使用环境变量 `NJUST_CANGJIE_EVAL_SUITE` 指定外部 JSON 清单，工程放在清单旁的 `projects/<project>/`。
+`initialFiles` 准备故障；`oracleFiles` 仅在交付工程的副本中添加隐藏测试；`testProjects` 指定测试目录；`reportIncludes` 定义报告必须包含的定位信息。
+路径越界、重复任务 ID、未知断言和缺失隐藏测试会被拒绝。
+原有12项任务的评分条件保留；draft.5 向模型明示允许修改的文件范围。早期编码错误的运行保留为诊断，不计成绩。
+
+`holdout/suite.json` 是实现者编写的8项独立验收任务，不能称为第三方封存的严格盲测。
+严格盲测应由独立评审者准备新的外部清单、工程和隐藏测试，并在冻结扩展与评分器后运行。
+
+模型配置可选 `provider: "deepseek"`，使用原生 DeepSeek Provider；缺省仍为 OpenAI Compatible。
+模型别名可能由服务端映射，应保留实际返回的模型名，不能宣称固定了不可变快照。
+
+从仓库根目录编译入口后运行：
+
+```powershell
+$env:NJUST_CANGJIE_EVAL_SUITE = (Resolve-Path 'packages/evals/cangjie/holdout/suite.json').Path
+$env:NJUST_CANGJIE_EVAL_OUTPUT = (Join-Path (Get-Location) 'bin/cangjie-evaluation')
+pnpm --filter @njust-ai/vscode-e2e exec node out/apps/vscode-e2e/src/runCangjieEval.js
+```
+
+每次在输出父目录创建新目录，保留所有证据。任务总数按清单计算，子集不能通过整套安全门槛。
+同条件下的完整真实模型报告可进行逐项对照：
+
+```powershell
+pnpm --filter @njust-ai/vscode-e2e exec node out/apps/vscode-e2e/src/compareCangjieEval.js '<旧版report.json>' '<候选版report.json>'
+```
+
+对照器拒绝不同任务集、模型、接口、SDK、评分器以及缺失或重复任务。重复运行需保留全部轮次，不只展示最佳轮次。
+
+## 本次修复后的对照约定
+
+原任务集 draft.7 明示 CJ11 使用 `cjpm test --filter=SlowTest.*`、代理等待上限 `timeout=2`，以实际进入后台后取消；draft.6 修正 CJ12 Windows 路径说明的匹配，不改变失败条件。独立集固定为 `1.0.3`，保留 `countExact` 原行为兼容性隐藏测试。历史成绩继续保留原评分。
+
+本轮用户已固定门槛：候选版每轮原任务至少 10/12、独立集至少 7/8，连续两轮分别达标；每轮安全用例全部通过、证据完整、无人改代码。旧版仅作对照。此门槛不代表已经通过。冻结编译后的评测器、扩展和工程样例；`NJUST_CANGJIE_EVAL_PROJECTS` 可指向冻结的样例目录，运行前核对冻结清单。
+
+Windows SDK 1.0.5 的 `std.testrunner.exe` 观察到监听 `0.0.0.0`，测试进程实际使用 `127.0.0.1` TCP 通信。需要事先由用户批准一次 UAC，然后在管理员 PowerShell 运行精确规则辅助脚本（先用 `-PlanOnly` 查看范围）：
+
+```powershell
+.\apps\vscode-e2e\scripts\configure-cangjie-test-firewall.ps1 -EvaluationRoot D:\NJUST_AI\Roo-Code\bin\my-evaluation
+```
+
+辅助脚本只为该评测目录内完整路径匹配的 `target/release/unittest_bin/std.testrunner.exe` 创建来自 `127.0.0.1` 的 TCP 入站规则。运行评测的终端设置 `NJUST_CANGJIE_EVAL_FIREWALL_QUEUE=<EvaluationRoot>\firewall-queue`；评测器在 SDK 检查前等待逐条授权回执，并将 UAC 作为环境干预写入报告。结束时在评测目录创建 `firewall.stop`，等待状态为 `stopped`，再独立检查该次规则组已全部移除。没有完成这些检查，不能宣称无人值守环境已就绪。

@@ -424,6 +424,35 @@ describe("CangjieRuntimePolicy", () => {
 		expect(policy.getMissingImportEvidence("", "import std.fs.*\nimport std.regex.*\nmain() {}\n")).toEqual([])
 	})
 
+	it("does not interpret ordinary absence reports as Option.None API claims", () => {
+		const policy = new CangjieRuntimePolicy(tempDir)
+		for (const text of [
+			"Upper bound: none exists. No constant is defined.",
+			"Verbatim compiler diagnostics: None available. No build ran.",
+			"Commands executed:\n\nNone. All requested commands were not executed.",
+			"In this case none of the project files declares a dependency.",
+			"```cangjie\nmain() { 0 }\n```\nNone available.\n```cangjie\nmain() { 1 }\n```",
+		]) {
+			expect(policy.getMissingCompletionEvidence(text)).toEqual([])
+		}
+	})
+
+	it("still requires external evidence for None values in code and constructor expressions", () => {
+		const policy = new CangjieRuntimePolicy(tempDir)
+		const reports = [
+			"Use `None` for the missing value.",
+			"Use None for the missing Option value.",
+			"```cangjie\nNone\n```",
+			"return None",
+			"let missing = None",
+			"match(value) { case None => 0 }",
+			"Option<Int64> uses getOrDefault({ => 0 }).",
+		]
+		for (const text of reports) expect(policy.getMissingCompletionEvidence(text)).toEqual(["std.core"])
+		policy.noteCorpusSearch(["std.core"], "Option and None")
+		for (const text of reports) expect(policy.getMissingCompletionEvidence(text)).toEqual([])
+	})
+
 	it("allows constrained completion text that refuses to assert high-risk API correctness", () => {
 		const policy = new CangjieRuntimePolicy(tempDir)
 

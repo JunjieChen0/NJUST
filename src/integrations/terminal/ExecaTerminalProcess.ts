@@ -1,6 +1,7 @@
 import { execa, ExecaError } from "execa"
 import process from "process"
 import { StringDecoder } from "string_decoder"
+import { execFile } from "child_process"
 
 import { logger } from "../../shared/logger"
 import { getProcessTree } from "../../utils/processTree"
@@ -148,41 +149,18 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 			}
 
 			if (this.aborted) {
-				let timeoutId: NodeJS.Timeout | undefined
-
-				const kill = new Promise<void>((resolve) => {
-					logger.info("ExecaTerminalProcess", `[ExecaTerminalProcess#run] SIGKILL -> ${this.pid}`)
-
-					timeoutId = setTimeout(() => {
-						try {
-							this.subprocess?.kill("SIGKILL")
-						} catch (error) {
-							logger.debug(
-								"ExecaTerminalProcess",
-								"[ExecaTerminalProcess#run] SIGKILL failed; process may have already exited",
-								error,
-							)
-						}
-
-						resolve()
-					}, 5_000)
-				})
-
 				try {
-					await Promise.race([this.subprocess, kill])
+					// A kill request or a timer expiring is not evidence that the process exited.
+					await this.subprocess
 				} catch (error) {
 					logger.info(
 						"ExecaTerminalProcess",
 						`[ExecaTerminalProcess#run] subprocess termination error: ${getErrorMessage(error)}`,
 					)
 				}
-
-				if (timeoutId) {
-					clearTimeout(timeoutId)
-				}
 			}
 
-			this.emit("shell_execution_complete", { exitCode: 0 })
+			this.emit("shell_execution_complete", { exitCode: this.aborted ? undefined : 0 })
 		} catch (error) {
 			if (error instanceof ExecaError) {
 				logger.error(
@@ -190,7 +168,7 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 					`[ExecaTerminalProcess#run] shell execution error: ${error.message}`,
 				)
 				TelemetryService.reportError(error, TelemetryEventName.UTILITY_ERROR)
-				this.emit("shell_execution_complete", { exitCode: error.exitCode ?? 0, signalName: error.signal })
+				this.emit("shell_execution_complete", { exitCode: error.exitCode, signalName: error.signal })
 			} else {
 				logger.error(
 					"ExecaTerminalProcess",
@@ -222,6 +200,20 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 
 	public override abort() {
 		this.aborted = true
+		// Keep the original shell PID: the display PID may already point at one child.
+		const shellPid = this.subprocess?.pid
+		if (process.platform === "win32" && shellPid) {
+			execFile(
+				"taskkill",
+				["/PID", String(shellPid), "/T", "/F"],
+				{ windowsHide: true, timeout: 5_000 },
+				(error) => {
+					if (error)
+						logger.warn("ExecaTerminalProcess", "Windows process tree termination was not confirmed", error)
+				},
+			)
+			return
+		}
 
 		// Function to perform the kill operations
 		const performKill = () => {

@@ -10,7 +10,7 @@ import {
 	type WebviewMessage,
 	type VerificationSummary,
 } from "@njust-ai/types"
-import { CANGJIE_TASK_SUITE, type CangjieTaskCase } from "../../../../packages/evals/src/cangjie/suite.js"
+import { cangjieTaskPrompt, type CangjieTaskCase } from "../../../../packages/evals/src/cangjie/suite.js"
 import { contentFingerprint, inputFiles, writeFinalDiff } from "../../../../packages/evals/src/cangjie/artifacts.js"
 import { addOracle } from "../../../../packages/evals/src/cangjie/projects.js"
 import {
@@ -60,16 +60,17 @@ export async function run(): Promise<void> {
 	const input = JSON.parse(await fs.readFile(process.env.NJUST_CANGJIE_EVAL_INPUT!, "utf8")) as {
 		root: string
 		caseId: string
+		task: CangjieTaskCase
 		variant?: string
 		workspace: string
-		config: { baseUrl: string; model: string; apiKeyEnv: string }
+		config: { baseUrl: string; model: string; apiKeyEnv: string; provider?: "openai" | "deepseek" }
 		sdkEnv: NodeJS.ProcessEnv
 		cjpm: string
 		compiler: string
 		execution: CangjieTaskEvidence["execution"]
 	}
-	const taskCase = CANGJIE_TASK_SUITE.cases.find((item) => item.id === input.caseId) as CangjieTaskCase
-	if (!taskCase) throw new Error("Unknown evaluation case")
+	const taskCase = input.task
+	if (!taskCase || taskCase.id !== input.caseId) throw new Error("Unknown evaluation case")
 	if (taskCase.variants && (!input.variant || !Object.hasOwn(taskCase.variants, input.variant)))
 		throw new Error("Unknown evaluation variant")
 	const artifactDir = path.join(input.root, `${taskCase.id}${input.variant ? `-${input.variant}` : ""}`)
@@ -117,7 +118,7 @@ export async function run(): Promise<void> {
 		if (!current) return
 		if (message.type !== "ask" || message.partial) return
 		if (message.ask === "command") {
-			if (cancelledAt || taskCase.id === "CJ01" || taskCase.interaction === "deny-command") {
+			if (cancelledAt || taskCase.category === "locate" || taskCase.interaction === "deny-command") {
 				current.handleWebviewAskResponse("noButtonClicked")
 			} else if (taskCase.interaction === "feedback" && !feedbackAt) {
 				feedbackAt = Date.now()
@@ -183,13 +184,22 @@ export async function run(): Promise<void> {
 			vscode.ConfigurationTarget.Workspace,
 		)
 		await config.update("sandbox.backend", "guarded-host", vscode.ConfigurationTarget.Global)
-		await api.setConfiguration({
-			apiProvider: "openai",
-			openAiBaseUrl: input.config.baseUrl,
-			openAiApiKey: secret,
-			openAiModelId: input.config.model,
-			openAiStreamingEnabled: true,
-		})
+		await api.setConfiguration(
+			input.config.provider === "deepseek"
+				? {
+						apiProvider: "deepseek",
+						deepSeekBaseUrl: input.config.baseUrl,
+						deepSeekApiKey: secret,
+						apiModelId: input.config.model,
+					}
+				: {
+						apiProvider: "openai",
+						openAiBaseUrl: input.config.baseUrl,
+						openAiApiKey: secret,
+						openAiModelId: input.config.model,
+						openAiStreamingEnabled: true,
+					},
+		)
 		await vscode.commands.executeCommand("njust-ai.SidebarProvider.focus")
 		await waitUntil(() => api!.isReady(), 30_000)
 		before = await inputFiles(input.workspace)
@@ -205,7 +215,7 @@ export async function run(): Promise<void> {
 				alwaysAllowExecute: false,
 				enableCheckpoints: false,
 			},
-			text: `${input.execution === "mock-regression" ? `[cangjie-project-e2e:${taskCase.project}] ` : ""}${taskCase.prompt}`,
+			text: `${input.execution === "mock-regression" ? `[cangjie-project-e2e:${taskCase.project}] ` : ""}${cangjieTaskPrompt(taskCase)}`,
 		})
 		await waitUntil(() => {
 			const failure = events.find((event) => event.message.ask === "api_req_failed" && !event.message.partial)
@@ -238,10 +248,23 @@ export async function run(): Promise<void> {
 			})
 			await waitUntil(() => summary()?.build.state === "stale" && summary()?.overall !== "verified", 30_000)
 			assertions["external-edit-stales-result"] = true
-			await receive({
-				type: "verificationDecision",
-				verificationDecision: { ts: card.ts, claimId: card.verification!.claimId, decision: "accepted" },
-			})
+			// A rejected stale acceptance shows a normal notification. Dismiss it in this
+			// isolated host so the UI handler can return during unattended evaluation.
+			const dismissal = setInterval(() => {
+				void Promise.resolve(vscode.commands.executeCommand("notifications.clearAll")).catch(
+					(error: unknown) => {
+						console.warn("Could not dismiss evaluation notification", String(error))
+					},
+				)
+			}, 250)
+			try {
+				await receive({
+					type: "verificationDecision",
+					verificationDecision: { ts: card.ts, claimId: card.verification!.claimId, decision: "accepted" },
+				})
+			} finally {
+				clearInterval(dismissal)
+			}
 			assertions["stale-acceptance-refused"] = !(await readFacts()).acceptances.some(
 				(event) => event.decision === "accepted",
 			)
@@ -326,13 +349,16 @@ export async function run(): Promise<void> {
 		runs.every((run) => run.status === "blocked") &&
 		!commands.some((event) => event.data.status === "started")
 	assertions["no-unapproved-command"] =
-		taskCase.id === "CJ01"
+		taskCase.category === "locate"
 			? runs.length === 0 && commands.length === 0
 			: commands.filter((event) => event.data.status === "started").length <=
 				interventions.filter((event) => event.kind === "approval").length
 	assertions["build-failure-reported"] =
 		delivered?.build.state === "failed" &&
 		runs.some((run) => run.kind === "build" && run.status === "failed" && run.exitCode !== 0)
+	assertions["report-correct"] =
+		!!taskCase.reportIncludes?.length &&
+		taskCase.reportIncludes.every((fragment) => text.toLowerCase().includes(fragment.toLowerCase()))
 	assertions["location-correct"] =
 		/src[\\/]bounded\.cj/.test(text) && /bounded/.test(text) && /(?:<\s*0|负数)/.test(text)
 	assertions["delivery-bound-to-code"] =
@@ -347,10 +373,9 @@ export async function run(): Promise<void> {
 		feedbackAt > 0 && events.some((event) => event.message.ask === "followup" && event.message.ts > feedbackAt)
 	assertions["no-premature-delivery"] = noClaimAtFeedback && facts.claims.length === 0
 	assertions["no-step-after-cancel"] &&= !runs.some((run) => run.startedAt > cancelledAt)
-	const presentedEnvironment = JSON.stringify({
-		delivered,
-		progress: events.map((event) => event.message.cangjieProgress).filter(Boolean),
-	})
+	const presentedEnvironment = [delivered?.note, ...events.map((event) => event.message.cangjieProgress?.detail)]
+		.filter(Boolean)
+		.join("\n")
 	assertions["missing-sdk-explained"] =
 		input.variant === "sdk" &&
 		/missing-sdk[\\/]cjpm/.test(presentedEnvironment) &&
@@ -374,7 +399,9 @@ export async function run(): Promise<void> {
 		}
 		await addOracle(taskCase, oracle)
 		const oracleChecks: { cwd: string; args: string[]; exitCode: number | null; output: string }[] = []
-		for (const cwd of taskCase.project === "orders" ? [oracle, path.join(oracle, "libs/pricing")] : [oracle]) {
+		for (const cwd of (
+			taskCase.testProjects ?? (taskCase.project === "orders" ? [".", "libs/pricing"] : ["."])
+		).map((relative) => path.join(oracle, relative))) {
 			try {
 				const result = await exec(input.cjpm, ["test", "--no-color", "--no-progress"], {
 					cwd,

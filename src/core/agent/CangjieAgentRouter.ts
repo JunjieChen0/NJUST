@@ -23,6 +23,8 @@ const REAL_DIAGNOSTIC_PATTERNS = [
 ]
 
 const VERIFY_ONLY_PATTERNS = [
+	/(?:检查|验证)[^，。；\n]*(?:能否|是否)[^，。；\n]*(?:构建|编译)/,
+	/\bcheck\s+(?:whether|if)\b[^.;\n]*\b(?:build|compile)\b/i,
 	/\bonly\s+run\b/i,
 	/\b(?:run|execute)\s+(?:only\s+)?(?:cjpm|cjc|cjlint)\b/i,
 	/\bverify\b|\bverification\b/i,

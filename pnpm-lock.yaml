@@ -301,6 +301,9 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
+      zod:
+        specifier: ^4.6.6
+        version: 4.6.7
 
   apps/vscode-nightly:
     devDependencies:

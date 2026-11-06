@@ -2,6 +2,12 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { asMock } from "../../../__tests__/helpers/asMock"
+import { execFile } from "child_process"
+
+vitest.mock("child_process", async (importOriginal) => ({
+	...(await importOriginal<typeof import("child_process")>()),
+	execFile: vitest.fn(),
+}))
 
 const mockPid = 12345
 const mockOutput = vitest.hoisted(() => ({ chunks: ["test output\n"] as Array<string | Uint8Array> }))
@@ -34,6 +40,22 @@ import { BaseTerminal } from "../BaseTerminal"
 import type { RooTerminal } from "../types"
 
 describe("ExecaTerminalProcess", () => {
+	it.runIf(process.platform === "win32")(
+		"cancels the original Windows shell tree rather than the updated child PID",
+		() => {
+			const terminal = {} as RooTerminal
+			const running = new ExecaTerminalProcess(terminal)
+			;(running as any).subprocess = { pid: 12345, kill: vitest.fn() }
+			;(running as any).pid = 23456
+			running.abort()
+			expect(execFile).toHaveBeenCalledWith(
+				"taskkill",
+				["/PID", "12345", "/T", "/F"],
+				expect.objectContaining({ windowsHide: true, timeout: 5_000 }),
+				expect.any(Function),
+			)
+		},
+	)
 	let mockTerminal: RooTerminal
 	let terminalProcess: ExecaTerminalProcess
 	let originalEnv: NodeJS.ProcessEnv

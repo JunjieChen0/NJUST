@@ -524,6 +524,14 @@ async function executeCommandAtCwd(
 
 	const terminalProvider = terminalShellIntegrationDisabled ? "execa" : "vscode"
 	const provider = await task.providerRef.deref()
+	let recordCommand: ((output: string, exitCode: number | undefined) => Promise<void>) | undefined
+	const preserveCommandEvidence = async (output: string) => {
+		try {
+			await recordCommand?.(output, exitDetails?.exitCode)
+		} catch (error) {
+			logger.warn("ExecuteCommandTool", "Cannot preserve structured command evidence", error)
+		}
+	}
 
 	// Get global storage path for persisted output artifacts
 	const globalStoragePath = provider?.context?.globalStorageUri?.fsPath
@@ -650,6 +658,7 @@ async function executeCommandAtCwd(
 		},
 		onCompleted: async (output: string | undefined) => {
 			try {
+				await preserveCommandEvidence(output ?? "")
 				clearTimeout(pendingCommandOutputEmitTimer)
 				pendingCommandOutputEmitTimer = undefined
 
@@ -710,6 +719,14 @@ async function executeCommandAtCwd(
 		audit,
 	}
 	const sandboxBackend = await sandboxService.evaluatePolicyOnly("local", sandboxRequest)
+	const owner = task.rootTask ?? task
+	if (owner.taskMode === "cangjie") {
+		try {
+			recordCommand = await owner.cangjieVerification?.observeCommand(resolvedCommand, workingDir, task.taskId)
+		} catch (error) {
+			logger.warn("ExecuteCommandTool", "Cannot capture command input fingerprint", error)
+		}
+	}
 
 	// ── Docker backend: execute in sandbox container ──────────────────────
 	if (sandboxBackend === "docker") {
@@ -757,6 +774,7 @@ async function executeCommandAtCwd(
 		}
 
 		const finalizeDockerOutput = async (finalOutput: string): Promise<void> => {
+			await preserveCommandEvidence(finalOutput || accumulatedOutput)
 			clearTimeout(pendingCommandOutputEmitTimer)
 			pendingCommandOutputEmitTimer = undefined
 			if (interceptor && !persistedResult) {

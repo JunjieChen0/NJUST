@@ -122,6 +122,9 @@ function evaluateCheck(
 		run.inputFingerprint === currentFingerprint &&
 		run.inputFingerprintAfter === currentFingerprint
 	if (!appliesToCurrentCode) return { state: "stale", run, staleReason: "code_changed" }
+	// Model-requested shell commands are observed evidence, never system verification.
+	// In particular, a passing filtered test must not verify the entire delivery.
+	if (run.source === "model_command") return { state: run.status === "passed" ? "inconclusive" : run.status, run }
 	if (hasEnvironmentChanged(run, currentEnvironment))
 		return { state: "stale", run, staleReason: "environment_changed" }
 

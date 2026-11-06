@@ -64,6 +64,15 @@ describe("getEnvironmentDetails", () => {
 	let mockProvider: any
 	let mockState: any
 
+	it("exposes an explicit Cangjie tool configuration blocker and clears it after recovery", async () => {
+		mockState.mode = "cangjie"
+		let issue: string | undefined = "Invalid explicit cjpm path: missing-sdk/cjpm; source: workspace"
+		mockCline.cangjieVerification = { configurationIssue: () => issue }
+		expect(await getEnvironmentDetails(mockCline)).toContain(issue)
+		issue = undefined
+		expect(await getEnvironmentDetails(mockCline)).not.toContain("Invalid explicit cjpm path")
+	})
+
 	beforeEach(() => {
 		vi.clearAllMocks()
 

@@ -51,6 +51,18 @@ describe("routeCangjieAgentTask", () => {
 		})
 	})
 
+	it.each([
+		"只检查文本统计工程能否构建，报告实际编译错误和未执行的检查。禁止修复或修改文件。",
+		"检查当前项目是否能够编译，不要修改文件。",
+		"仅检查这个工程能否构建。",
+		"Only check whether this project can build; do not modify files.",
+	])("routes build feasibility checks to an agent with toolchain access: %s", (request) => {
+		expect(routeCangjieAgentTask(request)).toMatchObject({
+			kind: "verify",
+			stages: ["CangjieVerify"],
+		})
+	})
+
 	it("does not add repair stages to a read-only request after verification fails", () => {
 		const section = buildCangjieAgentRoutingSection("验证当前工程的构建和测试", ["CangjieVerify"], {
 			repairRequired: true,

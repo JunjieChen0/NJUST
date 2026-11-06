@@ -64,6 +64,9 @@ export const verificationRunSchema = z.object({
 	runId: z.string().min(1),
 	taskId: z.string().min(1),
 	kind: verificationKindSchema,
+	/** Missing on legacy records, which were all produced by system verification. */
+	source: z.enum(["system_verification", "model_command"]).optional(),
+	command: z.string().optional(),
 	/** "baseline" = before the task changed code; "delivery" = verifying the task's result. */
 	phase: z.enum(["baseline", "delivery"]).optional(),
 	executable: z.string().min(1),

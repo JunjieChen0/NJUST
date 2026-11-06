@@ -95,6 +95,27 @@ describe("SearchFilesTool", () => {
 		expect(tool.isPartialArgsStable({ path: "." })).toBe(false)
 	})
 
+	it.each([undefined, "CangjieExplore"])(
+		"reuses static corpus evidence for %s without caching user files",
+		async (agentType) => {
+			isPathUnderBundledCangjieCorpusMock.mockReturnValue(true)
+			regexSearchFilesMock.mockResolvedValue("Found 1 result.\nString signature")
+			const task = createTask({ taskMode: "cangjie", agentType })
+			const callbacks = createCallbacks()
+			for (const regex of ["runes", "split", "runes"]) {
+				await tool.execute({ path: "corpus.md", regex }, task, callbacks)
+			}
+			expect(regexSearchFilesMock).toHaveBeenCalledTimes(2)
+			expect(callbacks.pushToolResult).toHaveBeenLastCalledWith(
+				expect.stringContaining("return your findings to the parent"),
+			)
+			isPathUnderBundledCangjieCorpusMock.mockReturnValue(false)
+			await tool.execute({ path: "src/main.cj", regex: "runes" }, task, callbacks)
+			await tool.execute({ path: "src/main.cj", regex: "runes" }, task, callbacks)
+			expect(regexSearchFilesMock).toHaveBeenCalledTimes(4)
+		},
+	)
+
 	it("rejects empty regex during validation", () => {
 		expect(tool.validateInput({ path: ".", regex: "" }).valid).toBe(false)
 		expect(tool.validateInput({ path: ".", regex: "   " }).error).toContain("required")

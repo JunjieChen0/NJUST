@@ -7,6 +7,7 @@ import type { VerificationSummary, CangjieTaskProgress } from "@njust-ai/types"
 
 import { logger } from "../../shared/logger"
 import { getErrorMessage } from "../../shared/error-utils"
+import { redactApiSecrets } from "../../utils/redactApiSecrets"
 import { getTaskDirectoryPath } from "../../utils/storage"
 import { suspendCangjieAutoFormat } from "../../services/cangjie-lsp/autoFormatSuspension"
 import { checkAutoApproval } from "../auto-approval"
@@ -20,9 +21,15 @@ import {
 	type CangjieCheckDeps,
 } from "./CangjieVerificationRunner"
 import { canonicalVerificationPath, resolveVerificationProjectRoot } from "./projectRoot"
-import type { TaskVerificationRecord, CompletionClaim } from "./types"
+import type { TaskVerificationRecord, CompletionClaim, VerificationRun } from "./types"
 import { evaluateVerification, type CheckState, type VerificationVerdict } from "./verdict"
-import { loadVerificationRecord, updateVerificationRecord, withClaim, withAcceptance } from "./VerificationStore"
+import {
+	loadVerificationRecord,
+	updateVerificationRecord,
+	withClaim,
+	withAcceptance,
+	withRun,
+} from "./VerificationStore"
 import { saveSnapshot } from "./snapshotStore"
 import { CangjieChangeMonitor, type ChangeMonitorDeps } from "./CangjieChangeMonitor"
 import { buildVerificationSummary } from "./verificationSummary"
@@ -190,6 +197,52 @@ export class CangjieTaskVerification {
 		return this.changeMonitor.onDidChange
 	}
 
+	configurationIssue(): string | undefined {
+		return this.deps.checkDeps.resolveCjpm() ? undefined : this.deps.checkDeps.unavailableReason?.()
+	}
+
+	/** Preserve direct model commands on the owning root, including their originating child task. */
+	async observeCommand(command: string, cwd: string, sourceTaskId: string) {
+		const match = command.trim().match(/^(?:"([^"]+)"|'([^']+)'|(\S+))\s+(build|test)(?:\s+(.*))?$/)
+		if (!match || !/(?:^|[\\/])cjpm(?:\.exe)?$/i.test(match[1] ?? match[2] ?? match[3]!)) return
+		const rest = match[5] ?? ""
+		if (/[;&|<>`$%(){}@'"\r\n]/.test(rest) || /[`$%]/.test(match[1] ?? match[2] ?? match[3]!)) return
+		const resolution = await this.resolveRoot()
+		if (resolution.kind !== "resolved") return
+		const before = await this.deps.checkDeps.snapshot(resolution.root)
+		const runId = this.deps.checkDeps.newId()
+		const startedAt = this.deps.checkDeps.now()
+		return async (output: string, exitCode: number | undefined) => {
+			const taskDir = await this.deps.taskDir()
+			const after = await this.deps.checkDeps.snapshot(resolution.root)
+			const logRef = `verification-logs/${runId}.log`
+			await fs.mkdir(path.join(taskDir, "verification-logs"), { recursive: true })
+			await fs.writeFile(path.join(taskDir, logRef), redactApiSecrets(output), "utf8")
+			const run: VerificationRun = {
+				runId,
+				taskId: sourceTaskId,
+				kind: match[4] as "build" | "test",
+				source: "model_command",
+				command: redactApiSecrets(command),
+				executable: redactApiSecrets(match[1] ?? match[2] ?? match[3]!),
+				args: redactApiSecrets(`${match[4]} ${rest}`).split(/\s+/).filter(Boolean),
+				cwd,
+				startedAt,
+				endedAt: this.deps.checkDeps.now(),
+				status: exitCode === undefined ? "inconclusive" : exitCode === 0 ? "passed" : "failed",
+				exitCode: exitCode ?? null,
+				logRef,
+				inputFingerprint: before?.fingerprint,
+				inputFingerprintAfter: after?.fingerprint,
+				inputCoverage:
+					before?.coverage === "complete" && after?.coverage === "complete" ? "complete" : "partial",
+				coverageGaps: [...(before?.gaps ?? []), ...(after?.gaps ?? [])],
+				stale: false,
+			}
+			await updateVerificationRecord(taskDir, this.task.taskId, (record) => withRun(record, run))
+		}
+	}
+
 	async currentSummary(): Promise<VerificationSummary | undefined> {
 		try {
 			const taskDir = await this.deps.taskDir()
@@ -212,11 +265,12 @@ export class CangjieTaskVerification {
 					taskDir,
 					changes: changed?.changes,
 					note:
-						resolution.kind === "blocked"
+						this.configurationIssue() ??
+						(resolution.kind === "blocked"
 							? resolution.reason
 							: !snapshot
 								? "Project snapshot is unavailable"
-								: verdict.latestClaim?.summary,
+								: verdict.latestClaim?.summary),
 				},
 				snapshot?.fingerprint,
 			)

@@ -35,7 +35,7 @@ const READ_ONLY_AGENT_TYPES = new Set(["CangjieExplore", "CangjieVerify"])
  * Shell features that could chain another command, redirect output into a file, or run a nested
  * expression (PowerShell evaluates `( )`, `@( )` and `{ }` before the outer command).
  */
-const SHELL_SIDE_EFFECT_RE = /[;&|`$<>(){}@'"^\r\n]/
+const SHELL_SIDE_EFFECT_RE = /[;&|`$%<>(){}@'"^\r\n]/
 const CJPM_READ_ONLY_ARGS = new Set(["build", "check", "test", "--version", "--help"])
 const CJC_READ_ONLY_ARGS = new Set(["--version", "-v", "--help"])
 
@@ -57,7 +57,8 @@ function isReadOnlyCommand(command: string): boolean {
 		case "cjpm":
 			return (
 				(args.length === 1 && CJPM_READ_ONLY_ARGS.has(args[0]!)) ||
-				(args.length === 3 && args[0] === "test" && args[1] === "--filter" && !args[2]!.startsWith("-"))
+				(args.length === 3 && args[0] === "test" && args[1] === "--filter" && !args[2]!.startsWith("-")) ||
+				(args.length === 2 && args[0] === "test" && /^--filter=[^-\s].*$/.test(args[1]!))
 			)
 		case "cjc":
 			return args.length === 1 && CJC_READ_ONLY_ARGS.has(args[0]!)
@@ -80,7 +81,7 @@ function validateCommand(command: unknown): string | null {
 	const quoted = normalized.match(/^(["'])(.*?)\1(?:\s+|$)(.*)$/)
 	const afterExecutable = quoted ? quoted[3]! : normalized
 	if (
-		(quoted && /[`$\r\n]/.test(quoted[2]!)) ||
+		(quoted && /[`$%\r\n]/.test(quoted[2]!)) ||
 		SHELL_SIDE_EFFECT_RE.test(afterExecutable) ||
 		!isReadOnlyCommand(normalized)
 	) {

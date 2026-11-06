@@ -256,6 +256,8 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 					verificationSummary = verification.summary
 					verificationFacts = verification.facts
 				}
+				if (verification.action === "skip")
+					verificationSummary = await task.cangjieVerification.currentSummary()
 			}
 
 			await this.traceCangjieCompletion(

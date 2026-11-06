@@ -48,6 +48,7 @@ function getOrCreateCorpusSemanticIndex(corpusRoot: string): CangjieCorpusSemant
 
 export class SearchFilesTool extends BaseTool<"search_files"> {
 	readonly name = "search_files" as const
+	private readonly corpusSearches = new WeakMap<Task, Map<string, string>>()
 	override readonly maxResultSizeChars = 50_000
 	override isConcurrencySafe(): boolean {
 		return true
@@ -109,6 +110,18 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 		const isOutsideWorkspace =
 			isPathOutsideWorkspace(absolutePath) && !isPathUnderBundledCangjieCorpus(absolutePath, extensionPath)
 		const isUnderCangjieCorpus = isPathUnderBundledCangjieCorpus(absolutePath, extensionPath)
+		const explorationKey =
+			(task.taskMode === "cangjie" || task.agentType === "CangjieExplore") && isUnderCangjieCorpus
+				? JSON.stringify([absolutePath, regex, filePattern, semanticQuery])
+				: undefined
+		const previous = explorationKey ? this.corpusSearches.get(task)?.get(explorationKey) : undefined
+		if (previous !== undefined) {
+			pushToolResult(
+				previous +
+					"\n\nThis exact bundled-corpus query already completed in this task. Reuse this evidence; do not repeat it. Read the cited signature once if needed, then continue the requested implementation or return your findings to the parent.",
+			)
+			return
+		}
 
 		const sharedMessageProps: ClineSayTool = {
 			tool: "searchFiles",
@@ -172,6 +185,12 @@ export class SearchFilesTool extends BaseTool<"search_files"> {
 			)
 
 			if (isUnderCangjieCorpus) {
+				if (explorationKey && results.startsWith("Found ")) {
+					const searches = this.corpusSearches.get(task) ?? new Map<string, string>()
+					searches.set(explorationKey, results)
+					if (searches.size > 16) searches.delete(searches.keys().next().value!)
+					this.corpusSearches.set(task, searches)
+				}
 				trackCangjieSearchHistory()
 				pushToolResult(results)
 				return

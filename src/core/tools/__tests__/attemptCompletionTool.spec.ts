@@ -1443,6 +1443,7 @@ describe("attemptCompletionTool", () => {
 		it("approves verification commands through the command ask and treats a refusal as not approved", async () => {
 			let approve: ((command: string) => Promise<VerificationApproval>) | undefined
 			;(mockTask as any).cangjieVerification = {
+				currentSummary: vi.fn().mockResolvedValue(undefined),
 				verifyForCompletion: vi.fn(async (fn: (command: string) => Promise<VerificationApproval>) => {
 					approve = fn
 					return { action: "skip" }
@@ -1462,11 +1463,35 @@ describe("attemptCompletionTool", () => {
 		it("does not append facts when system verification is skipped", async () => {
 			;(mockTask as any).cangjieVerification = {
 				verifyForCompletion: vi.fn().mockResolvedValue({ action: "skip" }),
+				currentSummary: vi.fn().mockResolvedValue(undefined),
 			}
 
 			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
 
 			expect(mockTask.say).toHaveBeenCalledWith("completion_result", "Implemented parseArgs.", undefined, false)
+		})
+
+		it("shows observed failure evidence when a check-only delivery skips system verification", async () => {
+			const summary = {
+				overall: "failed",
+				acceptance: "pending",
+				build: { state: "failed", logRef: "verification-logs/observed.log" },
+				test: { state: "not_run" },
+			}
+			;(mockTask as any).cangjieVerification = {
+				verifyForCompletion: vi.fn().mockResolvedValue({ action: "skip" }),
+				currentSummary: vi.fn().mockResolvedValue(summary),
+			}
+			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
+			expect(mockTask.say).toHaveBeenCalledWith(
+				"completion_result",
+				"Implemented parseArgs.",
+				undefined,
+				false,
+				undefined,
+				undefined,
+				{ verification: summary },
+			)
 		})
 
 		it("returns approval feedback and images to the model without completing or writing memory", async () => {

@@ -247,6 +247,8 @@ export async function tryEagerBatch(cline: Task): Promise<boolean> {
 			for (let i = start; i < cline.assistantMessageContent.length; i++) {
 				const b = cline.assistantMessageContent[i]
 				if (!b || b.type !== "tool_use") break
+				// Partial handlers only update the UI; consuming them would lose the final tool call.
+				if (b.partial) break
 				if (!b.id) break
 				const tb = b
 				if (!isConcurrencySafeToolUseBlock(tb)) break
