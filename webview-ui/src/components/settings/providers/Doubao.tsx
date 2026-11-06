@@ -31,13 +31,14 @@ export const Doubao = ({ apiConfiguration, setApiConfigurationField }: DoubaoPro
 
 	return (
 		<>
+			<p className="text-sm text-vscode-descriptionForeground">{t("settings:providers.volcengineDescription")}</p>
 			<VSCodeTextField
 				value={apiConfiguration?.doubaoApiKey || ""}
 				type="password"
 				onInput={handleInputChange("doubaoApiKey")}
 				placeholder={t("settings:placeholders.apiKey")}
 				className="w-full">
-				<label className="block font-medium mb-1">Doubao API Key</label>
+				<label className="block font-medium mb-1">{t("settings:providers.volcengineApiKey")}</label>
 			</VSCodeTextField>
 			<div className="text-sm text-vscode-descriptionForeground -mt-2">
 				{t("settings:providers.apiKeyStorageNotice")}
@@ -50,17 +51,16 @@ export const Doubao = ({ apiConfiguration, setApiConfigurationField }: DoubaoPro
 				<label className="block font-medium mb-1">Base URL</label>
 			</VSCodeTextField>
 			<div className="text-sm text-vscode-descriptionForeground -mt-2 space-y-1">
-				<p>默认对应方舟「按量在线推理」；已订阅 Coding Plan 时请把 Base 改为 {doubaoCodingPlanBaseUrl}</p>
 				<p>
-					模型可在下方列表选择，或在「模型 ID（可自填）」输入框直接填写；请求时会将内置选项映射为控制台 Model
-					ID，自填内容原样提交。仅当 Base 为 Coding Plan 且选 Doubao-Seed-Code 时使用 ark-code-latest。
+					{t("settings:providers.volcengineBaseUrlDescription", {
+						codingPlanBaseUrl: doubaoCodingPlanBaseUrl,
+					})}
 				</p>
+				<p>{t("settings:providers.volcengineModelDescription")}</p>
 			</div>
 			{!apiConfiguration?.doubaoApiKey && (
-				<VSCodeButtonLink
-					href="https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D"
-					appearance="secondary">
-					Get Doubao API Key
+				<VSCodeButtonLink href="https://docs.volcengine.com/docs/ark/api-key" appearance="secondary">
+					{t("settings:providers.getVolcengineApiKey")}
 				</VSCodeButtonLink>
 			)}
 		</>

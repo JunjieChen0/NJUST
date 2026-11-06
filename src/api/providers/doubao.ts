@@ -45,7 +45,7 @@ export class DoubaoHandler extends OpenAiHandler {
 
 		super({
 			...options,
-			openAiApiKey: requireApiKey(options.doubaoApiKey, "Doubao"),
+			openAiApiKey: requireApiKey(options.doubaoApiKey, "Volcengine (火山引擎)"),
 			openAiModelId: inferenceModelId,
 			openAiBaseUrl: effectiveBaseUrl,
 			openAiStreamingEnabled: true,
@@ -113,7 +113,7 @@ export class DoubaoHandler extends OpenAiHandler {
 				...(metadata?.signal ? { signal: metadata.signal } : {}),
 			})
 		} catch (error) {
-			throw handleProviderError(error, "Doubao")
+			throw handleProviderError(error, "Volcengine (火山引擎)")
 		}
 
 		let lastUsage

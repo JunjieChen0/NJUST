@@ -1,5 +1,5 @@
 import { useCallback } from "react"
-import { VSCodeTextField } from "@vscode/webview-ui-toolkit/react"
+import { VSCodeLink, VSCodeTextField } from "@vscode/webview-ui-toolkit/react"
 
 import type { ProviderSettings } from "@njust-ai/types"
 
@@ -30,13 +30,14 @@ export const Qwen = ({ apiConfiguration, setApiConfigurationField }: QwenProps) 
 
 	return (
 		<>
+			<p className="text-sm text-vscode-descriptionForeground">{t("settings:providers.bailianDescription")}</p>
 			<VSCodeTextField
 				value={apiConfiguration?.qwenApiKey || ""}
 				type="password"
 				onInput={handleInputChange("qwenApiKey")}
 				placeholder={t("settings:placeholders.apiKey")}
 				className="w-full">
-				<label className="block font-medium mb-1">Qwen API Key</label>
+				<label className="block font-medium mb-1">{t("settings:providers.bailianApiKey")}</label>
 			</VSCodeTextField>
 			<div className="text-sm text-vscode-descriptionForeground -mt-2">
 				{t("settings:providers.apiKeyStorageNotice")}
@@ -48,9 +49,15 @@ export const Qwen = ({ apiConfiguration, setApiConfigurationField }: QwenProps) 
 				className="w-full">
 				<label className="block font-medium mb-1">Base URL</label>
 			</VSCodeTextField>
+			<div className="text-sm text-vscode-descriptionForeground -mt-2 space-y-1">
+				<p>{t("settings:providers.bailianBaseUrlDescription")}</p>
+				<VSCodeLink href="https://help.aliyun.com/zh/model-studio/base-url" target="_blank">
+					{t("settings:providers.bailianBaseUrlDocs")}
+				</VSCodeLink>
+			</div>
 			{!apiConfiguration?.qwenApiKey && (
-				<VSCodeButtonLink href="https://dashscope.console.aliyun.com/apiKey" appearance="secondary">
-					Get Qwen API Key
+				<VSCodeButtonLink href="https://help.aliyun.com/zh/model-studio/get-api-key" appearance="secondary">
+					{t("settings:providers.getBailianApiKey")}
 				</VSCodeButtonLink>
 			)}
 		</>

@@ -16,7 +16,7 @@ export class QwenHandler extends OpenAICompatibleHandler {
 		const config: OpenAICompatibleConfig = {
 			providerName: "qwen",
 			baseURL: options.qwenBaseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1",
-			apiKey: requireApiKey(options.qwenApiKey, "Qwen"),
+			apiKey: requireApiKey(options.qwenApiKey, "Alibaba Cloud Model Studio (百炼)"),
 			modelId,
 			modelInfo,
 			modelMaxTokens: options.modelMaxTokens ?? undefined,

@@ -245,7 +245,7 @@ flowchart TB
 - **注册表**（`src/api/registry/`）：`providerRegistry` 管理 Provider 工厂与 Token 计数策略；统一注册入口为 `src/api/providers/register-all.ts`，未注册或重复注册会明确报错。
 - **模型目录**（`src/api/providers/fetchers/modelCache.ts`）：按连接身份缓存模型目录，刷新失败采用短暂退避；手动刷新可绕过退避。目录信息、静态回退和用户覆盖由 `resolveModelInfo.ts` 合并，目录不可用不等于模型不存在。
 - **流处理**：`ApiStream` 为统一的 AsyncGenerator 流，各 Provider 的 `src/api/transform/` 下格式转换器（如 `anthropic-format.ts`、`openai-format.ts`、`gemini-format.ts` 等）将原生响应转为统一流事件。
-- **已实现 Provider**：Anthropic（含 Vertex）、OpenAI（原生 + Responses API）、Google Gemini、AWS Bedrock、DeepSeek、Mistral、Ollama、LM Studio、OpenRouter、Fireworks、xAI、SambaNova、Vertex AI、Baseten、Moonshot、LiteLLM、Requesty、Unbound、VSCode LM API、Vercel AI Gateway、Z.AI、Minimax、Qwen / Qwen Code、豆包（Doubao）、GLM（智谱）、OpenAI Codex。
+- **已实现 Provider**：Anthropic（含 Vertex）、OpenAI（原生 + Responses API）、Google Gemini、AWS Bedrock、DeepSeek、Mistral、Ollama、LM Studio、OpenRouter、Fireworks、xAI、SambaNova、Vertex AI、Baseten、Moonshot、LiteLLM、Requesty、Unbound、VSCode LM API、Vercel AI Gateway、Z.AI、Minimax、[百炼（Alibaba Cloud Model Studio）](https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope)、Qwen Code、[火山引擎（Volcengine）](https://docs.volcengine.com/docs/ark/compatible-with-openai-sdk)、GLM（智谱）、OpenAI Codex。
 - **重试机制**（`src/api/retry/`、`src/core/task/TaskRetryHandler.ts`）：模型准备与推理错误分类处理，支持取消和有界重试；鉴权错误或预算耗尽会停止自动重试，人工重试确认不会被自动批准绕过。
 - **模型回退**（`src/api/index.ts` 中 `FallbackApiHandler`）：主模型失败时自动尝试备用模型列表。
 - **索引嵌入独立 Provider**：代码索引模块使用独立的嵌入模型与端点配置（`src/services/code-index/embedders/`），可与对话模型完全分离。

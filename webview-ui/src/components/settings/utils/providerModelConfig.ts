@@ -1,4 +1,11 @@
-import type { ProviderName, ModelInfo, ProviderSettings, ModelRecord, RouterModels, RouterProvider } from "@njust-ai/types"
+import type {
+	ProviderName,
+	ModelInfo,
+	ProviderSettings,
+	ModelRecord,
+	RouterModels,
+	RouterProvider,
+} from "@njust-ai/types"
 import {
 	anthropicDefaultModelId,
 	bedrockDefaultModelId,
@@ -46,10 +53,10 @@ export const PROVIDER_SERVICE_CONFIG: Partial<Record<ProviderName, ProviderServi
 	fireworks: { serviceName: "Fireworks AI", serviceUrl: "https://fireworks.ai" },
 	minimax: { serviceName: "MiniMax", serviceUrl: "https://minimax.chat" },
 	baseten: { serviceName: "Baseten", serviceUrl: "https://baseten.co" },
-	qwen: { serviceName: "Qwen (通义千问)", serviceUrl: "https://dashscope.console.aliyun.com" },
+	qwen: { serviceName: "Alibaba Cloud Model Studio (百炼)", serviceUrl: "https://bailian.console.aliyun.com" },
 	doubao: {
-		serviceName: "Doubao (豆包)",
-		serviceUrl: "https://console.volcengine.com/ark/region:ark+cn-beijing/endpoint",
+		serviceName: "Volcengine (火山引擎)",
+		serviceUrl: "https://ark.volcengine.com",
 	},
 	glm: { serviceName: "GLM (智谱清言)", serviceUrl: "https://open.bigmodel.cn" },
 	mimo: { serviceName: "Xiaomi MiMo", serviceUrl: "https://platform.xiaomimimo.com" },
@@ -150,8 +157,7 @@ export const PROVIDERS_WITH_CUSTOM_MODEL_UI: ProviderName[] = [
 /**
  * Checks if a provider should use the generic ModelPicker
  */
-export const hasModels = (models?: ModelRecord): models is ModelRecord =>
-	!!models && Object.keys(models).length > 0
+export const hasModels = (models?: ModelRecord): models is ModelRecord => !!models && Object.keys(models).length > 0
 
 export const DYNAMIC_MODEL_PICKER_PROVIDERS: ProviderName[] = [
 	"deepseek",
