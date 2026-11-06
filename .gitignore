@@ -72,6 +72,10 @@ docs/*
 /logs/
 *.log
 
+# Local agent runtime data
+/.njust-ai/cangjie-eval-trace.jsonl
+/.njust_ai/memories/
+
 # Vite development
 .vite-port
 webview-ui/vite-err.txt
