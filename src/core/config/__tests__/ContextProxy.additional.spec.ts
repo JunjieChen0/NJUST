@@ -565,7 +565,7 @@ describe("ContextProxy - Additional Coverage", () => {
 
 	describe("resetAllState error handling", () => {
 		it("logs errors from individual reset operations", async () => {
-			const { logger } = await import("../../../utils/logging")
+			const { logger } = await import("../../../shared/logger")
 			const loggerSpy = vi.spyOn(logger, "error")
 
 			// Make one globalState.update reject
@@ -578,9 +578,9 @@ describe("ContextProxy - Additional Coverage", () => {
 				return Promise.resolve()
 			})
 
-			await proxy.resetAllState()
+			await expect(proxy.resetAllState()).rejects.toThrow("State reset was incomplete")
 
-			expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to reset state"), expect.any(Error))
+			expect(loggerSpy).toHaveBeenCalledWith("ContextProxy", "Failed to reset state", expect.any(Error))
 		})
 	})
 

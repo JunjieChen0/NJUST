@@ -39,17 +39,19 @@ function isPrivateIPv4(ip: string): boolean {
 }
 
 function isBlockedIPv6(ip: string): boolean {
-	const normalized = ip.toLowerCase()
+	const normalized = new URL(`http://[${ip}]/`).hostname.slice(1, -1)
 	if (normalized === "::1") return true
 	if (normalized === "::") return true
-	if (normalized.startsWith("fe80:")) return true // link-local
+	if ((Number.parseInt(normalized.split(":")[0]!, 16) & 0xffc0) === 0xfe80) return true // fe80::/10
 	if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true // unique-local
 	if (normalized.startsWith("ff")) return true // multicast
 	if (normalized.startsWith("::ffff:")) {
-		const mapped = normalized.replace(/^::ffff:/, "")
-		if (net.isIP(mapped) === 4 && isPrivateIPv4(mapped)) {
-			return true
-		}
+		const words = normalized
+			.slice(7)
+			.split(":")
+			.map((word) => Number.parseInt(word, 16))
+		if (words.length === 2)
+			return isPrivateIPv4([words[0]! >>> 8, words[0]! & 255, words[1]! >>> 8, words[1]! & 255].join("."))
 	}
 	return false
 }
@@ -81,7 +83,27 @@ function assertHostnameAllowed(hostname: string): void {
 	}
 }
 
-export async function assertSafeOutboundUrl(url: string): Promise<URL> {
+/** DNS itself cannot be cancelled, but callers must stop waiting and never use a late result. */
+export async function lookupWithAbort(hostname: string, signal?: AbortSignal | null) {
+	const deadline = AbortSignal.timeout(30_000)
+	const active = signal ? AbortSignal.any([signal, deadline]) : deadline
+	active.throwIfAborted()
+	let onAbort!: () => void
+	const aborted = new Promise<never>((_resolve, reject) => {
+		onAbort = () => reject(active.reason)
+		active.addEventListener("abort", onAbort, { once: true })
+	})
+	try {
+		const result = await Promise.race([dns.lookup(hostname, { all: true, verbatim: true }), aborted])
+		active.throwIfAborted()
+		return result
+	} finally {
+		active.removeEventListener("abort", onAbort)
+	}
+}
+
+export async function assertSafeOutboundUrl(url: string, signal?: AbortSignal | null): Promise<URL> {
+	signal?.throwIfAborted()
 	let parsed: URL
 	try {
 		parsed = new URL(url)
@@ -95,13 +117,14 @@ export async function assertSafeOutboundUrl(url: string): Promise<URL> {
 
 	assertHostnameAllowed(parsed.hostname)
 
-	const hostIpVersion = net.isIP(parsed.hostname)
+	const hostname = parsed.hostname.replace(/^\[|\]$/g, "")
+	const hostIpVersion = net.isIP(hostname)
 	if (hostIpVersion !== 0) {
-		assertPublicIp(parsed.hostname)
+		assertPublicIp(hostname)
 		return parsed
 	}
 
-	const lookedUp = await dns.lookup(parsed.hostname, { all: true, verbatim: true })
+	const lookedUp = await lookupWithAbort(hostname, signal)
 	if (!lookedUp.length) {
 		throw new Error(`Could not resolve host: ${parsed.hostname}`)
 	}
@@ -248,15 +271,14 @@ function stripSensitiveHeadersForCrossOrigin(headers: Headers, fromOrigin: strin
  * Perform a single fetch with IP pinning against a validated URL.
  */
 async function pinnedFetch(parsed: URL, init?: RequestInit): Promise<Response> {
+	init?.signal?.throwIfAborted()
 	const hostname = parsed.hostname.replace(/^\[|\]$/g, "")
 	const family = net.isIP(hostname)
 	if (family !== 0 && !debugProxy) {
 		return fetch(parsed.toString(), { ...init, redirect: "manual" })
 	}
 
-	const resolved = family
-		? [{ address: hostname, family }]
-		: await dns.lookup(hostname, { all: true, verbatim: true })
+	const resolved = family ? [{ address: hostname, family }] : await lookupWithAbort(hostname, init?.signal)
 	if (!resolved.length) {
 		throw new Error(`Could not resolve host: ${parsed.hostname}`)
 	}
@@ -290,6 +312,7 @@ async function pinnedFetch(parsed: URL, init?: RequestInit): Promise<Response> {
 				},
 			})
 	try {
+		init?.signal?.throwIfAborted()
 		// Keep the original origin for Host, TLS SNI and certificate verification.
 		return await fetch(parsed.toString(), { ...init, redirect: "manual", dispatcher } as RequestInit & {
 			dispatcher: Dispatcher
@@ -326,7 +349,7 @@ function resolveRedirectLocation(location: string, currentUrl: URL): string {
  * @returns The final Response (non-redirect status)
  */
 export async function guardedFetch(url: string, init?: RequestInit): Promise<Response> {
-	let parsed = await assertSafeOutboundUrl(url)
+	let parsed = await assertSafeOutboundUrl(url, init?.signal)
 	// Enforce HTTPS for non-localhost initial URL
 	assertHttpsUnlessLocalhost(parsed)
 	// Validate headers against CRLF injection
@@ -341,6 +364,7 @@ export async function guardedFetch(url: string, init?: RequestInit): Promise<Res
 	const { redirect: _ignored, ...restInit } = init ?? {}
 
 	for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+		init?.signal?.throwIfAborted()
 		const resp = await pinnedFetch(parsed, { ...restInit, headers })
 
 		const status = resp.status
@@ -356,7 +380,7 @@ export async function guardedFetch(url: string, init?: RequestInit): Promise<Res
 		const prevUrl = new URL(currentUrl)
 
 		// Validate the redirect target (DNS + IP + hostname).
-		parsed = await assertSafeOutboundUrl(redirectUrl)
+		parsed = await assertSafeOutboundUrl(redirectUrl, init?.signal)
 
 		// Prevent HTTPS → HTTP downgrade
 		if (initialProtocol === "https:" && parsed.protocol === "http:") {

@@ -3,6 +3,8 @@
  * they may read, search, build and test, but never change sources by any route.
  */
 
+import { parseCangjieCommand } from "./cangjieCommand"
+
 const WRITE_TOOLS = [
 	"write_to_file",
 	"apply_diff",
@@ -31,11 +33,7 @@ const BLOCKED_TOOLS = new Set([...WRITE_TOOLS, ...OPAQUE_TOOLS])
 
 const READ_ONLY_AGENT_TYPES = new Set(["CangjieExplore", "CangjieVerify"])
 
-/**
- * Shell features that could chain another command, redirect output into a file, or run a nested
- * expression (PowerShell evaluates `( )`, `@( )` and `{ }` before the outer command).
- */
-const SHELL_SIDE_EFFECT_RE = /[;&|`$%<>(){}@'"^\r\n]/
+/** Subcommands allowed after the shared parser rejects shell side effects. */
 const CJPM_READ_ONLY_ARGS = new Set(["build", "check", "test", "--version", "--help"])
 const CJC_READ_ONLY_ARGS = new Set(["--version", "-v", "--help"])
 
@@ -43,16 +41,10 @@ export function isReadOnlyCangjieAgent(agentType: string | undefined): boolean {
 	return agentType !== undefined && READ_ONLY_AGENT_TYPES.has(agentType)
 }
 
-/** Split "<exe> args..." where the executable may be a quoted path with spaces. */
-function splitCommand(command: string): { tool: string; args: string[] } {
-	const quoted = command.match(/^(["'])(.*?)\1(?:\s+|$)(.*)$/)
-	const [exe = "", ...args] = quoted ? [quoted[2] ?? "", ...(quoted[3] ?? "").split(/\s+/)] : command.split(/\s+/)
-	const tool = (exe.split(/[\\/]/).pop() ?? "").toLowerCase().replace(/\.exe$/, "")
-	return { tool, args: args.filter(Boolean) }
-}
-
 function isReadOnlyCommand(command: string): boolean {
-	const { tool, args } = splitCommand(command)
+	const parsed = parseCangjieCommand(command)
+	if (!parsed) return false
+	const { tool, args } = parsed
 	switch (tool) {
 		case "cjpm":
 			return (
@@ -73,18 +65,7 @@ function validateCommand(command: unknown): string | null {
 	if (typeof command !== "string" || command.trim() === "") {
 		return "Check-only task: execute_command requires a cjpm build/check/test, cjc, or cjlint command."
 	}
-	const normalized = command
-		.trim()
-		.replace(/\s*2>&1\s*/g, " ")
-		.trim()
-	// A quoted executable path (e.g. "C:\Program Files (x86)\...\cjpm.exe") is inert; check the rest.
-	const quoted = normalized.match(/^(["'])(.*?)\1(?:\s+|$)(.*)$/)
-	const afterExecutable = quoted ? quoted[3]! : normalized
-	if (
-		(quoted && /[`$%\r\n]/.test(quoted[2]!)) ||
-		SHELL_SIDE_EFFECT_RE.test(afterExecutable) ||
-		!isReadOnlyCommand(normalized)
-	) {
+	if (!isReadOnlyCommand(command)) {
 		return (
 			`Check-only task: command "${command.trim()}" is not allowed. Only cjpm build/check/test, ` +
 			"toolchain version/help queries, or cjlint -f <path> may run. Arguments cannot contain quotes or escapes; " +

@@ -281,8 +281,13 @@ suite("Cangjie verification in Extension Host", function () {
 		await api.cancelCurrentTask()
 		await waitFor(async () => (await record(id)).runs.some((run) => run.status === "cancelled"))
 		assert.ok(!completed.has(id))
-		assert.ok(
-			provider.getCurrentTask()?.clineMessages.some((message) => message.verification?.terminal === "cancelled"),
+		// Cancellation creates a fresh task instance whose persisted messages load asynchronously.
+		await waitFor(() =>
+			Boolean(
+				provider
+					.getCurrentTask()
+					?.clineMessages.some((message) => message.verification?.terminal === "cancelled"),
+			),
 		)
 		assert.match(await fs.readFile(path.join(root, "src/main.cj"), "utf8"), /main/)
 	})

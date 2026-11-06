@@ -2,12 +2,60 @@ import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import type { CangjieTaskCase } from "./suite.js"
 
+/** Evaluation fixtures must be ordinary files/directories, never links to another tree. */
+async function assertUnlinkedPath(file: string): Promise<void> {
+	const absolute = path.resolve(file)
+	const parent = path.dirname(absolute)
+	if (parent !== absolute) await assertUnlinkedPath(parent)
+	try {
+		const stat = await fs.lstat(absolute)
+		if (stat.isSymbolicLink()) throw new Error(`Evaluation path contains a link: ${absolute}`)
+		const actual = await fs.realpath(absolute)
+		const normalize = (value: string) => (process.platform === "win32" ? value.toLowerCase() : value)
+		if (stat.isSymbolicLink() || normalize(actual) !== normalize(absolute))
+			throw new Error(`Evaluation path contains a link or reparse point: ${absolute}`)
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+	}
+}
+
+async function assertProjectTree(root: string): Promise<void> {
+	await assertUnlinkedPath(root)
+	for (const entry of await fs.readdir(root, { withFileTypes: true })) {
+		const file = path.join(root, entry.name)
+		if (entry.isSymbolicLink()) throw new Error(`Evaluation project contains a link: ${file}`)
+		if (entry.isDirectory()) await assertProjectTree(file)
+		else if (!entry.isFile()) throw new Error(`Unsupported evaluation file: ${file}`)
+	}
+}
+
+export async function copyEvaluationProject(source: string, destination: string): Promise<void> {
+	await assertProjectTree(source)
+	await assertUnlinkedPath(destination)
+	await fs.cp(source, destination, { recursive: true, force: false, errorOnExist: true })
+	await assertProjectTree(destination)
+}
+
+async function writeEvaluationFile(root: string, file: string, content: string): Promise<void> {
+	const parts = file.split(/[\\/]/)
+	if (
+		path.isAbsolute(file) ||
+		path.win32.isAbsolute(file) ||
+		parts.some((part) => !part || part === ".." || part === "." || part.includes(":"))
+	)
+		throw new Error(`Invalid evaluation file path: ${file}`)
+	const target = path.join(root, ...parts)
+	await assertUnlinkedPath(target)
+	await fs.mkdir(path.dirname(target), { recursive: true })
+	await fs.writeFile(target, content)
+}
+
 /** Mutations are part of the versioned starting point, before the Agent sees the project. */
 export async function prepareCase(task: CangjieTaskCase, root: string, variant?: string): Promise<void> {
+	await assertProjectTree(root)
 	if (task.initialFiles) {
 		for (const [file, content] of Object.entries(task.initialFiles)) {
-			await fs.mkdir(path.dirname(path.join(root, file)), { recursive: true })
-			await fs.writeFile(path.join(root, file), content)
+			await writeEvaluationFile(root, file, content)
 		}
 		return
 	}
@@ -46,10 +94,10 @@ import std.unittest.testmacro.*
 
 /** Additional tests are injected only into a separate final-project copy. */
 export async function addOracle(task: CangjieTaskCase, root: string): Promise<void> {
+	await assertProjectTree(root)
 	if (task.oracleFiles) {
 		for (const [file, content] of Object.entries(task.oracleFiles)) {
-			await fs.mkdir(path.dirname(path.join(root, file)), { recursive: true })
-			await fs.writeFile(path.join(root, file), content)
+			await writeEvaluationFile(root, file, content)
 		}
 		return
 	}

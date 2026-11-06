@@ -15,6 +15,8 @@ export interface CangjieTaskCase {
 	oracleFiles?: Readonly<Record<string, string>>
 	testProjects?: readonly string[]
 	reportIncludes?: readonly string[]
+	/** Expected facts are evaluator-owned; the prompt exposes field names and types only. */
+	reportFacts?: Readonly<Record<string, string | number | boolean>>
 }
 
 /** Present the complete edit contract to the model, including the scored file scope. */
@@ -22,7 +24,14 @@ export function cangjieTaskPrompt(task: CangjieTaskCase): string {
 	const scope = task.allowedChanges.length
 		? "Only these project files may be modified: " + task.allowedChanges.join(", ") + "."
 		: "Do not modify any project files."
-	return task.prompt + "\n" + scope
+	const report = task.reportFacts
+		? "\nReturn the final report as one JSON object only (no prose or code fence), with exactly these fields: " +
+			Object.entries(task.reportFacts)
+				.map(([key, value]) => `${key}: ${typeof value}`)
+				.join(", ") +
+			". Determine every value from the source code."
+		: ""
+	return task.prompt + "\n" + scope + report
 }
 
 export interface CangjieTaskSuite {

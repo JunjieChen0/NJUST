@@ -216,6 +216,10 @@ export interface TaskExecutorControlHost {
 	maybeWaitForProviderRateLimit(retryAttempt: number): Promise<void>
 	attemptApiRequest(retryAttempt: number, options?: { skipProviderRateLimit?: boolean }): ApiStream
 	presentAssistantMessage(): Promise<void>
+	/** Enforce the sub-task maxTurns cap before issuing a request. */
+	enforceMaxTurns(): Promise<boolean>
+	/** Number of model requests started by this task's loop. */
+	requestTurnCount: number
 
 	getTaskMode(): Promise<string>
 }

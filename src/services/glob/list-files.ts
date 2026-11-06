@@ -664,9 +664,9 @@ function formatAndCombineResults(files: string[], directories: string[], limit: 
 async function execRipgrep(rgPath: string, args: string[], limit: number): Promise<string[]> {
 	return new Promise((resolve, reject) => {
 		// Extract the directory path from args (it's the last argument)
-		const _searchDir = args[args.length - 1]
-
-		const rgProcess = childProcess.spawn(rgPath, args)
+		const searchDir = path.resolve(args[args.length - 1]!)
+		// Apply exclusion globs inside the requested directory, not to its ancestors.
+		const rgProcess = childProcess.spawn(rgPath, [...args.slice(0, -1), "."], { cwd: searchDir })
 		let output = ""
 		const results: string[] = []
 

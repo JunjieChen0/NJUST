@@ -23,7 +23,8 @@ vi.mock("node:dns/promises", () => ({
 	lookup: dnsLookupMock,
 }))
 
-vi.mock("../../security/networkGuard", () => ({
+vi.mock("../../security/networkGuard", async (original) => ({
+	...(await original<typeof import("../../security/networkGuard")>()),
 	assertSafeOutboundUrl: assertSafeOutboundUrlMock,
 	assertPublicIp: assertPublicIpMock,
 }))
@@ -72,6 +73,33 @@ describe("webFetchTool", () => {
 		expect(axiosGetMock).toHaveBeenCalledTimes(1)
 		expect(assertSafeOutboundUrlMock).toHaveBeenCalledTimes(1)
 		expect(callbacks.pushToolResult).toHaveBeenCalledWith(expect.stringContaining("cancelled"), { isError: true })
+	})
+	it("cancels while DNS is unresolved and never starts approval or HTTP afterwards", async () => {
+		let release!: (addresses: { address: string; family: number }[]) => void
+		let markStarted!: () => void
+		const started = new Promise<void>((resolve) => {
+			markStarted = resolve
+		})
+		dnsLookupMock.mockImplementationOnce(() => {
+			markStarted()
+			return new Promise((resolve) => {
+				release = resolve
+			})
+		})
+		const controller = new AbortController()
+		const callbacks = createCallbacks()
+		const pending = webFetchTool.execute(
+			{ url: "https://example.com" },
+			{ toolAbortController: controller } as any,
+			callbacks as any,
+		)
+		await started
+		controller.abort()
+		await pending
+		release([{ address: "8.8.8.8", family: 4 }])
+		await Promise.resolve()
+		expect(callbacks.askApproval).not.toHaveBeenCalled()
+		expect(axiosGetMock).not.toHaveBeenCalled()
 	})
 
 	it("accepts stable http and https partial urls only", () => {
@@ -215,8 +243,8 @@ describe("webFetchTool > manual redirect loop", () => {
 		await webFetchTool.execute({ url: "https://example.com/start" }, {} as any, callbacks as any)
 
 		expect(assertSafeOutboundUrlMock).toHaveBeenCalledTimes(2)
-		expect(assertSafeOutboundUrlMock).toHaveBeenNthCalledWith(1, "https://example.com/start")
-		expect(assertSafeOutboundUrlMock).toHaveBeenNthCalledWith(2, "https://safe-target.com/page")
+		expect(assertSafeOutboundUrlMock).toHaveBeenNthCalledWith(1, "https://example.com/start", undefined)
+		expect(assertSafeOutboundUrlMock).toHaveBeenNthCalledWith(2, "https://safe-target.com/page", undefined)
 		expect(callbacks.pushToolResult).toHaveBeenCalledWith("Final")
 	})
 
@@ -228,7 +256,7 @@ describe("webFetchTool > manual redirect loop", () => {
 
 		await webFetchTool.execute({ url: "https://example.com/base" }, {} as any, callbacks as any)
 
-		expect(assertSafeOutboundUrlMock).toHaveBeenNthCalledWith(2, "https://example.com/relative-path")
+		expect(assertSafeOutboundUrlMock).toHaveBeenNthCalledWith(2, "https://example.com/relative-path", undefined)
 		expect(callbacks.pushToolResult).toHaveBeenCalledWith("relative content")
 	})
 

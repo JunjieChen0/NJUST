@@ -74,64 +74,41 @@ export class FileSecretStorage implements SecretStorage {
 			if (fs.existsSync(this.filePath)) {
 				const encryptedContent = fs.readFileSync(this.filePath, "utf-8")
 				const keyFile = this.getKeyFilePath()
-
-				if (!fs.existsSync(keyFile)) {
-					// Migration path: no key file yet — try legacy key first
+				if (fs.existsSync(keyFile)) {
 					try {
-						const legacyKey = this.deriveLegacyKey()
-						const decrypted = this.decryptWithKey(encryptedContent, legacyKey)
-						this.secrets = JSON.parse(decrypted)
-						console.log(`Migrating secrets from legacy key to random key at ${keyFile}`)
-						// Set a new random key and re-encrypt
-						this.persistNewRandomKey()
-						this.saveToFile()
+						this.secrets = JSON.parse(this.decrypt(encryptedContent))
 						return
 					} catch {
-						console.warn(`Legacy key migration failed for ${this.filePath}, starting fresh`)
-						this.secrets = {}
-						this.persistNewRandomKey()
-						return
+						// A prior migration may have saved its key before publishing the new ciphertext.
+						console.warn(`Checking for an interrupted legacy migration at ${this.filePath}`)
 					}
 				}
-
-				try {
-					const decryptedContent = this.decrypt(encryptedContent)
-					this.secrets = JSON.parse(decryptedContent)
-				} catch {
-					console.warn(`Failed to decrypt secrets from ${this.filePath}, starting fresh`)
-					this.secrets = {}
-				}
+				this.secrets = JSON.parse(this.decryptWithKey(encryptedContent, this.deriveLegacyKey()))
+				if (!fs.existsSync(keyFile)) this.persistNewRandomKey()
+				this.saveToFile(this.secrets)
 			}
 		} catch (error) {
 			console.warn(`Failed to load secrets from ${this.filePath}:`, error)
-			this.secrets = {}
+			throw error
 		}
 	}
 
 	/**
 	 * Save secrets to the encrypted JSON file with restrictive permissions
 	 */
-	private saveToFile(): void {
+	private saveToFile(secrets: Record<string, string>): void {
 		try {
 			// Ensure directory exists
 			const dir = path.dirname(this.filePath)
 			ensureDirectoryExists(dir)
 
 			// Encrypt the secrets before writing
-			const plaintext = JSON.stringify(this.secrets, null, 2)
+			const plaintext = JSON.stringify(secrets, null, 2)
 			const encryptedContent = this.encrypt(plaintext)
-			fs.writeFileSync(this.filePath, encryptedContent)
-
-			// Set restrictive permissions (owner read/write only) on Unix-like systems
-			if (process.platform !== "win32") {
-				try {
-					fs.chmodSync(this.filePath, 0o600)
-				} catch {
-					// Ignore chmod errors (might not be supported on some filesystems)
-				}
-			}
+			this.writeProtectedFile(this.filePath, encryptedContent)
 		} catch (error) {
 			console.warn(`Failed to save secrets to ${this.filePath}:`, error)
+			throw error
 		}
 	}
 
@@ -152,8 +129,9 @@ export class FileSecretStorage implements SecretStorage {
 	 * @param value - The secret value
 	 */
 	async store(key: string, value: string): Promise<void> {
-		this.secrets[key] = value
-		this.saveToFile()
+		const next = { ...this.secrets, [key]: value }
+		this.saveToFile(next)
+		this.secrets = next
 		this._onDidChange.fire({ key })
 	}
 
@@ -163,8 +141,10 @@ export class FileSecretStorage implements SecretStorage {
 	 * @param key - The secret key to delete
 	 */
 	async delete(key: string): Promise<void> {
-		delete this.secrets[key]
-		this.saveToFile()
+		const next = { ...this.secrets }
+		delete next[key]
+		this.saveToFile(next)
+		this.secrets = next
 		this._onDidChange.fire({ key })
 	}
 
@@ -179,8 +159,8 @@ export class FileSecretStorage implements SecretStorage {
 	 * Clear all secrets (useful for testing)
 	 */
 	clearAll(): void {
+		this.saveToFile({})
 		this.secrets = {}
-		this.saveToFile()
 	}
 
 	/**
@@ -214,29 +194,24 @@ export class FileSecretStorage implements SecretStorage {
 	 */
 	private persistNewRandomKey(): void {
 		const keyFile = this.getKeyFilePath()
-		this.encryptionKey = crypto.randomBytes(KEY_LENGTH)
-		try {
-			// Atomic write: write to temp file, then rename
-			const tmpFile = keyFile + ".tmp"
-			fs.writeFileSync(tmpFile, this.encryptionKey)
-			if (process.platform !== "win32") {
-				fs.chmodSync(tmpFile, 0o600)
-			}
-			fs.renameSync(tmpFile, keyFile)
-			// Windows: disable inheritance and grant access only to current user
-			if (process.platform === "win32") {
-				try {
-					execFileSync("icacls", [keyFile, "/inheritance:r", "/grant:r", `${os.userInfo().username}:(R,W)`], {
-						timeout: 5000,
-						windowsHide: true,
-					})
-				} catch {
-					console.warn(`Failed to set ACL on key file ${keyFile}; using default permissions`)
-				}
-			}
-		} catch (err) {
-			console.warn(`Failed to persist encryption key to ${keyFile}:`, err)
+		const key = crypto.randomBytes(KEY_LENGTH)
+		this.writeProtectedFile(keyFile, key)
+		this.encryptionKey = key
+	}
+
+	/** Publish only after the complete file has owner-only permissions. */
+	private writeProtectedFile(file: string, content: string | Buffer): void {
+		const temporary = `${file}.${crypto.randomUUID()}.tmp`
+		// Secure the empty file before any key bytes are written, including if icacls fails.
+		fs.writeFileSync(temporary, "", { mode: 0o600, flag: "wx" })
+		if (process.platform === "win32") {
+			execFileSync("icacls", [temporary, "/inheritance:r", "/grant:r", `${os.userInfo().username}:(F)`], {
+				timeout: 5000,
+				windowsHide: true,
+			})
 		}
+		fs.writeFileSync(temporary, content, { flag: "r+" })
+		fs.renameSync(temporary, file)
 	}
 
 	/**
@@ -255,10 +230,11 @@ export class FileSecretStorage implements SecretStorage {
 			const keyFile = this.getKeyFilePath()
 			if (fs.existsSync(keyFile)) {
 				// Use persisted random key
-				this.encryptionKey = fs.readFileSync(keyFile)
-				if (this.encryptionKey.length !== KEY_LENGTH) {
-					throw new Error(`Invalid key file length: expected ${KEY_LENGTH}, got ${this.encryptionKey.length}`)
+				const key = fs.readFileSync(keyFile)
+				if (key.length !== KEY_LENGTH) {
+					throw new Error(`Invalid key file length: expected ${KEY_LENGTH}, got ${key.length}`)
 				}
+				this.encryptionKey = key
 			} else {
 				// Fresh install — no secrets.json and no key file
 				this.persistNewRandomKey()

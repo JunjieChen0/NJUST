@@ -73,6 +73,8 @@ function createHost(overrides: Record<string, any> = {}): any {
 		isStreaming: false,
 		isWaitingForFirstChunk: false,
 		parentTask: undefined,
+		requestTurnCount: 0,
+		enforceMaxTurns: vi.fn().mockResolvedValue(false),
 		getTokenUsage: vi.fn().mockReturnValue({ contextTokens: 0 }),
 		api: {
 			getModel: vi.fn().mockReturnValue({ id: "test-model", info: { contextWindow: 200_000 } }),

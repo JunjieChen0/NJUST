@@ -86,18 +86,23 @@ export abstract class BaseProvider implements ApiHandler {
 			}
 
 			// MCP tools use the 'mcp--' prefix - disable strict mode for them
-			// to preserve optional parameters from the MCP server schema
+			// to preserve optional parameters from the MCP server schema.
+			// A tool that explicitly opts out (strict: false) must also be
+			// respected: forcing strict on it makes every optional property
+			// mandatory, which produces "field: Required" errors for parameters
+			// the tool definition documents as optional (e.g. follow-up mode).
 			const isMcp = isMcpTool(tool.function.name)
+			const explicitlyNonStrict = tool.function.strict === false
+			const applyStrict = useStrict && !isMcp && !explicitlyNonStrict
 
 			return {
 				...tool,
 				function: {
 					...tool.function,
-					strict: useStrict && !isMcp,
-					parameters:
-						useStrict && !isMcp
-							? this.convertToolSchemaForOpenAI(tool.function.parameters)
-							: tool.function.parameters,
+					strict: applyStrict,
+					parameters: applyStrict
+						? this.convertToolSchemaForOpenAI(tool.function.parameters)
+						: tool.function.parameters,
 				},
 			} as TTool
 		})

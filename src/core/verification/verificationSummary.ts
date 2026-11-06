@@ -40,6 +40,8 @@ export function buildVerificationSummary(
 		const run = value.run
 		if (run.source === "model_command")
 			notes.push(`${run.kind}: model-requested command from task ${run.taskId}; not system verification`)
+		if (run.source === "model_command" && run.testScope?.filter)
+			notes.push(`test: result applies only to filter ${run.testScope.filter}; whole-project outcome is unknown`)
 		const detail = run.abortDetail ?? run.abortReason?.replaceAll("_", " ")
 		if (detail) notes.push(`${run.kind}: ${detail}`)
 		if (run.inputFingerprint && run.inputFingerprintAfter && run.inputFingerprint !== run.inputFingerprintAfter)

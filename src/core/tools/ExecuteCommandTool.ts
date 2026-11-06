@@ -154,7 +154,13 @@ export function isCangjieToolchainCommand(command: string): boolean {
 export function validateCangjieImplementCommand(agentType: string | undefined, command: string): string | null {
 	if (agentType !== "CangjieImplement") return null
 	if (/^\s*cjpm\s+init(?:\s|$)/i.test(command) && !/[;&|]/.test(command)) return null
-	return "CangjieImplement may execute only one direct cjpm init command. Delegate build/check/lint verification to CangjieVerify."
+	return (
+		"CangjieImplement is not permitted to run this command. Its execute_command access is limited to a single " +
+		"direct `cjpm init --name <name> --type=<type>` in an uninitialized directory. " +
+		"cjpm build/check, cjc, cjlint, cjfmt, shell wrappers and directory changes are rejected at runtime. " +
+		"Do not retry with a rewritten command: finish the edit and call attempt_completion so the parent can " +
+		"delegate verification to CangjieVerify."
+	)
 }
 
 export function resolveAgentTimeoutMs(timeoutSeconds: number | null | undefined): number {

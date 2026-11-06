@@ -1,6 +1,5 @@
 import axios from "axios"
 import * as cheerio from "cheerio"
-import dns from "node:dns/promises"
 import net from "node:net"
 import TurndownService from "turndown"
 import { z } from "zod"
@@ -8,7 +7,7 @@ import { z } from "zod"
 import { BaseTool, type ToolCallbacks } from "./BaseTool"
 import type { Task } from "../task/Task"
 import { formatResponse } from "../prompts/responses"
-import { assertSafeOutboundUrl } from "../security/networkGuard"
+import { assertSafeOutboundUrl, lookupWithAbort } from "../security/networkGuard"
 import { assertPublicIp } from "../security/networkGuard"
 
 const MAX_TIMEOUT_MS = 30_000
@@ -78,8 +77,8 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 			let hostname: string
 			let pinnedIp: string | undefined
 			try {
-				parsedUrl = await assertSafeOutboundUrl(url)
-				hostname = parsedUrl.hostname
+				parsedUrl = await assertSafeOutboundUrl(url, signal)
+				hostname = parsedUrl.hostname.replace(/^\[|\]$/g, "")
 			} catch (error) {
 				pushToolResult(formatResponse.toolError(error instanceof Error ? error.message : `Invalid URL: ${url}`))
 				return
@@ -89,7 +88,7 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 			// verified IP with a Host header. This eliminates the DNS rebinding
 			// window that exists with pre/post comparison.
 			if (!isIPAddress(hostname)) {
-				const resolved = await dns.lookup(hostname, { all: true, verbatim: true })
+				const resolved = await lookupWithAbort(hostname, signal)
 				if (!resolved.length) {
 					pushToolResult(formatResponse.toolError(`Could not resolve host: ${hostname}`))
 					return
@@ -157,15 +156,16 @@ class WebFetchToolImpl extends BaseTool<"web_fetch"> {
 
 					// Resolve relative URL using the original URL, then SSRF-guard
 					const redirectUrl = new URL(location, requestUrl).href
-					await assertSafeOutboundUrl(redirectUrl)
+					await assertSafeOutboundUrl(redirectUrl, signal)
 
 					const redirectParsed = new URL(redirectUrl)
+					const redirectHostname = redirectParsed.hostname.replace(/^\[|\]$/g, "")
 					// If redirecting to a different host, resolve it
-					if (redirectParsed.hostname !== currentHostname) {
-						currentHostname = redirectParsed.hostname
+					if (redirectHostname !== currentHostname) {
+						currentHostname = redirectHostname
 						currentPinnedIp = undefined
-						if (!isIPAddress(redirectParsed.hostname)) {
-							const redirectIps = await dns.lookup(redirectParsed.hostname, { all: true, verbatim: true })
+						if (!isIPAddress(redirectHostname)) {
+							const redirectIps = await lookupWithAbort(redirectHostname, signal)
 							if (redirectIps.length) {
 								for (const entry of redirectIps) assertPublicIp(entry.address)
 								currentPinnedIp = redirectIps[0]!.address

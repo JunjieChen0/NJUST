@@ -106,15 +106,28 @@ export class AgentTool extends BaseTool<"agent"> {
 			// Build the agent message with context about its type and constraints
 			const allowedTools = resolveSubAgentTools(agentType)
 			const toolSetDescription = agentType !== "custom" ? allowedTools.join(", ") : "inherited from parent"
+			// execute_command is listed for CangjieImplement only to allow a direct
+			// `cjpm init` in an uninitialized directory. Build/check/lint are rejected
+			// by validateCangjieImplementCommand, so spell that out to avoid the model
+			// wasting turns on commands that will be refused.
+			const toolScopeNote =
+				agentType === "CangjieImplement"
+					? "\n[Tool scope] execute_command is restricted to a single direct `cjpm init` command. " +
+						"Do not attempt cjpm build/check, cjc, cjlint, cjfmt, shell wrappers or directory changes: " +
+						"those are rejected at runtime. Verification is delegated to CangjieVerify by the parent."
+					: ""
 			const modeSlug = await task.getTaskMode()
 			const agentInstructions = resolveSubAgentInstructions(agentType, taskDescription, modeSlug)
 			const maxTurnsNote = maxTurns
-				? `\n\nIMPORTANT: You have a maximum of ${maxTurns} conversation turns to complete this task. Be efficient and focused.`
+				? `\n\nIMPORTANT: This sub-agent has a HARD limit of ${maxTurns} conversation turn(s), enforced by the runtime. ` +
+					`When the limit is reached the sub-agent is stopped automatically and its work is reported as incomplete. ` +
+					`Plan accordingly: investigate efficiently and call attempt_completion before the limit.`
 				: ""
 
 			const agentMessage = [
 				`[Sub-Agent Type: ${agentType}]`,
 				`[Available Tools: ${toolSetDescription}]`,
+				toolScopeNote,
 				agentInstructions ? `[Agent Instructions]\n${agentInstructions}\n[End Agent Instructions]` : "",
 				``,
 				taskDescription,
@@ -154,6 +167,7 @@ export class AgentTool extends BaseTool<"agent"> {
 				isolationLevel: "forked",
 				allowedTools: agentType === "custom" ? undefined : allowedTools,
 				agentType,
+				maxTurns,
 			})
 
 			// Focusing the child prevents the normal presenter from advancing the

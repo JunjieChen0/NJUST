@@ -55,7 +55,12 @@ export interface TaskProviderLike {
 export type TaskProviderEvents = {
 	[NJUST_AIEventName.TaskCreated]: [task: TaskLike]
 	[NJUST_AIEventName.TaskStarted]: [taskId: string]
-	[NJUST_AIEventName.TaskCompleted]: [taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage, meta: { isSubtask: boolean }]
+	[NJUST_AIEventName.TaskCompleted]: [
+		taskId: string,
+		tokenUsage: TokenUsage,
+		toolUsage: ToolUsage,
+		meta: { isSubtask: boolean },
+	]
 	[NJUST_AIEventName.TaskAborted]: [taskId: string]
 	[NJUST_AIEventName.TaskFocused]: [taskId: string]
 	[NJUST_AIEventName.TaskUnfocused]: [taskId: string]
@@ -91,6 +96,8 @@ export interface CreateTaskOptions {
 	initialTodos?: TodoItem[]
 	/** Capability-scoped tool whitelist for this task (used for delegated child tasks). */
 	allowedTools?: string[]
+	/** Hard cap on agentic turns (model requests) for delegated child tasks. */
+	maxTurns?: number
 	/** Optional trace id used to stitch parent/child task observability spans. */
 	parentTraceId?: string
 	/** Initial status for the task's history item (e.g., "active" for child tasks) */
@@ -138,7 +145,12 @@ export interface TaskLike {
 export type TaskEvents = {
 	// Task Lifecycle
 	[NJUST_AIEventName.TaskStarted]: []
-	[NJUST_AIEventName.TaskCompleted]: [taskId: string, tokenUsage: TokenUsage, toolUsage: ToolUsage, meta: { isSubtask: boolean }]
+	[NJUST_AIEventName.TaskCompleted]: [
+		taskId: string,
+		tokenUsage: TokenUsage,
+		toolUsage: ToolUsage,
+		meta: { isSubtask: boolean },
+	]
 	[NJUST_AIEventName.TaskAborted]: []
 	[NJUST_AIEventName.TaskFocused]: []
 	[NJUST_AIEventName.TaskUnfocused]: []

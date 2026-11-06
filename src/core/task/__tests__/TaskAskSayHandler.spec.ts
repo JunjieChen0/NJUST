@@ -139,6 +139,32 @@ describe("TaskAskSayHandler", () => {
 			await vi.advanceTimersByTimeAsync(121_000)
 			expect(await result).toMatchObject({ name: "TimeoutError" })
 		})
+
+		it.each(["tool", "command", "use_mcp_server", "completion_result"] as const)(
+			"returns queued feedback arriving during %s without granting approval",
+			async (type) => {
+				const queue = createQueue()
+				const host = createHost({ messageQueueService: queue })
+				const pending = new TaskAskSayHandler(host).ask(type, "waiting", false, undefined, true)
+				void pending.catch(() => undefined)
+				await vi.advanceTimersByTimeAsync(2_100)
+				queue.messages.push({ text: "Do not execute. Explain first.", images: ["feedback.png"] })
+				await vi.advanceTimersByTimeAsync(200)
+				try {
+					expect(queue.dequeueMessage).toHaveBeenCalledOnce()
+					expect(await pending).toEqual({
+						response: "messageResponse",
+						text: "Do not execute. Explain first.",
+						images: ["feedback.png"],
+					})
+					expect(host.approveAsk).not.toHaveBeenCalled()
+				} finally {
+					host.abort = true
+					await vi.advanceTimersByTimeAsync(100)
+					await pending.catch(() => undefined)
+				}
+			},
+		)
 	})
 
 	it("adds a new partial ask and ignores it", async () => {
@@ -203,16 +229,34 @@ describe("TaskAskSayHandler", () => {
 		expect(result).toEqual({ response: "messageResponse", text: "answer", images: ["img"] })
 	})
 
-	it("drains queued user messages as approval for tool asks", async () => {
-		const host = createHost({ messageQueueService: createQueue([{ text: "approved" }]) })
-		const handler = new TaskAskSayHandler(host)
-		const spy = vi.spyOn(handler, "handleWebviewAskResponse")
+	it.each(["tool", "command", "use_mcp_server", "completion_result"] as const)(
+		"drains queued feedback without approving %s",
+		async (type) => {
+			const host = createHost({ messageQueueService: createQueue([{ text: "Do not execute" }]) })
+			const handler = new TaskAskSayHandler(host)
+			const spy = vi.spyOn(handler, "handleWebviewAskResponse")
 
-		const result = await handler.ask("tool", "run?", false)
+			const result = await handler.ask(type, "run?", false, undefined, true)
 
-		expect(spy).toHaveBeenCalledWith("yesButtonClicked", "approved", undefined)
-		expect(result.response).toBe("yesButtonClicked")
-	})
+			expect(spy).toHaveBeenCalledWith("messageResponse", "Do not execute", undefined)
+			expect(result.response).toBe("messageResponse")
+		},
+	)
+
+	it.each(["approve", "deny"] as const)(
+		"does not overwrite a resolved %s decision with queued text",
+		async (decision) => {
+			const queue = createQueue([{ text: "next request" }])
+			checkAutoApprovalMock.mockResolvedValue({ decision })
+			const result = await new TaskAskSayHandler(createHost({ messageQueueService: queue })).ask(
+				"command",
+				"run?",
+				false,
+			)
+			expect(result.response).toBe(decision === "deny" ? "noButtonClicked" : "yesButtonClicked")
+			expect(queue.dequeueMessage).not.toHaveBeenCalled()
+		},
+	)
 
 	it("does not drain queued messages for command_output asks", async () => {
 		const queue = createQueue([{ text: "keep" }])

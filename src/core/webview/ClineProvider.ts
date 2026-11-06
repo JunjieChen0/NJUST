@@ -1085,6 +1085,7 @@ export class ClineProvider
 		forkedContextSummary?: string
 		allowedTools?: string[]
 		agentType?: string
+		maxTurns?: number
 	}): Promise<Task> {
 		return delegateParentAndOpenChildWithProvider(this, params)
 	}

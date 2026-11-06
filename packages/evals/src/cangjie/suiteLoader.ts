@@ -50,6 +50,7 @@ const taskSchema = z
 			.min(1)
 			.optional(),
 		reportIncludes: z.array(z.string().min(1)).min(1).optional(),
+		reportFacts: z.record(z.string().min(1), z.union([z.string(), z.number(), z.boolean()])).optional(),
 	})
 	.strict()
 
@@ -77,8 +78,8 @@ const suiteSchema = z
 				context.addIssue({ code: "custom", message: `${task.id} requires an independent oracle assertion` })
 			if (task.requiredAssertions.includes("oracle-passed") && !Object.keys(task.oracleFiles ?? {}).length)
 				context.addIssue({ code: "custom", message: `${task.id} requires hidden test files` })
-			if (task.requiredAssertions.includes("report-correct") && !task.reportIncludes?.length)
-				context.addIssue({ code: "custom", message: `${task.id} requires reportIncludes` })
+			if (task.requiredAssertions.includes("report-correct") && !Object.keys(task.reportFacts ?? {}).length)
+				context.addIssue({ code: "custom", message: `${task.id} requires reportFacts` })
 		}
 	})
 

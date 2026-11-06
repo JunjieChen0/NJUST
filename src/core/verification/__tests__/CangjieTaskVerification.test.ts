@@ -179,6 +179,82 @@ describe("CangjieTaskVerification", () => {
 		expect(await loadVerificationRecord(taskDir, "task-1")).toBeUndefined()
 	})
 
+	it.each([false, true])("runs system verification after a model failure (SDK switched: %s)", async (switched) => {
+		const dependencies = deps()
+		let sdkVersion = "old"
+		dependencies.checkDeps.sdkInfo = async () => ({ version: sdkVersion })
+		dependencies.checkDeps.environment = async () => ({ sdkVersion, cjpmPath: "cjpm" })
+		const session = new CangjieTaskVerification(
+			{ taskId: "task-1", cwd: projectRoot, policy: makePolicy() },
+			dependencies,
+		)
+		const finish = await session.observeCommand("cjpm build", projectRoot, "child")
+		await finish!("old failure", 1)
+		if (switched) {
+			sdkVersion = "new"
+			expect((await session.currentSummary())?.build.state).toBe("stale")
+		}
+		exec.mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok(TESTS_PASSED))
+		const result = await session.verifyForCompletion(approveAll)
+		expect(exec).toHaveBeenCalledTimes(2)
+		expect(result.action === "allow" && result.summary.overall).toBe("verified")
+		expect((await loadVerificationRecord(taskDir, "task-1"))?.runs[0]).toMatchObject({
+			source: "model_command",
+			status: "failed",
+		})
+		session.dispose()
+	})
+	it("preserves a bare model command failure under an unchanged explicit SDK configuration", async () => {
+		const dependencies = deps()
+		const configured = path.join(base, "SDK", "cjpm.exe")
+		dependencies.checkDeps.resolveCjpm = () => configured
+		dependencies.checkDeps.environment = async () => ({ sdkVersion: "1.0.5", cjpmPath: configured })
+		const session = new CangjieTaskVerification(
+			{ taskId: "task-1", cwd: projectRoot, policy: makePolicy() },
+			dependencies,
+		)
+		const finish = await session.observeCommand("cjpm test --filter=Selected.*", projectRoot, "child")
+		await finish!("selected test failed", 1)
+		const summary = await session.currentSummary()
+		expect(summary?.test.state).toBe("failed")
+		expect(summary?.note).toContain("whole-project outcome is unknown")
+		expect((await session.currentSummary())?.test.state).toBe("failed")
+		expect((await loadVerificationRecord(taskDir, "task-1"))?.invalidations).toEqual([])
+		const run = (await loadVerificationRecord(taskDir, "task-1"))?.runs[0]
+		expect(run?.executable).toBe("cjpm")
+		expect(run?.sdk).toBeUndefined()
+		expect(run?.observedEnvironment?.cjpmPath).toBe(configured)
+		session.dispose()
+	})
+
+	it("does not reuse a filtered model failure as whole-project verification", async () => {
+		const session = create(makePolicy())
+		exec.mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok(TESTS_PASSED))
+		await session.verifyForCompletion(approveAll)
+		exec.mockClear()
+		const finish = await session.observeCommand("cjpm test --filter=Selected.* 2>&1", projectRoot, "child")
+		expect(finish).toBeDefined()
+		await finish!("selected test failed", 1)
+		const observed = (await loadVerificationRecord(taskDir, "task-1"))?.runs.at(-1)
+		expect(observed?.testScope).toMatchObject({ filter: "Selected.*" })
+		exec.mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok(TESTS_PASSED))
+		const result = await session.verifyForCompletion(approveAll)
+		expect(exec).toHaveBeenCalledTimes(2)
+		expect(result.action === "allow" && result.summary.overall).toBe("verified")
+		session.dispose()
+	})
+
+	it.each(["cjpm build 2>&1", '"C:/SDK path/cjpm.exe" build 2>&1'])(
+		"records safe stderr merging: %s",
+		async (command) => {
+			const finish = await create(makePolicy()).observeCommand(command, projectRoot, "child")
+			expect(finish).toBeDefined()
+			await finish!("failed output", 1)
+			const run = (await loadVerificationRecord(taskDir, "task-1"))?.runs[0]
+			expect(run).toMatchObject({ command, args: ["build"], status: "failed", exitCode: 1 })
+		},
+	)
+
 	it("retains a blocked configuration record and verifies after the tool is restored", async () => {
 		const dependencies = deps()
 		let available = false

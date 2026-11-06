@@ -19,6 +19,9 @@ function fixture(legacyKey?: string, storedKey?: string) {
 			}),
 		},
 		secrets: {
+			delete: vi.fn(async (key: string) => {
+				secrets.delete(key)
+			}),
 			get: vi.fn(async (key: string) => secrets.get(key)),
 			store: vi.fn(async (key: string, value: string) => {
 				secrets.set(key, value)
@@ -35,6 +38,20 @@ function fixture(legacyKey?: string, storedKey?: string) {
 }
 
 describe("web search credential storage", () => {
+	it.each(["store", "clear"])(
+		"does not resurrect a legacy key after migration %s fails and the user resets",
+		async (failure) => {
+			const f = fixture("synthetic-legacy")
+			if (failure === "store") vi.mocked(f.context.secrets.store).mockRejectedValueOnce(new Error("store failed"))
+			else vi.mocked(f.context.globalState.update).mockRejectedValueOnce(new Error("clear failed"))
+			const proxy = await f.create()
+			expect(f.globals.get("webSearchApiKey")).toBe("synthetic-legacy")
+			await proxy.resetAllState()
+			expect(f.globals.get("webSearchApiKey")).toBeUndefined()
+			expect(f.secrets.get("webSearchApiKey")).toBeUndefined()
+			expect((await f.create()).getValue("webSearchApiKey")).toBeUndefined()
+		},
+	)
 	it("classifies the search key as a secret instead of ordinary global state", () => {
 		expect(isSecretStateKey("webSearchApiKey")).toBe(true)
 		expect(GLOBAL_STATE_KEYS).not.toContain("webSearchApiKey")

@@ -8,6 +8,9 @@
 import { NamedError } from "@njust-ai/core/shared"
 
 export class AskIgnoredError extends NamedError {
+	// This control-flow name is inspected across layers and must survive minification.
+	override name = "AskIgnoredError"
+
 	constructor(reason?: string) {
 		super(reason ? `Ask ignored: ${reason}` : "Ask ignored")
 	}

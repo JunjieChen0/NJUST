@@ -1,5 +1,5 @@
 {
-	"version": "independent-acceptance-1.0.3",
+	"version": "independent-acceptance-1.0.4",
 	"sdkVersion": "1.0.5",
 	"concurrency": 1,
 	"performanceThreshold": null,
@@ -53,7 +53,12 @@
 			"prompt": "只读定位允许预留库存的函数：说明文件、函数和请求数量为0时的结果。不要修改文件，不运行构建和测试。",
 			"allowedChanges": [],
 			"requiredAssertions": ["source-unchanged", "no-unapproved-command", "report-correct"],
-			"reportIncludes": ["stock.cj", "canReserve"]
+			"reportIncludes": ["stock.cj", "canReserve"],
+			"reportFacts": {
+				"file": "src/stock.cj",
+				"function": "canReserve",
+				"zeroRequestedAllowed": false
+			}
 		},
 		{
 			"id": "H04",
@@ -121,7 +126,13 @@
 			"prompt": "只读定位单词计数的实现文件和函数，说明它对连续空格与空字符串的处理。不要修改文件，不运行任何命令。",
 			"allowedChanges": [],
 			"requiredAssertions": ["source-unchanged", "no-unapproved-command", "report-correct"],
-			"reportIncludes": ["text.cj", "wordCount"]
+			"reportIncludes": ["text.cj", "wordCount"],
+			"reportFacts": {
+				"file": "src/text.cj",
+				"function": "wordCount",
+				"consecutiveSpacesCreateWords": false,
+				"emptyCount": 0
+			}
 		},
 		{
 			"id": "H08",

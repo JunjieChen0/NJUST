@@ -569,6 +569,14 @@ export class TaskExecutor {
 			const currentIncludeFileDetails = currentItem.includeFileDetails
 			t._savedMessagesForCurrentRequest = false
 
+			// Hard turn cap for delegated sub-tasks. Checked before every model
+			// request (including follow-up stack items pushed by tool results),
+			// so a sub-agent cannot keep the task alive by looping indefinitely.
+			if (await t.enforceMaxTurns()) {
+				break
+			}
+			t.requestTurnCount++
+
 			if (t.abort) {
 				// Only force ERROR if not already in a terminal state, avoiding
 				// the COMPLETED -> ERROR unsafe transition race condition.

@@ -14,6 +14,11 @@ import { cangjieTaskPrompt, type CangjieTaskCase } from "../../../../packages/ev
 import { contentFingerprint, inputFiles, writeFinalDiff } from "../../../../packages/evals/src/cangjie/artifacts.js"
 import { addOracle } from "../../../../packages/evals/src/cangjie/projects.js"
 import {
+	evaluateReportFacts,
+	finalModelReport,
+	REPORT_SCORER_VERSION,
+} from "../../../../packages/evals/src/cangjie/reportFacts.js"
+import {
 	hasAssistantResponse,
 	hasPassingDependencyTests,
 	scoreCangjieTask,
@@ -63,7 +68,7 @@ export async function run(): Promise<void> {
 		task: CangjieTaskCase
 		variant?: string
 		workspace: string
-		config: { baseUrl: string; model: string; apiKeyEnv: string; provider?: "openai" | "deepseek" }
+		config: { baseUrl: string; model: string; apiKeyEnv: string; provider?: "openai" | "deepseek" | "doubao" }
 		sdkEnv: NodeJS.ProcessEnv
 		cjpm: string
 		compiler: string
@@ -137,6 +142,17 @@ export async function run(): Promise<void> {
 			}
 		} else if (message.ask === "command_output") {
 			current.handleWebviewAskResponse("messageResponse", "继续后台运行，等待我的指示。")
+		} else if (message.ask === "followup") {
+			// Unattended evaluation has no human to answer a follow-up question.
+			// Leaving it unanswered blocks the task until the 180s deadline; answer
+			// with a neutral, non-leading response so the model can continue.
+			// Deliberately not recorded as an intervention: it is harness plumbing,
+			// not a user-supplied approval/feedback that scoring should count.
+			current.handleWebviewAskResponse("messageResponse", "请按任务要求继续，不要等待进一步确认。")
+		} else if (message.ask === "completion_result") {
+			// The report has already been displayed. Approve it so the task can
+			// emit TaskCompleted instead of hanging open until cancellation.
+			current.handleWebviewAskResponse("yesButtonClicked")
 		}
 	}
 	const onCompleted = (id: string) => {
@@ -185,20 +201,27 @@ export async function run(): Promise<void> {
 		)
 		await config.update("sandbox.backend", "guarded-host", vscode.ConfigurationTarget.Global)
 		await api.setConfiguration(
-			input.config.provider === "deepseek"
+			input.config.provider === "doubao"
 				? {
-						apiProvider: "deepseek",
-						deepSeekBaseUrl: input.config.baseUrl,
-						deepSeekApiKey: secret,
+						apiProvider: "doubao",
+						doubaoApiKey: secret,
+						doubaoBaseUrl: input.config.baseUrl,
 						apiModelId: input.config.model,
 					}
-				: {
-						apiProvider: "openai",
-						openAiBaseUrl: input.config.baseUrl,
-						openAiApiKey: secret,
-						openAiModelId: input.config.model,
-						openAiStreamingEnabled: true,
-					},
+				: input.config.provider === "deepseek"
+					? {
+							apiProvider: "deepseek",
+							deepSeekBaseUrl: input.config.baseUrl,
+							deepSeekApiKey: secret,
+							apiModelId: input.config.model,
+						}
+					: {
+							apiProvider: "openai",
+							openAiBaseUrl: input.config.baseUrl,
+							openAiApiKey: secret,
+							openAiModelId: input.config.model,
+							openAiStreamingEnabled: true,
+						},
 		)
 		await vscode.commands.executeCommand("njust-ai.SidebarProvider.focus")
 		await waitUntil(() => api!.isReady(), 30_000)
@@ -356,9 +379,22 @@ export async function run(): Promise<void> {
 	assertions["build-failure-reported"] =
 		delivered?.build.state === "failed" &&
 		runs.some((run) => run.kind === "build" && run.status === "failed" && run.exitCode !== 0)
-	assertions["report-correct"] =
-		!!taskCase.reportIncludes?.length &&
-		taskCase.reportIncludes.every((fragment) => text.toLowerCase().includes(fragment.toLowerCase()))
+	const displayedReport =
+		events
+			.filter(
+				(event) =>
+					event.taskId === rootId && event.message.say === "completion_result" && !event.message.partial,
+			)
+			.at(-1)?.message.text ?? ""
+	const report = finalModelReport(rootTask?.apiConversationHistory ?? []) ?? ""
+	assertions["report-correct"] = !!displayedReport && evaluateReportFacts(taskCase, report)
+	if (taskCase.requiredAssertions.includes("report-correct"))
+		await save("report-facts.json", {
+			scorerVersion: REPORT_SCORER_VERSION,
+			report,
+			displayedReport,
+			passed: assertions["report-correct"],
+		})
 	assertions["location-correct"] =
 		/src[\\/]bounded\.cj/.test(text) && /bounded/.test(text) && /(?:<\s*0|负数)/.test(text)
 	assertions["delivery-bound-to-code"] =

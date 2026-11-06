@@ -60,6 +60,15 @@ export const sdkInfoSchema = z.object({
 	imageDigest: z.string().optional(),
 })
 
+export const verificationEnvironmentSchema = z.object({
+	sdkHome: z.string().optional(),
+	sdkVersion: z.string().optional(),
+	cjpmPath: z.string().optional(),
+	backend: z.enum(["guarded-host", "docker"]).optional(),
+	image: z.string().optional(),
+	imageDigest: z.string().optional(),
+})
+
 export const verificationRunSchema = z.object({
 	runId: z.string().min(1),
 	taskId: z.string().min(1),
@@ -67,6 +76,8 @@ export const verificationRunSchema = z.object({
 	/** Missing on legacy records, which were all produced by system verification. */
 	source: z.enum(["system_verification", "model_command"]).optional(),
 	command: z.string().optional(),
+	/** Configuration observed before a model command, not proof of its shell's resolved SDK. */
+	observedEnvironment: verificationEnvironmentSchema.optional(),
 	/** "baseline" = before the task changed code; "delivery" = verifying the task's result. */
 	phase: z.enum(["baseline", "delivery"]).optional(),
 	executable: z.string().min(1),
@@ -119,14 +130,6 @@ export const fileChangeSchema = z.object({
 	change: z.enum(["added", "modified", "deleted"]),
 })
 export const attributedChangeSchema = fileChangeSchema.extend({ source: z.enum(["task_tool", "other"]) })
-export const verificationEnvironmentSchema = z.object({
-	sdkHome: z.string().optional(),
-	sdkVersion: z.string().optional(),
-	cjpmPath: z.string().optional(),
-	backend: z.enum(["guarded-host", "docker"]).optional(),
-	image: z.string().optional(),
-	imageDigest: z.string().optional(),
-})
 export const invalidationSchema = z.object({
 	at: z.number(),
 	cause: z.enum(["file_change", "checkpoint_restore", "task_resume", "environment_change"]),

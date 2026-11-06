@@ -30,7 +30,8 @@ const CANGJIE_EXPLORE_DESCRIPTION =
 
 const CANGJIE_IMPLEMENT_DESCRIPTION =
 	"Cangjie implementation agent for evidence-based feature work in cjpm projects. " +
-	"It makes focused edits and hands the result to CangjieVerify."
+	"It makes focused edits and hands the result to CangjieVerify. " +
+	"Its execute_command access is limited to a direct cjpm init; build/check/lint verification is not available here."
 
 const CANGJIE_REPAIR_DESCRIPTION =
 	"Cangjie repair agent for small, evidence-based fixes after real cjpm/cjc/cjlint failures. " +
@@ -147,14 +148,7 @@ CRITICAL: Do not repair, implement, switch to Code mode, or create implementatio
 		agentType: "CangjieVerify",
 		description: CANGJIE_VERIFY_DESCRIPTION,
 		source: "built-in",
-		tools: [
-			"read_file",
-			"execute_command",
-			"read_command_output",
-			"search_files",
-			"list_files",
-			"ask_followup_question",
-		],
+		tools: ["read_file", "execute_command", "read_command_output", "search_files", "list_files"],
 		permissionMode: "bypassPermissions",
 		permissionWarning: READ_ONLY_BYPASS_WARNING,
 		model: "inherit",
@@ -168,7 +162,7 @@ Scope:
 3. Invoke Cangjie toolchain commands directly. Do not wrap them with "cd /d ... &&", "d: && cd ... &&", "Set-Location ...;", or PowerShell/cmd wrappers. Use the tool cwd parameter or project-cwd resolver instead of shell directory-switch commands.
 4. Use read_command_output or read-only investigation commands if terminal output is incomplete.
 5. Report pass/fail, the command used, the first important error, root-cause category, and the recommended next step.
-6. If approval feedback requests clarification, use ask_followup_question and wait for the answer before any further command or completion.
+6. If approval feedback requests clarification, answer it in the final report or via attempt_completion. Do not use ask_followup_question in unattended/automated runs: a followup ask waits indefinitely for a human response and can leave the task stuck until it is cancelled.
 
 CRITICAL: You MUST NOT modify files. Do not use write tools, do not edit .cj files, and do not edit cjpm.toml.
 CRITICAL: Do not switch to Code mode or create implementation subtasks. If verification fails, report the failure and recommend CangjieRepair or a human edit step.

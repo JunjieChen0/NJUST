@@ -1,5 +1,6 @@
 export {
 	assertSafeOutboundUrl,
+	lookupWithAbort,
 	guardedFetch,
 	assertPublicIp,
 	assertHeadersSafe,

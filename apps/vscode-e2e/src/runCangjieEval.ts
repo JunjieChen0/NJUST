@@ -9,7 +9,7 @@ import { loadCangjieTaskSuite } from "../../../packages/evals/src/cangjie/suiteL
 import { summarizeCangjieScores } from "../../../packages/evals/src/cangjie/report.js"
 import { prepareWindowsTestEnvironment } from "./cangjie-eval/windowsTestEnvironment.js"
 import { contentFingerprint, inputFiles } from "../../../packages/evals/src/cangjie/artifacts.js"
-import { prepareCase } from "../../../packages/evals/src/cangjie/projects.js"
+import { copyEvaluationProject, prepareCase } from "../../../packages/evals/src/cangjie/projects.js"
 import {
 	scoreCangjieTask,
 	scoreCangjieTaskVariants,
@@ -22,7 +22,7 @@ const execFileAsync = promisify(execFile)
 let mockServer: Awaited<ReturnType<typeof startMockServer>> | undefined
 
 interface ModelConfig {
-	provider?: "openai" | "deepseek"
+	provider?: "openai" | "deepseek" | "doubao"
 	baseUrl: string
 	model: string
 	apiKeyEnv: string
@@ -44,7 +44,8 @@ function parseModelConfig(value: unknown): ModelConfig {
 	if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search)
 		throw new Error("Use an HTTP(S) base URL without embedded credentials or query parameters")
 	const provider = "provider" in value ? value.provider : "openai"
-	if (provider !== "openai" && provider !== "deepseek") throw new Error("Unsupported evaluation provider")
+	if (provider !== "openai" && provider !== "deepseek" && provider !== "doubao")
+		throw new Error("Unsupported evaluation provider")
 	return { baseUrl: value.baseUrl, model: value.model, apiKeyEnv: value.apiKeyEnv, provider }
 }
 
@@ -66,7 +67,7 @@ async function main(): Promise<void> {
 	const extensionPath = process.env.NJUST_CANGJIE_EVAL_EXTENSION_PATH ?? path.join(repo, "src")
 	const outputParent = process.env.NJUST_CANGJIE_EVAL_OUTPUT ?? os.tmpdir()
 	await fs.mkdir(outputParent, { recursive: true })
-	const root = await fs.mkdtemp(path.join(outputParent, "njust-cangjie-eval-"))
+	const root = await fs.mkdtemp(path.join(await fs.realpath(outputParent), "njust-cangjie-eval-"))
 	console.info(`Cangjie evaluation artifacts: ${root}`)
 	const executable = process.platform === "win32" ? ".exe" : ""
 	const sdkEnv: NodeJS.ProcessEnv = {}
@@ -99,19 +100,16 @@ async function main(): Promise<void> {
 	if (!compilerVersion.includes(` ${suite.sdkVersion} `)) throw new Error(`SDK version mismatch: ${compilerVersion}`)
 	if (!cjpmVersion.includes(suite.sdkVersion)) throw new Error(`cjpm version mismatch: ${cjpmVersion}`)
 	const version = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repo })).stdout.trim()
+	const sourcePaths = ["src", "webview-ui", "packages", "apps/vscode-e2e"]
 	const sourceDiff = (
-		await execFileAsync("git", ["diff", "HEAD", "--", "src", "webview-ui", "packages/types"], {
+		await execFileAsync("git", ["diff", "HEAD", "--", ...sourcePaths], {
 			cwd: repo,
 			maxBuffer: 8 * 1024 * 1024,
 		})
 	).stdout
 	await fs.writeFile(path.join(root, "source.patch"), sourceDiff)
 	const untracked = (
-		await execFileAsync(
-			"git",
-			["ls-files", "--others", "--exclude-standard", "--", "src", "webview-ui", "packages/types"],
-			{ cwd: repo },
-		)
+		await execFileAsync("git", ["ls-files", "--others", "--exclude-standard", "--", ...sourcePaths], { cwd: repo })
 	).stdout
 		.trim()
 		.split(/\r?\n/)
@@ -149,8 +147,8 @@ async function main(): Promise<void> {
 						__filename,
 						path.join(__dirname, "cangjie-eval/index.js"),
 						path.join(__dirname, "cangjie-eval/windowsTestEnvironment.js"),
-						...["suite", "suiteLoader", "report", "evidence", "artifacts", "projects"].map((name) =>
-							path.resolve(__dirname, `../../../packages/evals/src/cangjie/${name}.js`),
+						...["suite", "suiteLoader", "report", "reportFacts", "evidence", "artifacts", "projects"].map(
+							(name) => path.resolve(__dirname, `../../../packages/evals/src/cangjie/${name}.js`),
 						),
 					].map(async (file) => [path.basename(file), await fs.readFile(file, "utf8")]),
 				),
@@ -184,7 +182,7 @@ async function main(): Promise<void> {
 	}[] = []
 	for (const project of new Set(suite.cases.map((task) => task.project))) {
 		const destination = path.join(root, "sdk-check", project)
-		await fs.cp(path.join(projects, project), destination, { recursive: true })
+		await copyEvaluationProject(path.join(projects, project), destination)
 		metadata.projectFingerprints[project] = contentFingerprint(await inputFiles(destination))
 		for (const command of ["build", "test"] as const) {
 			const startedAt = Date.now()
@@ -263,8 +261,10 @@ async function main(): Promise<void> {
 		for (const variant of variants) {
 			const label = `${task.id}${variant ? `-${variant}` : ""}`
 			const workspace = path.join(root, "workspaces", label)
-			await fs.cp(path.join(projects, task.project), workspace, { recursive: true })
+			await copyEvaluationProject(path.join(projects, task.project), workspace)
 			await prepareCase(task, workspace, variant)
+			// Keep search tools from inheriting ignore rules from a parent repository.
+			await execFileAsync("git", ["init", "--quiet"], { cwd: workspace })
 			const initial: { buildFailed?: boolean; testFailed?: boolean; inputFingerprint: string } = {
 				inputFingerprint: contentFingerprint(await inputFiles(workspace)),
 			}

@@ -234,6 +234,38 @@ describe("ReadFileTool", () => {
 			)
 		})
 
+		it.each(["slice", "indentation", "legacy", "empty"])(
+			"does not record corpus evidence without a body (%s)",
+			async (mode) => {
+				const noteCorpusReadPath = vi.fn()
+				const task = Object.assign(createMockTask(), { cangjieRuntimePolicy: { noteCorpusReadPath } })
+				const file = "CangjieCorpus-1.0.0/extra/Option.md"
+				const empty = {
+					content: "Error: outside file",
+					returnedLines: 0,
+					totalLines: 1,
+					wasTruncated: false,
+					includedRanges: [],
+				}
+				mockedReadWithSlice.mockReturnValue(empty)
+				mockedReadWithIndentation.mockReturnValue(empty)
+				mockedFsReadFile.mockResolvedValue(mode === "empty" ? "" : "Only one line")
+				const params =
+					mode === "legacy"
+						? {
+								_legacyFormat: true as const,
+								files: [{ path: file, lineRanges: [{ start: 999, end: 1000 }] }],
+							}
+						: {
+								path: file,
+								mode: mode === "indentation" ? ("indentation" as const) : ("slice" as const),
+								offset: 999,
+							}
+				await readFileTool.execute(params, task as any, createMockCallbacks())
+				expect(noteCorpusReadPath).not.toHaveBeenCalled()
+			},
+		)
+
 		it("does not record a bundled corpus read that fails after approval", async () => {
 			const bundled = vi.spyOn(bundledCorpus, "isPathUnderBundledCangjieCorpus").mockReturnValue(true)
 			try {

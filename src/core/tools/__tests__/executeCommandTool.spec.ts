@@ -105,13 +105,15 @@ describe("validateCangjieImplementCommand", () => {
 		expect(
 			validateCangjieImplementCommand("CangjieImplement", "cjpm init --name demo_app --type=executable"),
 		).toBeNull()
-		expect(validateCangjieImplementCommand("CangjieImplement", "cjpm build")).toContain("only one direct cjpm init")
+		expect(validateCangjieImplementCommand("CangjieImplement", "cjpm build")).toContain(
+			"limited to a single direct `cjpm init",
+		)
 		expect(
 			validateCangjieImplementCommand(
 				"CangjieImplement",
 				"cd demo && cjpm init --name demo_app --type=executable",
 			),
-		).toContain("only one direct cjpm init")
+		).toContain("limited to a single direct `cjpm init")
 		expect(validateCangjieImplementCommand("CangjieVerify", "cjpm build")).toBeNull()
 	})
 })

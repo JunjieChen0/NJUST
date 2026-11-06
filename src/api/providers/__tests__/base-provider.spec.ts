@@ -286,6 +286,46 @@ describe("BaseProvider", () => {
 			expect(result?.[0].function.parameters.additionalProperties).toBeUndefined()
 		})
 
+		it("should respect an explicit strict: false and leave optional params optional", () => {
+			// ask_followup_question opts out of strict mode because its nested
+			// suggestion.mode is optional. Forcing strict would make it Required.
+			const tools = [
+				{
+					type: "function",
+					function: {
+						name: "ask_followup_question",
+						description: "Ask a follow-up question",
+						strict: false,
+						parameters: {
+							type: "object",
+							properties: {
+								question: { type: "string" },
+								follow_up: {
+									type: "array",
+									items: {
+										type: "object",
+										properties: {
+											text: { type: "string" },
+											mode: { type: ["string", "null"] },
+										},
+										required: ["text"],
+									},
+								},
+							},
+							required: ["question", "follow_up"],
+							additionalProperties: false,
+						},
+					},
+				},
+			]
+
+			const result = provider.testConvertToolsForOpenAI(tools)
+
+			expect(result?.[0].function.strict).toBe(false)
+			// Nested optional field must NOT be promoted to required.
+			expect((result?.[0].function.parameters as any).properties.follow_up.items.required).toEqual(["text"])
+		})
+
 		it("should preserve non-function tools unchanged", () => {
 			const tools = [
 				{

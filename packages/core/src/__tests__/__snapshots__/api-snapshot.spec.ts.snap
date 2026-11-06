@@ -30,6 +30,7 @@ exports[`packages/core public API snapshot > exports match expected surface 1`] 
   "guardedFetch",
   "hasTokenUsageChanged",
   "hasToolUsageChanged",
+  "lookupWithAbort",
   "providerDebugLog",
   "readTaskSessionsFromStoragePath",
   "recordSecurityMetric",

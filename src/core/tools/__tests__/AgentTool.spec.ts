@@ -99,7 +99,9 @@ describe("AgentTool", () => {
 		)
 		const message = task.host.delegateParentAndOpenChild.mock.calls[0][0].message as string
 		expect(message).toContain("read_file, search_files")
-		expect(message).toContain("maximum of 3 conversation turns")
+		expect(message).toContain("HARD limit of 3 conversation turn(s)")
+		// maxTurns must be passed through to the runtime, not just mentioned in the prompt.
+		expect(task.host.delegateParentAndOpenChild.mock.calls[0][0].maxTurns).toBe(3)
 		expect(callbacks.pushToolResult).toHaveBeenCalledWith("Delegated to sub-agent (explore); awaiting completion.")
 		expect(task.userMessageContentReady).toBe(true)
 	})

@@ -36,6 +36,7 @@ import { buildVerificationSummary } from "./verificationSummary"
 import { VerificationFeedbackError, type VerificationApproval, type VerificationFeedback } from "./verificationApproval"
 import { captureDeliveryBaseline, buildTaskDelivery } from "./taskDelivery"
 import { discoverProjectRoots } from "./projectFingerprint"
+import { parseCangjieCommand } from "./cangjieCommand"
 
 const LOG_TAIL_CHARS = 4_000
 /** Upper bound on completions blocked by failed system verification, so a task always reaches an end. */
@@ -78,6 +79,12 @@ export type CompletionVerificationOutcome =
 
 /** A result for the current code that re-running the same commands could not change. */
 function hasReusableResult(verdict: VerificationVerdict): boolean {
+	if (
+		[verdict.build, verdict.test, ...(verdict.relatedTests ?? [])].some(
+			(check) => check.state !== "not_run" && check.run.source === "model_command",
+		)
+	)
+		return false
 	if (verdict.build.state === "failed") return true
 	return verdict.build.state === "passed" && ["passed", "failed", "zero_tests"].includes(verdict.test.state)
 }
@@ -203,13 +210,19 @@ export class CangjieTaskVerification {
 
 	/** Preserve direct model commands on the owning root, including their originating child task. */
 	async observeCommand(command: string, cwd: string, sourceTaskId: string) {
-		const match = command.trim().match(/^(?:"([^"]+)"|'([^']+)'|(\S+))\s+(build|test)(?:\s+(.*))?$/)
-		if (!match || !/(?:^|[\\/])cjpm(?:\.exe)?$/i.test(match[1] ?? match[2] ?? match[3]!)) return
-		const rest = match[5] ?? ""
-		if (/[;&|<>`$%(){}@'"\r\n]/.test(rest) || /[`$%]/.test(match[1] ?? match[2] ?? match[3]!)) return
+		const parsed = parseCangjieCommand(command)
+		if (!parsed || parsed.tool !== "cjpm") return
+		const kind = parsed.args[0]
+		if (kind !== "build" && kind !== "test") return
 		const resolution = await this.resolveRoot()
 		if (resolution.kind !== "resolved") return
 		const before = await this.deps.checkDeps.snapshot(resolution.root)
+		const observedEnvironment = await this.deps.checkDeps.environment()
+		const filterIndex = parsed.args.indexOf("--filter")
+		const filter =
+			filterIndex >= 0
+				? parsed.args[filterIndex + 1]
+				: parsed.args.find((arg) => arg.startsWith("--filter="))?.slice(9)
 		const runId = this.deps.checkDeps.newId()
 		const startedAt = this.deps.checkDeps.now()
 		return async (output: string, exitCode: number | undefined) => {
@@ -221,11 +234,20 @@ export class CangjieTaskVerification {
 			const run: VerificationRun = {
 				runId,
 				taskId: sourceTaskId,
-				kind: match[4] as "build" | "test",
+				kind,
 				source: "model_command",
 				command: redactApiSecrets(command),
-				executable: redactApiSecrets(match[1] ?? match[2] ?? match[3]!),
-				args: redactApiSecrets(`${match[4]} ${rest}`).split(/\s+/).filter(Boolean),
+				executable: redactApiSecrets(parsed.executable),
+				args: parsed.args.map((arg) => redactApiSecrets(arg)),
+				observedEnvironment,
+				...(kind === "test"
+					? {
+							testScope: {
+								description: filter ? `filtered: ${filter}` : "model command; scope not certified",
+								filter,
+							},
+						}
+					: {}),
 				cwd,
 				startedAt,
 				endedAt: this.deps.checkDeps.now(),

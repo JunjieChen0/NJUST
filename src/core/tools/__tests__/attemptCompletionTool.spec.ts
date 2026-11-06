@@ -147,6 +147,22 @@ describe("attemptCompletionTool", () => {
 	})
 
 	describe("todo list validation", () => {
+		it.each([
+			"Cangjie Option<Int64>.getOrThrow() returns None.",
+			"Cangjie std.regex.Regex.findAll returns a String.",
+		])("checks Ask API claims without a project: %s", async (result) => {
+			mockTask.taskMode = "ask"
+			mockTask.cangjieRuntimePolicy!.getMissingCompletionEvidence = vi.fn().mockReturnValue(["std.core"])
+			await attemptCompletionTool.execute({ result }, mockTask as Task, {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
+				askFinishSubTaskApproval: mockAskFinishSubTaskApproval,
+				toolDescription: mockToolDescription,
+			})
+			expect(mockPushToolResult).toHaveBeenCalledWith(expect.stringContaining("std.core"))
+			expect(mockTask.ask).not.toHaveBeenCalled()
+		})
 		it.each([false, true])("scopes Ask completion gates to a Cangjie project (project=%s)", async (hasProject) => {
 			mockTask.taskMode = "ask"
 			mockTask.cangjieRuntimePolicy!.hasCjpmProject = vi.fn().mockResolvedValue(hasProject)
@@ -191,6 +207,9 @@ describe("attemptCompletionTool", () => {
 			expect(mockTask.say).toHaveBeenCalledWith("completion_result", "cjpm build success", undefined, false)
 			expect(mockTask.markAttemptedCompletion).toHaveBeenCalledOnce()
 			expect(mockTask.markTaskCompleted).toHaveBeenCalledOnce()
+			// Completion must release the stream finalizer instead of waiting for
+			// the 30s userMessageContentReady timeout.
+			expect((mockTask as any).userMessageContentReady).toBe(true)
 			expect(mockTask.ask).not.toHaveBeenCalledWith("completion_result", "", false)
 		})
 
@@ -1538,14 +1557,21 @@ describe("attemptCompletionTool", () => {
 			expect(mockTask.consecutiveMistakeCount).toBe(1)
 		})
 
-		it("stops quietly when the task was cancelled during verification", async () => {
+		it("releases the stream finalizer when the task was cancelled during verification", async () => {
+			// A silent return used to leave userMessageContentReady false, so
+			// finalizeStreamResponse waited until the external cancel with no
+			// tool_result and no TaskCompleted event.
 			;(mockTask as any).cangjieVerification = {
 				verifyForCompletion: vi.fn().mockResolvedValue({ action: "cancelled" }),
 			}
 
 			await attemptCompletionTool.handle(mockTask as Task, block, callbacks())
 
-			expect(mockPushToolResult).not.toHaveBeenCalled()
+			expect(mockPushToolResult).toHaveBeenCalledWith(
+				expect.stringContaining("System verification was cancelled"),
+				undefined,
+			)
+			expect((mockTask as any).userMessageContentReady).toBe(true)
 			expect(mockTask.say).not.toHaveBeenCalledWith("completion_result", expect.anything(), undefined, false)
 		})
 

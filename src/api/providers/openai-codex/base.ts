@@ -251,14 +251,18 @@ export class OpenAiCodexHandler extends BaseProvider implements SingleCompletion
 				.filter((tool) => tool.type === "function")
 				.map((tool) => {
 					const isMcp = isMcpTool(tool.function.name)
+					// Respect an explicit opt-out: tools with optional nested
+					// parameters cannot be strict without becoming "Required".
+					const explicitlyNonStrict = tool.function.strict === false
+					const applyStrict = !isMcp && !explicitlyNonStrict
 					return {
 						type: "function",
 						name: tool.function.name,
 						description: tool.function.description,
-						parameters: isMcp
-							? ensureAdditionalPropertiesFalse(tool.function.parameters)
-							: ensureAllRequired(tool.function.parameters),
-						strict: !isMcp,
+						parameters: applyStrict
+							? ensureAllRequired(tool.function.parameters)
+							: ensureAdditionalPropertiesFalse(tool.function.parameters),
+						strict: applyStrict,
 					}
 				}),
 			tool_choice: metadata?.tool_choice,

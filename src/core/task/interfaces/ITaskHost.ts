@@ -38,6 +38,7 @@ export interface ITaskHost extends IMcpHubClient, ITaskUINotifier {
 		cacheSafeParams?: import("../SubTaskOptions").CacheSafeParams
 		allowedTools?: string[]
 		agentType?: string
+		maxTurns?: number
 	}): Promise<TaskLike>
 
 	setMode(mode: string): Promise<void>

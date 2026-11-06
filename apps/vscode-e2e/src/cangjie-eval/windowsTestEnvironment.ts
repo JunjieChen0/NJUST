@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises"
 import * as path from "node:path"
+import { randomUUID } from "node:crypto"
 import type { CangjieTaskSuite } from "../../../../packages/evals/src/cangjie/suite.js"
 
 /** The elevated local helper only authorizes these exact generated runners on loopback TCP. */
@@ -24,7 +25,9 @@ export async function prepareWindowsTestEnvironment(root: string, suite: Cangjie
 	}
 	await fs.mkdir(queue, { recursive: true })
 	const request = path.join(queue, `${path.basename(root)}.json`)
-	await fs.writeFile(request, JSON.stringify({ runRoot: root, programs: [...programs] }, null, 2))
+	const temporary = `${request}.${randomUUID()}.tmp`
+	await fs.writeFile(temporary, JSON.stringify({ runRoot: root, programs: [...programs] }, null, 2), { flag: "wx" })
+	await fs.rename(temporary, request)
 	const deadline = Date.now() + 60_000
 	while (Date.now() < deadline) {
 		const response = await fs.readFile(`${request}.ack`, "utf8").then(

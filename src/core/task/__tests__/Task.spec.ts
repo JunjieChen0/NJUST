@@ -526,6 +526,89 @@ describe("Cline", () => {
 			expect(cline.agentType).toBe("CangjieImplement")
 		})
 
+		it("stores a positive maxTurns as a floored hard cap", () => {
+			const cline = new Task({
+				provider: mockProvider,
+				apiConfiguration: mockApiConfig,
+				task: "test task",
+				startTask: false,
+				maxTurns: 5.7,
+			})
+
+			expect(cline.maxTurns).toBe(5)
+		})
+
+		it("ignores non-positive maxTurns values", async () => {
+			const cline = new Task({
+				provider: mockProvider,
+				apiConfiguration: mockApiConfig,
+				task: "test task",
+				startTask: false,
+				maxTurns: 0,
+			})
+
+			expect(cline.maxTurns).toBeUndefined()
+			await expect(cline.enforceMaxTurns()).resolves.toBe(false)
+		})
+
+		describe("enforceMaxTurns", () => {
+			it("does not stop the loop before the hard cap is reached", async () => {
+				const cline = new Task({
+					provider: mockProvider,
+					apiConfiguration: mockApiConfig,
+					task: "test task",
+					startTask: false,
+					maxTurns: 3,
+				})
+				cline.requestTurnCount = 2
+
+				await expect(cline.enforceMaxTurns()).resolves.toBe(false)
+				expect(cline.turnLimitReached).toBe(false)
+				expect(cline.taskCompleted).toBe(false)
+			})
+
+			it("stops the loop and returns control to the parent at the hard cap", async () => {
+				const reopenParentFromDelegation = vi.fn().mockResolvedValue(undefined)
+				const cline = new Task({
+					provider: mockProvider,
+					apiConfiguration: mockApiConfig,
+					task: "test task",
+					startTask: false,
+					maxTurns: 3,
+				})
+				cline.requestTurnCount = 3
+				Object.defineProperty(cline, "parentTaskId", { value: "parent-1", configurable: true })
+				cline.hostRef = { deref: () => ({ reopenParentFromDelegation }) } as never
+				cline.say = vi.fn().mockResolvedValue(undefined)
+				cline.cancelCurrentRequest = vi.fn()
+
+				await expect(cline.enforceMaxTurns()).resolves.toBe(true)
+
+				expect(cline.turnLimitReached).toBe(true)
+				expect(cline.taskCompleted).toBe(true)
+				expect(cline.isPaused).toBe(true)
+				expect(cline.cancelCurrentRequest).toHaveBeenCalledOnce()
+
+				// The handoff is deferred to initiateTaskLoop's finally, after the
+				// executor stack unwinds (avoids disposing a still-running child).
+				expect((cline as any).turnLimitHandoffSummary).toContain("turn limit reached")
+				expect(reopenParentFromDelegation).not.toHaveBeenCalled()
+
+				await (cline as any).handBackToParentAfterTurnLimit()
+				expect(reopenParentFromDelegation).toHaveBeenCalledWith(
+					expect.objectContaining({
+						parentTaskId: "parent-1",
+						childTaskId: cline.taskId,
+						completionResultSummary: expect.stringContaining("turn limit reached"),
+					}),
+				)
+
+				// Idempotent: a second call must not re-enter the parent.
+				await expect(cline.enforceMaxTurns()).resolves.toBe(true)
+				expect(reopenParentFromDelegation).toHaveBeenCalledOnce()
+			})
+		})
+
 		it("should always have diff strategy defined", async () => {
 			const cline = new Task({
 				provider: mockProvider,
@@ -2508,11 +2591,11 @@ describe("checkpoint conversation persistence", () => {
 			stopped = resolve
 		})
 		const cleanup = vi.fn().mockResolvedValue(undefined)
-		const host = {
-			cangjieVerification: { cancelAndWait: vi.fn(() => verification) },
-			lifecycleHandler: { waitForCheckpointCleanup: cleanup },
-		}
-		const pending = Task.prototype.waitForCheckpointCleanup.call(host as unknown as Task)
+		const host = Object.create(Task.prototype, {
+			cangjieVerification: { value: { cancelAndWait: vi.fn(() => verification) } },
+			lifecycleHandler: { value: { waitForCheckpointCleanup: cleanup } },
+		}) as Task
+		const pending = Task.prototype.waitForCheckpointCleanup.call(host)
 		await Promise.resolve()
 		expect(cleanup).not.toHaveBeenCalled()
 		stopped()
@@ -2523,16 +2606,16 @@ describe("checkpoint conversation persistence", () => {
 	it.each(["saveApiConversationHistory", "saveClineMessages"] as const)(
 		"rejects a false result from %s",
 		async (failure) => {
-			const host = {
+			const host = Object.assign(Object.create(Task.prototype) as Task, {
 				abort: true,
 				addToClineMessages: vi.fn().mockResolvedValue(undefined),
 				saveApiConversationHistory: vi.fn().mockResolvedValue(true),
 				saveClineMessages: vi.fn().mockResolvedValue(true),
-			}
+			})
 			host[failure].mockResolvedValue(false)
-			await expect(
-				Task.prototype.persistCheckpointConversation.call(host as unknown as Task, "{}"),
-			).rejects.toThrow("could not be saved")
+			await expect(Task.prototype.persistCheckpointConversation.call(host, "{}")).rejects.toThrow(
+				"could not be saved",
+			)
 		},
 	)
 
@@ -2542,9 +2625,12 @@ describe("checkpoint conversation persistence", () => {
 			finish = resolve
 		})
 		const abortTask = vi.fn(() => cleanup)
-		const host = { lifecycleHandler: { abortTask }, abandoned: false }
-		const first = Task.prototype.abortTask.call(host as unknown as Task)
-		const second = Task.prototype.abortTask.call(host as unknown as Task, true)
+		const host = Object.create(Task.prototype, {
+			lifecycleHandler: { value: { abortTask } },
+			abandoned: { value: false, writable: true },
+		}) as Task
+		const first = Task.prototype.abortTask.call(host)
+		const second = Task.prototype.abortTask.call(host, true)
 		expect(abortTask).toHaveBeenCalledOnce()
 		expect(host.abandoned).toBe(true)
 		finish()

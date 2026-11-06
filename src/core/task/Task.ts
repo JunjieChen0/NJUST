@@ -140,6 +140,8 @@ export interface TaskOptions extends CreateTaskOptions {
 	workspacePath?: string
 	/** Capability-scoped tool whitelist for this task (used for delegated child tasks). */
 	allowedTools?: string[]
+	/** Hard cap on agentic turns (model requests) for delegated child tasks. */
+	maxTurns?: number
 	/** Explicit mode for newly delegated tasks, available synchronously during construction. */
 	taskMode?: string
 	/** Specialized delegated-agent type, used for stage-specific lifecycle rules. */
@@ -169,6 +171,12 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	readonly allowedTools?: ReadonlySet<string>
 	readonly agentType?: string
 	readonly parentTraceId?: string
+	/** Hard cap on model requests for this (sub)task; undefined = no cap. */
+	readonly maxTurns?: number
+	/** Number of model requests started by this task's executor loop. */
+	requestTurnCount: number = 0
+	/** True once maxTurns was reached and the loop stopped itself. */
+	turnLimitReached: boolean = false
 
 	/** Forked context summary injected by parent when isolationLevel is "forked" */
 	forkedContextSummary?: string
@@ -549,6 +557,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		allowedTools,
 		taskMode,
 		agentType,
+		maxTurns,
 	}: TaskOptions) {
 		super()
 
@@ -647,6 +656,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.taskNumber = taskNumber
 		this.initialStatus = initialStatus
 		this.allowedTools = allowedTools ? new Set(allowedTools) : undefined
+		this.maxTurns = typeof maxTurns === "number" && maxTurns > 0 ? Math.floor(maxTurns) : undefined
 		this.modeHandler = new TaskModeHandler(this)
 
 		if (historyItem) {
@@ -1076,6 +1086,81 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		void this.persistMemrlEpisode()
 	}
 
+	/**
+	 * Hard maxTurns enforcement for delegated sub-tasks.
+	 *
+	 * `maxTurns` used to be a prompt-only hint, so a model that kept exploring
+	 * could never be stopped by the runtime. This method is called by
+	 * TaskExecutor immediately before each model request. When the cap is hit it
+	 * stops this task's loop and, for a delegated child, hands control back to
+	 * the parent with an explicit "turn limit reached" result so the parent is
+	 * never left paused forever.
+	 *
+	 * @returns true when the executor must stop before issuing another request.
+	 */
+	public async enforceMaxTurns(): Promise<boolean> {
+		if (!this.maxTurns || this.maxTurns <= 0) return false
+		if (this.requestTurnCount < this.maxTurns) return false
+		if (this.turnLimitReached) return true
+
+		this.turnLimitReached = true
+		this.isPaused = true
+		this.taskCompleted = true
+		this.cancelCurrentRequest()
+
+		const summary =
+			`[Sub-agent turn limit reached]\n` +
+			`The sub-agent (${this.agentType ?? "custom"}) reached its hard limit of ${this.maxTurns} ` +
+			`conversation turn(s) and was stopped by the runtime. ` +
+			`Treat the work as incomplete; do not assume the requested changes or verification completed.`
+
+		logger.warn("Task", `maxTurns=${this.maxTurns} reached for task ${this.taskId}; stopping sub-agent loop`)
+
+		try {
+			await this.say("completion_result", summary)
+		} catch (error) {
+			logger.debug("Task", "Failed to publish turn-limit notice", error)
+		}
+
+		// The actual handoff runs from initiateTaskLoop's finally, after this
+		// executor call and the stream finalizer have fully unwound. Doing it here
+		// would dispose the child (stack.pop -> abortTask) while its own request
+		// loop is still on the stack.
+		this.turnLimitHandoffSummary = summary
+
+		return true
+	}
+
+	/** Set when maxTurns is hit; consumed by initiateTaskLoop's finally. */
+	private turnLimitHandoffSummary?: string
+
+	/** Resume the parent once the child loop has completely finished. */
+	private async handBackToParentAfterTurnLimit(): Promise<void> {
+		const summary = this.turnLimitHandoffSummary
+		this.turnLimitHandoffSummary = undefined
+		if (!summary || !this.parentTaskId) return
+
+		const provider = this.hostRef.deref() as
+			| (ITaskHost & {
+					reopenParentFromDelegation?(params: {
+						parentTaskId: string
+						childTaskId: string
+						completionResultSummary: string
+					}): Promise<void>
+			  })
+			| undefined
+
+		try {
+			await provider?.reopenParentFromDelegation?.({
+				parentTaskId: this.parentTaskId,
+				childTaskId: this.taskId,
+				completionResultSummary: summary,
+			})
+		} catch (error) {
+			logger.error("Task", "Failed to return to parent after maxTurns", error)
+		}
+	}
+
 	public refreshVerificationSummary(): Promise<void> {
 		this.verificationMessageUpdate = this.verificationMessageUpdate
 			.catch((error) => logger.debug("Task", "Previous verification card update failed", error))
@@ -1388,6 +1473,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 			if (this.activeTaskLoopCount === 0) {
 				for (const resolve of this.taskLoopIdleResolvers) resolve()
 				this.taskLoopIdleResolvers.clear()
+				// A maxTurns stop must hand control back to the parent only after
+				// this loop has fully unwound, otherwise stack.pop() would dispose
+				// the child while its stream finalizer is still running.
+				// Only run when a turn-limit stop actually requested it, so normal
+				// completions (and prototype-only test hosts) are unaffected.
+				if (this.turnLimitHandoffSummary) {
+					await this.handBackToParentAfterTurnLimit?.()
+				}
 			}
 		}
 	}

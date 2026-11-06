@@ -1,5 +1,13 @@
 # NJUST_AI Changelog
 
+## 2026.11.7
+
+- 任务流程：为子任务 `maxTurns` 增加运行时硬限制（计数、终止并交回父任务），不再只依赖提示词约束。
+- 工具一致性：修正 `CangjieImplement` 的工具说明与执行守卫差异，明确 `execute_command` 仅限直接 `cjpm init`。
+- 交互协议：`ask_followup_question` 退出 OpenAI strict 模式以保留可选的 `mode` 字段，消除 "mode: Required" 重试；收紧 `CangjieVerify` 在无人值守场景的主动追问。
+- 完成收尾：验证被取消或完成时补发 tool_result / 立即释放流终结语，取消路径补发完成事件，避免报告已显示但任务挂到超时。
+- 评测器：补上 `followup` 与 `completion_result` 询问的自动应答，避免无人值守评测空等 180 秒。
+
 ## 2026.11.4
 
 - 普通版按日期版本打包，使用 NJUST 校徽。

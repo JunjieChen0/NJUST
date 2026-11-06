@@ -124,26 +124,28 @@ function evaluateCheck(
 	if (!appliesToCurrentCode) return { state: "stale", run, staleReason: "code_changed" }
 	// Model-requested shell commands are observed evidence, never system verification.
 	// In particular, a passing filtered test must not verify the entire delivery.
-	if (run.source === "model_command") return { state: run.status === "passed" ? "inconclusive" : run.status, run }
 	if (hasEnvironmentChanged(run, currentEnvironment))
 		return { state: "stale", run, staleReason: "environment_changed" }
+	if (run.source === "model_command") return { state: run.status === "passed" ? "inconclusive" : run.status, run }
 
 	if (run.status !== "passed") return { state: run.status, run }
 	return kind === "build" ? evaluatePassedBuild(run) : evaluatePassedTest(run)
 }
 
+export function recordedEnvironment(run: VerificationRun): VerificationEnvironment {
+	if (run.source === "model_command" && run.observedEnvironment) return run.observedEnvironment
+	return {
+		sdkHome: run.sdk?.home,
+		sdkVersion: run.sdk?.version,
+		cjpmPath: run.executable,
+		backend: run.sdk?.backend ?? "guarded-host",
+		image: run.sdk?.image,
+		imageDigest: run.sdk?.imageDigest,
+	}
+}
+
 export function hasEnvironmentChanged(run: VerificationRun, current?: VerificationEnvironment): boolean {
-	return environmentsDiffer(
-		{
-			sdkHome: run.sdk?.home,
-			sdkVersion: run.sdk?.version,
-			cjpmPath: run.executable,
-			backend: run.sdk?.backend ?? "guarded-host",
-			image: run.sdk?.image,
-			imageDigest: run.sdk?.imageDigest,
-		},
-		current,
-	)
+	return environmentsDiffer(recordedEnvironment(run), current)
 }
 
 export function environmentsDiffer(previous?: VerificationEnvironment, current?: VerificationEnvironment): boolean {

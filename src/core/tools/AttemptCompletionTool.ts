@@ -27,6 +27,8 @@ interface AttemptCompletionParams {
 const CANGJIE_EVIDENCE_AUDIT_HEADING_RE = /^\s*\**\s*Cangjie evidence audit\s*:?\s*\**\s*$/im
 const CANGJIE_COMPLETION_SURFACE_RE =
 	/\b(?:Cangjie evidence audit|CangjieCorpus|cjpm|HashMap|Option|std\.collection|std\.regex|File\.readFrom|String\.fromUtf8|MatchData)\b|\.cj\b/i
+const CANGJIE_API_ASSERTION_RE =
+	/\b(?:Option\s*<|(?:Option|Regex|HashMap|File|String|MatchData)\s*\.[A-Za-z_]|std\.(?:core|regex|collection|fs|net|sync|time|process)\b|getOrThrow\b|getOrDefault\b|isSome\b|isNone\b)/i
 
 function hasCangjieEvidenceAuditHeading(result: string): boolean {
 	return CANGJIE_EVIDENCE_AUDIT_HEADING_RE.test(result)
@@ -110,6 +112,7 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 		// A repository overview in Ask mode can mention these APIs without being a Cangjie task.
 		const shouldApplyCangjieCompletionGates =
 			task.taskMode === "cangjie" ||
+			CANGJIE_API_ASSERTION_RE.test(result) ||
 			(task.taskMode !== "ask" && CANGJIE_COMPLETION_SURFACE_RE.test(result)) ||
 			(await task.cangjieRuntimePolicy.hasCjpmProject())
 
@@ -238,10 +241,24 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 			}
 
 			if (isTopLevelCangjieTask && task.cangjieVerification) {
+				// Every early exit below must leave a tool_result behind. Otherwise
+				// finalizeStreamResponse waits forever on userMessageContentReady and
+				// the task is only released by an external cancel (no TaskCompleted).
+				const stopWithoutCompletion = (reason: string) => {
+					logger.warn("AttemptCompletionTool", `Completion stopped before acceptance: ${reason}`)
+					pushToolResult(formatResponse.toolError(reason))
+					task.userMessageContentReady = true
+				}
+
 				const verification = await task.cangjieVerification.verifyForCompletion((command) =>
 					approveVerificationCommand(task, command),
 				)
-				if (verification.action === "cancelled") return
+				if (verification.action === "cancelled") {
+					stopWithoutCompletion(
+						"System verification was cancelled; completion was not accepted. Continue or abort the task.",
+					)
+					return
+				}
 				if (verification.action === "feedback") {
 					const { text, images } = verification.feedback
 					await task.say("user_feedback", text, images)
@@ -458,6 +475,13 @@ export class AttemptCompletionTool extends BaseTool<"attempt_completion"> {
 		// Signal the outer loop to stop re-prompting the model with
 		// noToolsUsed() after the user accepts this completion.
 		task.markTaskCompleted()
+
+		// Release the stream finalizer immediately instead of making it wait
+		// for the 30s userMessageContentReady timeout (and then the untimed
+		// completion_result wait). Without this the request stays open long
+		// after the report is displayed and can be cancelled before the
+		// TaskCompleted event reaches API consumers.
+		task.userMessageContentReady = true
 	}
 }
 

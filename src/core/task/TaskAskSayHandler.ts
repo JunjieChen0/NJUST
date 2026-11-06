@@ -128,7 +128,7 @@ export class TaskAskSayHandler {
 
 			const isBlocking = !(this.host.askResponse !== undefined || this.host.lastMessageTs !== askTs)
 			const isMessageQueued = !this.host.messageQueueService.isEmpty()
-			const shouldDrainQueuedMessageForAsk = type !== "command_output" && !isIdleAsk(type)
+			const shouldDrainQueuedMessageForAsk = type !== "command_output"
 			const isStatusMutable = !partial && isBlocking && !isMessageQueued && approval.decision === "ask"
 
 			if (isStatusMutable) {
@@ -166,14 +166,17 @@ export class TaskAskSayHandler {
 						}, statusMutationTimeout),
 					)
 				}
-			} else if (isMessageQueued && shouldDrainQueuedMessageForAsk) {
+			} else if (
+				isBlocking &&
+				!this.host.abort &&
+				!this.host.abandoned &&
+				isMessageQueued &&
+				shouldDrainQueuedMessageForAsk
+			) {
 				const message = this.host.messageQueueService.dequeueMessage()
 				if (message) {
-					if (type === "tool" || type === "command" || type === "use_mcp_server") {
-						this.handleWebviewAskResponse("yesButtonClicked", message.text, message.images)
-					} else {
-						this.handleWebviewAskResponse("messageResponse", message.text, message.images)
-					}
+					// Queued text is feedback, never authorization to execute a tool.
+					this.handleWebviewAskResponse("messageResponse", message.text, message.images)
 				}
 			}
 
@@ -190,11 +193,7 @@ export class TaskAskSayHandler {
 					if (shouldDrainQueuedMessageForAsk && !this.host.messageQueueService.isEmpty()) {
 						const message = this.host.messageQueueService.dequeueMessage()
 						if (message) {
-							if (type === "tool" || type === "command" || type === "use_mcp_server") {
-								this.handleWebviewAskResponse("yesButtonClicked", message.text, message.images)
-							} else {
-								this.handleWebviewAskResponse("messageResponse", message.text, message.images)
-							}
+							this.handleWebviewAskResponse("messageResponse", message.text, message.images)
 						}
 					}
 					return false

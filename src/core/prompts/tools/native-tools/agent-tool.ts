@@ -30,12 +30,12 @@ const AGENT_TYPE_PARAMETER_DESCRIPTION = `The type of sub-agent to spawn, which 
 - "implement": Full write permissions for code changes (read_file, write_to_file, apply_patch, execute_command, search_files)
 - "verify": Testing and validation tools (read_file, execute_command, search_files, list_files)
 - "CangjieExplore": Read-only cjpm structure and Cangjie corpus evidence collection
-- "CangjieImplement": Focused Cangjie implementation with read/write and verification tools
+- "CangjieImplement": Focused Cangjie implementation with read/write tools; execute_command is restricted to a direct cjpm init in an uninitialized directory (build/check/cjlint verification belongs to CangjieVerify)
 - "CangjieVerify": Read-only cjpm/cjc/cjlint verification and diagnostic summaries
 - "CangjieRepair": Narrow Cangjie repairs driven by real toolchain failures
 - "custom": Inherits parent task tools (default)`
 
-const MAX_TURNS_PARAMETER_DESCRIPTION = `Optional maximum number of conversation turns the sub-agent is allowed. Use this to constrain long-running agents. If not specified, no limit is imposed.`
+const MAX_TURNS_PARAMETER_DESCRIPTION = `Optional HARD cap on the number of conversation turns (model requests) the sub-agent is allowed. Enforced by the runtime: once reached, the sub-agent is stopped automatically and its work is reported as incomplete to the parent. Use this to keep long-running agents bounded. If not specified, no limit is imposed.`
 
 export default {
 	type: "function",

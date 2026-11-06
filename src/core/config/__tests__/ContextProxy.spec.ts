@@ -405,7 +405,7 @@ describe("ContextProxy", () => {
 			}
 
 			// Total calls should include initial setup + reset operations
-			const expectedUpdateCalls = 2 + GLOBAL_STATE_KEYS.length
+			const expectedUpdateCalls = 3 + GLOBAL_STATE_KEYS.length
 			expect(mockGlobalState.update).toHaveBeenCalledTimes(expectedUpdateCalls)
 		})
 

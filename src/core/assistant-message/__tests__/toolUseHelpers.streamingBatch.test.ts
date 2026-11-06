@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Task } from "../../task/Task"
 import type { ToolUse } from "../../../shared/tools"
-import { toolRegistry } from "../../tools/ToolRegistry"
+import { toolRegistry, ToolRegistryImpl } from "../../tools/ToolRegistry"
+import { readFileTool } from "../../tools/ReadFileTool"
 import { asMock } from "../../../__tests__/helpers/asMock"
 
 vi.mock("@njust-ai/telemetry", () => ({ TelemetryService: { reportError: vi.fn() } }))
@@ -43,6 +44,18 @@ describe("streaming batch dispatch", () => {
 		})
 		return { task, blocks, results, handle }
 	}
+
+	it("leaves reads with individual approval pending for serial dispatch", async () => {
+		const { task, results, handle } = setup([false, false])
+		const registry = new ToolRegistryImpl()
+		registry.register(readFileTool)
+		vi.mocked(toolRegistry.getConcurrencySafeNames).mockReturnValue(registry.getConcurrencySafeNames())
+		expect(await tryEagerBatch(task)).toBe(false)
+		expect(handle).not.toHaveBeenCalled()
+		expect(results).toHaveLength(0)
+		expect(task.currentStreamingContentIndex).toBe(0)
+		expect(task.userMessageContentReady).toBe(false)
+	})
 
 	it.each([
 		[true, true],

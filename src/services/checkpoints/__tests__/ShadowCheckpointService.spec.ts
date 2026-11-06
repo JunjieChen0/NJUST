@@ -102,6 +102,9 @@ describe.each([[RepoPerTaskCheckpointService, "RepoPerTaskCheckpointService"]])(
 		let currentWorkspaceDir: string
 
 		beforeEach(async () => {
+			const rgPath = await ripgrep.getBinPath(path.resolve(__dirname, "../../../../apps/cli"))
+			if (!rgPath) throw new Error("Checkpoint integration tests require ripgrep")
+			vitest.spyOn(ripgrep, "getBinPath").mockResolvedValue(rgPath)
 			const shadowDir = path.join(tmpDir, `${prefix}-${Date.now()}`)
 			const workspaceDir = path.join(tmpDir, `workspace-${Date.now()}`)
 			currentShadowDir = shadowDir

@@ -134,12 +134,23 @@ interface FileResult {
 	entry?: InternalFileEntry
 }
 
+interface TextReadResult {
+	content: string
+	hasBody: boolean
+}
+
+function hasReadBody(content: string, ranges: Array<[number, number]>): boolean {
+	const lines = content.split("\n")
+	return ranges.some(([start, end]) => lines.slice(start - 1, end).some((line) => line.trim().length > 0))
+}
+
 // ─── Tool Implementation ──────────────────────────────────────────────────────
 
 export class ReadFileTool extends BaseTool<"read_file"> {
 	readonly name = "read_file" as const
 	override isConcurrencySafe(): boolean {
-		return true
+		// Each call uses Task.ask's single approval slot, even with automatic approval.
+		return false
 	}
 
 	override isReadOnly(): boolean {
@@ -323,10 +334,10 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 					const result = this.processTextFile(fileContent, entry)
 
 					await task.fileContextTracker.trackFileContext(relPath, "read_tool" as RecordSource)
-					this.recordCorpusRead(task, fullPath)
+					if (result.hasBody) this.recordCorpusRead(task, fullPath)
 
 					updateFileResult(relPath, {
-						nativeContent: `File: ${relPath}\n${result}`,
+						nativeContent: `File: ${relPath}\n${result.content}`,
 					})
 				} catch (error) {
 					const errorMsg = getErrorMessage(error)
@@ -378,9 +389,9 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 	 * Previously only the first `limit` lines were returned and the model had to call read_file
 	 * again, which triggered approval each time.
 	 */
-	private readFullFileInSliceMode(content: string, entry: InternalFileEntry): string {
+	private readFullFileInSliceMode(content: string, entry: InternalFileEntry): TextReadResult {
 		if (content === "") {
-			return "Note: File is empty"
+			return { content: "Note: File is empty", hasBody: false }
 		}
 
 		const offset1 = entry.offset ?? 1
@@ -389,33 +400,38 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 		/** Safety cap: at most 500 chunks × limit lines (e.g. 1M lines at default limit). */
 		const MAX_SLICES = 500
 		const segments: string[] = []
+		let hasBody = false
 
 		for (let i = 0; i < MAX_SLICES; i++) {
 			const result = readWithSlice(content, offset0, limit)
 
-			if (result.content.startsWith("Error:")) {
-				return result.content
+			if (result.returnedLines === 0) {
+				return { content: result.content, hasBody: false }
 			}
+			hasBody ||= hasReadBody(content, result.includedRanges)
 
 			segments.push(result.content)
 
 			if (!result.wasTruncated) {
 				if (segments.length === 1) {
-					return segments[0]!
+					return { content: segments[0]!, hasBody }
 				}
-				return segments.join("\n\n")
+				return { content: segments.join("\n\n"), hasBody }
 			}
 
 			offset0 += result.returnedLines
 		}
 
-		return `${segments.join("\n\n")}\n\nIMPORTANT: File still truncated after reading ${MAX_SLICES * limit} lines. Use read_file with offset=${offset0 + 1} and limit=${limit} to continue.`
+		return {
+			content: `${segments.join("\n\n")}\n\nIMPORTANT: File still truncated after reading ${MAX_SLICES * limit} lines. Use read_file with offset=${offset0 + 1} and limit=${limit} to continue.`,
+			hasBody,
+		}
 	}
 
 	/**
 	 * Process a text file according to the requested mode.
 	 */
-	private processTextFile(content: string, entry: InternalFileEntry): string {
+	private processTextFile(content: string, entry: InternalFileEntry): TextReadResult {
 		const mode = entry.mode || "slice"
 
 		if (mode === "indentation") {
@@ -448,7 +464,7 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 				output += `\n\nIncluded ranges: ${rangeStr} (total: ${result.totalLines} lines)`
 			}
 
-			return output
+			return { content: output, hasBody: result.returnedLines > 0 && hasReadBody(content, result.includedRanges) }
 		}
 
 		// Slice mode (default): read through end of file in one approval (chunked internally).
@@ -963,34 +979,46 @@ export class ReadFileTool extends BaseTool<"read_file"> {
 
 				// Handle line ranges if specified
 				let content: string
+				let hasBody = false
 				if (entry.lineRanges && entry.lineRanges.length > 0) {
 					const lines = rawContent.split("\n")
 					const selectedLines: string[] = []
 
 					for (const range of entry.lineRanges) {
+						if (
+							!Number.isInteger(range.start) ||
+							!Number.isInteger(range.end) ||
+							range.start < 1 ||
+							range.end < range.start ||
+							range.start > lines.length
+						)
+							throw new Error(`Invalid line range ${range.start}-${range.end} for ${lines.length} lines`)
 						// Convert to 0-based index, ranges are 1-based inclusive
 						const startIdx = Math.max(0, range.start - 1)
 						const endIdx = Math.min(lines.length - 1, range.end - 1)
 
 						for (let i = startIdx; i <= endIdx; i++) {
 							selectedLines.push(`${i + 1} | ${lines[i]}`)
+							hasBody ||= Boolean(lines[i]?.trim())
 						}
 					}
 					content = selectedLines.join("\n")
 				} else {
 					// Full file in one approval (same chunking as executeNew slice mode)
-					content = this.readFullFileInSliceMode(rawContent, {
+					const result = this.readFullFileInSliceMode(rawContent, {
 						path: relPath,
 						offset: 1,
 						limit: DEFAULT_LINE_LIMIT,
 					})
+					content = result.content
+					hasBody = result.hasBody
 				}
 
 				results.push(`File: ${relPath}\n${content}`)
 
 				// Track file in context
 				await task.fileContextTracker.trackFileContext(relPath, "read_tool")
-				this.recordCorpusRead(task, fullPath)
+				if (hasBody) this.recordCorpusRead(task, fullPath)
 			} catch (error) {
 				const errorMsg = getErrorMessage(error)
 				results.push(`File: ${relPath}\nError: ${errorMsg}`)

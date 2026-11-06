@@ -107,10 +107,20 @@ export async function delegateParentAndOpenChildWithProvider(
 		forkedContextSummary?: string
 		allowedTools?: string[]
 		agentType?: string
+		maxTurns?: number
 	},
 ): Promise<Task> {
-	const { parentTaskId, message, initialTodos, mode, isolationLevel, forkedContextSummary, allowedTools, agentType } =
-		params
+	const {
+		parentTaskId,
+		message,
+		initialTodos,
+		mode,
+		isolationLevel,
+		forkedContextSummary,
+		allowedTools,
+		agentType,
+		maxTurns,
+	} = params
 
 	// Metadata-driven delegation is always enabled
 
@@ -198,6 +208,7 @@ export async function delegateParentAndOpenChildWithProvider(
 			allowedTools,
 			taskMode: mode,
 			agentType,
+			maxTurns,
 		})
 	} catch (error) {
 		parent.isPaused = false

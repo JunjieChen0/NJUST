@@ -12,7 +12,7 @@ import type {
 	VerificationInvalidation,
 	TaskVerificationRecord,
 } from "./types"
-import { evaluateVerification, environmentsDiffer, type VerificationVerdict } from "./verdict"
+import { evaluateVerification, environmentsDiffer, recordedEnvironment, type VerificationVerdict } from "./verdict"
 import { loadVerificationRecord, updateVerificationRecord, withInvalidation } from "./VerificationStore"
 
 type Cause = VerificationInvalidation["cause"]
@@ -193,14 +193,7 @@ function latestBinding(record: TaskVerificationRecord, includeInvalidations = tr
 		...record.runs.map((run) => ({
 			at: run.endedAt ?? run.startedAt,
 			fingerprint: run.inputFingerprint,
-			environment: {
-				sdkHome: run.sdk?.home,
-				sdkVersion: run.sdk?.version,
-				cjpmPath: run.executable,
-				backend: run.sdk?.backend ?? "guarded-host",
-				image: run.sdk?.image,
-				imageDigest: run.sdk?.imageDigest,
-			},
+			environment: recordedEnvironment(run),
 		})),
 		...record.claims.map((claim) => ({
 			at: claim.claimedAt,

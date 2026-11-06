@@ -604,16 +604,22 @@ export class ContextProxy {
 		this.secretCache = {}
 
 		const operations = [
+			// This legacy field is no longer in GLOBAL_STATE_KEYS, but can survive failed migration.
+			this.originalContext.globalState.update("webSearchApiKey", undefined),
 			...GLOBAL_STATE_KEYS.map((key) => this.originalContext.globalState.update(key, undefined)),
 			...SECRET_STATE_KEYS.map((key) => this.originalContext.secrets.delete(key)),
 			...GLOBAL_SECRET_KEYS.map((key) => this.originalContext.secrets.delete(key)),
 		]
 		const results = await Promise.allSettled(operations)
+		const failures: unknown[] = []
 		for (const result of results) {
 			if (result.status === "rejected") {
-				logger.error("Failed to reset state", result.reason)
+				systemLogger.error("ContextProxy", "Failed to reset state", result.reason)
+				failures.push(result.reason)
 			}
 		}
+		if (failures.length)
+			throw new AggregateError(failures, "State reset was incomplete; retry before reinitializing")
 
 		await this.initialize()
 	}
