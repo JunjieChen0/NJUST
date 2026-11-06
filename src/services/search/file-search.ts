@@ -16,19 +16,23 @@ export async function executeRipgrep({
 	args,
 	workspacePath,
 	limit = 500,
+	signal,
 }: {
 	args: string[]
 	workspacePath: string
 	limit?: number
+	signal?: AbortSignal
 }): Promise<FileResult[]> {
+	signal?.throwIfAborted()
 	const rgPath = await getBinPath(vscode.env.appRoot)
+	signal?.throwIfAborted()
 
 	if (!rgPath) {
 		throw new Error(`ripgrep not found: ${rgPath}`)
 	}
 
 	return new Promise((resolve, reject) => {
-		const rgProcess = childProcess.spawn(rgPath, args)
+		const rgProcess = childProcess.spawn(rgPath, args, { signal, windowsHide: true })
 		const rl = readline.createInterface({ input: rgProcess.stdout, crlfDelay: Infinity })
 		const fileResults: FileResult[] = []
 		const dirSet = new Set<string>() // Track unique directory paths.
@@ -68,6 +72,10 @@ export async function executeRipgrep({
 		})
 
 		rl.on("close", () => {
+			if (signal?.aborted) {
+				reject(signal.reason)
+				return
+			}
 			if (errorOutput && fileResults.length === 0) {
 				reject(new Error(`ripgrep process error: ${errorOutput}`))
 			} else {

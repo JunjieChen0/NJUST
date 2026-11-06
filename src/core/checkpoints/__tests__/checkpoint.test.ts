@@ -101,6 +101,7 @@ describe("Checkpoint functionality", () => {
 		mockTask = {
 			taskId: "test-task-id",
 			enableCheckpoints: true,
+			checkpointTimeout: 15,
 			checkpointService: mockCheckpointService,
 			checkpointServiceInitializing: false,
 			providerRef: {
@@ -110,6 +111,7 @@ describe("Checkpoint functionality", () => {
 			apiConversationHistory: [],
 			pendingUserMessageCheckpoint: undefined,
 			say: vi.fn().mockResolvedValue(undefined),
+			persistCheckpointConversation: vi.fn().mockResolvedValue(undefined),
 			overwriteClineMessages: vi.fn(),
 			overwriteApiConversationHistory: vi.fn(),
 			combineMessages: vi.fn().mockReturnValue([]),
@@ -131,15 +133,20 @@ describe("Checkpoint functionality", () => {
 			mockCheckpointService.isInitialized = false
 			mockTask.checkpointService = mockCheckpointService
 
-			// Simulate service initialization after a delay
-			setTimeout(() => {
-				mockCheckpointService.isInitialized = true
-			}, 100)
-
-			// Call checkpointSave
+			let initialize!: () => void
+			mockCheckpointService.initShadowGit.mockImplementation(
+				() =>
+					new Promise<void>((resolve) => {
+						initialize = () => {
+							mockCheckpointService.isInitialized = true
+							resolve()
+						}
+					}),
+			)
 			const savePromise = checkpointSave(mockTask, true)
-
-			// Wait for the save to complete
+			await vi.waitFor(() => expect(mockCheckpointService.initShadowGit).toHaveBeenCalledOnce())
+			expect(mockCheckpointService.saveCheckpoint).not.toHaveBeenCalled()
+			initialize()
 			const result = await savePromise
 
 			// saveCheckpoint should have been called
@@ -247,7 +254,7 @@ describe("Checkpoint functionality", () => {
 				{ ts: 1, role: "user", content: [{ type: "text", text: "Message 1" }] },
 			])
 			expect(mockTask.overwriteClineMessages).toHaveBeenCalledWith([{ ts: 1, say: "user", text: "Message 1" }])
-			expect(mockProvider.cancelTask).toHaveBeenCalled()
+			expect(mockProvider.cancelTask).not.toHaveBeenCalled()
 		})
 
 		it("should restore checkpoint for edit operation", async () => {
@@ -267,10 +274,10 @@ describe("Checkpoint functionality", () => {
 				{ ts: 1, say: "user", text: "Message 1" },
 				{ ts: 2, say: "assistant", text: "Message 2" },
 			])
-			expect(mockProvider.cancelTask).toHaveBeenCalled()
+			expect(mockProvider.cancelTask).not.toHaveBeenCalled()
 		})
 
-		it("rechecks restored code after restore completes and before cancelling the task", async () => {
+		it("refreshes verification after restore and before publishing completion", async () => {
 			const refreshed = vi.fn().mockResolvedValue(undefined)
 			mockTask.cangjieVerification = { onCheckpointRestored: refreshed }
 			await checkpointRestore(mockTask, { ts: 2, commitHash: "abc123", mode: "preview" })
@@ -279,7 +286,7 @@ describe("Checkpoint functionality", () => {
 				refreshed.mock.invocationCallOrder[0],
 			)
 			expect(refreshed.mock.invocationCallOrder[0]).toBeLessThan(
-				mockProvider.cancelTask.mock.invocationCallOrder[0],
+				mockProvider.postMessageToWebview.mock.invocationCallOrder[0],
 			)
 		})
 
@@ -289,14 +296,16 @@ describe("Checkpoint functionality", () => {
 			}
 			await checkpointRestore(mockTask, { ts: 2, commitHash: "abc123", mode: "preview" })
 			expect(mockTask.enableCheckpoints).toBe(true)
-			expect(mockProvider.cancelTask).toHaveBeenCalledOnce()
+			expect(mockProvider.cancelTask).not.toHaveBeenCalled()
 		})
 
 		it("does not recheck verification when restoring the checkpoint fails", async () => {
 			const refreshed = vi.fn()
 			mockTask.cangjieVerification = { onCheckpointRestored: refreshed }
 			mockCheckpointService.restoreCheckpoint.mockRejectedValueOnce(new Error("Restore failed"))
-			await checkpointRestore(mockTask, { ts: 2, commitHash: "abc123", mode: "preview" })
+			await expect(checkpointRestore(mockTask, { ts: 2, commitHash: "abc123", mode: "preview" })).rejects.toThrow(
+				"checkpoint_restore_failed",
+			)
 			expect(refreshed).not.toHaveBeenCalled()
 		})
 
@@ -310,15 +319,17 @@ describe("Checkpoint functionality", () => {
 			expect(mockCheckpointService.restoreCheckpoint).toHaveBeenCalledWith("abc123")
 			expect(mockTask.overwriteApiConversationHistory).not.toHaveBeenCalled()
 			expect(mockTask.overwriteClineMessages).not.toHaveBeenCalled()
-			expect(mockProvider.cancelTask).toHaveBeenCalled()
+			expect(mockProvider.cancelTask).not.toHaveBeenCalled()
 		})
 
 		it("should handle missing message gracefully", async () => {
-			await checkpointRestore(mockTask, {
-				ts: 999, // Non-existent timestamp
-				commitHash: "abc123",
-				mode: "restore",
-			})
+			await expect(
+				checkpointRestore(mockTask, {
+					ts: 999, // Non-existent timestamp
+					commitHash: "abc123",
+					mode: "restore",
+				}),
+			).rejects.toThrow("checkpoint_message_missing")
 
 			expect(mockCheckpointService.restoreCheckpoint).not.toHaveBeenCalled()
 		})
@@ -326,11 +337,13 @@ describe("Checkpoint functionality", () => {
 		it("should disable checkpoints on error", async () => {
 			mockCheckpointService.restoreCheckpoint.mockRejectedValue(new Error("Restore failed"))
 
-			await checkpointRestore(mockTask, {
-				ts: 2,
-				commitHash: "abc123",
-				mode: "restore",
-			})
+			await expect(
+				checkpointRestore(mockTask, {
+					ts: 2,
+					commitHash: "abc123",
+					mode: "restore",
+				}),
+			).rejects.toThrow("checkpoint_restore_failed")
 
 			expect(mockTask.enableCheckpoints).toBe(false)
 			expect(mockProvider.log).toHaveBeenCalledWith(
@@ -462,11 +475,12 @@ describe("Checkpoint functionality", () => {
 			expect(service).toBeUndefined()
 		})
 
-		it("should return undefined if service is still initializing", async () => {
+		it("does not trust a stale initializing flag without a shared operation", async () => {
 			mockTask.checkpointService = undefined
 			mockTask.checkpointServiceInitializing = true
 			const service = await getCheckpointService(mockTask)
-			expect(service).toBeUndefined()
+			expect(service).toBe(mockCheckpointService)
+			expect(mockCheckpointService.initShadowGit).toHaveBeenCalledOnce()
 		})
 
 		it("should create new service if none exists", async () => {

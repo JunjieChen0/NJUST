@@ -112,6 +112,8 @@ export interface TaskLifecycleHost {
 // ── Handler ──────────────────────────────────────────────────────────────
 
 export class TaskLifecycleHandler {
+	private checkpointCleanupError?: unknown
+	private diffRevertPromise?: Promise<void>
 	private sandboxCleanupPromise: Promise<void> | undefined
 	private awaitingResume = false
 
@@ -491,6 +493,7 @@ export class TaskLifecycleHandler {
 		} catch (error) {
 			sandboxCleanupError = error
 		}
+		this.checkpointCleanupError = sandboxCleanupError
 		if (sandboxCleanupError && !t.abandoned) {
 			try {
 				await t.reportCommandCleanupFailure?.(String(sandboxCleanupError))
@@ -507,6 +510,7 @@ export class TaskLifecycleHandler {
 		try {
 			t.dispose()
 		} catch (error) {
+			this.checkpointCleanupError ??= error
 			logger.error("TaskLifecycleHandler", `Error during task ${t.taskId}.${t.instanceId} disposal:`, error)
 			TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
 		}
@@ -616,12 +620,19 @@ export class TaskLifecycleHandler {
 
 		safeDispose("DiffViewProvider", () => {
 			if (t.isStreaming && t.diffViewProvider.isEditing) {
-				t.diffViewProvider.revertChanges().catch((error: unknown) => {
+				this.diffRevertPromise = t.diffViewProvider.revertChanges()
+				void this.diffRevertPromise.catch((error: unknown) => {
 					logger.error("TaskLifecycleHandler", "DiffViewProvider revertChanges failed:", error)
 					TelemetryService.reportError(error, TelemetryEventName.TASK_LIFECYCLE_ERROR)
 				})
 			}
 		})
+	}
+
+	public async waitForCheckpointCleanup(): Promise<void> {
+		if (this.checkpointCleanupError) throw this.checkpointCleanupError
+		await this.diffRevertPromise
+		await this.sandboxCleanupPromise
 	}
 
 	private cleanupSandboxScope(): Promise<void> {

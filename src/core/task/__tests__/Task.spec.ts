@@ -2500,3 +2500,54 @@ describe("pushToolResultToUserContent", () => {
 		expect(task.userMessageContent[2]).toEqual(toolResult)
 	})
 })
+
+describe("checkpoint conversation persistence", () => {
+	it("waits for system verification to stop before allowing a checkpoint restore", async () => {
+		let stopped!: () => void
+		const verification = new Promise<void>((resolve) => {
+			stopped = resolve
+		})
+		const cleanup = vi.fn().mockResolvedValue(undefined)
+		const host = {
+			cangjieVerification: { cancelAndWait: vi.fn(() => verification) },
+			lifecycleHandler: { waitForCheckpointCleanup: cleanup },
+		}
+		const pending = Task.prototype.waitForCheckpointCleanup.call(host as unknown as Task)
+		await Promise.resolve()
+		expect(cleanup).not.toHaveBeenCalled()
+		stopped()
+		await pending
+		expect(cleanup).toHaveBeenCalledOnce()
+	})
+
+	it.each(["saveApiConversationHistory", "saveClineMessages"] as const)(
+		"rejects a false result from %s",
+		async (failure) => {
+			const host = {
+				abort: true,
+				addToClineMessages: vi.fn().mockResolvedValue(undefined),
+				saveApiConversationHistory: vi.fn().mockResolvedValue(true),
+				saveClineMessages: vi.fn().mockResolvedValue(true),
+			}
+			host[failure].mockResolvedValue(false)
+			await expect(
+				Task.prototype.persistCheckpointConversation.call(host as unknown as Task, "{}"),
+			).rejects.toThrow("could not be saved")
+		},
+	)
+
+	it("shares cancellation completion across callers", async () => {
+		let finish!: () => void
+		const cleanup = new Promise<void>((resolve) => {
+			finish = resolve
+		})
+		const abortTask = vi.fn(() => cleanup)
+		const host = { lifecycleHandler: { abortTask }, abandoned: false }
+		const first = Task.prototype.abortTask.call(host as unknown as Task)
+		const second = Task.prototype.abortTask.call(host as unknown as Task, true)
+		expect(abortTask).toHaveBeenCalledOnce()
+		expect(host.abandoned).toBe(true)
+		finish()
+		await Promise.all([first, second])
+	})
+})

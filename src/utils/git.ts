@@ -215,11 +215,13 @@ async function checkGitRepo(cwd: string): Promise<boolean> {
  *   console.log("Git is not installed");
  * }
  */
-export async function checkGitInstalled(): Promise<boolean> {
+export async function checkGitInstalled(signal?: AbortSignal): Promise<boolean> {
 	try {
-		await execAsync("git --version")
+		await execAsync("git --version", { signal, windowsHide: true })
 		return true
-	} catch {
+	} catch (error) {
+		signal?.throwIfAborted()
+		logger.debug("Git", "Git availability check failed", error)
 		return false
 	}
 }

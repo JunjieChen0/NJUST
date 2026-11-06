@@ -89,7 +89,6 @@ const getCacheFilePatterns = () => [
 	"*.dmp",
 	"*.dump",
 	"*.eslintcache",
-	"*.lock",
 	"*.log",
 	"*.old",
 	"*.part",
@@ -130,7 +129,6 @@ const getDatabaseFilePatterns = () => [
 	"*.avro",
 	"*.bak",
 	"*.bson",
-	"*.csv",
 	"*.db",
 	"*.dbf",
 	"*.dmp",
@@ -143,7 +141,6 @@ const getDatabaseFilePatterns = () => [
 	"*.parquet",
 	"*.pdb",
 	"*.rdb",
-	"*.sql",
 	"*.sqlite",
 ]
 
@@ -172,7 +169,6 @@ const getGeospatialPatterns = () => [
 	"*.mxd",
 	"*.qgs",
 	"*.grd",
-	"*.csv",
 	"*.dwg",
 	"*.dxf",
 ]

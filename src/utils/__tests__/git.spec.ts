@@ -91,6 +91,18 @@ describe("git utils", () => {
 	})
 
 	describe("checkGitInstalled", () => {
+		it("propagates cancellation instead of reporting Git as missing", async () => {
+			const controller = new AbortController()
+			const reason = new Error("checkpoint initialization cancelled")
+			vitest.mocked(exec).mockImplementation(function (_command: string, options: any, callback: any) {
+				expect(options.signal).toBe(controller.signal)
+				controller.abort(reason)
+				callback(reason)
+				return {} as any
+			})
+			await expect(checkGitInstalled(controller.signal)).rejects.toBe(reason)
+		})
+
 		it("should return true when git --version succeeds", async () => {
 			vitest.mocked(exec).mockImplementation(function (command: string, options: any, callback: any) {
 				if (command === "git --version") {
@@ -103,7 +115,11 @@ describe("git utils", () => {
 
 			const result = await checkGitInstalled()
 			expect(result).toBe(true)
-			expect(vitest.mocked(exec)).toHaveBeenCalledWith("git --version", {}, expect.any(Function))
+			expect(vitest.mocked(exec)).toHaveBeenCalledWith(
+				"git --version",
+				{ signal: undefined, windowsHide: true },
+				expect.any(Function),
+			)
 		})
 
 		it("should return false when git --version fails", async () => {
@@ -118,7 +134,11 @@ describe("git utils", () => {
 
 			const result = await checkGitInstalled()
 			expect(result).toBe(false)
-			expect(vitest.mocked(exec)).toHaveBeenCalledWith("git --version", {}, expect.any(Function))
+			expect(vitest.mocked(exec)).toHaveBeenCalledWith(
+				"git --version",
+				{ signal: undefined, windowsHide: true },
+				expect.any(Function),
+			)
 		})
 
 		it("should handle unexpected errors gracefully", async () => {
@@ -134,7 +154,11 @@ describe("git utils", () => {
 
 			const result = await checkGitInstalled()
 			expect(result).toBe(false)
-			expect(vitest.mocked(exec)).toHaveBeenCalledWith("git --version", {}, expect.any(Function))
+			expect(vitest.mocked(exec)).toHaveBeenCalledWith(
+				"git --version",
+				{ signal: undefined, windowsHide: true },
+				expect.any(Function),
+			)
 		})
 	})
 
@@ -201,7 +225,11 @@ describe("git utils", () => {
 			})
 
 			// Then verify all commands were called correctly
-			expect(vitest.mocked(exec)).toHaveBeenCalledWith("git --version", {}, expect.any(Function))
+			expect(vitest.mocked(exec)).toHaveBeenCalledWith(
+				"git --version",
+				{ signal: undefined, windowsHide: true },
+				expect.any(Function),
+			)
 			expect(vitest.mocked(exec)).toHaveBeenCalledWith("git rev-parse --git-dir", { cwd }, expect.any(Function))
 			expect(vitest.mocked(execFile)).toHaveBeenCalledWith(
 				"git",
@@ -232,7 +260,11 @@ describe("git utils", () => {
 
 			const result = await searchCommits("test", cwd)
 			expect(result).toEqual([])
-			expect(vitest.mocked(exec)).toHaveBeenCalledWith("git --version", {}, expect.any(Function))
+			expect(vitest.mocked(exec)).toHaveBeenCalledWith(
+				"git --version",
+				{ signal: undefined, windowsHide: true },
+				expect.any(Function),
+			)
 		})
 
 		it("should return empty array when not in a git repository", async () => {
@@ -257,7 +289,11 @@ describe("git utils", () => {
 
 			const result = await searchCommits("test", cwd)
 			expect(result).toEqual([])
-			expect(vitest.mocked(exec)).toHaveBeenCalledWith("git --version", {}, expect.any(Function))
+			expect(vitest.mocked(exec)).toHaveBeenCalledWith(
+				"git --version",
+				{ signal: undefined, windowsHide: true },
+				expect.any(Function),
+			)
 			expect(vitest.mocked(exec)).toHaveBeenCalledWith("git rev-parse --git-dir", { cwd }, expect.any(Function))
 		})
 

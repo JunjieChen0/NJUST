@@ -1,5 +1,4 @@
 import * as vscode from "vscode"
-import pWaitFor from "p-wait-for"
 
 import {
 	type ClineMessage,
@@ -18,7 +17,7 @@ import { checkExistKey } from "../../../shared/checkExistApiConfig"
 import { setPendingTodoList } from "../../tools/UpdateTodoListTool"
 import { getCommand } from "../../../utils/commands"
 
-import { handleCheckpointRestoreOperation } from "../checkpointRestoreHandler"
+import { handleCheckpointRestoreOperation, stopTaskForCheckpointRestore } from "../checkpointRestoreHandler"
 import { resolveIncomingImages } from "./shared-utils"
 import { MessageRouter, type MessageHandlerContext } from "./MessageRouter"
 import { logger } from "../../../shared/logger"
@@ -544,16 +543,16 @@ async function handleCheckpointRestore(context: MessageHandlerContext, message: 
 	const { provider } = context
 	const r = checkoutRestorePayloadSchema.safeParse(message.payload)
 	if (!r.success) return
-	await provider.cancelTask()
+	const task = provider.getCurrentTask()
+	if (!task) return
 	try {
-		await pWaitFor(() => provider.getCurrentTask()?.isInitialized === true, { timeout: 3_000 })
-	} catch {
-		vscode.window.showErrorMessage(t("common:errors.checkpoint_timeout"))
-	}
-	try {
-		await provider.getCurrentTask()?.checkpointRestore(r.data)
-	} catch {
-		vscode.window.showErrorMessage(t("common:errors.checkpoint_failed"))
+		await stopTaskForCheckpointRestore(task)
+		if (provider.getCurrentTask() !== task) throw new Error(t("common:errors.checkpoint_task_changed"))
+		await task.checkpointRestore(r.data)
+		await provider.cancelTask()
+	} catch (error) {
+		logger.error("CheckpointRestore", "Checkpoint restore failed", error)
+		void vscode.window.showErrorMessage(getErrorMessage(error))
 	}
 }
 

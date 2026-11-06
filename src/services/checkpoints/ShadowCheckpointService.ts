@@ -6,6 +6,7 @@ import EventEmitter from "events"
 
 import { simpleGit, SimpleGit, SimpleGitOptions } from "simple-git"
 import pWaitFor from "p-wait-for"
+import { Mutex } from "async-mutex"
 import * as vscode from "vscode"
 
 import { fileExistsAtPath } from "../../utils/fs"
@@ -26,7 +27,7 @@ import { logger } from "../../shared/logger"
  * @param baseDir - The directory where git operations should be executed
  * @returns A SimpleGit instance with sanitized environment
  */
-function createSanitizedGit(baseDir: string): SimpleGit {
+function createSanitizedGit(baseDir: string, signal?: AbortSignal): SimpleGit {
 	// Create a clean environment by explicitly unsetting git-related environment variables
 	// that could interfere with checkpoint operations
 	const sanitizedEnv: Record<string, string> = {}
@@ -40,7 +41,7 @@ function createSanitizedGit(baseDir: string): SimpleGit {
 		// PAGER is also stripped: simple-git's safety plugin rejects it (allowUnsafePager),
 		// and a pager is meaningless for programmatic git output capture.
 		if (key.startsWith("GIT_") || key === "EDITOR" || key === "PAGER") {
-			removedVars.push(`${key}=${value}`)
+			removedVars.push(key)
 			continue
 		}
 
@@ -60,6 +61,7 @@ function createSanitizedGit(baseDir: string): SimpleGit {
 
 	const options: Partial<SimpleGitOptions> = {
 		baseDir,
+		abort: signal,
 		config: [],
 		unsafe: {
 			allowUnsafeTemplateDir: true,
@@ -89,6 +91,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 	public readonly checkpointsDir: string
 	public readonly workspaceDir: string
 
+	private readonly operations = new Mutex()
 	protected _checkpoints: string[] = []
 	protected _baseHash?: string
 
@@ -134,12 +137,13 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 		this.log = log
 	}
 
-	public async initShadowGit(onInit?: () => Promise<void>) {
+	public async initShadowGit(onInit?: () => Promise<void>, signal?: AbortSignal) {
+		signal?.throwIfAborted()
 		if (this.git) {
 			throw new Error("Shadow git repo already initialized")
 		}
 
-		const nestedGitPath = await this.getNestedGitRepository()
+		const nestedGitPath = await this.getNestedGitRepository(signal)
 
 		if (nestedGitPath) {
 			// Show persistent error message with the offending path
@@ -153,12 +157,14 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 			)
 		}
 
+		signal?.throwIfAborted()
 		await fs.mkdir(this.checkpointsDir, { recursive: true })
-		const git = createSanitizedGit(this.checkpointsDir)
+		const git = createSanitizedGit(this.checkpointsDir, signal)
 		const gitVersion = await git.version()
 		this.log(`[${this.constructor.name}#create] git = ${gitVersion}`)
 
 		let created = false
+		let baseHash: string
 		const startTime = Date.now()
 
 		if (await fileExistsAtPath(this.dotGitDir)) {
@@ -178,7 +184,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 			}
 
 			await this.writeExcludeFile()
-			this.baseHash = await git.revparse(["HEAD"])
+			baseHash = await git.revparse(["HEAD"])
 		} else {
 			this.log(`[${this.constructor.name}#initShadowGit] creating shadow git repo at ${this.checkpointsDir}`)
 			await git.init({ "--template": "" })
@@ -189,19 +195,20 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 			await this.writeExcludeFile()
 			await this.stageAll(git)
 			const { commit } = await git.commit("initial commit", { "--allow-empty": null })
-			this.baseHash = commit
+			baseHash = commit
 			created = true
 		}
 
 		const duration = Date.now() - startTime
 
 		this.log(
-			`[${this.constructor.name}#initShadowGit] initialized shadow repo with base commit ${this.baseHash} in ${duration}ms`,
+			`[${this.constructor.name}#initShadowGit] initialized shadow repo with base commit ${baseHash} in ${duration}ms`,
 		)
 
-		this.git = git
-
 		await onInit?.()
+		signal?.throwIfAborted()
+		this.baseHash = baseHash
+		this.git = git
 
 		this.emit("initialize", {
 			type: "initialize",
@@ -226,12 +233,8 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 	}
 
 	private async stageAll(git: SimpleGit) {
-		try {
-			// Exclude files larger than 100MB to prevent shadow git from ballooning
-			await git.raw(["add", ".", "--ignore-errors"])
-		} catch (error) {
-			this.log(`[${this.constructor.name}#stageAll] failed to add files to git: ${getErrorMessage(error)}`)
-		}
+		// A partial index is not a valid checkpoint. Let the caller report failure.
+		await git.raw(["add", "."])
 	}
 
 	private async safeClean(git: SimpleGit) {
@@ -240,7 +243,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 		await git.clean("f", ["-d", "-f"])
 	}
 
-	private async getNestedGitRepository(): Promise<string | null> {
+	private async getNestedGitRepository(signal?: AbortSignal): Promise<string | null> {
 		try {
 			// Find all .git/HEAD files that are not at the root level.
 			const args = [
@@ -251,11 +254,13 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 				"-g",
 				"**/.git/HEAD",
 				"-g",
+				"**/.git",
+				"-g",
 				"!**/.vscode-test/**",
 				this.workspaceDir,
 			]
 
-			const gitPaths = await executeRipgrep({ args, workspacePath: this.workspaceDir })
+			const gitPaths = await executeRipgrep({ args, workspacePath: this.workspaceDir, signal })
 
 			// Filter to only include nested git directories (not the root .git).
 			// Since we're searching for HEAD files, we expect type to be "file"
@@ -265,11 +270,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 
 				// Ensure it's a .git/HEAD file and not the root one
 				const normalizedPath = filePath.replace(/\\/g, "/")
-				return (
-					normalizedPath.includes(".git/HEAD") &&
-					!normalizedPath.startsWith(".git/") &&
-					normalizedPath !== ".git/HEAD"
-				)
+				return normalizedPath.endsWith("/.git/HEAD") || normalizedPath.endsWith("/.git")
 			})
 
 			if (nestedGitPaths.length > 0) {
@@ -279,8 +280,8 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 
 				// Use path module to properly extract the repository directory
 				// The HEAD file is at .git/HEAD, so we need to go up two directories
-				const gitDir = path.dirname(headPath) // removes HEAD, gives us .git
-				const repoDir = path.dirname(gitDir) // removes .git, gives us the repo directory
+				const gitDir = path.basename(headPath) === "HEAD" ? path.dirname(headPath) : headPath
+				const repoDir = path.dirname(gitDir)
 
 				const absolutePath = path.join(this.workspaceDir, repoDir)
 
@@ -296,8 +297,8 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 				`[${this.constructor.name}#getNestedGitRepository] failed to check for nested git repos: ${getErrorMessage(error)}`,
 			)
 
-			// If we can't check, assume there are no nested repos to avoid blocking the feature.
-			return null
+			// A failed scan cannot establish that the workspace is safe to snapshot.
+			throw error
 		}
 	}
 
@@ -316,6 +317,13 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 	}
 
 	public async saveCheckpoint(
+		message: string,
+		options?: { allowEmpty?: boolean; suppressMessage?: boolean },
+	): Promise<CheckpointResult | undefined> {
+		return this.operations.runExclusive(() => this.saveCheckpointLocked(message, options))
+	}
+
+	private async saveCheckpointLocked(
 		message: string,
 		options?: { allowEmpty?: boolean; suppressMessage?: boolean },
 	): Promise<CheckpointResult | undefined> {
@@ -365,12 +373,16 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 			}
 
 			this.log(`[${this.constructor.name}#saveCheckpoint] failed to create checkpoint: ${error.message}`)
-			this.emit("error", { type: "error", error })
+			if (this.listenerCount("error") > 0) this.emit("error", { type: "error", error })
 			throw error
 		}
 	}
 
 	public async restoreCheckpoint(commitHash: string) {
+		return this.operations.runExclusive(() => this.restoreCheckpointLocked(commitHash))
+	}
+
+	private async restoreCheckpointLocked(commitHash: string) {
 		try {
 			this.log(`[${this.constructor.name}#restoreCheckpoint] starting checkpoint restore`)
 
@@ -394,45 +406,58 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 		} catch (e) {
 			const error = e instanceof Error ? e : new Error(String(e))
 			this.log(`[${this.constructor.name}#restoreCheckpoint] failed to restore checkpoint: ${error.message}`)
-			this.emit("error", { type: "error", error })
+			if (this.listenerCount("error") > 0) this.emit("error", { type: "error", error })
 			throw error
 		}
 	}
 
-	public async getDiff({ from, to }: { from?: string; to?: string }): Promise<CheckpointDiff[]> {
-		if (!this.git) {
-			throw new Error("Shadow git repo not initialized")
+	public async getDiff(options: { from?: string; to?: string }): Promise<CheckpointDiff[]> {
+		return this.operations.runExclusive(() => this.getDiffLocked(options))
+	}
+
+	private async getDiffLocked({ from, to }: { from?: string; to?: string }): Promise<CheckpointDiff[]> {
+		if (!this.git) throw new Error("Shadow git repo not initialized")
+		const git = this.git
+		from ??= (await git.raw(["rev-list", "--max-parents=0", "HEAD"])).trim()
+
+		// NUL-delimited paths preserve Unicode, whitespace and rename source/destination.
+		// Comparing the working tree must never stage files into the restore index.
+		const output = await git.raw([
+			"diff",
+			"--name-status",
+			"-z",
+			"--find-renames",
+			"--no-ext-diff",
+			"--no-textconv",
+			from,
+			...(to ? [to] : []),
+			"--",
+		])
+		const fields = output.split("\0")
+		const entries: { status: string; beforePath: string; afterPath: string }[] = []
+		for (let i = 0; i < fields.length && fields[i]; ) {
+			const status = fields[i++]!
+			const beforePath = fields[i++]!
+			const afterPath = /^[RC]/.test(status) ? fields[i++]! : beforePath
+			entries.push({ status, beforePath, afterPath })
+		}
+		if (!to) {
+			const untracked = await git.raw(["ls-files", "--others", "--exclude-standard", "-z"])
+			const knownPaths = new Set(entries.map((entry) => entry.afterPath))
+			for (const file of untracked.split("\0").filter(Boolean)) {
+				if (!knownPaths.has(file)) entries.push({ status: "A", beforePath: file, afterPath: file })
+			}
 		}
 
-		const result = []
-
-		if (!from) {
-			from = (await this.git.raw(["rev-list", "--max-parents=0", "HEAD"])).trim()
+		const result: CheckpointDiff[] = []
+		for (const { status, beforePath, afterPath } of entries) {
+			const absPath = path.join(this.workspaceDir, afterPath)
+			const before = status === "A" ? "" : await git.show([`${from}:${beforePath}`])
+			const after =
+				status === "D" ? "" : to ? await git.show([`${to}:${afterPath}`]) : await fs.readFile(absPath, "utf8")
+			if (before.includes("\0") || after.includes("\0")) continue
+			result.push({ paths: { relative: afterPath, absolute: absPath }, content: { before, after } })
 		}
-
-		// Stage all changes so that untracked files appear in diff summary.
-		await this.stageAll(this.git)
-
-		this.log(`[${this.constructor.name}#getDiff] diffing ${to ? `${from}..${to}` : `${from}..HEAD`}`)
-		const { files } = to ? await this.git.diffSummary([`${from}..${to}`]) : await this.git.diffSummary([from])
-
-		const cwdPath = (await this.getShadowGitConfigWorktree(this.git)) || this.workspaceDir || ""
-
-		for (const file of files) {
-			const relPath = file.file
-			const absPath = path.join(cwdPath, relPath)
-			const before = await this.git.show([`${from}:${relPath}`]).catch(() => "")
-
-			const after = to
-				? await this.git.show([`${to}:${relPath}`]).catch(() => "")
-				: await fs.readFile(absPath, "utf8").catch(() => "")
-
-			// Skip binary files — they produce garbage diffs when read as UTF-8
-			if (before.includes(" ") || after.includes(" ")) continue
-
-			result.push({ paths: { relative: relPath, absolute: absPath }, content: { before, after } })
-		}
-
 		return result
 	}
 

@@ -215,6 +215,8 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	readonly globalStoragePath: string
+	private abortTaskPromise?: Promise<void>
+	private commandCleanupFailure?: string
 	abort: boolean = false
 	readonly toolAbortController = new AbortController()
 
@@ -1089,6 +1091,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	}
 
 	public async reportCommandCleanupFailure(detail: string): Promise<void> {
+		this.commandCleanupFailure = `${t("delivery:unconfirmedProcess")}\n${detail}`
 		await this.addToClineMessages({
 			ts: Date.now(),
 			type: "say",
@@ -1216,7 +1219,14 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 		this.isBackgrounded = false
 	}
 	public async abortTask(isAbandoned = false) {
-		return this.lifecycleHandler.abortTask(isAbandoned)
+		if (isAbandoned) this.abandoned = true
+		return (this.abortTaskPromise ??= this.lifecycleHandler.abortTask(isAbandoned))
+	}
+
+	public async waitForCheckpointCleanup(): Promise<void> {
+		await this.cangjieVerification.cancelAndWait()
+		await this.lifecycleHandler.waitForCheckpointCleanup()
+		if (this.commandCleanupFailure) throw new Error(this.commandCleanupFailure)
 	}
 
 	public isDisposed = false
@@ -1450,6 +1460,13 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 	> {
 		return this.streamProcessor.buildCleanConversationHistory(messages)
 	}
+	/** Persist restored history without sending a new message through an aborted task's say() guard. */
+	public async persistCheckpointConversation(deletedMetrics: string): Promise<void> {
+		await this.addToClineMessages({ ts: Date.now(), type: "say", say: "api_req_deleted", text: deletedMetrics })
+		if (!(await this.saveApiConversationHistory())) throw new Error("Restored API history could not be saved")
+		if (!(await this.saveClineMessages())) throw new Error("Restored task messages could not be saved")
+	}
+
 	public async checkpointRestore(options: CheckpointRestoreOptions) {
 		return checkpointRestore(this, options)
 	}

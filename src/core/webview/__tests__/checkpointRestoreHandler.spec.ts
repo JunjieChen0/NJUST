@@ -9,6 +9,7 @@ vi.mock("../../task-persistence", () => ({
 	saveTaskMessages: vi.fn(),
 }))
 vi.mock("p-wait-for")
+vi.mock("../../../integrations/terminal/TerminalRegistry", () => ({ TerminalRegistry: { getTerminals: () => [] } }))
 vi.mock("vscode", () => ({
 	window: {
 		showErrorMessage: vi.fn(),
@@ -26,6 +27,9 @@ describe("checkpointRestoreHandler", () => {
 		mockCline = {
 			taskId: "test-task-123",
 			abort: false,
+			cancelCurrentRequest: vi.fn(),
+			waitForTaskLoopIdle: vi.fn(),
+			waitForCheckpointCleanup: vi.fn(),
 			abortTask: vi.fn(function () {
 				mockCline.abort = true
 			}),
@@ -91,7 +95,7 @@ describe("checkpointRestoreHandler", () => {
 			expect(abortOrder).toBeLessThan(restoreOrder)
 		})
 
-		it("should not abort task if already aborted", async () => {
+		it("awaits task cancellation even if the abort flag is already set", async () => {
 			// Simulate a task that's already aborted
 			mockCline.abort = true
 
@@ -104,8 +108,8 @@ describe("checkpointRestoreHandler", () => {
 				operation: "delete",
 			})
 
-			// Verify abortTask was not called
-			expect(mockCline.abortTask).not.toHaveBeenCalled()
+			// The flag does not prove that asynchronous cleanup has finished.
+			expect(mockCline.abortTask).toHaveBeenCalled()
 			expect(mockCline.checkpointRestore).toHaveBeenCalled()
 		})
 
@@ -126,8 +130,8 @@ describe("checkpointRestoreHandler", () => {
 				editData,
 			})
 
-			// Verify abortTask was NOT called for edit operations
-			expect(mockCline.abortTask).not.toHaveBeenCalled()
+			// Edit operations must stop writers before restoring files.
+			expect(mockCline.abortTask).toHaveBeenCalled()
 
 			// Verify pending edit operation was set
 			expect(mockProvider.setPendingEditOperation).toHaveBeenCalledWith("task-test-task-123", {
@@ -195,7 +199,7 @@ describe("checkpointRestoreHandler", () => {
 			expect(mockProvider.createTaskWithHistoryItem).toHaveBeenCalledWith(expectedHistoryItem)
 		})
 
-		it("should not save messages or reinitialize for edit operation", async () => {
+		it("reinitializes once after a successful edit restoration", async () => {
 			const editData = {
 				editedContent: "Edited content",
 				images: [],
@@ -215,8 +219,8 @@ describe("checkpointRestoreHandler", () => {
 			// Verify saveTaskMessages was NOT called for edit operation
 			expect(saveTaskMessages).not.toHaveBeenCalled()
 
-			// Verify createTaskWithHistoryItem was NOT called for edit operation
-			expect(mockProvider.createTaskWithHistoryItem).not.toHaveBeenCalled()
+			// Reinitialize only after restoring and recording the pending edit.
+			expect(mockProvider.createTaskWithHistoryItem).toHaveBeenCalledOnce()
 		})
 
 		it("should handle errors gracefully", async () => {

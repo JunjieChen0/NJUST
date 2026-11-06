@@ -1,4 +1,3 @@
-import pWaitFor from "p-wait-for"
 import * as vscode from "vscode"
 
 import { type ClineApiReqInfo, TelemetryEventName } from "@njust-ai/types"
@@ -16,7 +15,7 @@ import { getApiMetrics } from "../../shared/getApiMetrics"
 
 import { DIFF_VIEW_URI_SCHEME } from "../../integrations/editor/diffViewConstants"
 
-import { CheckpointServiceOptions, RepoPerTaskCheckpointService } from "../../services/checkpoints"
+import { RepoPerTaskCheckpointService } from "../../services/checkpoints"
 import { getErrorMessage } from "../../shared/error-utils"
 
 const WARNING_THRESHOLD_MS = 5000
@@ -28,111 +27,68 @@ function sendCheckpointInitWarn(task: Task, type?: "WAIT_TIMEOUT" | "INIT_TIMEOU
 	})
 }
 
-export async function getCheckpointService(task: Task, { interval = 250 }: { interval?: number } = {}) {
-	if (!task.enableCheckpoints) {
-		return undefined
-	}
+const initializations = new WeakMap<Task, Promise<RepoPerTaskCheckpointService | undefined>>()
 
-	if (task.checkpointService) {
-		return task.checkpointService
-	}
+export async function getCheckpointService(task: Task) {
+	if (!task.enableCheckpoints) return undefined
+	if (task.checkpointService?.isInitialized) return task.checkpointService
+	const pending = initializations.get(task)
+	if (pending) return pending
 
 	const provider = task.providerRef.deref()
-
-	// Get checkpoint timeout from task settings (converted to milliseconds)
-	const checkpointTimeoutMs = task.checkpointTimeout * 1000
-
-	const log = (message: string) => {
-		logger.info("Checkpoints", message)
-
-		try {
-			provider?.log(message)
-		} catch (error) {
-			logger.debug("Checkpoints", `log failed: ${getErrorMessage(error)}`)
-			TelemetryService.reportError(error, TelemetryEventName.CHECKPOINT_ERROR)
-		}
-	}
-
-	logger.info("Checkpoints", "[Task#getCheckpointService] initializing checkpoints service")
-
-	try {
+	const controller = new AbortController()
+	const timeoutError = new Error(
+		t("common:errors.init_checkpoint_fail_long_time", { timeout: task.checkpointTimeout }),
+	)
+	timeoutError.name = "TimeoutError"
+	const timeout = setTimeout(() => controller.abort(timeoutError), task.checkpointTimeout * 1000)
+	const warning = setTimeout(
+		() => sendCheckpointInitWarn(task, "WAIT_TIMEOUT", WARNING_THRESHOLD_MS / 1000),
+		WARNING_THRESHOLD_MS,
+	)
+	const aborted = new Promise<never>((_, reject) => {
+		controller.signal.addEventListener("abort", () => reject(controller.signal.reason), { once: true })
+	})
+	const log = (message: string) => logger.info("Checkpoints", message)
+	task.checkpointServiceInitializing = true
+	const initialize = async () => {
 		const workspaceDir = task.cwd || getWorkspacePath()
-
-		if (!workspaceDir) {
-			log("[Task#getCheckpointService] workspace folder not found, disabling checkpoints")
-			task.enableCheckpoints = false
-			return undefined
-		}
-
 		const globalStorageDir = provider?.context.globalStorageUri.fsPath
-
-		if (!globalStorageDir) {
-			log("[Task#getCheckpointService] globalStorageDir not found, disabling checkpoints")
-			task.enableCheckpoints = false
-			return undefined
-		}
-
-		const options: CheckpointServiceOptions = {
+		if (!workspaceDir || !globalStorageDir)
+			throw new Error("Checkpoint workspace or storage directory is unavailable")
+		const service = RepoPerTaskCheckpointService.create({
 			taskId: task.taskId,
 			workspaceDir,
 			shadowDir: globalStorageDir,
 			log,
-		}
-
-		if (task.checkpointServiceInitializing) {
-			const checkpointInitStartTime = Date.now()
-			let warningShown = false
-
-			await pWaitFor(
-				() => {
-					const elapsed = Date.now() - checkpointInitStartTime
-
-					// Show warning if we're past the threshold and haven't shown it yet
-					if (!warningShown && elapsed >= WARNING_THRESHOLD_MS) {
-						warningShown = true
-						sendCheckpointInitWarn(task, "WAIT_TIMEOUT", WARNING_THRESHOLD_MS / 1000)
-					}
-
-					logger.info(
-						"Checkpoints",
-						`[Task#getCheckpointService] waiting for service to initialize (${Math.round(elapsed / 1000)}s)`,
-					)
-					return !!task.checkpointService && !!task?.checkpointService?.isInitialized
-				},
-				{ interval, timeout: checkpointTimeoutMs },
-			)
-			if (!task?.checkpointService) {
-				sendCheckpointInitWarn(task, "INIT_TIMEOUT", task.checkpointTimeout)
-				task.enableCheckpoints = false
-				return undefined
-			} else {
-				sendCheckpointInitWarn(task)
-			}
-			return task.checkpointService
-		}
-
-		if (!task.enableCheckpoints) {
-			return undefined
-		}
-
-		const service = RepoPerTaskCheckpointService.create(options)
-		task.checkpointServiceInitializing = true
-		await checkGitInstallation(task, service, log, provider)
+		})
+		await checkGitInstallation(task, service, log, provider, controller.signal)
+		controller.signal.throwIfAborted()
+		if (!task.enableCheckpoints) return undefined
 		task.checkpointService = service
-		if (task.enableCheckpoints) {
-			sendCheckpointInitWarn(task)
-		}
+		sendCheckpointInitWarn(task)
 		return service
-	} catch (err) {
-		if ((err as { name?: unknown }).name === "TimeoutError" && task.enableCheckpoints) {
-			sendCheckpointInitWarn(task, "INIT_TIMEOUT", task.checkpointTimeout)
-		}
-		log(`[Task#getCheckpointService] ${getErrorMessage(err)}`)
-		TelemetryService.reportError(err, TelemetryEventName.CHECKPOINT_ERROR)
-		task.enableCheckpoints = false
-		task.checkpointServiceInitializing = false
-		return undefined
 	}
+	const initialization = Promise.race([initialize(), aborted])
+		.catch((error: unknown) => {
+			if (controller.signal.aborted) sendCheckpointInitWarn(task, "INIT_TIMEOUT", task.checkpointTimeout)
+			else
+				void vscode.window.showErrorMessage(
+					t("common:errors.checkpoint_init_failed", { error: getErrorMessage(error) }),
+				)
+			logger.error("Checkpoints", "Checkpoint initialization failed", error)
+			TelemetryService.reportError(error, TelemetryEventName.CHECKPOINT_ERROR)
+			task.enableCheckpoints = false
+			return undefined
+		})
+		.finally(() => {
+			clearTimeout(timeout)
+			clearTimeout(warning)
+			task.checkpointServiceInitializing = false
+			initializations.delete(task)
+		})
+	initializations.set(task, initialization)
+	return initialization
 }
 
 async function checkGitInstallation(
@@ -140,24 +96,25 @@ async function checkGitInstallation(
 	service: RepoPerTaskCheckpointService,
 	log: (message: string) => void,
 	provider: ITaskHost | undefined,
+	signal: AbortSignal,
 ) {
 	try {
-		const gitInstalled = await checkGitInstalled()
+		const gitInstalled = await checkGitInstalled(signal)
 
+		signal.throwIfAborted()
 		if (!gitInstalled) {
 			log("[Task#getCheckpointService] Git is not installed, disabling checkpoints")
 			task.enableCheckpoints = false
 			task.checkpointServiceInitializing = false
 
 			// Show user-friendly notification
-			const selection = await vscode.window.showWarningMessage(
-				t("common:errors.git_not_installed"),
-				t("common:buttons.learn_more"),
-			)
-
-			if (selection === t("common:buttons.learn_more")) {
-				await vscode.env.openExternal(vscode.Uri.parse("https://git-scm.com/downloads"))
-			}
+			void vscode.window
+				.showWarningMessage(t("common:errors.git_not_installed"), t("common:buttons.learn_more"))
+				.then((selection) => {
+					if (selection === t("common:buttons.learn_more"))
+						return vscode.env.openExternal(vscode.Uri.parse("https://git-scm.com/downloads"))
+					return undefined
+				})
 
 			return
 		}
@@ -203,20 +160,16 @@ async function checkGitInstallation(
 
 		log("[Task#getCheckpointService] initializing shadow git")
 
-		try {
-			await service.initShadowGit()
-		} catch (err) {
-			log(`[Task#getCheckpointService] initShadowGit -> ${getErrorMessage(err)}`)
-			TelemetryService.reportError(err, TelemetryEventName.CHECKPOINT_ERROR)
-			task.enableCheckpoints = false
-		}
+		await service.initShadowGit(undefined, signal)
 		task.checkpointServiceInitializing = false
 	} catch (err) {
+		signal.throwIfAborted()
 		log(`[Task#getCheckpointService] Unexpected error during Git check: ${getErrorMessage(err)}`)
 		logger.error("Checkpoints", "Git check error:", err)
 		TelemetryService.reportError(err, TelemetryEventName.CHECKPOINT_ERROR)
 		task.enableCheckpoints = false
 		task.checkpointServiceInitializing = false
+		throw err
 	}
 }
 
@@ -229,13 +182,16 @@ export async function checkpointSave(task: Task, force = false, suppressMessage 
 
 	TelemetryService.instance.captureCheckpointCreated(task.taskId)
 
-	// Start the checkpoint process in the background.
+	// Callers that edit files await this snapshot.
 	return service
 		.saveCheckpoint(`Task: ${task.taskId}, Time: ${Date.now()}`, { allowEmpty: force, suppressMessage })
 		.catch((err) => {
 			logger.error("Checkpoints", "checkpointSave caught unexpected error, disabling checkpoints:", err)
 			TelemetryService.reportError(err, TelemetryEventName.CHECKPOINT_ERROR)
 			task.enableCheckpoints = false
+			void vscode.window.showErrorMessage(
+				t("common:errors.checkpoint_save_failed", { error: getErrorMessage(err) }),
+			)
 		})
 }
 
@@ -252,27 +208,23 @@ export async function checkpointRestore(
 ) {
 	const service = await getCheckpointService(task)
 
-	if (!service) {
-		return
-	}
+	if (!service) throw new Error(t("common:errors.checkpoint_unavailable"))
 
 	const index = task.clineMessages.findIndex((m) => m.ts === ts)
 
-	if (index === -1) {
-		return
-	}
+	if (index === -1) throw new Error(t("common:errors.checkpoint_message_missing"))
 
 	const provider = task.providerRef.deref()
 
+	let filesRestored = false
 	try {
 		await service.restoreCheckpoint(commitHash)
+		filesRestored = true
 		try {
 			await task.cangjieVerification?.onCheckpointRestored()
 		} catch (error) {
 			logger.debug("Checkpoints", "Verification refresh after checkpoint restore failed", error)
 		}
-		TelemetryService.instance.captureCheckpointRestored(task.taskId)
-		await provider?.postMessageToWebview({ type: "currentCheckpointUpdated", text: commitHash })
 
 		if (mode === "restore") {
 			// Calculate metrics from messages that will be deleted (must be done before rewind)
@@ -289,8 +241,7 @@ export async function checkpointRestore(
 			})
 
 			// Report the deleted API request metrics
-			await task.say(
-				"api_req_deleted",
+			await task.persistCheckpointConversation(
 				JSON.stringify({
 					tokensIn: totalTokensIn,
 					tokensOut: totalTokensOut,
@@ -301,21 +252,18 @@ export async function checkpointRestore(
 			)
 		}
 
-		// The task is already cancelled by the provider beforehand, but we
-		// need to re-init to get the updated messages.
-		//
-		// This was taken from Cline's implementation of the checkpoints
-		// feature. The task instance will hang if we don't cancel twice,
-		// so this is currently necessary, but it seems like a complicated
-		// and hacky solution to a problem that I don't fully understand.
-		// I'd like to revisit this in the future and try to improve the
-		// task flow and the communication between the webview and the
-		// `Task` instance.
-		void provider?.cancelTask()
+		// Publish success only after both files and requested conversation state are restored.
+		await provider?.postMessageToWebview({ type: "currentCheckpointUpdated", text: commitHash })
+		TelemetryService.instance.captureCheckpointRestored(task.taskId)
 	} catch (error) {
 		provider?.log(`[checkpointRestore] disabling checkpoints for this task: ${getErrorMessage(error)}`)
 		TelemetryService.reportError(error, TelemetryEventName.CHECKPOINT_ERROR)
 		task.enableCheckpoints = false
+		throw new Error(
+			t(filesRestored ? "common:errors.checkpoint_partial_restore" : "common:errors.checkpoint_restore_failed", {
+				error: getErrorMessage(error),
+			}),
+		)
 	}
 }
 

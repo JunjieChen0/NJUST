@@ -404,6 +404,7 @@ describe("TaskLifecycleHandler", () => {
 
 		expect(host.abort).toBe(true)
 		expect(host.dispose).toHaveBeenCalled()
+		await expect(handler.waitForCheckpointCleanup()).rejects.toThrow("dispose failed")
 	})
 
 	it("disposes resources once and writes session metrics", async () => {
@@ -573,5 +574,32 @@ describe("TaskLifecycleHandler", () => {
 		const handler = new TaskLifecycleHandler(host)
 
 		await expect(handler.resumeTaskFromHistory()).resolves.toBeUndefined()
+	})
+	it("waits for pending editor rollback before checkpoint restore", async () => {
+		let finish!: () => void
+		const rollback = new Promise<void>((resolve) => {
+			finish = resolve
+		})
+		const host = createHost({ isStreaming: true })
+		host.diffViewProvider.isEditing = true
+		host.diffViewProvider.revertChanges.mockReturnValue(rollback)
+		const handler = new TaskLifecycleHandler(host)
+		handler.dispose()
+		let done = false
+		const pending = handler.waitForCheckpointCleanup().then(() => {
+			done = true
+		})
+		await Promise.resolve()
+		expect(done).toBe(false)
+		finish()
+		await pending
+		expect(done).toBe(true)
+	})
+
+	it("refuses checkpoint restoration after sandbox cleanup failure", async () => {
+		disposeScopeMock.mockRejectedValue(new Error("cleanup failed"))
+		const handler = new TaskLifecycleHandler(createHost())
+		await handler.abortTask()
+		await expect(handler.waitForCheckpointCleanup()).rejects.toThrow("cleanup failed")
 	})
 })
