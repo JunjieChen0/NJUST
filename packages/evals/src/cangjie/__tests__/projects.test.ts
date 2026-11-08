@@ -63,6 +63,8 @@ it("rejects external fixture links before copying any files", async () => {
 	expect(await fs.readFile(path.join(outside, "victim.cj"), "utf8")).toBe("unchanged")
 })
 
+// Directory copies are markedly slower on Windows CI runners; allow generous headroom
+// over the default 5s timeout rather than making the assertion depend on disk speed.
 it("copies a normal project before applying initial and oracle files", async () => {
 	await fs.writeFile(path.join(workspace, "cjpm.toml"), "[package]")
 	const destination = path.join(base, "copy")
@@ -70,4 +72,4 @@ it("copies a normal project before applying initial and oracle files", async () 
 	await prepareCase({ ...task, initialFiles: { "src/main.cj": "initial" } }, destination)
 	await addOracle({ ...task, oracleFiles: { "src/test.cj": "oracle" } }, destination)
 	expect(await fs.readFile(path.join(destination, "cjpm.toml"), "utf8")).toBe("[package]")
-})
+}, 30_000)

@@ -17,21 +17,34 @@ vi.mock("../../../shared/logger", () => ({
 }))
 vi.mock("@njust-ai/telemetry", () => ({ TelemetryService: { reportError() {} } }))
 vi.mock("../../../i18n", () => ({ t: (key: string) => key }))
+// Self-contained replacement for ripgrep: the production helper resolves an `rg`
+// binary from the VS Code install, which is unavailable on CI runners. The
+// checkpoint service only asks for files matching `**/.git/HEAD` / `**/.git`, so
+// a small filesystem walk reproduces the observable behaviour without depending
+// on any external executable (and works identically on Windows, macOS and Linux).
 vi.mock("../../search/file-search", () => ({
-	executeRipgrep: async ({ args, workspacePath }: { args: string[]; workspacePath: string }) => {
-		const { execFileSync } = await import("node:child_process")
+	executeRipgrep: async ({ workspacePath }: { args: string[]; workspacePath: string }) => {
+		const fs = await import("node:fs/promises")
 		const path = await import("node:path")
-		try {
-			const output = execFileSync("rg", args, { cwd: workspacePath, encoding: "utf8", windowsHide: true })
-			return output
-				.trim()
-				.split(/\r?\n/)
-				.filter(Boolean)
-				.map((file) => ({ type: "file", path: path.relative(workspacePath, file) }))
-		} catch (error: any) {
-			if (error.status === 1) return []
-			throw error
+		const matches: { type: "file"; path: string }[] = []
+		async function walk(dir: string): Promise<void> {
+			let entries: Awaited<ReturnType<typeof fs.readdir>>
+			try {
+				entries = await fs.readdir(dir, { withFileTypes: true })
+			} catch {
+				return
+			}
+			for (const entry of entries) {
+				const full = path.join(dir, entry.name)
+				if (entry.name === ".vscode-test") continue
+				if (entry.name === ".git" || (entry.name === "HEAD" && path.basename(dir) === ".git")) {
+					matches.push({ type: "file", path: path.relative(workspacePath, full) })
+				}
+				if (entry.isDirectory()) await walk(full)
+			}
 		}
+		await walk(workspacePath)
+		return matches
 	},
 }))
 
