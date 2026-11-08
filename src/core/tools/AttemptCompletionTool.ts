@@ -26,9 +26,11 @@ interface AttemptCompletionParams {
 
 const CANGJIE_EVIDENCE_AUDIT_HEADING_RE = /^\s*\**\s*Cangjie evidence audit\s*:?\s*\**\s*$/im
 const CANGJIE_COMPLETION_SURFACE_RE =
-	/\b(?:Cangjie evidence audit|CangjieCorpus|cjpm|HashMap|Option|std\.collection|std\.regex|File\.readFrom|String\.fromUtf8|MatchData)\b|\.cj\b/i
+	/\b(?:Cangjie evidence audit|CangjieCorpus|cjpm|HashMap|Option|std\.collection|std\.regex|File\.readFrom|String\.fromUtf8|MatchData)\b|\.cj\b/
+// Case-sensitive on purpose: Cangjie types are capitalized (File, String, Option), and the
+// case-insensitive form matched ordinary prose such as "file.json" or "string.length".
 const CANGJIE_API_ASSERTION_RE =
-	/\b(?:Option\s*<|(?:Option|Regex|HashMap|File|String|MatchData)\s*\.[A-Za-z_]|std\.(?:core|regex|collection|fs|net|sync|time|process)\b|getOrThrow\b|getOrDefault\b|isSome\b|isNone\b)/i
+	/\b(?:Option\s*<|(?:Option|Regex|HashMap|File|String|MatchData)\s*\.[A-Za-z_]|std\.(?:core|regex|collection|fs|net|sync|time|process)\b|getOrThrow\b|getOrDefault\b|isSome\b|isNone\b)/
 
 function hasCangjieEvidenceAuditHeading(result: string): boolean {
 	return CANGJIE_EVIDENCE_AUDIT_HEADING_RE.test(result)

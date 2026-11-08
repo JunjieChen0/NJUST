@@ -98,8 +98,16 @@ function isBlockedDevicePath(filePath: string): boolean {
 	// Check Unix device paths
 	if (BLOCKED_DEVICE_PATHS.has(normalized)) return true
 
+	// Win32 device namespaces: \\.\PhysicalDrive0, \\?\GLOBALROOT\..., \\.\pipe\...
+	// After slash normalization these begin with "//./" or "//?/".
+	if (normalized.startsWith("//./") || normalized.startsWith("//?/")) return true
+
+	// Console handles (CONIN$ / CONOUT$) are special even though they are not in the name list.
+	const bare = path.basename(filePath).toLowerCase()
+	if (bare === "conin$" || bare === "conout$") return true
+
 	// Check Windows device names (can appear as bare name or with extensions)
-	const basename = path.basename(filePath).toLowerCase().split(".")[0]!
+	const basename = bare.split(".")[0]!
 	if (BLOCKED_WINDOWS_DEVICES.has(basename)) return true
 
 	return false

@@ -148,12 +148,14 @@ function assertHttpsUnlessLocalhost(parsed: URL): void {
 }
 
 /**
- * Validate that a redirect target stays within the same registrable domain.
+ * Validate that a redirect target stays within the same host family.
  * Prevents open-redirect attacks where a trusted server redirects to an
  * attacker-controlled domain to leak authorization headers.
  *
- * Uses a simplified check: the hostname of the redirect target must equal
- * or be a subdomain of the original hostname (or vice versa).
+ * Current policy: the redirect target must be the same hostname, or a parent/child
+ * of it (a.example.com ⇄ example.com). Sibling subdomains (a.example.com →
+ * b.example.com) are rejected. Using the registrable domain (eTLD+1 via the Public
+ * Suffix List) would be more precise; tracked as a follow-up.
  */
 function assertSameDomainRedirect(from: URL, to: URL): void {
 	const fromHost = from.hostname.toLowerCase()

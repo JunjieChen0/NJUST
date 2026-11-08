@@ -185,6 +185,24 @@ describe("attemptCompletionTool", () => {
 			}
 		})
 
+		it.each([
+			"Updated config file.json and the README.",
+			"Use string.length to measure the buffer.",
+			"Lowercase option and none are fine in plain prose.",
+		])("does not treat ordinary prose as Cangjie API evidence (%s)", async (result) => {
+			mockTask.taskMode = "code"
+			mockTask.cangjieRuntimePolicy!.hasCjpmProject = vi.fn().mockResolvedValue(false)
+			mockTask.cangjieRuntimePolicy!.getMissingCompletionEvidence = vi.fn().mockReturnValue(["std.core"])
+			await attemptCompletionTool.execute({ result }, mockTask as Task, {
+				askApproval: mockAskApproval,
+				handleError: mockHandleError,
+				pushToolResult: mockPushToolResult,
+				askFinishSubTaskApproval: mockAskFinishSubTaskApproval,
+				toolDescription: mockToolDescription,
+			})
+			expect(mockTask.cangjieRuntimePolicy!.getMissingCompletionEvidence).not.toHaveBeenCalled()
+		})
+
 		it("auto-completes a top-level Cangjie task after its completion gates pass", async () => {
 			mockTask.taskMode = "cangjie"
 			mockTask.parentTaskId = undefined

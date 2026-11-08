@@ -863,4 +863,27 @@ describe("ReadFileTool", () => {
 			expect(description).toBe("[read_file with missing path]")
 		})
 	})
+
+	describe("blocked device paths", () => {
+		it.each([
+			"/dev/zero",
+			"/dev/urandom",
+			"NUL",
+			"nul.txt",
+			"CON",
+			"com1.log",
+			"CONIN$",
+			"conout$",
+			"\\\\.\\PhysicalDrive0",
+			"\\\\?\\GLOBALROOT\\Device\\HarddiskVolume1",
+		])("refuses to read device path %s", async (filePath) => {
+			const mockTask = createMockTask()
+			const callbacks = createMockCallbacks()
+
+			await readFileTool.execute({ path: filePath } as any, mockTask as any, callbacks)
+
+			expect(callbacks.pushToolResult).toHaveBeenCalledWith(expect.stringContaining("is blocked for safety"))
+			expect(mockedFsReadFile).not.toHaveBeenCalled()
+		})
+	})
 })
