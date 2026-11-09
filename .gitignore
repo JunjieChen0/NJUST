@@ -157,3 +157,7 @@ INTEGRATED_CODE_REVIEW_REPORT.md
 
 # Windows reserved device name (cannot be deleted)
 nul
+
+# Local IDE/runtime artifacts (keep on disk, never version)
+/.arts/
+/target/
