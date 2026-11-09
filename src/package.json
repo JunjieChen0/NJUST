@@ -1038,7 +1038,7 @@
 					"type": "string",
 					"scope": "machine",
 					"default": "",
-					"description": "API key for web search provider (Tavily). Get a free key at https://tavily.com"
+					"description": "API key for web search provider (Tavily). Get a free key at https://tavily.com. The key is migrated to the OS secret store (SecretStorage) and is not synced with your settings."
 				},
 				"njust-ai.vsCodeLmModelSelector": {
 					"type": "object",
@@ -1237,13 +1237,13 @@
 					"type": "string",
 					"scope": "machine",
 					"default": "",
-					"description": "Auto-generated device token for Cloud Agent authentication. Do not modify manually."
+					"description": "[已废弃，仅用于一次性迁移] 设备令牌已保存在系统密钥库中，启动时会清除此设置。请勿手动修改。"
 				},
 				"njust-ai.cloudAgent.apiKey": {
 					"type": "string",
 					"scope": "machine",
 					"default": "",
-					"description": "[已废弃] 请使用 Cloud Agent Profile 管理 API Key。此设置仅在未配置 Profile 时作为后备。X-API-Key for Cloud Agent (must match server CLOUD_AGENT_MOCK_API_KEY)."
+					"description": "[已废弃，仅用于一次性迁移] 请使用 Cloud Agent Profile 管理 API Key。启动时会迁移到系统密钥库并清除此设置；请勿在此处填写密钥。"
 				},
 				"njust-ai.cloudAgent.requestTimeoutMs": {
 					"type": "number",
@@ -1313,7 +1313,7 @@
 					"type": "string",
 					"scope": "machine",
 					"default": "",
-					"description": "Bearer token for authenticating MCP Tools Server requests. REQUIRED when bindAddress is '0.0.0.0'. Leave empty to disable authentication (only for local-only access)."
+					"description": "Bearer token for authenticating MCP Tools Server requests. Stored in the OS secret store (SecretStorage) after migration, and cleared from this setting. REQUIRED when bindAddress is '0.0.0.0'. Leave empty to disable authentication (only for local-only access)."
 				},
 				"njust-ai.errorReporting.endpoint": {
 					"type": "string",
