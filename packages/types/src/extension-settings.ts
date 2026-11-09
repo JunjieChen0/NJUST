@@ -44,6 +44,7 @@ export const extensionSettingSchemas = {
 	enableCodeActions: z.boolean().default(true),
 	enableStreamingToolExecution: z.boolean().default(true),
 	enableWebSearch: z.boolean().default(false),
+	"errorReporting.endpoint": z.string().default(""),
 	"inlineCompletion.enableCangjieEnhanced": z.boolean().default(true),
 	"inlineCompletion.enabled": z.boolean().default(true),
 	"inlineCompletion.maxLines": z.number().min(1).max(50).default(10),
