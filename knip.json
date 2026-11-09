@@ -64,6 +64,7 @@
 			"project": ["src/**/*.{ts,tsx}", "../src/shared/*.ts"],
 			"ignore": [
 				"src/hooks/useCloudUpsell.ts",
+				"src/utils/url.ts",
 				"src/components/cloud/CloudUpsellDialog.tsx",
 				"src/components/cloud/CloudView.tsx",
 				"src/components/common/VersionIndicator.tsx",
