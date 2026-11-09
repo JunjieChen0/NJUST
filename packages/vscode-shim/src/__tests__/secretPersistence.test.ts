@@ -66,6 +66,55 @@ describe("secret persistence failures", () => {
 			for (const file of fs.readdirSync(root)) expect(fs.statSync(path.join(root, file)).size).toBe(0)
 		},
 	)
+	it("starts empty and preserves the original file when ciphertext is unrecoverable", async () => {
+		const file = path.join(root, "secrets.json")
+		const corrupt = "not-valid-base64-or-ciphertext"
+		fs.writeFileSync(file, corrupt)
+		// A valid sidecar key means the legacy-key fallback cannot help either.
+		fs.writeFileSync(path.join(root, "secrets.key"), crypto.randomBytes(32))
+
+		const storage = new FileSecretStorage(root)
+		expect(await storage.get("key")).toBeUndefined()
+
+		const backups = fs.readdirSync(root).filter((name) => name.startsWith("secrets.json.corrupt-"))
+		expect(backups).toHaveLength(1)
+		expect(fs.readFileSync(path.join(root, backups[0]!), "utf8")).toBe(corrupt)
+		expect(fs.existsSync(file)).toBe(false)
+
+		// The host must remain usable: subsequent writes succeed and reload.
+		await storage.store("key", "recovered")
+		expect(await new FileSecretStorage(root).get("key")).toBe("recovered")
+	})
+
+	it("rotates an invalid master key instead of failing every write", async () => {
+		fs.writeFileSync(path.join(root, "secrets.key"), Buffer.from("too-short"))
+
+		const storage = new FileSecretStorage(root)
+		await storage.store("key", "after-rotation")
+
+		expect(await new FileSecretStorage(root).get("key")).toBe("after-rotation")
+		const backups = fs.readdirSync(root).filter((name) => name.startsWith("secrets.key.corrupt-"))
+		expect(backups).toHaveLength(1)
+		expect(fs.readFileSync(path.join(root, "secrets.key")).length).toBe(32)
+	})
+
+	it("does not discard a valid ciphertext just because the key file is invalid", async () => {
+		// Encrypt with a valid random key, then corrupt only the sidecar key file.
+		const good = new FileSecretStorage(root)
+		await good.store("key", "keep-me")
+		const file = path.join(root, "secrets.json")
+		const ciphertext = fs.readFileSync(file, "utf8")
+		fs.writeFileSync(path.join(root, "secrets.key"), Buffer.from("too-short"))
+
+		const recovered = new FileSecretStorage(root)
+		// Data cannot be decrypted with a lost key, but the original ciphertext must
+		// still be preserved for manual recovery rather than silently deleted.
+		expect(await recovered.get("key")).toBeUndefined()
+		const backups = fs.readdirSync(root).filter((name) => name.startsWith("secrets.json.corrupt-"))
+		expect(backups).toHaveLength(1)
+		expect(fs.readFileSync(path.join(root, backups[0]!), "utf8")).toBe(ciphertext)
+	})
+
 	it("recovers legacy data when migration was interrupted after its random key was saved", async () => {
 		const legacy = crypto.scryptSync(
 			`${os.userInfo().username}@${os.hostname()}:${process.platform}`,

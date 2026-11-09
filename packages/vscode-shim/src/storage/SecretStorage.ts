@@ -30,8 +30,13 @@ const KEY_FILE_NAME = "secrets.key"
  * - Master key is cryptographically random (32 bytes)
  * - File permissions are set restrictive (0600) on Unix-like systems
  * - On Windows, inheritance is disabled and only the current user retains access
- * - For production environments, consider using VS Code's native SecretStorage
- *   which integrates with the OS keychain
+ * - This shim is used by the CLI host (`@njust-ai/vscode-shim`); the real VS Code
+ *   extension uses VS Code's native SecretStorage (OS keychain). The master key
+ *   therefore sits beside the ciphertext in this shim only. If the CLI ever needs
+ *   keychain-grade protection, inject a platform SecretStorage implementation at
+ *   the ExtensionContext boundary rather than changing this file format in place.
+ * - Corrupt ciphertext or an invalid key file is preserved as a `.corrupt-*` backup
+ *   and the store starts empty, so a bad file cannot abort host startup.
  *
  * @example
  * ```typescript
@@ -68,28 +73,70 @@ export class FileSecretStorage implements SecretStorage {
 	/**
 	 * Load secrets from the encrypted JSON file.
 	 * Handles transparent migration from the legacy machine-ID-derived key.
+	 *
+	 * A ciphertext that cannot be decrypted with either key is treated as corrupt:
+	 * the original file is preserved as a `.corrupt-<timestamp>` backup and the
+	 * store starts empty instead of throwing. Throwing here aborts construction of
+	 * ExtensionContext (and therefore the whole CLI host), leaving no way to
+	 * recover short of deleting files by hand.
 	 */
 	private loadFromFile(): void {
+		if (!fs.existsSync(this.filePath)) return
+
+		const keyFile = this.getKeyFilePath()
+		let encryptedContent: string
 		try {
-			if (fs.existsSync(this.filePath)) {
-				const encryptedContent = fs.readFileSync(this.filePath, "utf-8")
-				const keyFile = this.getKeyFilePath()
-				if (fs.existsSync(keyFile)) {
-					try {
-						this.secrets = JSON.parse(this.decrypt(encryptedContent))
-						return
-					} catch {
-						// A prior migration may have saved its key before publishing the new ciphertext.
-						console.warn(`Checking for an interrupted legacy migration at ${this.filePath}`)
-					}
-				}
-				this.secrets = JSON.parse(this.decryptWithKey(encryptedContent, this.deriveLegacyKey()))
-				if (!fs.existsSync(keyFile)) this.persistNewRandomKey()
-				this.saveToFile(this.secrets)
-			}
+			encryptedContent = fs.readFileSync(this.filePath, "utf-8")
 		} catch (error) {
-			console.warn(`Failed to load secrets from ${this.filePath}:`, error)
-			throw error
+			// Unreadable file: recover the same way as undecryptable data.
+			this.secrets = {}
+			console.warn(`Could not read secrets from ${this.filePath}; starting with an empty store.`, error)
+			return
+		}
+		let migratedFromLegacy = false
+
+		try {
+			if (fs.existsSync(keyFile)) {
+				try {
+					this.secrets = JSON.parse(this.decrypt(encryptedContent))
+					return
+				} catch {
+					// A prior migration may have saved its key before publishing the new ciphertext.
+					console.warn(`Checking for an interrupted legacy migration at ${this.filePath}`)
+				}
+			}
+			this.secrets = JSON.parse(this.decryptWithKey(encryptedContent, this.deriveLegacyKey()))
+			migratedFromLegacy = true
+		} catch (error) {
+			// Only unreadable *data* is recoverable here. Write/IO failures during
+			// migration must still propagate: swallowing them would break the atomic
+			// publish guarantee and lose the original ciphertext.
+			this.secrets = {}
+			this.preserveCorruptFile()
+			console.warn(
+				`Failed to load secrets from ${this.filePath}; starting with an empty store. ` +
+					`The original file was kept as a backup.`,
+				error,
+			)
+			return
+		}
+
+		// Re-encrypt legacy data with a random key. This performs a write, so it is
+		// deliberately outside the recovery try/catch above.
+		if (migratedFromLegacy) {
+			if (!fs.existsSync(keyFile)) this.persistNewRandomKey()
+			this.saveToFile(this.secrets)
+		}
+	}
+
+	/** Rename an undecryptable secrets file aside so it is never silently lost. */
+	private preserveCorruptFile(): void {
+		try {
+			const backup = `${this.filePath}.corrupt-${Date.now()}`
+			fs.renameSync(this.filePath, backup)
+			console.warn(`Preserved unreadable secrets file at ${backup}`)
+		} catch (backupError) {
+			console.warn(`Could not preserve unreadable secrets file ${this.filePath}:`, backupError)
 		}
 	}
 
@@ -229,18 +276,32 @@ export class FileSecretStorage implements SecretStorage {
 		if (!this.encryptionKey) {
 			const keyFile = this.getKeyFilePath()
 			if (fs.existsSync(keyFile)) {
-				// Use persisted random key
 				const key = fs.readFileSync(keyFile)
-				if (key.length !== KEY_LENGTH) {
-					throw new Error(`Invalid key file length: expected ${KEY_LENGTH}, got ${key.length}`)
+				if (key.length === KEY_LENGTH) {
+					this.encryptionKey = key
+				} else {
+					// A truncated/tampered key file must not brick every future write.
+					// Preserve it and rotate to a fresh random key.
+					this.preserveCorruptKeyFile()
+					this.persistNewRandomKey()
 				}
-				this.encryptionKey = key
 			} else {
 				// Fresh install — no secrets.json and no key file
 				this.persistNewRandomKey()
 			}
 		}
 		return this.encryptionKey!
+	}
+
+	private preserveCorruptKeyFile(): void {
+		const keyFile = this.getKeyFilePath()
+		try {
+			const backup = `${keyFile}.corrupt-${Date.now()}`
+			fs.renameSync(keyFile, backup)
+			console.warn(`Preserved invalid master key file at ${backup}`)
+		} catch (backupError) {
+			console.warn(`Could not preserve invalid master key file ${keyFile}:`, backupError)
+		}
 	}
 
 	/**
