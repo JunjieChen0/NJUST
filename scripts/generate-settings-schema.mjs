@@ -15,6 +15,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { execFileSync } from "node:child_process"
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const manifestPath = resolve(rootDir, "src/package.json")
@@ -97,14 +98,22 @@ export function parseExtensionSetting<K extends ExtensionSettingKey>(
 }
 `
 
+// Format through the repository's Prettier so the committed file, the generator
+// and CI all compare against one canonical style (quoted keys are normalized).
+const formatted = execFileSync(
+	process.execPath,
+	[resolve(rootDir, "node_modules/prettier/bin/prettier.cjs"), "--stdin-filepath", outputPath],
+	{ input: output, encoding: "utf8", cwd: rootDir },
+)
+
 if (checkOnly) {
-	if (!existsSync(outputPath) || readFileSync(outputPath, "utf8") !== output) {
+	if (!existsSync(outputPath) || readFileSync(outputPath, "utf8") !== formatted) {
 		console.error("extension-settings.ts is out of date. Run: node scripts/generate-settings-schema.mjs")
 		process.exit(1)
 	}
 	console.log(`Settings schema is up to date (${entries.length} settings).`)
 } else {
 	mkdirSync(dirname(outputPath), { recursive: true })
-	writeFileSync(outputPath, output, "utf8")
+	writeFileSync(outputPath, formatted, "utf8")
 	console.log(`Generated ${outputPath} (${entries.length} settings).`)
 }

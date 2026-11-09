@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-vi.mock("../../../../utils/logging", () => ({
+vi.mock("../../../../shared/logger", () => ({
 	logger: {
 		info: vi.fn(),
 	},
