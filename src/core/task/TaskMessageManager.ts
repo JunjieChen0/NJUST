@@ -8,6 +8,7 @@
  * Phase 2 (future): move ask/say control flow here once the state surface
  * is reduced via further decoupling.
  */
+import stringify from "safe-stable-stringify"
 import type { Anthropic } from "@anthropic-ai/sdk"
 import type {
 	ClineMessage,
@@ -105,6 +106,38 @@ type MessageWithTs = {
 }
 
 export class TaskMessageManager {
+	/**
+	 * Last serialized snapshot emitted for each Cline message, keyed by a
+	 * stable message key. Streaming code frequently calls updateClineMessage()
+	 * with an in-place-mutated object whose content has NOT actually changed;
+	 * without this guard a single completion_result can be re-emitted thousands
+	 * of times, flooding the webview (messageUpdated renders), the external API
+	 * event bus and the on-disk api-messages.log. See
+	 * docs/development/cangjie-e2e-findings.md (event-storm finding).
+	 *
+	 * Bounded so a long-running task cannot grow it without limit.
+	 */
+	private readonly lastEmittedSnapshots = new Map<string, string>()
+	private static readonly MAX_SNAPSHOT_ENTRIES = 500
+
+	private messageKey(message: ClineMessage): string {
+		return message.id ?? `${message.ts}:${message.type}:${message.say ?? message.ask ?? ""}`
+	}
+
+	/** Record a snapshot; returns true when it differs from the last emission. */
+	private shouldEmit(message: ClineMessage): boolean {
+		const key = this.messageKey(message)
+		const snapshot = stringify(message) ?? ""
+		const changed = this.lastEmittedSnapshots.get(key) !== snapshot
+		if (changed) {
+			if (this.lastEmittedSnapshots.size >= TaskMessageManager.MAX_SNAPSHOT_ENTRIES) {
+				this.lastEmittedSnapshots.clear()
+			}
+			this.lastEmittedSnapshots.set(key, snapshot)
+		}
+		return changed
+	}
+
 	constructor(private ctx: TaskMessageContext) {}
 
 	async getSavedApiConversationHistory(): Promise<ApiMessage[]> {
@@ -383,6 +416,9 @@ export class TaskMessageManager {
 
 	async addToClineMessages(message: ClineMessage): Promise<void> {
 		this.ctx.clineMessages.push(message)
+		// A creation is always a distinct event, but seed the snapshot so a
+		// subsequent no-op update of the same object is suppressed.
+		this.shouldEmit(message)
 		await this.ctx.notifier?.postStateToWebviewWithoutTaskHistory()
 		this.ctx.emit(NJUST_AIEventName.Message, { action: "created", message })
 		await this.saveClineMessages()
@@ -390,11 +426,20 @@ export class TaskMessageManager {
 
 	async overwriteClineMessages(newMessages: ClineMessage[]): Promise<void> {
 		this.ctx.clineMessages = newMessages
+		// Replaced history invalidates all previous snapshots.
+		this.lastEmittedSnapshots.clear()
 		restoreTodoListForTask(this.ctx)
 		await this.saveClineMessages()
 	}
 
 	async updateClineMessage(message: ClineMessage): Promise<void> {
+		// Skip the webview render, the event-bus emission and the downstream file
+		// log when nothing in the message actually changed. This is the fix for
+		// the non-partial message storm: the same ClineMessage object is mutated
+		// in place and re-sent with identical content on every stream tick.
+		if (!this.shouldEmit(message)) {
+			return
+		}
 		await this.ctx.notifier?.postMessageToWebview({ type: "messageUpdated", clineMessage: message })
 		this.ctx.emit(NJUST_AIEventName.Message, { action: "updated", message })
 	}

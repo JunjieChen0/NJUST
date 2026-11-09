@@ -1,6 +1,7 @@
 import { EventEmitter } from "events"
 import fs from "fs/promises"
 import * as path from "path"
+import stringify from "safe-stable-stringify"
 
 import * as vscode from "vscode"
 import pWaitFor from "p-wait-for"
@@ -41,6 +42,13 @@ export class API extends EventEmitter<NJUST_AIEvents> implements NJUST_AIAPI {
 	private readonly ipc?: IpcServer
 	private readonly log: (...args: unknown[]) => void
 	private logfile?: string
+	/**
+	 * Dedupe key for the last non-partial message written to api-messages.log.
+	 * Streaming / event-bus replays can deliver the identical message many
+	 * times; writing each one made the file grow without bound and drowned the
+	 * evaluation event stream. See docs/development/cangjie-e2e-findings.md.
+	 */
+	private lastLoggedMessageKey?: string
 
 	constructor(
 		outputChannel: vscode.OutputChannel,
@@ -417,10 +425,17 @@ export class API extends EventEmitter<NJUST_AIEvents> implements NJUST_AIAPI {
 				async (message: { action: "created" | "updated"; message: ClineMessage }) => {
 					this.emit(NJUST_AIEventName.Message, { taskId: task.taskId, ...message })
 
+					// Only persist non-partial messages, and never the same content
+					// twice in a row. `created` and `updated` for an unchanged message
+					// must not each append a full JSON copy to the log file.
 					if (message.message.partial !== true) {
-						await this.fileLog(
-							`[${new Date().toISOString()}] ${JSON.stringify(message.message, null, 2)}\n`,
-						)
+						const key = `${task.taskId}:${message.message.id ?? message.message.ts}:${stringify(message.message)}`
+						if (key !== this.lastLoggedMessageKey) {
+							this.lastLoggedMessageKey = key
+							await this.fileLog(
+								`[${new Date().toISOString()}] ${JSON.stringify(message.message, null, 2)}\n`,
+							)
+						}
 					}
 				},
 			)

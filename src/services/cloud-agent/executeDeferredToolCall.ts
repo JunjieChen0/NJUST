@@ -10,6 +10,7 @@ import type { DeferredToolCall, DeferredToolResult } from "./types"
 import { getErrorMessage } from "../../shared/error-utils"
 import type { IPathValidator, IWriteProtector } from "./interfaces/IPathAccessController"
 import { checkToolExecutionAuth, type AuthContext } from "./auth-context"
+import { findSensitivePathReason } from "./sensitivePath"
 
 function expectString(args: Record<string, unknown>, key: string): string {
 	const val = args[key]
@@ -94,9 +95,23 @@ export async function executeDeferredToolCall(
 			return !validator || validator.validateAccess(filePath)
 		}
 
+		/**
+		 * The deferred protocol lets a REMOTE server choose a local path; a
+		 * compromised server must not be able to read credential files that
+		 * happen to live inside the workspace. This is a hard stop applied to
+		 * every read-like tool, independent of the user's approval choice.
+		 */
+		const assertNotSensitive = (candidate: string): void => {
+			const reason = findSensitivePathReason(candidate)
+			if (reason) {
+				throw new Error(`Access denied by sensitive-file policy (${reason}): ${candidate}`)
+			}
+		}
+
 		switch (call.tool) {
 			case "read_file": {
 				const readPath = expectString(args, "path")
+				assertNotSensitive(readPath)
 				const readAccessAllowed = isPathAccessAllowed(pathValidator, readPath)
 				if (!readAccessAllowed) {
 					return {
@@ -164,6 +179,7 @@ export async function executeDeferredToolCall(
 			case "list_files": {
 				const raw = args.path
 				const listPath = typeof raw === "string" ? raw.trim() : ""
+				assertNotSensitive(listPath || ".")
 				const listAccessAllowed = isPathAccessAllowed(pathValidator, listPath || ".")
 				if (!listAccessAllowed) {
 					return {
@@ -182,6 +198,7 @@ export async function executeDeferredToolCall(
 
 			case "search_files": {
 				const searchPath = expectOptionalString(args, "path") ?? "."
+				assertNotSensitive(searchPath)
 				const searchAccessAllowed = isPathAccessAllowed(pathValidator, searchPath)
 				if (!searchAccessAllowed) {
 					return {

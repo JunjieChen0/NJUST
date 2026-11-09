@@ -383,4 +383,39 @@ describe("executeDeferredToolCall security", () => {
 			expect(result.content).toContain("Write protected")
 		})
 	})
+
+	// A remote Cloud Agent chooses these paths; a compromised server must not be
+	// able to read credential files that happen to live in the workspace.
+	describe("sensitive-file denylist for read-like tools", () => {
+		it.each([
+			["read_file", ".env"],
+			["read_file", "config/id_rsa"],
+			["read_file", ".aws/credentials"],
+			["list_files", ".ssh"],
+			["search_files", ".env.local"],
+		] as const)("rejects %s targeting %s", async (tool, target) => {
+			const call: DeferredToolCall = {
+				call_id: "sensitive-1",
+				tool,
+				arguments: { path: target, regex: ".*" },
+			}
+
+			const result = await executeDeferredToolCall(cwd, call, authCtx, { taskId: "test-task" })
+
+			expect(result.is_error).toBe(true)
+			expect(result.content).toContain("sensitive-file policy")
+		})
+
+		it("still allows reading a normal source file", async () => {
+			const call: DeferredToolCall = {
+				call_id: "normal-1",
+				tool: "read_file",
+				arguments: { path: "src/main.ts" },
+			}
+
+			const result = await executeDeferredToolCall(cwd, call, authCtx, { taskId: "test-task" })
+
+			expect(result.is_error).toBe(false)
+		})
+	})
 })

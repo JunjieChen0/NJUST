@@ -87,6 +87,13 @@ export async function run(): Promise<void> {
 		fs.writeFile(path.join(artifactDir, name), redact(JSON.stringify(value, null, 2)))
 	let before = await inputFiles(input.workspace)
 	const events: { taskId: string; message: ClineMessage }[] = []
+	// The API emits an `action` field ("created" / "updated") that this harness
+	// previously discarded. Record it so duplicate non-partial re-emissions of
+	// the same message can be de-duplicated instead of flooding the event stream
+	// (see docs/development/cangjie-e2e-findings.md, event-storm finding).
+	const seenMessageKeys = new Set<string>()
+	const eventKey = (taskId: string, message: ClineMessage): string =>
+		`${taskId}:${message.id ?? message.ts}:${JSON.stringify(message)}`
 	const commands: { at: number; data: Record<string, unknown> }[] = []
 	const interventions: CangjieTaskEvidence["interventions"] = []
 	const violations: string[] = []
@@ -115,13 +122,27 @@ export async function run(): Promise<void> {
 	const summary = (): VerificationSummary | undefined =>
 		[...(rootTask?.clineMessages ?? [])].reverse().find((message) => message.verification)?.verification
 	const onMessage = ({ taskId, message }: { taskId: string; message: ClineMessage }) => {
-		events.push({ taskId, message })
+		// A message may legitimately be `created` once and `updated` many times
+		// while streaming, but identical full (non-partial) payloads are replays.
+		// Only skip RECORDING the duplicate — the interaction handling below
+		// (auto-approving asks, etc.) must still run, exactly as before.
+		const key = eventKey(taskId, message)
+		const isDuplicate = message.partial !== true && seenMessageKeys.has(key)
+		if (message.partial !== true) {
+			seenMessageKeys.add(key)
+		}
+		if (!isDuplicate) {
+			events.push({ taskId, message })
+		}
 		const visible = provider?.getCurrentTask()
 		if (visible) rootTask = visible.rootTask ?? visible
 		// Parent verification can ask while the task stack is still removing its last child.
 		const current = rootTask?.taskId === taskId ? rootTask : visible?.taskId === taskId ? visible : undefined
 		if (!current) return
 		if (message.type !== "ask" || message.partial) return
+		// A replayed full ask must not trigger a second approval/response; the
+		// first delivery already resolved that interaction.
+		if (isDuplicate) return
 		if (message.ask === "command") {
 			if (cancelledAt || taskCase.category === "locate" || taskCase.interaction === "deny-command") {
 				current.handleWebviewAskResponse("noButtonClicked")

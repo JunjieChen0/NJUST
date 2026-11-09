@@ -19,6 +19,7 @@ import { AskIgnoredError } from "./AskIgnoredError"
 import { NJUST_AIEventName } from "@njust-ai/types"
 import { getErrorMessage } from "../../shared/error-utils"
 import { logger } from "../../shared/logger"
+import { getExtensionSetting } from "../../shared/extensionSettings"
 import { getAuditLogger } from "../../services/auditAccessor"
 import type { ICloudAgentHost } from "./interfaces/ICloudAgentHost"
 import { TaskAbortedError } from "./TaskErrors"
@@ -58,19 +59,27 @@ interface BehaviorConfig {
 	requestTimeoutMs: number
 	allowedCommands: string[]
 	deniedCommands: string[]
+	/**
+	 * Require a user approval before executing server-requested read-only
+	 * deferred tools (read_file / list_files / search_files). The server is a
+	 * remote party choosing local paths, so it has a different trust boundary
+	 * from locally auto-approved reads. Defaults to true.
+	 */
+	confirmDeferredReadTools: boolean
 }
 
 function readBehaviorConfig(): BehaviorConfig {
 	const config = vscode.workspace.getConfiguration(Package.name)
 	return {
-		applyRemoteWorkspaceOps: config.get<boolean>("cloudAgent.applyRemoteWorkspaceOps", true) ?? true,
-		confirmRemoteWorkspaceOps: config.get<boolean>("cloudAgent.confirmRemoteWorkspaceOps", true) ?? true,
-		useDeferredProtocol: config.get<boolean>("cloudAgent.deferredProtocol", true) ?? true,
-		compileLoopEnabled: config.get<boolean>("cloudAgent.compileLoop.enabled", true) ?? true,
-		compileMaxRetries: config.get<number>("cloudAgent.compileLoop.maxRetries", 3) ?? 3,
-		requestTimeoutMs: config.get<number>("cloudAgent.requestTimeoutMs", 0) ?? 0,
-		allowedCommands: config.get<string[]>("allowedCommands") ?? [],
-		deniedCommands: config.get<string[]>("deniedCommands") ?? [],
+		applyRemoteWorkspaceOps: getExtensionSetting(config, "cloudAgent.applyRemoteWorkspaceOps"),
+		confirmRemoteWorkspaceOps: getExtensionSetting(config, "cloudAgent.confirmRemoteWorkspaceOps"),
+		useDeferredProtocol: getExtensionSetting(config, "cloudAgent.deferredProtocol"),
+		confirmDeferredReadTools: getExtensionSetting(config, "cloudAgent.confirmDeferredReadTools"),
+		compileLoopEnabled: getExtensionSetting(config, "cloudAgent.compileLoop.enabled"),
+		compileMaxRetries: getExtensionSetting(config, "cloudAgent.compileLoop.maxRetries"),
+		requestTimeoutMs: getExtensionSetting(config, "cloudAgent.requestTimeoutMs"),
+		allowedCommands: getExtensionSetting(config, "allowedCommands"),
+		deniedCommands: getExtensionSetting(config, "deniedCommands"),
 	}
 }
 
@@ -147,6 +156,7 @@ export class CloudAgentOrchestrator {
 			try {
 				await client.connect()
 			} catch (error) {
+				logger.debug("CloudAgentOrchestrator", "Cloud Agent connect failed", error)
 				if (this.host.abort) return undefined
 				return [`Cloud Agent connect error: ${getErrorMessage(error)}`]
 			} finally {
@@ -183,6 +193,7 @@ export class CloudAgentOrchestrator {
 				}),
 			)
 		} catch (error) {
+			logger.debug("CloudAgentOrchestrator", "Cloud Agent legacy run failed", error)
 			if (this.host.abort) return undefined
 			const isAbort =
 				error instanceof TaskAbortedError ||
@@ -363,6 +374,7 @@ export class CloudAgentOrchestrator {
 				}),
 			)
 		} catch (error) {
+			logger.debug("CloudAgentOrchestrator", "Cloud Agent deferred/start failed", error)
 			if (this.host.abort) return undefined
 			return [`Cloud Agent deferred/start error: ${getErrorMessage(error)}`]
 		} finally {
@@ -440,7 +452,7 @@ export class CloudAgentOrchestrator {
 			for (const call of pendingTools) {
 				if (this.host.abort) break
 				await this.host.say("text", `[Deferred] executing tool: ${call.tool} (${call.call_id})`)
-				const approvalResult = await this.approveDeferredToolCall(call)
+				const approvalResult = await this.approveDeferredToolCall(call, behavior)
 				if (approvalResult) {
 					toolResults.push(approvalResult)
 					lifecycleGuard.recordToolCompletion()
@@ -546,6 +558,7 @@ export class CloudAgentOrchestrator {
 					}),
 				)
 			} catch (error) {
+				logger.debug("CloudAgentOrchestrator", "Cloud Agent deferred/resume failed", error)
 				if (this.host.abort) break
 				const status =
 					typeof error === "object" && error !== null ? (error as { status?: number }).status : undefined
@@ -582,6 +595,7 @@ export class CloudAgentOrchestrator {
 						)
 						continue
 					} catch (restartError) {
+						logger.debug("CloudAgentOrchestrator", "Cloud Agent session recovery failed", restartError)
 						if (this.host.abort) break
 						return [t("errors.cloud_agent.session_recovery_failed", { msg: getErrorMessage(restartError) })]
 					} finally {
@@ -749,7 +763,41 @@ export class CloudAgentOrchestrator {
 		return undefined
 	}
 
-	private async approveDeferredToolCall(call: DeferredToolCall): Promise<DeferredToolResult | undefined> {
+	private async approveDeferredToolCall(
+		call: DeferredToolCall,
+		behavior: BehaviorConfig,
+	): Promise<DeferredToolResult | undefined> {
+		// Server-selected reads have a different trust boundary from local
+		// auto-approved reads: a malicious Cloud Agent can pick an arbitrary
+		// workspace path and get its contents back via `resume`. Require an
+		// explicit approval for these read-only tools unless the user has
+		// deliberately opted out. See sensitivePath.ts for the hard denylist
+		// that applies regardless of this setting.
+		if (
+			behavior.confirmDeferredReadTools &&
+			(call.tool === "read_file" || call.tool === "list_files" || call.tool === "search_files")
+		) {
+			const target = this.getDeferredStringArg(call, "path") ?? "."
+			const toolJson = JSON.stringify({
+				tool: call.tool,
+				path: target,
+				...("regex" in call.arguments ? { regex: this.getDeferredStringArg(call, "regex") } : {}),
+				source: "cloud-agent",
+			})
+			const askResult = await this.host.ask("tool", toolJson, false)
+			if (askResult.text) {
+				await this.host.say("user_feedback", askResult.text, askResult.images)
+			}
+			if (askResult.response !== "yesButtonClicked") {
+				return {
+					call_id: call.call_id,
+					content: `Deferred tool rejected by user: ${call.tool}`,
+					is_error: true,
+				}
+			}
+			return undefined
+		}
+
 		if (call.tool === "write_file" || call.tool === "apply_diff") {
 			const op = this.getWorkspaceOpFromDeferredTool(call)
 			if (!op) return undefined
@@ -837,6 +885,7 @@ export class CloudAgentOrchestrator {
 			try {
 				compileResult = await this.host.compileLocal(compileCwd)
 			} catch (error) {
+				logger.debug("CloudAgentOrchestrator", "Local compile invocation failed", error)
 				if (this.host.abort) break
 				const msg = getErrorMessage(error)
 				await this.host.say("error", t("common:errors.cangjieCompileGuard.compileFailed", { msg }))
@@ -893,6 +942,7 @@ export class CloudAgentOrchestrator {
 					}),
 				)
 			} catch (error) {
+				logger.debug("CloudAgentOrchestrator", "Cloud Agent compile-fix request failed", error)
 				if (this.host.abort) break
 				const msg = getErrorMessage(error)
 				await this.host.say("error", t("errors.cloud_agent.compile_fix_failed", { msg }))
@@ -976,6 +1026,7 @@ export class CloudAgentOrchestrator {
 						await this.host.say("user_feedback", askResult.text, askResult.images)
 					}
 				} catch (err) {
+					logger.debug("CloudAgentOrchestrator", "Workspace op approval interrupted", err)
 					if (err instanceof AskIgnoredError) return failed
 					throw err
 				}
@@ -1003,10 +1054,35 @@ export class CloudAgentOrchestrator {
 				return { ok: false, reason: t("errors.cloud_agent.workspace_ops_rejected", { count: notApplied }) }
 			}
 		} else {
-			// Confirmation is OFF: the user has chosen to apply remote workspace
-			// operations in batch without per-step approval. Surface a single
-			// prominent chat warning and audit each op (path, type, outcome) so
-			// the trail still exists for security review.
+			// Confirmation is OFF: the user has opted out of PER-STEP approval,
+			// but a remote server must still not be able to rewrite arbitrary
+			// workspace files with zero clicks. Ask ONCE for the whole batch,
+			// showing exactly which paths will be touched, and abort the batch
+			// if the user declines. This keeps the batch workflow convenient
+			// while preserving an explicit trust decision.
+			const batchSummary = JSON.stringify({
+				tool: "workspace_ops_batch",
+				count: ops.length,
+				paths: ops.map((op) => op.path),
+				source: "cloud-agent",
+			})
+			let batchApproved: ClineAskResponse
+			try {
+				const askResult = await this.host.ask("tool", batchSummary, false)
+				batchApproved = askResult.response
+				if (askResult.text) {
+					await this.host.say("user_feedback", askResult.text, askResult.images)
+				}
+			} catch (err) {
+				logger.debug("CloudAgentOrchestrator", "Workspace batch approval interrupted", err)
+				if (err instanceof AskIgnoredError) return failed
+				throw err
+			}
+			if (batchApproved !== "yesButtonClicked") {
+				await this.host.say("text", `Skipped ${ops.length} remote workspace operation(s): batch not approved`)
+				return { ok: false, reason: t("errors.cloud_agent.workspace_ops_rejected", { count: ops.length }) }
+			}
+
 			await this.host.say(
 				"text",
 				`⚠️ Applying ${ops.length} remote workspace operation(s) WITHOUT per-step confirmation ` +

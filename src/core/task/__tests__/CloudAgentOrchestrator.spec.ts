@@ -55,6 +55,7 @@ const DEFAULT_CONFIG: Record<string, any> = {
 	"cloudAgent.requestTimeoutMs": 0,
 	"cloudAgent.applyRemoteWorkspaceOps": true,
 	"cloudAgent.confirmRemoteWorkspaceOps": true,
+	"cloudAgent.confirmDeferredReadTools": true,
 	"cloudAgent.deferredProtocol": true,
 	"cloudAgent.compileLoop.enabled": true,
 	"cloudAgent.compileLoop.maxRetries": 3,
@@ -697,6 +698,76 @@ describe("CloudAgentOrchestrator", () => {
 			await orch.run("hello")
 
 			expect(mockClientInstance.compile).not.toHaveBeenCalled()
+		})
+	})
+
+	describe("deferred read-tool approval (untrusted remote path selection)", () => {
+		const readTools = ["read_file", "list_files", "search_files"] as const
+
+		it.each(readTools)("asks for approval before executing deferred %s", async (tool) => {
+			mockClientInstance.deferredStart.mockResolvedValueOnce({
+				run_id: "run-1",
+				status: "pending",
+				pending_tools: [{ call_id: "c1", tool, arguments: { path: "src/a.ts" } }],
+			})
+			mockClientInstance.deferredResume.mockResolvedValueOnce({ run_id: "run-1", status: "done", ok: true })
+			vi.mocked(executeDeferredToolCall).mockResolvedValueOnce({
+				call_id: "c1",
+				content: "ok",
+				is_error: false,
+			})
+			const host = createMockHost()
+			const orch = new CloudAgentOrchestrator(host)
+
+			await orch.run("hello")
+
+			expect(host.ask).toHaveBeenCalledWith("tool", expect.stringContaining(`"tool":"${tool}"`), false)
+			expect(host.ask).toHaveBeenCalledWith("tool", expect.stringContaining('"source":"cloud-agent"'), false)
+			expect(executeDeferredToolCall).toHaveBeenCalled()
+		})
+
+		it.each(readTools)("does not execute deferred %s when approval is rejected", async (tool) => {
+			mockClientInstance.deferredStart.mockResolvedValueOnce({
+				run_id: "run-1",
+				status: "pending",
+				pending_tools: [{ call_id: "c1", tool, arguments: { path: "src/a.ts" } }],
+			})
+			mockClientInstance.deferredResume.mockResolvedValueOnce({ run_id: "run-1", status: "done", ok: true })
+			const host = createMockHost({
+				ask: vi.fn(async (type: string) => ({
+					response: type === "tool" ? "noButtonClicked" : "yesButtonClicked",
+				})),
+			})
+			const orch = new CloudAgentOrchestrator(host)
+
+			await orch.run("hello")
+
+			expect(executeDeferredToolCall).not.toHaveBeenCalled()
+			expect(mockClientInstance.deferredResume).toHaveBeenCalledWith("run-1", "test-task-id", [
+				{ call_id: "c1", content: `Deferred tool rejected by user: ${tool}`, is_error: true },
+			])
+		})
+
+		it("skips read-tool approval when explicitly opted out", async () => {
+			mockVscodeConfig({ "cloudAgent.confirmDeferredReadTools": false })
+			mockClientInstance.deferredStart.mockResolvedValueOnce({
+				run_id: "run-1",
+				status: "pending",
+				pending_tools: [{ call_id: "c1", tool: "read_file", arguments: { path: "src/a.ts" } }],
+			})
+			mockClientInstance.deferredResume.mockResolvedValueOnce({ run_id: "run-1", status: "done", ok: true })
+			vi.mocked(executeDeferredToolCall).mockResolvedValueOnce({
+				call_id: "c1",
+				content: "ok",
+				is_error: false,
+			})
+			const host = createMockHost()
+			const orch = new CloudAgentOrchestrator(host)
+
+			await orch.run("hello")
+
+			expect(vi.mocked(host.ask).mock.calls.map(([type]) => type)).toEqual(["completion_result"])
+			expect(executeDeferredToolCall).toHaveBeenCalled()
 		})
 	})
 
@@ -1670,6 +1741,39 @@ describe("CloudAgentOrchestrator", () => {
 			} finally {
 				setSpy.mockRestore()
 			}
+		})
+
+		it("requires a one-time batch approval and skips writes when declined", async () => {
+			mockVscodeConfig({
+				"cloudAgent.deferredProtocol": false,
+				"cloudAgent.confirmRemoteWorkspaceOps": false,
+			})
+			mockClientInstance.submitTask.mockResolvedValueOnce({
+				memorySummary: "done",
+				tokensIn: 100,
+				tokensOut: 200,
+				cost: 0.01,
+				workspaceOps: [
+					{ op: "write_file", path: "a.ts", content: "x" },
+					{ op: "apply_diff", path: "b.ts", diff: "d" },
+				],
+			})
+			const host = createMockHost({
+				ask: vi.fn(async (type: string) => ({
+					response: type === "tool" ? "noButtonClicked" : "yesButtonClicked",
+				})),
+			})
+			const orch = new CloudAgentOrchestrator(host)
+
+			await orch.run("hello")
+
+			expect(host.ask).toHaveBeenCalledWith(
+				"tool",
+				expect.stringContaining('"tool":"workspace_ops_batch"'),
+				false,
+			)
+			expect(host.ask).toHaveBeenCalledWith("tool", expect.stringContaining('"a.ts"'), false)
+			expect(applyCloudWorkspaceOps).not.toHaveBeenCalled()
 		})
 
 		it("audits failed ops with outcome=error when confirm is false", async () => {

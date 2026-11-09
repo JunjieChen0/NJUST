@@ -327,6 +327,73 @@ describe("TaskMessageManager", () => {
 		expect(ctx.emit).toHaveBeenCalledWith(expect.any(String), { action: "updated", message })
 	})
 
+	describe("updateClineMessage idempotency (event-storm guard)", () => {
+		it("does not re-emit an unchanged message", async () => {
+			const ctx = createContext()
+			const manager = new TaskMessageManager(ctx)
+			const message = { id: "m1", ts: 3, type: "say", say: "completion_result", text: "done" } as any
+
+			await manager.updateClineMessage(message)
+			await manager.updateClineMessage(message)
+			await manager.updateClineMessage(message)
+
+			expect(ctx.notifier?.postMessageToWebview).toHaveBeenCalledTimes(1)
+			expect(ctx.emit).toHaveBeenCalledTimes(1)
+		})
+
+		it("re-emits once the message content actually changes", async () => {
+			const ctx = createContext()
+			const manager = new TaskMessageManager(ctx)
+			const message = { id: "m1", ts: 3, type: "say", say: "text", partial: true } as any
+
+			await manager.updateClineMessage(message)
+			message.text = "hello"
+			await manager.updateClineMessage(message)
+			message.partial = false
+			await manager.updateClineMessage(message)
+
+			expect(ctx.notifier?.postMessageToWebview).toHaveBeenCalledTimes(3)
+			expect(ctx.emit).toHaveBeenCalledTimes(3)
+		})
+
+		it("suppresses a no-op update immediately after addToClineMessages", async () => {
+			const ctx = createContext()
+			const manager = new TaskMessageManager(ctx)
+			const message = { id: "m1", ts: 3, type: "say", say: "text", text: "hi" } as any
+
+			await manager.addToClineMessages(message)
+			expect(ctx.emit).toHaveBeenCalledTimes(1) // created
+			await manager.updateClineMessage(message) // unchanged
+
+			expect(ctx.notifier?.postMessageToWebview).not.toHaveBeenCalled()
+			expect(ctx.emit).toHaveBeenCalledTimes(1)
+		})
+
+		it("clears snapshots when the message history is overwritten", async () => {
+			const ctx = createContext()
+			const manager = new TaskMessageManager(ctx)
+			const message = { id: "m1", ts: 3, type: "say", say: "text", text: "hi" } as any
+
+			await manager.updateClineMessage(message)
+			await manager.overwriteClineMessages([message])
+			await manager.updateClineMessage(message)
+
+			expect(ctx.emit).toHaveBeenCalledTimes(2)
+		})
+
+		it("uses id when present so distinct messages sharing a ts are independent", async () => {
+			const ctx = createContext()
+			const manager = new TaskMessageManager(ctx)
+			const a = { id: "a", ts: 1, type: "say", say: "text", text: "A" } as any
+			const b = { id: "b", ts: 1, type: "say", say: "text", text: "B" } as any
+
+			await manager.updateClineMessage(a)
+			await manager.updateClineMessage(b)
+
+			expect(ctx.emit).toHaveBeenCalledTimes(2)
+		})
+	})
+
 	it("saves Cline messages with metadata and task history update", async () => {
 		const ctx = createContext({ getTaskApiConfigName: vi.fn().mockResolvedValue(undefined) })
 		const manager = new TaskMessageManager(ctx)
