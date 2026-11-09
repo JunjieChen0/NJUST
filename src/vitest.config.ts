@@ -15,6 +15,9 @@ export default defineConfig({
 			"webview-ui/**",
 			"apps/**",
 			"packages/**",
+			// Local VSIX/review worktrees can contain full source copies and must
+			// never be discovered as a second test suite.
+			"bin/**",
 			"**/out/**",
 		],
 		watch: false,
@@ -35,6 +38,10 @@ export default defineConfig({
 			reporter: ["json", "html", "text-summary"],
 			reportsDirectory: "../coverage/src",
 			include: [
+				// Include both esbuild entry points; activation and token workers were
+				// previously invisible to the coverage gate.
+				"src/extension.ts",
+				"src/workers/**",
 				"src/core/**",
 				"src/api/**",
 				"src/services/**",
@@ -67,16 +74,19 @@ export default defineConfig({
 					statements: 80,
 				},
 				"src/services/cloud-agent/**": {
+					lines: 80,
 					functions: 85,
 					branches: 74,
 					statements: 82,
 				},
 				"src/core/task/**": {
+					lines: 70,
 					functions: 70,
 					branches: 63,
 					statements: 73,
 				},
 				"src/services/mcp/**": {
+					lines: 70,
 					functions: 68,
 					branches: 70,
 					statements: 73,
