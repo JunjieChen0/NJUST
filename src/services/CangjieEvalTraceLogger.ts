@@ -797,6 +797,7 @@ async function readTraceStats(filePath: string): Promise<{
 		const text = await fs.readFile(filePath, "utf8")
 		const lines = text.split(/\r?\n/).filter(Boolean)
 		let blockedAttempts = 0
+		let corruptLineCount = 0
 		const priorBlockReasonCodes = new Set<string>()
 		for (const line of lines) {
 			try {
@@ -808,8 +809,17 @@ async function readTraceStats(filePath: string): Promise<{
 					}
 				}
 			} catch {
-				// Ignore corrupt legacy lines; the next append should still succeed.
+				// Corrupt legacy lines are skipped so the next append still succeeds;
+				// count them so the discarded data stays observable without logging
+				// once per line.
+				corruptLineCount += 1
 			}
+		}
+		if (corruptLineCount > 0) {
+			logger.debug(
+				"CangjieEvalTraceLogger",
+				`skipped ${corruptLineCount} corrupt trace line(s) while reading ${path.basename(filePath)}`,
+			)
 		}
 		return { attempts: lines.length, blockedAttempts, priorBlockReasonCodes: [...priorBlockReasonCodes].sort() }
 	} catch {

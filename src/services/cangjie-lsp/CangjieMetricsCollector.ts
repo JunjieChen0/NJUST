@@ -3,6 +3,7 @@ import * as path from "path"
 import * as fs from "fs"
 import { NJUST_AI_CONFIG_DIR, TelemetryEventName } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
+import { logger } from "../../shared/logger"
 import type { CompileResult } from "./CangjieCompileGuard"
 
 // ---------------------------------------------------------------------------
@@ -225,8 +226,8 @@ export class CangjieMetricsCollector implements vscode.Disposable {
 				const content = fs.readFileSync(tomlPath, "utf-8")
 				const m = content.match(/name\s*=\s*"([^"]+)"/)
 				if (m) return m[1]!
-			} catch {
-				/* ignore */
+			} catch (error) {
+				logger.debug("CangjieMetricsCollector", "cjpm.toml unreadable; using directory name", error)
 			}
 		}
 		return path.basename(cwd)
@@ -300,8 +301,8 @@ function inferProjectName(cwd: string): string {
 			const content = fs.readFileSync(tomlPath, "utf-8")
 			const m = content.match(/name\s*=\s*"([^"]+)"/)
 			if (m) return m[1]!
-		} catch {
-			/* ignore */
+		} catch (error) {
+			logger.debug("CangjieMetricsCollector", "cjpm.toml unreadable; using directory name", error)
 		}
 	}
 	return path.basename(cwd)
