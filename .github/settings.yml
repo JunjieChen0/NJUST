@@ -1,5 +1,10 @@
 # GitHub Repository Settings (requires https://github.com/apps/settings probot app)
 # Install the "Repository Settings" GitHub App to enable declarative branch protection.
+#
+# Keep `contexts` in sync with the job names/ids in .github/workflows/code-qa.yml
+# and .github/workflows/codeql.yml. A check listed here that does not run on
+# EVERY PR will block merges forever, so path-filtered workflows
+# (vulnerability-scan.yml) are intentionally NOT listed.
 
 branches:
   - name: main
@@ -11,19 +16,38 @@ branches:
       required_status_checks:
         strict: true
         contexts:
-          # Code QA — core quality gates
+          # Code QA — build & static analysis (job ids in code-qa.yml)
+          - check-translations
+          - knip
+          - repository-hygiene
           - lint
           - typecheck
+          - circular-dependency-guard
+          - unsafe-any-gate
+          - bundle-size-check
+          - inheritance-health-check
+          - check-secrets
+          # Code QA — unit tests (matrix job name)
           - "platform-unit-test (ubuntu-latest)"
           - "platform-unit-test (windows-latest)"
           - "platform-unit-test (macos-latest)"
-          - circular-dependency-guard
-          - check-secrets
-          - bundle-size-check
-          # Security
+          # Code QA — real VS Code E2E (matrix job name, both supported versions)
+          - "e2e-test (VS Code 1.144.0)"
+          - "e2e-test (VS Code 1.95.3)"
+          # Code QA — coverage thresholds (vitest enforces the floors in-job)
+          - "coverage (src)"
+          - "coverage (prompt-engine)"
+          - "coverage (webview-ui)"
+          # Security — CodeQL (codeql.yml, runs on every PR)
           - "Analyze (javascript-typescript)"
-      enforce_admins: false
+          # NOTE: Codecov project/patch statuses and vulnerability-scan.yml jobs
+          # are intentionally absent. The former needs the Codecov GitHub App
+          # installed; the latter is path-filtered and does not run on every PR.
+          # Adding either would block unrelated PRs indefinitely.
+      enforce_admins: true
       restrictions: null
+      # Deliberately off: enabling it forces squash/rebase merges for EVERY PR.
+      # Flip only after the merge policy is confirmed with the maintainers.
       required_linear_history: false
       allow_force_pushes: false
       allow_deletions: false

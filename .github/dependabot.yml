@@ -1,0 +1,33 @@
+version: 2
+
+updates:
+  # Root pnpm workspace (covers src/, packages/ and apps/ through the lockfile).
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: UTC
+    open-pull-requests-limit: 5
+    versioning-strategy: increase-if-necessary
+    groups:
+      production-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+      development-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  # Keep GitHub Actions moving while code-qa.yml verifies every update.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:30"
+      timezone: UTC
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns: ["*"]

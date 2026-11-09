@@ -41,6 +41,8 @@ jobs:
               uses: ./.github/actions/setup-node-pnpm
             - name: Check repository hygiene and dependency policy seed
               run: pnpm syncpack:lint
+            - name: Verify generated extension settings schema is current
+              run: pnpm check:settings-schema
 
     lint:
         runs-on: ubuntu-latest
@@ -184,6 +186,8 @@ jobs:
               uses: ./.github/actions/setup-node-pnpm
             - name: Verify UnsafeAny / cast counts have not grown
               run: pnpm check:any-gate
+            - name: Verify oversized production files have not grown
+              run: pnpm check:file-size
 
     bundle-size:
         name: bundle-size-check

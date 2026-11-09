@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# A single publish run at a time; never cancel an in-flight release.
+concurrency:
+  group: marketplace-publish
+  cancel-in-progress: false
+
 env:
   GIT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'main' }}
 
@@ -22,6 +27,9 @@ jobs:
         github.event.pull_request.base.ref == 'main' &&
         contains(github.event.pull_request.title, 'Changeset version bump') ) ||
         github.event_name == 'workflow_dispatch'
+    outputs:
+      vsix_version: ${{ steps.package.outputs.vsix_version }}
+      vsix_sha256: ${{ steps.checksum.outputs.vsix_sha256 }}
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -39,14 +47,69 @@ jobs:
         run: pnpm --filter @njust-ai/types build
       - name: Run unit tests
         run: pnpm test
-      - name: Package extension (dry run)
-        run: pnpm package
+      # Build the ONLY artifact that gets published. The publish job downloads
+      # this exact VSIX instead of re-running `pnpm vsix`, so the bytes verified
+      # here are the bytes shipped to Marketplace / Open VSX / GitHub Releases.
+      - name: Package and verify extension
+        id: package
+        run: |
+          set -euo pipefail
+          current_package_version=$(node -p "require('./src/package.json').version")
+          echo "vsix_version=${current_package_version}" >> "$GITHUB_OUTPUT"
+          # vsce honours SOURCE_DATE_EPOCH for deterministic zip entry timestamps.
+          # Use the release commit's time (zip DOS dates cannot represent 1970).
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          # `vsix` triggers `vscode:prepublish` (corpus sync + production bundle)
+          # and turbo builds the webview / shared packages first.
+          pnpm vsix
+          pnpm check:bundle-size
+          vsix="bin/njust-ai-${current_package_version}.vsix"
+          test -f "$vsix" || { echo "ERROR: expected VSIX not produced: $vsix"; exit 1; }
+
+          # Save VSIX contents to a temporary file to avoid broken pipe issues.
+          unzip -l "$vsix" > /tmp/Njust-AI-vsix-contents.txt
+
+          # Check for required files.
+          grep -q "extension/package.json" /tmp/Njust-AI-vsix-contents.txt || exit 1
+          grep -q "extension/package.nls.json" /tmp/Njust-AI-vsix-contents.txt || exit 1
+          grep -q "extension/dist/extension.js" /tmp/Njust-AI-vsix-contents.txt || exit 1
+          grep -q "extension/webview-ui/audio/celebration.wav" /tmp/Njust-AI-vsix-contents.txt || exit 1
+          grep -q "extension/webview-ui/build/assets/index.js" /tmp/Njust-AI-vsix-contents.txt || exit 1
+          grep -q "extension/assets/codicons/codicon.ttf" /tmp/Njust-AI-vsix-contents.txt || exit 1
+          grep -q "extension/assets/vscode-material-icons/icons/3d.svg" /tmp/Njust-AI-vsix-contents.txt || exit 1
+
+          # Verify .env file is NOT included in the VSIX (secrets must not be packaged).
+          if grep -q "^.*\.env$" /tmp/Njust-AI-vsix-contents.txt; then
+            echo "ERROR: .env file found in VSIX package — secrets must not be distributed!"
+            exit 1
+          fi
+          rm /tmp/Njust-AI-vsix-contents.txt
+      - name: Publish checksum
+        id: checksum
+        run: |
+          set -euo pipefail
+          vsix="bin/njust-ai-${{ steps.package.outputs.vsix_version }}.vsix"
+          sha256sum "$vsix"
+          sha256sum "$vsix" > "${vsix}.sha256"
+          echo "vsix_sha256=$(cut -d' ' -f1 < "${vsix}.sha256")" >> "$GITHUB_OUTPUT"
+      - name: Upload verified VSIX artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-vsix
+          path: |
+            bin/*.vsix
+            bin/*.vsix.sha256
+          if-no-files-found: error
+          retention-days: 7
 
   publish-extension:
     needs: quality-gate
     runs-on: ubuntu-latest
+    # Protected environment: configure required reviewers for `production` in
+    # repository settings. This gates the use of publishing secrets.
+    environment: production
     permissions:
-      contents: write # Required for pushing tags.
+      contents: write # Required for pushing tags and creating releases.
     if: >
         ( github.event_name == 'pull_request' &&
         github.event.pull_request.merged == true &&
@@ -58,58 +121,58 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ env.GIT_REF }}
+      # Needed for `pnpm exec vsce/ovsx` below. This installs dependencies but
+      # deliberately does NOT re-run `pnpm vsix`: the published bytes come only
+      # from the quality-gate artifact.
       - name: Setup Node.js and pnpm
         uses: ./.github/actions/setup-node-pnpm
+      - name: Download verified VSIX artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-vsix
+          path: artifacts/
+      - name: Verify artifact checksum
+        env:
+          VSIX_VERSION: ${{ needs.quality-gate.outputs.vsix_version }}
+          VSIX_SHA256: ${{ needs.quality-gate.outputs.vsix_sha256 }}
+        run: |
+          set -euo pipefail
+          mkdir -p bin
+          # Artifact layout may or may not retain the original `bin/` prefix;
+          # locate the files instead of assuming a rootDirectory behaviour.
+          find artifacts -type f -name '*.vsix' -exec cp {} bin/ \;
+          find artifacts -type f -name '*.vsix.sha256' -exec cp {} bin/ \;
+          vsix="bin/njust-ai-${VSIX_VERSION}.vsix"
+          test -f "$vsix" || { echo "ERROR: artifact VSIX missing: $vsix"; exit 1; }
+          sha256sum --check "${vsix}.sha256"
+          echo "${VSIX_SHA256}  ${vsix}" | sha256sum --check -
+          echo "VSIX_VERSION=${VSIX_VERSION}" >> "$GITHUB_ENV"
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-      - name: Package Extension
-        env:
-          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
-        run: |
-          current_package_version=$(node -p "require('./src/package.json').version")
-          pnpm vsix
-
-          # Save VSIX contents to a temporary file to avoid broken pipe issues.
-          unzip -l bin/njust-ai-${current_package_version}.vsix > /tmp/Njust-AI-vsix-contents.txt
-
-          # Check for required files.
-          grep -q "extension/package.json" /tmp/Njust-AI-vsix-contents.txt || exit 1
-          grep -q "extension/package.nls.json" /tmp/Njust-AI-vsix-contents.txt || exit 1
-          grep -q "extension/dist/extension.js" /tmp/Njust-AI-vsix-contents.txt || exit 1
-          grep -q "extension/webview-ui/audio/celebration.wav" /tmp/Njust-AI-vsix-contents.txt || exit 1
-          grep -q "extension/webview-ui/build/assets/index.js" /tmp/Njust-AI-vsix-contents.txt || exit 1
-          grep -q "extension/assets/codicons/codicon.ttf" /tmp/Njust-AI-vsix-contents.txt || exit 1
-          grep -q "extension/assets/vscode-material-icons/icons/3d.svg" /tmp/Njust-AI-vsix-contents.txt || exit 1
-
-          # Verify .env file is NOT included in the VSIX (secrets should not be packaged).
-          if grep -q "^.*\.env$" /tmp/Njust-AI-vsix-contents.txt; then
-            echo "ERROR: .env file found in VSIX package — secrets must not be distributed!"
-            exit 1
-          fi
-          
-          # Clean up temporary file.
-          rm /tmp/Njust-AI-vsix-contents.txt
       - name: Create and Push Git Tag
         run: |
-          current_package_version=$(node -p "require('./src/package.json').version")
-          git tag -a "v${current_package_version}" -m "Release v${current_package_version}"
-          git push origin "v${current_package_version}" --no-verify
-          echo "Successfully created and pushed git tag v${current_package_version}"
+          git tag -a "v${VSIX_VERSION}" -m "Release v${VSIX_VERSION}"
+          git push origin "v${VSIX_VERSION}"
+          echo "Successfully created and pushed git tag v${VSIX_VERSION}"
       - name: Publish Extension
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: |
-          current_package_version=$(node -p "require('./src/package.json').version")
-          pnpm --filter njust-ai publish:marketplace
-          echo "Successfully published version $current_package_version to VS Code Marketplace"
+          set -euo pipefail
+          vsix="bin/njust-ai-${VSIX_VERSION}.vsix"
+          # Publish the exact verified artifact. Neither tool re-packages it.
+          pnpm exec vsce publish --no-dependencies -i "$vsix"
+          pnpm exec ovsx publish --no-dependencies "$vsix"
+          echo "Successfully published version ${VSIX_VERSION} to VS Code Marketplace / Open VSX"
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          current_package_version=$(node -p "require('./src/package.json').version")
+          set -euo pipefail
+          current_package_version="${VSIX_VERSION}"
 
           # Extract changelog for current version
           echo "Extracting changelog for version ${current_package_version}"
@@ -123,10 +186,11 @@ jobs:
             echo "Found changelog section for version ${current_package_version}"
           fi
 
-          # Create release with changelog content
+          # Create release with changelog content and its checksum
           gh release create "v${current_package_version}" \
             --title "Release v${current_package_version}" \
             --notes "$changelog_content" \
             --target ${{ env.GIT_REF }} \
-            bin/njust-ai-${current_package_version}.vsix
+            "bin/njust-ai-${current_package_version}.vsix" \
+            "bin/njust-ai-${current_package_version}.vsix.sha256"
           echo "Successfully created GitHub Release v${current_package_version}"

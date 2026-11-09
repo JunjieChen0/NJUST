@@ -26,6 +26,18 @@ pnpm install
 
 在 VS Code 中按 `F5` 启动调试，会打开一个加载了 NJUST_AI 扩展的新窗口。Webview 和核心扩展的修改都会自动热重载。
 
+### 修改扩展设置与工程门禁
+
+`src/package.json` 的 `contributes.configuration` 是设置声明的唯一真源。新增或修改设置后，重新生成类型化 Zod schema，并运行防回退检查：
+
+```sh
+pnpm settings:generate       # 更新 packages/types/src/extension-settings.ts
+pnpm check:settings-schema  # 检查生成物与清单一致
+pnpm check:file-size        # 超过 1000 行的既有生产文件只允许缩小
+```
+
+业务代码读取设置时使用 `src/shared/extensionSettings.ts` 的 `getExtensionSetting()`，不要在调用方重复写默认值。
+
 ### 构建 VSIX
 
 ```sh
