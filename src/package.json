@@ -1259,6 +1259,11 @@
 					"default": true,
 					"description": "When applyRemoteWorkspaceOps is enabled, show a tool-style approval UI for each operation before writing. When false, all operations run in one batch without per-step confirmation."
 				},
+				"njust-ai.cloudAgent.confirmDeferredReadTools": {
+					"type": "boolean",
+					"default": true,
+					"description": "Require a user approval before the deferred protocol executes server-requested read-only tools (read_file / list_files / search_files). A remote Cloud Agent chooses these paths, so they have a different trust boundary from local auto-approved reads. Keep enabled unless you fully trust the server. A hard denylist for credential/secret files applies regardless of this setting."
+				},
 				"njust-ai.cloudAgent.deferredProtocol": {
 					"type": "boolean",
 					"default": true,
