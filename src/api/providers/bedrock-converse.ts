@@ -17,7 +17,7 @@ import { ModelInfo as CacheModelInfo } from "../transform/cache-strategy/types"
 import type { CachePointPlacement } from "../transform/cache-strategy/types"
 import { convertToBedrockConverseMessages as sharedConverter } from "../transform/bedrock-converse-format"
 import { getApiRequestTimeout } from "./utils/timeout-config"
-import { logger } from "../../utils/logging"
+import { logger } from "../../shared/logger"
 import { shouldUseReasoningBudget } from "../../shared/api"
 import type { ApiHandlerCreateMessageMetadata } from "../types"
 import { convertToolsForBedrock, convertToolChoiceForBedrock } from "./bedrock-tools"
@@ -165,7 +165,7 @@ export async function* bedrockCreateMessageInner(
 				},
 			}
 		}
-		logger.info("Extended thinking enabled for Bedrock request", {
+		logger.info("BedrockConverse", "Extended thinking enabled for Bedrock request", {
 			ctx: "bedrock",
 			modelId: modelConfig.id,
 			thinking: additionalModelRequestFields.thinking,
@@ -189,7 +189,7 @@ export async function* bedrockCreateMessageInner(
 		handler.options.awsBedrockServiceTier &&
 		(BEDROCK_SERVICE_TIER_MODEL_IDS as readonly string[]).includes(baseModelId)
 	if (useServiceTier) {
-		logger.info("Service tier specified for Bedrock request", {
+		logger.info("BedrockConverse", "Service tier specified for Bedrock request", {
 			ctx: "bedrock",
 			modelId: modelConfig.id,
 			serviceTier: handler.options.awsBedrockServiceTier,
@@ -268,7 +268,7 @@ export async function* bedrockCreateMessageInner(
 						? (bedrockStreamEventSchema.parse(JSON.parse(chunk)) as StreamEvent)
 						: (chunk as StreamEvent)
 			} catch (e) {
-				logger.error("Failed to parse stream event", {
+				logger.error("BedrockConverse", "Failed to parse stream event", {
 					ctx: "bedrock",
 					error: e instanceof Error ? e : String(e),
 					chunk: typeof chunk === "string" ? chunk : "binary data",
@@ -329,7 +329,7 @@ export async function* bedrockCreateMessageInner(
 						}
 					}
 				} catch (error) {
-					logger.error("Error handling Bedrock invokedModelId", {
+					logger.error("BedrockConverse", "Error handling Bedrock invokedModelId", {
 						ctx: "bedrock",
 						error: error instanceof Error ? error : String(error),
 					})

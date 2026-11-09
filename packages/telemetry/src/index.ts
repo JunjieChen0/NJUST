@@ -12,6 +12,16 @@ export interface TelemetryProperties {
 
 export type TelemetryPropertiesProvider = () => TelemetryProperties | Promise<TelemetryProperties>
 
+/**
+ * Optional off-box event consumer. Implementations receive only the same
+ * allowlisted properties used by the local NDJSON logger; raw errors, message
+ * bodies, paths and credentials are never forwarded by this service.
+ */
+export interface TelemetryClient {
+	captureEvent(name: string, properties: Record<string, any>): void | Promise<void>
+	flush?(): void | Promise<void>
+}
+
 export interface StaticAppProperties {
 	[key: string]: any
 }
@@ -79,6 +89,7 @@ export class TelemetryService {
 	private otelApi: any = undefined
 	private tracer: any = undefined
 	private spanStore = new Map<string, any>()
+	private clients = new Set<TelemetryClient>()
 	private optedIn: boolean | undefined = undefined // undefined = unset (default allows collection)
 
 	static get instance(): TelemetryService {
@@ -129,8 +140,16 @@ export class TelemetryService {
 		}
 	}
 
-	register(_client: any): void {
-		// no-op — reserved for external telemetry clients
+	/**
+	 * Register an external telemetry consumer and return an unregister function.
+	 * Delivery is best-effort and isolated: a failing client can neither break
+	 * the extension nor prevent delivery to the remaining clients.
+	 */
+	register(client: TelemetryClient): () => void {
+		this.clients.add(client)
+		return () => {
+			this.clients.delete(client)
+		}
 	}
 
 	shutdown(): void {
@@ -155,6 +174,7 @@ export class TelemetryService {
 		if (this.batcher) {
 			this.batcher.flush()
 		}
+		await Promise.allSettled([...this.clients].map((client) => Promise.resolve(client.flush?.())))
 	}
 
 	// ─── Span management (OTel) ──────────────────────────────────────
@@ -196,6 +216,19 @@ export class TelemetryService {
 		// File batcher (always available when configured)
 		if (this.batcher) {
 			this.batcher.enqueue({ t: Date.now(), n: name, p: safe })
+		}
+
+		// External clients (crash/error reporting, self-hosted exporters, etc.).
+		// A rejection is deliberately contained so reporting cannot crash the
+		// extension host or surface as an unhandled rejection.
+		for (const client of this.clients) {
+			try {
+				void Promise.resolve(client.captureEvent(name, safe)).catch(() => {
+					/* external telemetry is best-effort */
+				})
+			} catch {
+				/* external telemetry is best-effort */
+			}
 		}
 
 		// OTel event (optional)

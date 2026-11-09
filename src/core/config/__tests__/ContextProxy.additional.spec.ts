@@ -168,7 +168,7 @@ describe("ContextProxy - Additional Coverage", () => {
 		})
 
 		it("handles individual secret read failures gracefully", async () => {
-			const { logger } = await import("../../../utils/logging")
+			const { logger } = await import("../../../shared/logger")
 			const loggerSpy = vi.spyOn(logger, "error")
 
 			mockSecrets.get.mockRejectedValueOnce(new Error("secret read failed"))
@@ -177,7 +177,7 @@ describe("ContextProxy - Additional Coverage", () => {
 			await expect(proxy.refreshSecrets()).resolves.toBeUndefined()
 
 			// Should have logged the error (single template-literal argument)
-			expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining("Error refreshing"))
+			expect(loggerSpy).toHaveBeenCalledWith("ContextProxy", expect.stringContaining("Error refreshing"))
 		})
 	})
 
@@ -264,7 +264,7 @@ describe("ContextProxy - Additional Coverage", () => {
 	describe("initialize error handling", () => {
 		it("logs error when globalState.get throws", async () => {
 			vi.clearAllMocks()
-			const { logger } = await import("../../../utils/logging")
+			const { logger } = await import("../../../shared/logger")
 			const loggerSpy = vi.spyOn(logger, "error")
 
 			mockGlobalState.get.mockImplementation(function (key: string) {
@@ -277,12 +277,15 @@ describe("ContextProxy - Additional Coverage", () => {
 			const errorProxy = new ContextProxy(mockContext)
 			await errorProxy.initialize()
 
-			expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining("Error loading global apiProvider"))
+			expect(loggerSpy).toHaveBeenCalledWith(
+				"ContextProxy",
+				expect.stringContaining("Error loading global apiProvider"),
+			)
 		})
 
 		it("logs error when secrets.get throws", async () => {
 			vi.clearAllMocks()
-			const { logger } = await import("../../../utils/logging")
+			const { logger } = await import("../../../shared/logger")
 			const loggerSpy = vi.spyOn(logger, "error")
 
 			mockSecrets.get.mockImplementation(function (key: string) {
@@ -295,7 +298,10 @@ describe("ContextProxy - Additional Coverage", () => {
 			const errorProxy = new ContextProxy(mockContext)
 			await errorProxy.initialize()
 
-			expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining("Error loading secret apiKey"))
+			expect(loggerSpy).toHaveBeenCalledWith(
+				"ContextProxy",
+				expect.stringContaining("Error loading secret apiKey"),
+			)
 		})
 
 		it("completes initialization even if some loads fail", async () => {
@@ -398,7 +404,7 @@ describe("ContextProxy - Additional Coverage", () => {
 
 		it("handles migration errors gracefully", async () => {
 			vi.clearAllMocks()
-			const { logger } = await import("../../../utils/logging")
+			const { logger } = await import("../../../shared/logger")
 			const loggerSpy = vi.spyOn(logger, "error")
 
 			mockSecrets.get.mockImplementation(function (_key: string) {
@@ -416,6 +422,7 @@ describe("ContextProxy - Additional Coverage", () => {
 			await migrationProxy.initialize()
 
 			expect(loggerSpy).toHaveBeenCalledWith(
+				"ContextProxy",
 				expect.stringContaining("Error during image generation settings migration"),
 			)
 		})
@@ -497,7 +504,7 @@ describe("ContextProxy - Additional Coverage", () => {
 
 		it("handles migration errors gracefully", async () => {
 			vi.clearAllMocks()
-			const { logger } = await import("../../../utils/logging")
+			const { logger } = await import("../../../shared/logger")
 			const loggerSpy = vi.spyOn(logger, "error")
 
 			mockGlobalState.get.mockImplementation(function (key: string) {
@@ -511,6 +518,7 @@ describe("ContextProxy - Additional Coverage", () => {
 			await migrationProxy.initialize()
 
 			expect(loggerSpy).toHaveBeenCalledWith(
+				"ContextProxy",
 				expect.stringContaining("Error during customCondensingPrompt migration"),
 			)
 		})
@@ -603,7 +611,7 @@ describe("ContextProxy - Additional Coverage", () => {
 	describe("migrateInvalidApiProvider error handling", () => {
 		it("logs error when migration encounters exception", async () => {
 			vi.clearAllMocks()
-			const { logger } = await import("../../../utils/logging")
+			const { logger } = await import("../../../shared/logger")
 			const _loggerSpy = vi.spyOn(logger, "error")
 
 			mockGlobalState.get.mockImplementation(function (key: string) {
@@ -642,7 +650,7 @@ describe("ContextProxy - Additional Coverage", () => {
 
 	describe("setValues with rejections", () => {
 		it("logs error when setValue rejects for a key", async () => {
-			const { logger } = await import("../../../utils/logging")
+			const { logger } = await import("../../../shared/logger")
 			const loggerSpy = vi.spyOn(logger, "error")
 
 			// Make storeSecret reject
@@ -654,7 +662,11 @@ describe("ContextProxy - Additional Coverage", () => {
 			} as any)
 
 			// Should log the failure but not throw
-			expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to set value"), expect.any(Error))
+			expect(loggerSpy).toHaveBeenCalledWith(
+				"ContextProxy",
+				expect.stringContaining("Failed to set value"),
+				expect.any(Error),
+			)
 
 			// Other key should still have been set
 			expect(proxy.getGlobalState("apiModelId")).toBe("gpt-4")

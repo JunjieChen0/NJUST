@@ -1,6 +1,6 @@
 import type { BedrockRuntimeClient } from "@aws-sdk/client-bedrock-runtime"
 
-import { logger } from "../../utils/logging"
+import { logger } from "../../shared/logger"
 import { getErrorMessage } from "../../shared/error-utils"
 
 import { isBedrockError } from "./bedrock-types"
@@ -281,7 +281,7 @@ export function handleBedrockError(
 	const definition = BEDROCK_ERROR_TYPES[errorType]
 	const logMethod = definition!.logLevel
 	const contextName = isStreamContext ? "createMessage" : "completePrompt"
-	logger[logMethod](`${errorType} error in ${contextName}`, {
+	logger[logMethod]("Bedrock", `${errorType} error in ${contextName}`, {
 		ctx: "bedrock",
 		customArn,
 		errorType,

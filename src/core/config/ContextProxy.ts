@@ -20,8 +20,7 @@ import {
 } from "@njust-ai/types"
 import { TelemetryService } from "@njust-ai/telemetry"
 
-import { logger } from "../../utils/logging"
-import { logger as systemLogger } from "../../shared/logger"
+import { logger } from "../../shared/logger"
 import { supportPrompt } from "../../shared/support-prompt"
 import { TIMING } from "../../shared/constants"
 import { getErrorMessage } from "../../shared/error-utils"
@@ -64,7 +63,7 @@ export class ContextProxy {
 				// Revert to original assignment
 				this.stateCache[key] = this.originalContext.globalState.get(key)
 			} catch (error) {
-				logger.error(`Error loading global ${key}: ${getErrorMessage(error)}`)
+				logger.error("ContextProxy", `Error loading global ${key}: ${getErrorMessage(error)}`)
 			}
 		}
 
@@ -73,14 +72,14 @@ export class ContextProxy {
 				try {
 					this.secretCache[key] = await this.originalContext.secrets.get(key)
 				} catch (error) {
-					logger.error(`Error loading secret ${key}: ${getErrorMessage(error)}`)
+					logger.error("ContextProxy", `Error loading secret ${key}: ${getErrorMessage(error)}`)
 				}
 			}),
 			...GLOBAL_SECRET_KEYS.map(async (key) => {
 				try {
 					this.secretCache[key] = await this.originalContext.secrets.get(key)
 				} catch (error) {
-					logger.error(`Error loading global secret ${key}: ${getErrorMessage(error)}`)
+					logger.error("ContextProxy", `Error loading global secret ${key}: ${getErrorMessage(error)}`)
 				}
 			}),
 		]
@@ -106,8 +105,10 @@ export class ContextProxy {
 			for (const key of [...SECRET_STATE_KEYS, ...GLOBAL_SECRET_KEYS]) {
 				try {
 					this.secretCache[key] = await this.originalContext.secrets.get(key)
-				} catch {
-					/* ignore individual failures */
+				} catch (error) {
+					// A single unavailable key must not stop the remaining secrets
+					// from refreshing; retain a diagnostic trail for locked keyrings.
+					logger.debug("ContextProxy", `Failed to refresh secret ${key}`, error)
 				}
 			}
 		}, TIMING.SECRET_REFRESH_INTERVAL_MS)
@@ -127,7 +128,7 @@ export class ContextProxy {
 			}
 			await this.originalContext.globalState.update("webSearchApiKey", undefined)
 		} catch (error) {
-			systemLogger.warn(
+			logger.warn(
 				"ContextProxy",
 				"Cannot migrate the web search key to secret storage; will retry on restart",
 				error,
@@ -171,12 +172,18 @@ export class ContextProxy {
 				// This prevents pinning users to an old default if the default prompt changes.
 				const isCustomized = legacyPrompt.trim() !== supportPrompt.default["CONDENSE"]!.trim()
 				if (!currentSupportPrompts.CONDENSE && isCustomized) {
-					logger.info("Migrating customized legacy customCondensingPrompt to customSupportPrompts")
+					logger.info(
+						"ContextProxy",
+						"Migrating customized legacy customCondensingPrompt to customSupportPrompts",
+					)
 					const updatedPrompts = { ...currentSupportPrompts, CONDENSE: legacyPrompt }
 					await this.originalContext.globalState.update("customSupportPrompts", updatedPrompts)
 					this.stateCache.customSupportPrompts = updatedPrompts
 				} else if (!isCustomized) {
-					logger.info("Skipping migration: legacy customCondensingPrompt equals the default prompt")
+					logger.info(
+						"ContextProxy",
+						"Skipping migration: legacy customCondensingPrompt equals the default prompt",
+					)
 				}
 
 				// Always remove the legacy field
@@ -184,7 +191,7 @@ export class ContextProxy {
 				this.stateCache.customCondensingPrompt = undefined
 			}
 		} catch (error) {
-			logger.error(`Error during customCondensingPrompt migration: ${getErrorMessage(error)}`)
+			logger.error("ContextProxy", `Error during customCondensingPrompt migration: ${getErrorMessage(error)}`)
 		}
 	}
 
@@ -209,6 +216,7 @@ export class ContextProxy {
 
 			if (savedCondensePrompt && this.isOldV1DefaultCondensePrompt(savedCondensePrompt)) {
 				logger.info(
+					"ContextProxy",
 					"Clearing old v1 default condensing prompt from customSupportPrompts.CONDENSE - user will now get the improved v2 default",
 				)
 
@@ -220,7 +228,10 @@ export class ContextProxy {
 				this.stateCache.customSupportPrompts = updatedPrompts
 			}
 		} catch (error) {
-			logger.error(`Error during old default condensing prompt migration: ${getErrorMessage(error)}`)
+			logger.error(
+				"ContextProxy",
+				`Error during old default condensing prompt migration: ${getErrorMessage(error)}`,
+			)
 		}
 	}
 
@@ -278,13 +289,16 @@ export class ContextProxy {
 				typeof apiProvider === "string" && (isProviderName(apiProvider) || isRetiredProvider(apiProvider))
 
 			if (apiProvider !== undefined && !isKnownProvider) {
-				logger.info(`[ContextProxy] Found invalid provider "${apiProvider}" in storage - clearing it`)
+				logger.info(
+					"ContextProxy",
+					`[ContextProxy] Found invalid provider "${apiProvider}" in storage - clearing it`,
+				)
 				// Clear the invalid provider from both cache and storage
 				this.stateCache.apiProvider = undefined
 				await this.originalContext.globalState.update("apiProvider", undefined)
 			}
 		} catch (error) {
-			logger.error(`Error during invalid API provider migration: ${getErrorMessage(error)}`)
+			logger.error("ContextProxy", `Error during invalid API provider migration: ${getErrorMessage(error)}`)
 		}
 	}
 
@@ -299,14 +313,14 @@ export class ContextProxy {
 			)
 
 			if (oldNestedSettings && typeof oldNestedSettings === "object") {
-				logger.info("Migrating old nested image generation settings to flattened structure")
+				logger.info("ContextProxy", "Migrating old nested image generation settings to flattened structure")
 
 				// Migrate the API key if it exists and we don't already have one
 				const oldApiKey = oldNestedSettings.openRouterApiKey
 				if (typeof oldApiKey === "string" && oldApiKey && !this.secretCache.openRouterImageApiKey) {
 					await this.originalContext.secrets.store("openRouterImageApiKey", oldApiKey)
 					this.secretCache.openRouterImageApiKey = oldApiKey
-					logger.info("Migrated openRouterImageApiKey to secrets")
+					logger.info("ContextProxy", "Migrated openRouterImageApiKey to secrets")
 				}
 
 				// Migrate the selected model if it exists and we don't already have one
@@ -321,15 +335,15 @@ export class ContextProxy {
 						oldSelectedModel,
 					)
 					this.stateCache.openRouterImageGenerationSelectedModel = oldSelectedModel
-					logger.info("Migrated openRouterImageGenerationSelectedModel to global state")
+					logger.info("ContextProxy", "Migrated openRouterImageGenerationSelectedModel to global state")
 				}
 
 				// Clean up the old nested structure
 				await this.originalContext.globalState.update("openRouterImageGenerationSettings", undefined)
-				logger.info("Removed old nested openRouterImageGenerationSettings")
+				logger.info("ContextProxy", "Removed old nested openRouterImageGenerationSettings")
 			}
 		} catch (error) {
-			logger.error(`Error during image generation settings migration: ${getErrorMessage(error)}`)
+			logger.error("ContextProxy", `Error during image generation settings migration: ${getErrorMessage(error)}`)
 		}
 	}
 
@@ -416,14 +430,14 @@ export class ContextProxy {
 				try {
 					this.secretCache[key] = await this.originalContext.secrets.get(key)
 				} catch (error) {
-					logger.error(`Error refreshing secret ${key}: ${getErrorMessage(error)}`)
+					logger.error("ContextProxy", `Error refreshing secret ${key}: ${getErrorMessage(error)}`)
 				}
 			}),
 			...GLOBAL_SECRET_KEYS.map(async (key) => {
 				try {
 					this.secretCache[key] = await this.originalContext.secrets.get(key)
 				} catch (error) {
-					logger.error(`Error refreshing global secret ${key}: ${getErrorMessage(error)}`)
+					logger.error("ContextProxy", `Error refreshing global secret ${key}: ${getErrorMessage(error)}`)
 				}
 			}),
 		]
@@ -447,6 +461,7 @@ export class ContextProxy {
 		try {
 			return globalSettingsSchema.parse(values)
 		} catch (error) {
+			logger.debug("ContextProxy", "Global settings schema validation failed", error)
 			if (error instanceof ZodError) {
 				TelemetryService.instance.captureSchemaValidationError({ schemaName: "GlobalSettings", error })
 			}
@@ -471,6 +486,7 @@ export class ContextProxy {
 		try {
 			return providerSettingsSchema.parse(sanitizedValues)
 		} catch (error) {
+			logger.debug("ContextProxy", "Provider settings schema validation failed", error)
 			if (error instanceof ZodError) {
 				TelemetryService.instance.captureSchemaValidationError({ schemaName: "ProviderSettings", error })
 			}
@@ -505,7 +521,10 @@ export class ContextProxy {
 			(isProviderName(values.apiProvider) || isRetiredProvider(values.apiProvider))
 
 		if (values.apiProvider !== undefined && !isKnownProvider) {
-			logger.info(`[ContextProxy] Sanitizing invalid provider "${values.apiProvider}" - resetting to undefined`)
+			logger.info(
+				"ContextProxy",
+				`[ContextProxy] Sanitizing invalid provider "${values.apiProvider}" - resetting to undefined`,
+			)
 			// Return a new values object without the invalid apiProvider
 			const { apiProvider: _apiProvider, ...restValues } = sanitizedValues
 			return restValues as NJUST_AISettings
@@ -566,7 +585,7 @@ export class ContextProxy {
 		const results = await Promise.allSettled(entries.map(([key, value]) => this.setValue(key, value)))
 		for (const [index, result] of results.entries()) {
 			if (result.status === "rejected") {
-				logger.error(`Failed to set value for key "${entries[index]![0]}"`, result.reason)
+				logger.error("ContextProxy", `Failed to set value for key "${entries[index]![0]}"`, result.reason)
 			}
 		}
 	}
@@ -585,6 +604,7 @@ export class ContextProxy {
 
 			return Object.fromEntries(Object.entries(globalSettings).filter(([_, value]) => value !== undefined))
 		} catch (error) {
+			logger.debug("ContextProxy", "Global settings export schema validation failed", error)
 			if (error instanceof ZodError) {
 				TelemetryService.instance.captureSchemaValidationError({ schemaName: "GlobalSettings", error })
 			}
@@ -614,7 +634,7 @@ export class ContextProxy {
 		const failures: unknown[] = []
 		for (const result of results) {
 			if (result.status === "rejected") {
-				systemLogger.error("ContextProxy", "Failed to reset state", result.reason)
+				logger.error("ContextProxy", "Failed to reset state", result.reason)
 				failures.push(result.reason)
 			}
 		}

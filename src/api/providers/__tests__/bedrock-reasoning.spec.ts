@@ -4,11 +4,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 import { AwsBedrockHandler } from "../bedrock"
 import { BedrockRuntimeClient, ConverseStreamCommand } from "@aws-sdk/client-bedrock-runtime"
-import { logger } from "../../../utils/logging"
+import { logger } from "../../../shared/logger"
 
 // Mock the AWS SDK
 vi.mock("@aws-sdk/client-bedrock-runtime")
-vi.mock("../../../utils/logging")
+vi.mock("../../../shared/logger")
 
 // Store the command payload for verification
 let capturedPayload: any = null
@@ -190,6 +190,7 @@ describe("AwsBedrockHandler - Extended Thinking", () => {
 
 			// Verify logging
 			expect(logger.info).toHaveBeenCalledWith(
+				"BedrockConverse",
 				expect.stringContaining("Extended thinking enabled"),
 				expect.objectContaining({
 					ctx: "bedrock",

@@ -26,7 +26,7 @@ import { TelemetryService } from "@njust-ai/telemetry"
 
 import { ApiStream } from "../transform/stream"
 import { BaseProvider } from "./base-provider"
-import { logger } from "../../utils/logging"
+import { logger } from "../../shared/logger"
 import { Package } from "../../shared/package"
 import { getModelParams } from "../transform/model-params"
 import type { AnthropicReasoningParams } from "../transform/reasoning"
@@ -93,7 +93,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			this.arnInfo = this.parseArn(this.options.awsCustomArn, region)
 
 			if (!this.arnInfo.isValid) {
-				logger.error("Invalid ARN format", {
+				logger.error("Bedrock", "Invalid ARN format", {
 					ctx: "bedrock",
 					errorMessage: this.arnInfo.errorMessage,
 				})
@@ -108,7 +108,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			if (this.arnInfo.region && this.arnInfo.region !== this.options.awsRegion) {
 				// Log a warning if there's a region mismatch between the ARN and the region selected by the user.
 				// We will use the ARN's region, so execution can continue.
-				logger.info(this.arnInfo.errorMessage ?? "Region mismatch between ARN and selected region", {
+				logger.info("Bedrock", this.arnInfo.errorMessage ?? "Region mismatch between ARN and selected region", {
 					ctx: "bedrock",
 					selectedRegion: this.options.awsRegion,
 					arnRegion: this.arnInfo.region,
@@ -293,7 +293,7 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 				try {
 					return response.output.message.content[0]!.text
 				} catch (parseError) {
-					logger.error("Failed to parse Bedrock response", {
+					logger.error("Bedrock", "Failed to parse Bedrock response", {
 						ctx: "bedrock",
 						error: parseError instanceof Error ? parseError : String(parseError),
 					})

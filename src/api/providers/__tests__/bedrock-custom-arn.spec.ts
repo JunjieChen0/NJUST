@@ -4,10 +4,10 @@ import { describe, it, expect } from "vitest"
 
 import { AwsBedrockHandler } from "../bedrock"
 import { ApiHandlerOptions } from "../../../shared/api"
-import { logger } from "../../../utils/logging"
+import { logger } from "../../../shared/logger"
 
 // Mock the logger
-vitest.mock("../../../utils/logging", () => ({
+vitest.mock("../../../shared/logger", () => ({
 	logger: {
 		debug: vitest.fn(),
 		info: vitest.fn(),
@@ -245,6 +245,7 @@ describe("Bedrock ARN Handling", () => {
 
 			// Verify logger was called with region mismatch warning
 			expect(infoSpy).toHaveBeenCalledWith(
+				"Bedrock",
 				expect.stringContaining("Region mismatch"),
 				expect.objectContaining({
 					selectedRegion: "us-east-1",
