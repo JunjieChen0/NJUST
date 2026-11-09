@@ -1315,6 +1315,11 @@
 					"default": "",
 					"description": "Bearer token for authenticating MCP Tools Server requests. REQUIRED when bindAddress is '0.0.0.0'. Leave empty to disable authentication (only for local-only access)."
 				},
+				"njust-ai.errorReporting.endpoint": {
+					"type": "string",
+					"default": "",
+					"description": "Optional HTTPS endpoint that receives sanitized error and lifecycle events (allowlisted properties only). Empty (default) disables off-box error reporting. Requests go through the SSRF-guarded fetch, and reporting is skipped when telemetry is opted out."
+				},
 				"njust-ai.debug": {
 					"type": "boolean",
 					"default": false,

@@ -23,6 +23,7 @@ import { TerminalRegistry } from "./integrations/terminal/TerminalRegistry"
 import { McpServerManager } from "./services/mcp/McpServerManager"
 import { CodeIndexManager } from "./services/code-index/manager"
 import { AuditLogger } from "./services/AuditLogger"
+import { ErrorReportingClient } from "./services/telemetry/ErrorReportingClient"
 import { AuditSink } from "./services/AuditSink"
 import { setAuditServices } from "./services/auditAccessor"
 import { scanGeneratedFilesForCleanup, initTestCleanup } from "./services/cangjie-lsp/cangjieGeneratedTestCleanup"
@@ -189,6 +190,23 @@ async function activateExtension(context: vscode.ExtensionContext) {
 	const telemetrySetting = context.globalState.get<string>("telemetrySetting") ?? "unset"
 	if (telemetrySetting === "disabled") {
 		TelemetryService.instance.updateTelemetryState(false)
+	}
+
+	// Off-box error reporting is opt-in: it requires an explicit endpoint and a
+	// telemetry state that is not opted out. Registration happens after the
+	// preference above, so an opted-out user never starts reporting.
+	const reportingEndpoint = vscode.workspace
+		.getConfiguration(Package.name)
+		.get<string>("errorReporting.endpoint", "")
+		.trim()
+	if (reportingEndpoint && telemetrySetting !== "disabled") {
+		try {
+			const client = new ErrorReportingClient(reportingEndpoint)
+			const unregister = TelemetryService.instance.register(client)
+			context.subscriptions.push({ dispose: unregister })
+		} catch (error) {
+			logger.debug("Extension", "Failed to register error reporting client", error)
+		}
 	}
 
 	// Initialize audit log system (NDJSON in globalStorage/audit/)
