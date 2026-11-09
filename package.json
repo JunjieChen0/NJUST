@@ -31,6 +31,7 @@
 		"settings:generate": "node scripts/generate-settings-schema.mjs",
 		"check:settings-schema": "node scripts/generate-settings-schema.mjs --check",
 		"check:file-size": "node scripts/check-file-size.mjs",
+		"check:overrides": "node scripts/check-overrides.mjs",
 		"check:bundle-size": "node scripts/check-bundle-size.mjs",
 		"check:inheritance": "node scripts/check-inheritance.mjs",
 		"report:activation-perf": "node scripts/report-activation-perf.mjs",

@@ -188,6 +188,8 @@ jobs:
               run: pnpm check:any-gate
             - name: Verify oversized production files have not grown
               run: pnpm check:file-size
+            - name: Verify pnpm.overrides policy is respected
+              run: pnpm check:overrides
 
     bundle-size:
         name: bundle-size-check
