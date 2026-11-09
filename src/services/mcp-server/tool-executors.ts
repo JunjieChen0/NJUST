@@ -743,10 +743,11 @@ export async function execCommand(
 	}
 
 	// Run the same security analysis used by the interactive execute_command tool.
-	// In MCP context, both forbidden AND dangerous patterns are rejected —
-	// there is no interactive user to confirm the risk.
+	// In MCP / deferred context there is no interactive user to confirm the risk:
+	// everything that `checkCommandSafety` marks as requiring confirmation
+	// (forbidden, dangerous, and medium network/privilege patterns) is rejected.
 	const safetyCheck = checkCommandSafety(params.command)
-	if (safetyCheck.riskLevel === "forbidden" || safetyCheck.riskLevel === "dangerous") {
+	if (safetyCheck.requiresConfirmation) {
 		logSecurityEvent({
 			action: "mcp.command.execute",
 			resource: params.command.slice(0, 200),

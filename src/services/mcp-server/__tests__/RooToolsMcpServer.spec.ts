@@ -65,23 +65,43 @@ describe("RooToolsMcpServer CORS origin", () => {
 	}
 
 	/** OPTIONS 请求，使用 Node http 模块绕过 nock 的 fetch 拦截器。 */
-	function optionsRequest(host: string, port: number, origin: string): Promise<http.IncomingMessage> {
+	function optionsRequest(
+		host: string,
+		port: number,
+		origin: string,
+		authHeader?: string,
+	): Promise<http.IncomingMessage> {
 		return new Promise((resolve, reject) => {
-			const req = http.request(
-				{ hostname: host, port, path: "/mcp", method: "OPTIONS", headers: { Origin: origin } },
-				(res) => resolve(res),
+			const headers: Record<string, string> = { Origin: origin }
+			if (authHeader) headers.Authorization = authHeader
+			const req = http.request({ hostname: host, port, path: "/mcp", method: "OPTIONS", headers }, (res) =>
+				resolve(res),
 			)
 			req.on("error", reject)
 			req.end()
 		})
 	}
 
-	it("allows browser origin only when server is exposed beyond localhost", async () => {
+	it("never reflects an untrusted Origin, even when bound beyond localhost", async () => {
+		const { server, port } = await startServer("0.0.0.0", "secret-token")
+
+		try {
+			// OPTIONS is now authenticated first; send a valid Bearer token so
+			// the request reaches the CORS headers. The Origin must NOT be echoed.
+			const res = await optionsRequest("127.0.0.1", port, "https://agent.example", "Bearer secret-token")
+			expect(res.statusCode).toBe(204)
+			expect(res.headers["access-control-allow-origin"]).toBe("null")
+		} finally {
+			await server.stop()
+		}
+	})
+
+	it("rejects unauthenticated OPTIONS preflight", async () => {
 		const { server, port } = await startServer("0.0.0.0", "secret-token")
 
 		try {
 			const res = await optionsRequest("127.0.0.1", port, "https://agent.example")
-			expect(res.headers["access-control-allow-origin"]).toBe("https://agent.example")
+			expect(res.statusCode).toBe(401)
 		} finally {
 			await server.stop()
 		}

@@ -118,7 +118,12 @@ export function checkCommandSafety(command: string): CommandSafetyResult {
 	}
 
 	const allReasons = [...shellAnalysis.reasons, ...extraReasons]
-	const requiresConfirmation = risk === "dangerous" || risk === "forbidden"
+	// `medium` covers network egress (curl/wget/nc/ssh/scp) and privilege-
+	// sensitive patterns. Those can exfiltrate workspace data, so they must
+	// require an explicit confirmation just like `dangerous`. Previously only
+	// dangerous/forbidden did, leaving a gap when the allowlist prefixes bypass
+	// did not apply. See the security audit finding on conditional HTTP blocks.
+	const requiresConfirmation = risk === "medium" || risk === "dangerous" || risk === "forbidden"
 
 	return {
 		safe: risk === "safe",

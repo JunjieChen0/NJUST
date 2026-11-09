@@ -1036,6 +1036,7 @@
 				},
 				"njust-ai.webSearchApiKey": {
 					"type": "string",
+					"scope": "machine",
 					"default": "",
 					"description": "API key for web search provider (Tavily). Get a free key at https://tavily.com"
 				},
@@ -1234,11 +1235,13 @@
 				},
 				"njust-ai.cloudAgent.deviceToken": {
 					"type": "string",
+					"scope": "machine",
 					"default": "",
 					"description": "Auto-generated device token for Cloud Agent authentication. Do not modify manually."
 				},
 				"njust-ai.cloudAgent.apiKey": {
 					"type": "string",
+					"scope": "machine",
 					"default": "",
 					"description": "[已废弃] 请使用 Cloud Agent Profile 管理 API Key。此设置仅在未配置 Profile 时作为后备。X-API-Key for Cloud Agent (must match server CLOUD_AGENT_MOCK_API_KEY)."
 				},
@@ -1308,6 +1311,7 @@
 				},
 				"njust-ai.mcpServer.authToken": {
 					"type": "string",
+					"scope": "machine",
 					"default": "",
 					"description": "Bearer token for authenticating MCP Tools Server requests. REQUIRED when bindAddress is '0.0.0.0'. Leave empty to disable authentication (only for local-only access)."
 				},

@@ -451,8 +451,12 @@ export class RooToolsMcpServer {
 		}
 
 		this.httpServer = http.createServer(async (req, res) => {
-			const allowedOrigin = this.isLocalOnly() ? "null" : (req.headers.origin ?? "null")
-			res.setHeader("Access-Control-Allow-Origin", allowedOrigin)
+			// Never reflect an untrusted `Origin` header. Doing so would let an
+			// attacker-controlled web page read MCP responses cross-origin when the
+			// server is bound beyond localhost. Browser-based callers are not a
+			// supported transport here (MCP clients are native/CLI), so `null` is
+			// both safe and correct. A non-local bind still REQUIRES authToken.
+			res.setHeader("Access-Control-Allow-Origin", "null")
 			res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 			res.setHeader("Access-Control-Allow-Headers", "Content-Type, mcp-session-id, Authorization")
 			res.setHeader("Access-Control-Expose-Headers", "mcp-session-id")
@@ -463,12 +467,9 @@ export class RooToolsMcpServer {
 				return
 			}
 
-			if (req.method === "OPTIONS") {
-				res.writeHead(204)
-				res.end()
-				return
-			}
-
+			// Authenticate BEFORE handling the CORS preflight. Previously OPTIONS
+			// returned 204 unauthenticated, exposing server presence and CORS
+			// headers to any origin probing the port.
 			if (authToken && !this.verifyAuth(req, authToken)) {
 				logSecurityEvent({
 					action: "mcp.session.auth",
@@ -478,6 +479,12 @@ export class RooToolsMcpServer {
 				})
 				res.writeHead(401, { "Content-Type": "application/json" })
 				res.end(JSON.stringify({ error: "Unauthorized" }))
+				return
+			}
+
+			if (req.method === "OPTIONS") {
+				res.writeHead(204)
+				res.end()
 				return
 			}
 

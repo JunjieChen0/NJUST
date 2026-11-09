@@ -210,6 +210,18 @@ export class ProfileStorageService {
 
 		await this.saveProfile(migrated)
 		await this.setActiveProfileId(MIGRATED_ID)
+
+		// Legacy plaintext settings are load-bearing only for this one-time
+		// migration. Once the credential lives in SecretStorage (saveProfile
+		// above strips it from globalState), remove the old config values so
+		// they cannot leak via settings.json / Settings Sync. Best-effort:
+		// a failed cleanup must not undo a successful migration.
+		try {
+			await config.update("cloudAgent.apiKey", undefined, vscode.ConfigurationTarget.Global)
+			await config.update("cloudAgent.serverUrl", undefined, vscode.ConfigurationTarget.Global)
+		} catch (error) {
+			logger.warn("ProfileStorageService", "Failed to clean up legacy cloudAgent config", error)
+		}
 		return migrated
 	}
 

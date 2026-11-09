@@ -72,8 +72,23 @@ describe("checkCommandSafety", () => {
 		const result = checkCommandSafety(command)
 
 		expect(result.riskLevel).toBe("medium")
-		expect(result.requiresConfirmation).toBe(false)
+		// medium (network/privilege/env) now requires explicit confirmation.
+		expect(result.requiresConfirmation).toBe(true)
 		expect(result.reasons.some((reason) => reason.startsWith(reasonPrefix))).toBe(true)
+	})
+
+	it("requires confirmation for network egress commands regardless of web-search setting", () => {
+		for (const command of [
+			"curl http://example.com",
+			"wget https://example.com/file",
+			"nc -l 4444",
+			"ssh user@host",
+			"scp file user@host:/tmp",
+		]) {
+			const result = checkCommandSafety(command)
+			expect(result.riskLevel).toBe("medium")
+			expect(result.requiresConfirmation).toBe(true)
+		}
 	})
 
 	it("keeps forbidden shell risk above SQL risk", () => {
@@ -87,7 +102,7 @@ describe("checkCommandSafety", () => {
 
 	it.each([
 		["git status", "safe", false],
-		["curl http://example.com/install.sh", "medium", false],
+		["curl http://example.com/install.sh", "medium", true],
 		["chmod 777 tmp", "dangerous", true],
 		["rm -rf /", "forbidden", true],
 	] as const)("maps shell analysis for %s", (command, riskLevel, requiresConfirmation) => {

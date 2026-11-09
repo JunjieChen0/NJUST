@@ -11,6 +11,7 @@ import axios from "axios"
 
 import { getNonce } from "./getNonce"
 import { getUri } from "./getUri"
+import { safeConnectOrigin } from "./safeCspOrigin"
 import { resolveHmrViteServerHost } from "./resolveHmrViteServerHost"
 import { t } from "../../i18n"
 import { logger } from "../../shared/logger"
@@ -68,8 +69,7 @@ export class WebviewContentProvider {
 
 		const nonce = getNonce()
 
-		const openRouterBaseUrl = this.host.getValues().openRouterBaseUrl || "https://openrouter.ai"
-		const openRouterDomain = openRouterBaseUrl.match(/^(https?:\/\/[^/]+)/)?.[1] || "https://openrouter.ai"
+		const openRouterDomain = safeConnectOrigin(this.host.getValues().openRouterBaseUrl)
 
 		const stylesUri = getUri(webview, this.host.extensionUri, ["webview-ui", "build", "assets", "index.css"])
 
@@ -118,7 +118,7 @@ export class WebviewContentProvider {
 			"default-src 'none'",
 			`font-src ${webview.cspSource} data:`,
 			`style-src ${webview.cspSource} 'unsafe-inline' http://${localServerUrl}`,
-			`img-src ${webview.cspSource} https://storage.googleapis.com https://img.clerk.com data:`,
+			`img-src ${webview.cspSource} data:`,
 			`media-src ${webview.cspSource} blob:`,
 			`script-src 'unsafe-eval' ${webview.cspSource} http://${localServerUrl} 'nonce-${nonce}'`,
 			`connect-src ${webview.cspSource} ${openRouterDomain} ws://${localServerUrl} http://${localServerUrl}`,
@@ -163,8 +163,9 @@ export class WebviewContentProvider {
 
 		const nonce = getNonce()
 
-		const openRouterBaseUrl = this.host.getValues().openRouterBaseUrl || "https://openrouter.ai"
-		const openRouterDomain = openRouterBaseUrl.match(/^(https?:\/\/[^/]+)/)?.[1] || "https://openrouter.ai"
+		// Derive a single, validated origin. The webview can write
+		// openRouterBaseUrl, so never interpolate the raw value into the CSP.
+		const openRouterDomain = safeConnectOrigin(this.host.getValues().openRouterBaseUrl)
 
 		return /*html*/ `
         <!DOCTYPE html>
@@ -173,7 +174,7 @@ export class WebviewContentProvider {
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no">
             <meta name="theme-color" content="#000000">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} https://storage.googleapis.com https://img.clerk.com data:; media-src ${webview.cspSource} blob:; script-src ${webview.cspSource} 'wasm-unsafe-eval' 'nonce-${nonce}' 'strict-dynamic'; connect-src ${webview.cspSource} ${openRouterDomain} https://api.requesty.ai;">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data:; media-src ${webview.cspSource} blob:; script-src ${webview.cspSource} 'wasm-unsafe-eval' 'nonce-${nonce}' 'strict-dynamic'; connect-src ${webview.cspSource} ${openRouterDomain} https://api.requesty.ai;">
             <link rel="stylesheet" type="text/css" href="${stylesUri}">
 			<link href="${codiconsUri}" rel="stylesheet" />
 			<script nonce="${nonce}">

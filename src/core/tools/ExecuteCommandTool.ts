@@ -218,16 +218,18 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 				}
 			}
 
-			{
-				const earlyState = await task.providerRef.deref()?.getState()
-				if (earlyState?.enableWebSearch && isHttpCommand(canonicalCommand)) {
-					pushToolResult(
-						"This command attempts to make an HTTP request (curl/wget/etc.), which is blocked. " +
-							"Use the web_search tool instead to retrieve information from the internet. " +
-							'Example: { "search_query": "your query here", "count": 5 }',
-					)
-					return
-				}
+			// Network-egress commands are blocked unconditionally, not only when
+			// web search happens to be enabled. Blocking was previously gated on
+			// `enableWebSearch`, which is OFF by default — leaving curl/wget usable
+			// with no guard in the default configuration. The dedicated web_search
+			// tool is the supported way to reach the internet.
+			if (isHttpCommand(canonicalCommand)) {
+				pushToolResult(
+					"This command attempts to make an HTTP request (curl/wget/etc.), which is blocked. " +
+						"Use the web_search tool instead to retrieve information from the internet. " +
+						'Example: { "search_query": "your query here", "count": 5 }',
+				)
+				return
 			}
 
 			const ignoredFileAttemptedToAccess = task.rooIgnoreController?.validateCommand(canonicalCommand)
@@ -298,7 +300,7 @@ export class ExecuteCommandTool extends BaseTool<"execute_command"> {
 			await reportProgress?.({ icon: "terminal", text: "Waiting for command approval" })
 			const approvalMessage =
 				safetyCheck.requiresConfirmation && (!isBypassMode || requiresConfirmationEvenInBypass)
-					? `[High risk] This command may destroy data. Confirm to run:\n${canonicalCommand}\n\nReasons: ${safetyCheck.reasons.join("; ")}`
+					? `[High risk] Confirm before running this command:\n${canonicalCommand}\n\nReasons: ${safetyCheck.reasons.join("; ")}`
 					: canonicalCommand
 
 			if (!isBypassMode || requiresConfirmationEvenInBypass) {

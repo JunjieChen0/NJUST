@@ -9,6 +9,7 @@ vi.mock("vscode", () => ({
 	workspace: {
 		getConfiguration: vi.fn(),
 	},
+	ConfigurationTarget: { Global: 1 },
 }))
 
 function createMockMemento(initial: Record<string, unknown> = {}): vscode.Memento {
@@ -291,15 +292,14 @@ describe("ProfileStorageService", () => {
 		})
 
 		it("creates migrated profile from legacy config", async () => {
-			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(
-				createMockWorkspaceConfiguration({
-					get: vi.fn(function (key: string) {
-						if (key === "cloudAgent.serverUrl") return "http://legacy.example.com"
-						if (key === "cloudAgent.apiKey") return "legacy-key"
-						return undefined
-					}),
+			const config = createMockWorkspaceConfiguration({
+				get: vi.fn(function (key: string) {
+					if (key === "cloudAgent.serverUrl") return "http://legacy.example.com"
+					if (key === "cloudAgent.apiKey") return "legacy-key"
+					return undefined
 				}),
-			)
+			})
+			vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(config)
 
 			const result = await service.migrateFromLegacyConfig()
 			expect(result).not.toBeNull()
@@ -307,6 +307,20 @@ describe("ProfileStorageService", () => {
 			expect(result?.serverUrl).toBe("http://legacy.example.com")
 			expect(result?.auth.type).toBe("api-key")
 			expect(result?.auth.apiKey).toBe("legacy-key")
+			expect(secrets.store).toHaveBeenCalledWith(
+				"cloudAgent.profile.auth.migrated-default",
+				expect.stringContaining("legacy-key"),
+			)
+			expect(config.update).toHaveBeenCalledWith(
+				"cloudAgent.apiKey",
+				undefined,
+				vscode.ConfigurationTarget.Global,
+			)
+			expect(config.update).toHaveBeenCalledWith(
+				"cloudAgent.serverUrl",
+				undefined,
+				vscode.ConfigurationTarget.Global,
+			)
 		})
 
 		it("is idempotent — skips if already migrated", async () => {
